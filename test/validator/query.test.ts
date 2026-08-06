@@ -1,7 +1,6 @@
 import { Context, Elysia, t, ValidationError } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('Query Validator', () => {
 	it('validate single', async () => {
@@ -14,7 +13,7 @@ describe('Query Validator', () => {
 			},
 			({ query: { name } }) => name
 		)
-		const res = await app.handle(req('/?name=sucrose'))
+		const res = await app.handle('/?name=sucrose')
 
 		await expect(res.text()).resolves.toBe('sucrose')
 		expect(res.status).toBe(200)
@@ -30,7 +29,7 @@ describe('Query Validator', () => {
 			},
 			({ query }) => query['character-name']
 		)
-		const res = await app.handle(req('/?character-name=sucrose'))
+		const res = await app.handle('/?character-name=sucrose')
 
 		await expect(res.text()).resolves.toBe('sucrose')
 		expect(res.status).toBe(200)
@@ -46,7 +45,7 @@ describe('Query Validator', () => {
 			},
 			({ query }) => query['character.name']
 		)
-		const res = await app.handle(req('/?character.name=sucrose'))
+		const res = await app.handle('/?character.name=sucrose')
 
 		await expect(res.text()).resolves.toBe('sucrose')
 		expect(res.status).toBe(200)
@@ -64,9 +63,7 @@ describe('Query Validator', () => {
 			},
 			({ query }) => query
 		)
-		const res = await app.handle(
-			req('/?name=sucrose&job=alchemist&trait=dog')
-		)
+		const res = await app.handle('/?name=sucrose&job=alchemist&trait=dog')
 
 		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
@@ -88,9 +85,7 @@ describe('Query Validator', () => {
 			},
 			() => ''
 		)
-		const res = await app.handle(
-			req('/?name=sucrose&job=alchemist&trait=dog')
-		)
+		const res = await app.handle('/?name=sucrose&job=alchemist&trait=dog')
 
 		expect(res.status).toBe(200)
 	})
@@ -107,7 +102,7 @@ describe('Query Validator', () => {
 			},
 			({ query }) => query
 		)
-		const res = await app.handle(req('/?name=sucrose&job=alchemist'))
+		const res = await app.handle('/?name=sucrose&job=alchemist')
 
 		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
@@ -129,7 +124,7 @@ describe('Query Validator', () => {
 			},
 			({ query }) => query
 		)
-		const res = await app.handle(req('/?name=sucrose&job=alchemist&age=16'))
+		const res = await app.handle('/?name=sucrose&job=alchemist&age=16')
 
 		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
@@ -154,7 +149,7 @@ describe('Query Validator', () => {
 			({ query }) => query
 		)
 		const res = await app.handle(
-			req('/?name=sucrose&job=alchemist&age=16&rank=4')
+			'/?name=sucrose&job=alchemist&age=16&rank=4'
 		)
 
 		await expect(res.json()).resolves.toEqual({
@@ -183,9 +178,7 @@ describe('Query Validator', () => {
 			},
 			({ query }) => query
 		)
-		const res = await app.handle(
-			req(`/?name=sucrose&gender=${Gender.MALE}`)
-		)
+		const res = await app.handle(`/?name=sucrose&gender=${Gender.MALE}`)
 
 		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
@@ -204,7 +197,7 @@ describe('Query Validator', () => {
 			},
 			({ query: { limit } }) => limit
 		)
-		const res = await app.handle(req('/?limit=16'))
+		const res = await app.handle('/?limit=16')
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('16')
 	})
@@ -220,7 +213,7 @@ describe('Query Validator', () => {
 			},
 			({ query }) => query
 		)
-		const res = await app.handle(req('/?limit=16&offset=0'))
+		const res = await app.handle('/?limit=16&offset=0')
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({ limit: 16, offset: 0 })
 	})
@@ -239,7 +232,7 @@ describe('Query Validator', () => {
 			},
 			({ query }) => query
 		)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({})
@@ -261,7 +254,7 @@ describe('Query Validator', () => {
 			},
 			({ query }) => query
 		)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({})
@@ -277,7 +270,7 @@ describe('Query Validator', () => {
 			},
 			({ query }) => query
 		)
-		const res = await app.handle(req('/?param1=true'))
+		const res = await app.handle('/?param1=true')
 
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({ param1: true })
@@ -293,7 +286,7 @@ describe('Query Validator', () => {
 			},
 			({ query }) => query
 		)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({ param1: true })
@@ -311,7 +304,7 @@ describe('Query Validator', () => {
 			},
 			({ query }) => query
 		)
-		const res = await app.handle(req('/?other=sucrose'))
+		const res = await app.handle('/?other=sucrose')
 
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({ other: 'sucrose' })
@@ -329,7 +322,7 @@ describe('Query Validator', () => {
 			},
 			({ query }) => query
 		)
-		const res = await app.handle(req('/?other=sucrose'))
+		const res = await app.handle('/?other=sucrose')
 
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({
@@ -355,8 +348,8 @@ describe('Query Validator', () => {
 		)
 
 		const [valid, invalid] = await Promise.all([
-			app.handle(req('/?name=sucrose')),
-			app.handle(req('/'))
+			app.handle('/?name=sucrose'),
+			app.handle('/')
 		])
 
 		await expect(valid.text()).resolves.toBe('sucrose')
@@ -378,9 +371,7 @@ describe('Query Validator', () => {
 			({ query }) => query
 		)
 
-		const value = await app
-			.handle(req('/?name=nagisa'))
-			.then((x) => x.json())
+		const value = await app.handle('/?name=nagisa').then((x) => x.json())
 
 		expect(value).toEqual({
 			name: 'nagisa',
@@ -400,9 +391,7 @@ describe('Query Validator', () => {
 			({ query }) => query
 		)
 
-		const value = await app
-			.handle(req('/?name=nagisa'))
-			.then((x) => x.json())
+		const value = await app.handle('/?name=nagisa').then((x) => x.json())
 
 		expect(value).toEqual({
 			name: 'nagisa',
@@ -436,9 +425,7 @@ describe('Query Validator', () => {
 				return 'yay'
 			})
 
-		const response = await app
-			.handle(req('/a?state=123'))
-			.then((x) => x.text())
+		const response = await app.handle('/a?state=123').then((x) => x.text())
 
 		expect(response).toBe('yay')
 	})
@@ -483,12 +470,10 @@ describe('Query Validator', () => {
 
 		const response = await app
 			.handle(
-				req(
-					`/?role=${JSON.stringify([
-						{ name: 'hello' },
-						{ name: 'world' }
-					])}`
-				)
+				`/?role=${JSON.stringify([
+					{ name: 'hello' },
+					{ name: 'world' }
+				])}`
 			)
 			.then((x) => x.json())
 
@@ -518,12 +503,10 @@ describe('Query Validator', () => {
 
 		const response = await app
 			.handle(
-				req(
-					`/?role=${JSON.stringify([
-						{ name: 'hello' },
-						{ name: 'world' }
-					])}`
-				)
+				`/?role=${JSON.stringify([
+					{ name: 'hello' },
+					{ name: 'world' }
+				])}`
 			)
 			.then((x) => x.json())
 
@@ -621,7 +604,7 @@ describe('Query Validator', () => {
 		const app = new Elysia().get('/', ({ query: { role } }) => role)
 
 		const response = await app
-			.handle(req(`/?role=${JSON.stringify({ name: 'hello' })}`))
+			.handle(`/?role=${JSON.stringify({ name: 'hello' })}`)
 			.then((x) => x.text())
 
 		expect(response).toBe(JSON.stringify({ name: 'hello' }))
@@ -642,7 +625,7 @@ describe('Query Validator', () => {
 		)
 
 		const res = await app.handle(
-			req('/?constructor=one&hasOwnProperty=two&toString=three&tags=a,b')
+			'/?constructor=one&hasOwnProperty=two&toString=three&tags=a,b'
 		)
 
 		expect(res.status).toBe(200)
@@ -671,7 +654,7 @@ describe('Query Validator', () => {
 		)
 
 		const response = await app
-			.handle(req(`/?ids=1&ids=${JSON.stringify({ a: 'b' })}`))
+			.handle(`/?ids=1&ids=${JSON.stringify({ a: 'b' })}`)
 			.then((res) => res.json())
 
 		expect(response).toEqual([1, { a: 'b' }])
@@ -688,7 +671,7 @@ describe('Query Validator', () => {
 			({ query: { id } }) => typeof id
 		)
 
-		const value = await app.handle(req('/?id=1')).then((x) => x.text())
+		const value = await app.handle('/?id=1').then((x) => x.text())
 
 		expect(value).toBe('number')
 	})
@@ -704,9 +687,7 @@ describe('Query Validator', () => {
 			({ query: { isAdmin } }) => typeof isAdmin
 		)
 
-		const value = await app
-			.handle(req('/?isAdmin=true'))
-			.then((x) => x.text())
+		const value = await app.handle('/?isAdmin=true').then((x) => x.text())
 
 		expect(value).toBe('boolean')
 	})
@@ -720,9 +701,7 @@ describe('Query Validator', () => {
 		)
 
 		await app.handle(
-			req(
-				`/?pagination=${JSON.stringify({ pageIndex: 1, pageLimit: 10 })}`
-			)
+			`/?pagination=${JSON.stringify({ pageIndex: 1, pageLimit: 10 })}`
 		)
 
 		expect(value).toEqual(JSON.stringify({ pageIndex: 1, pageLimit: 10 }))
@@ -746,9 +725,7 @@ describe('Query Validator', () => {
 
 		const response = await app
 			.handle(
-				req(
-					`/?pagination=${JSON.stringify([{ pageIndex: 1, pageLimit: 10 }])}`
-				)
+				`/?pagination=${JSON.stringify([{ pageIndex: 1, pageLimit: 10 }])}`
 			)
 			.then((x) => x.json())
 
@@ -775,9 +752,7 @@ describe('Query Validator', () => {
 
 		const response = await app
 			.handle(
-				req(
-					`/?pagination=${JSON.stringify({ pageIndex: 1, pageLimit: 10 })}&pagination=${JSON.stringify({ pageIndex: 2, pageLimit: 9 })}`
-				)
+				`/?pagination=${JSON.stringify({ pageIndex: 1, pageLimit: 10 })}&pagination=${JSON.stringify({ pageIndex: 2, pageLimit: 9 })}`
 			)
 			.then((x) => x.json())
 
@@ -804,12 +779,10 @@ describe('Query Validator', () => {
 		)
 
 		const response = await app.handle(
-			req(
-				`?user=${JSON.stringify({
-					id: '2',
-					name: 'test'
-				})}`
-			)
+			`/?user=${JSON.stringify({
+				id: '2',
+				name: 'test'
+			})}`
 		)
 
 		expect(response.status).toBe(422)
@@ -829,8 +802,8 @@ describe('Query Validator', () => {
 		)
 
 		const res = await Promise.all([
-			app.handle(req('/')).then((x) => x.json()),
-			app.handle(req('/?id=1')).then((x) => x.json())
+			app.handle('/').then((x) => x.json()),
+			app.handle('/?id=1').then((x) => x.json())
 		])
 
 		expect(res).toEqual([{}, { id: 1 }])
@@ -850,7 +823,7 @@ describe('Query Validator', () => {
 		)
 
 		const response = await app
-			.handle(req('/?leading=foo&arr=bar&arr=baz&trailing=qux&arr=xd'))
+			.handle('/?leading=foo&arr=bar&arr=baz&trailing=qux&arr=xd')
 			.then((x) => x.json())
 
 		expect(response).toEqual({
@@ -897,23 +870,23 @@ describe('Query Validator', () => {
 		)
 
 		await expect(
-			app.handle(req('/?key1=ab&key1=cd&z=が')).then((x) => x.status)
+			app.handle('/?key1=ab&key1=cd&z=が').then((x) => x.status)
 		).resolves.toEqual(200)
 
 		await expect(
-			app.handle(req('/?key1=ab&z=が')).then((x) => x.status)
+			app.handle('/?key1=ab&z=が').then((x) => x.status)
 		).resolves.toEqual(200)
 
 		await expect(
-			app.handle(req('/?key1=ab&key1=cd&z=x')).then((x) => x.status)
+			app.handle('/?key1=ab&key1=cd&z=x').then((x) => x.status)
 		).resolves.toEqual(200)
 
 		await expect(
-			app.handle(req('/?z=が&key1=ab&key1=cd')).then((x) => x.status)
+			app.handle('/?z=が&key1=ab&key1=cd').then((x) => x.status)
 		).resolves.toEqual(200)
 
 		await expect(
-			app.handle(req('/?key1=で&key1=が&z=x')).then((x) => x.status)
+			app.handle('/?key1=で&key1=が&z=x').then((x) => x.status)
 		).resolves.toEqual(200)
 	})
 
@@ -929,7 +902,7 @@ describe('Query Validator', () => {
 			({ query }) => query
 		)
 
-		api.handle(req(`/?date=${Date.now()}`)).then((x) => x.json())
+		api.handle(`/?date=${Date.now()}`).then((x) => x.json())
 	})
 
 	it('handle nuqs format when specified as Array', async () => {
@@ -943,7 +916,7 @@ describe('Query Validator', () => {
 			({ query }) => query
 		)
 
-		const response = await app.handle(req('/?a=a,b')).then((x) => x.json())
+		const response = await app.handle('/?a=a,b').then((x) => x.json())
 
 		expect(response).toEqual({
 			a: ['a', 'b']
@@ -961,7 +934,7 @@ describe('Query Validator', () => {
 			({ query }) => query
 		)
 
-		const response = await app.handle(req('/?a=1,2')).then((x) => x.json())
+		const response = await app.handle('/?a=1,2').then((x) => x.json())
 
 		expect(response).toEqual({
 			a: [1, 2]
@@ -980,7 +953,7 @@ describe('Query Validator', () => {
 		)
 
 		const response = await app
-			.handle(req('/?a=true,false'))
+			.handle('/?a=true,false')
 			.then((x) => x.json())
 
 		expect(response).toEqual({
@@ -1001,7 +974,7 @@ describe('Query Validator', () => {
 
 	it('coerces Number and Boolean array elements from query strings', async () => {
 		const response = await plainArrayApp
-			.handle(req('/?ids=1,2,3&flags=true,false'))
+			.handle('/?ids=1,2,3&flags=true,false')
 			.then((x) => x.json())
 
 		expect(response).toEqual({ ids: [1, 2, 3], flags: [true, false] })
@@ -1009,7 +982,7 @@ describe('Query Validator', () => {
 
 	it('rejects an invalid Number array element from a query string', async () => {
 		const status = await plainArrayApp
-			.handle(req('/?ids=1,x,3&flags=true'))
+			.handle('/?ids=1,x,3&flags=true')
 			.then((x) => x.status)
 
 		expect(status).toBe(422)
@@ -1113,9 +1086,9 @@ describe('Query Validator', () => {
 		)
 
 		const response = await Promise.all([
-			app.handle(req('/?')).then((x) => x.json()),
-			app.handle(req('/?status=a')).then((x) => x.json()),
-			app.handle(req('/?status=a&status=b')).then((x) => x.json())
+			app.handle('/?').then((x) => x.json()),
+			app.handle('/?status=a').then((x) => x.json()),
+			app.handle('/?status=a&status=b').then((x) => x.json())
 		])
 
 		expect(response).toEqual([
@@ -1142,9 +1115,7 @@ describe('Query Validator', () => {
 			})
 		)
 
-		const response = await app
-			.handle(req('/test?id=test'))
-			.then((x) => x.json())
+		const response = await app.handle('/test?id=test').then((x) => x.json())
 
 		expect(response).toEqual({
 			id: {
@@ -1166,7 +1137,7 @@ describe('Query Validator', () => {
 		)
 
 		const response = await app
-			.handle(req(`/?date=2023-04-05T12:30:00+01:00`))
+			.handle(`/?date=2023-04-05T12:30:00+01:00`)
 			.then((x) => x.text())
 
 		expect(response).toEqual('2023-04-05T11:30:00.000Z')
@@ -1188,7 +1159,7 @@ describe('Query Validator', () => {
 			({ query }) => query
 		)
 
-		await app.handle(req('?year=3000'))
+		await app.handle('/?year=3000')
 
 		expect(err instanceof ValidationError).toBe(true)
 	})
@@ -1210,9 +1181,7 @@ describe('Query Validator', () => {
 				({ query }) => query
 			)
 
-		const response = await app
-			.handle(req('?ids=1,2,3'))
-			.then((x) => x.json())
+		const response = await app.handle('/?ids=1,2,3').then((x) => x.json())
 
 		expect(response).toEqual({
 			ids: ['1', '2', '3']
@@ -1348,7 +1317,7 @@ describe('Query Validator', () => {
 		)
 
 		const response = (await app
-			.handle(req('/?ids=1&ids=2'))
+			.handle('/?ids=1&ids=2')
 			.then((x) => x.json())) as { ids: string[] }
 
 		expect(response.ids).toEqual(['1', '2'])
@@ -1371,7 +1340,7 @@ describe('Query Validator', () => {
 		)
 
 		const response = await app
-			.handle(req('/?page=5'))
+			.handle('/?page=5')
 			.then((x) => x.json() as Promise<{ page: number }>)
 
 		expect(response.page).toBe(5)

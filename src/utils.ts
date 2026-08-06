@@ -447,6 +447,15 @@ export const redirect = (
 
 export type redirect = typeof redirect
 
+class ElysiaForm {}
+Object.defineProperty(ElysiaForm, 'name', { value: 'ElysiaForm' })
+export const ELYSIA_FORM_PROTOTYPE: object = ElysiaForm.prototype
+
+export const isElysiaForm = (value: unknown): boolean =>
+	value instanceof ElysiaForm ||
+	(value != null &&
+		Object.getPrototypeOf(value)?.constructor?.name === 'ElysiaForm')
+
 function appendFormField(formData: FormData, key: string, value: unknown) {
 	if (value === undefined || value === null) return
 
@@ -458,16 +467,10 @@ function appendFormField(formData: FormData, key: string, value: unknown) {
 	else formData.append(key, '' + value)
 }
 
-/**
- * Build `FormData` from a `form()` object, skipping the internal `~ely-form`
- * marker that flags the object as a form.
- */
 export function formToFormData(value: Record<keyof any, unknown>): FormData {
 	const formData = new FormData()
 
 	for (const key in value) {
-		if (key === '~ely-form') continue
-
 		const field = value[key]
 
 		if (Array.isArray(field))
@@ -496,7 +499,16 @@ export function formToFormData(value: Record<keyof any, unknown>): FormData {
 export const form = <const T extends Record<keyof any, unknown>>(
 	value: T
 ): ElysiaFormData<T> =>
-	({ ...value, '~ely-form': 1 }) as unknown as ElysiaFormData<T>
+	// Spread, never `Object.assign`: spread *defines* own data properties, while
+	// `Object.assign` *assigns* them and so invokes the inherited `__proto__`
+	// setter. A body parsed from `{"__proto__":{…}}` owns a real `__proto__`
+	// key, so assigning it would hand the caller's input control of this
+	// object's prototype — and therefore of response dispatch — the moment
+	// anyone writes `form(body)`. `setPrototypeOf` after the copy is the brand.
+	Object.setPrototypeOf(
+		{ ...value },
+		ELYSIA_FORM_PROTOTYPE
+	) as unknown as ElysiaFormData<T>
 
 export const getLoosePath = (path: string) =>
 	path.charCodeAt(path.length - 1) === 47 ? path.slice(0, -1) : path + '/'

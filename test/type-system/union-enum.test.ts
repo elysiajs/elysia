@@ -1,7 +1,7 @@
 import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { Value } from 'typebox/value'
-import { post } from '../utils'
+import { post, json } from '../utils'
 
 describe('TypeSystem - UnionEnum', () => {
 	it('Create', () => {
@@ -50,13 +50,13 @@ describe('TypeSystem - UnionEnum', () => {
 			},
 			({ body }) => body
 		)
-		const res1 = await app.handle(post('/', { value: 1 }))
+		const res1 = await app.handle('/', json({ value: 1 }))
 		expect(res1.status).toBe(200)
 
-		const res2 = await app.handle(post('/', { value: 'some' }))
+		const res2 = await app.handle('/', json({ value: 'some' }))
 		expect(res2.status).toBe(200)
 
-		const res3 = await app.handle(post('/', { value: 'data' }))
+		const res3 = await app.handle('/', json({ value: 'data' }))
 		expect(res3.status).toBe(422)
 	})
 })

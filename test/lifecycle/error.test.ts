@@ -10,7 +10,7 @@ import {
 	validationDetail
 } from '../../src'
 import { describe, expect, it, spyOn } from 'bun:test'
-import { post, req } from '../utils'
+import { post, json } from '../utils'
 import * as z from 'zod'
 
 import { TypeBoxValidator } from '../../src/type/validator'
@@ -27,10 +27,8 @@ describe('Error lifecycle', () => {
 				}
 			})
 
-		const root = await app.handle(req('/')).then((x) => x.text())
-		const notFound = await app
-			.handle(req('/not/found'))
-			.then((x) => x.text())
+		const root = await app.handle('/').then((x) => x.text())
+		const notFound = await app.handle('/not/found').then((x) => x.text())
 
 		expect(root).toBe('hello')
 		expect(notFound).toBe('UwU')
@@ -86,7 +84,7 @@ describe('Error lifecycle', () => {
 				({ body }) => body
 			)
 
-		const res = await app.handle(post('/login', {}))
+		const res = await app.handle('/login', json({}))
 		const data = await res.json()
 
 		expect(data).toBeArray()
@@ -100,7 +98,7 @@ describe('Error lifecycle', () => {
 			throw new Error('')
 		})
 
-		const res = await app.handle(req('/')).then((t) => t.text())
+		const res = await app.handle('/').then((t) => t.text())
 		expect(res).toBe('hi')
 	})
 
@@ -111,7 +109,7 @@ describe('Error lifecycle', () => {
 			throw new Error('')
 		})
 
-		const res = await app.handle(req('/')).then((t) => t.text())
+		const res = await app.handle('/').then((t) => t.text())
 		expect(res).not.toBe('hi')
 	})
 
@@ -126,7 +124,7 @@ describe('Error lifecycle', () => {
 				throw new InternalServerError()
 			})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		await expect(response.text()).resolves.toBe('UwU')
 		expect(response.status).toBe(500)
@@ -143,7 +141,7 @@ describe('Error lifecycle', () => {
 				throw new Error('boom')
 			})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		await expect(response.text()).resolves.toBe('recovered?')
 		expect(response.status).toBe(500)
@@ -156,7 +154,7 @@ describe('Error lifecycle', () => {
 				throw new Error('boom')
 			})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		await expect(response.text()).resolves.toBe('recovered')
 		expect(response.status).toBe(200)
@@ -167,7 +165,7 @@ describe('Error lifecycle', () => {
 			status(418, 'I am a teapot')
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(418)
 	})
@@ -177,7 +175,7 @@ describe('Error lifecycle', () => {
 			status("I'm a teapot", 'I am a teapot')
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(418)
 	})
@@ -185,7 +183,7 @@ describe('Error lifecycle', () => {
 	it('uses the default body for a numeric status code', async () => {
 		const app = new Elysia().get('/', ({ status }) => status(418))
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(418)
 		await expect(response.text()).resolves.toBe("I'm a teapot")
@@ -196,7 +194,7 @@ describe('Error lifecycle', () => {
 			status("I'm a teapot")
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(418)
 		await expect(response.text()).resolves.toBe("I'm a teapot")
@@ -216,7 +214,7 @@ describe('Error lifecycle', () => {
 				throw new Error('A')
 			})
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(order).toEqual(['A', 'B'])
 	})
@@ -245,7 +243,7 @@ describe('Error lifecycle', () => {
 				throw new Error('boom')
 			})
 
-		const sub = await app.handle(req('/sub')).then((x) => x.text())
+		const sub = await app.handle('/sub').then((x) => x.text())
 
 		expect(sub).toBe('plugin')
 		expect(order).toEqual(['plugin'])
@@ -268,10 +266,7 @@ describe('Error lifecycle', () => {
 			throw new Error('A')
 		})
 
-		await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
+		await Promise.all([app.handle('/inner'), app.handle('/outer')])
 
 		expect(called).toEqual(['/inner', '/outer'])
 	})
@@ -293,10 +288,7 @@ describe('Error lifecycle', () => {
 			throw new Error('A')
 		})
 
-		await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
+		await Promise.all([app.handle('/inner'), app.handle('/outer')])
 
 		expect(called).toEqual(['/inner'])
 	})
@@ -363,7 +355,7 @@ describe('Error lifecycle', () => {
 
 		const app = new Elysia().use(plugin)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		expect(response.status).toBe(401)
 		await expect(response.text()).resolves.toBe('Unauthorized')
 		expect(i).toBe(1)
@@ -530,7 +522,7 @@ describe('Error lifecycle', () => {
 				({ body }) => body
 			)
 
-		const res = await app.handle(post('/login', {}))
+		const res = await app.handle('/login', json({}))
 		const data = (await res.json()) as any
 
 		expect(data).toHaveProperty('message', 'Validation failed')
@@ -568,7 +560,8 @@ describe('Error lifecycle', () => {
 			)
 
 		const res = await app.handle(
-			post('/user', {
+			'/user',
+			json({
 				name: 'ab',
 				email: 'invalid',
 				age: 10
@@ -607,7 +600,7 @@ describe('Lazy validation error enumeration', () => {
 					({ body }) => body
 				)
 
-			const res = await app.handle(post('/', { x: 'not a number' }))
+			const res = await app.handle('/', json({ x: 'not a number' }))
 
 			expect(res.status).toBe(422)
 			await expect(res.text()).resolves.toBe('expected a number')
@@ -631,7 +624,7 @@ describe('Lazy validation error enumeration', () => {
 				({ body }) => body
 			)
 
-			const res = await app.handle(post('/', { x: 'not a number' }))
+			const res = await app.handle('/', json({ x: 'not a number' }))
 			const data = (await res.json()) as any
 
 			expect(res.status).toBe(422)
@@ -689,7 +682,7 @@ describe('Lazy validation error enumeration', () => {
 			.error(() => 'constant')
 			.post('/', { body: schema }, ({ body }) => body)
 
-		await silent.handle(post('/', { x: 'a' }))
+		await silent.handle('/', json({ x: 'a' }))
 		expect(called).toBe(0)
 
 		const reading = new Elysia().post(
@@ -699,7 +692,7 @@ describe('Lazy validation error enumeration', () => {
 			},
 			({ body }) => body
 		)
-		const res = await reading.handle(post('/', { x: 'a' }))
+		const res = await reading.handle('/', json({ x: 'a' }))
 
 		expect(called).toBe(1)
 		expect(res.status).toBe(422)
@@ -721,7 +714,7 @@ describe('Validation error payload echo limits', () => {
 			({ body }) => body
 		)
 
-		const res = await app.handle(post('/', { x: 'a' }))
+		const res = await app.handle('/', json({ x: 'a' }))
 		const data = (await res.json()) as any
 
 		expect(res.status).toBe(422)
@@ -741,7 +734,8 @@ describe('Validation error payload echo limits', () => {
 		)
 
 		const res = await app.handle(
-			post('/', { id: 'not a number', items: bigItems })
+			'/',
+			json({ id: 'not a number', items: bigItems })
 		)
 		const data = (await res.json()) as any
 
@@ -760,7 +754,7 @@ describe('Validation error payload echo limits', () => {
 			({ body }) => body
 		)
 
-		const res = await app.handle(post('/', { items: bigItems }))
+		const res = await app.handle('/', json({ items: bigItems }))
 		const text = await res.text()
 		const data = JSON.parse(text) as any
 

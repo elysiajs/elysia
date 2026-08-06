@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 import { Elysia, sse } from '../../src'
 import { trace } from '../../src/plugin/trace'
@@ -25,7 +24,7 @@ describe('Stream', () => {
 		})
 
 		const response = await app
-			.handle(req('/'))
+			.handle('/')
 			.then((x) => x.body)
 			.then((x) => {
 				if (!x) return
@@ -176,7 +175,7 @@ describe('Stream', () => {
 			yield sse({ event: 'test', data: { count: 2 } })
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		const cookieHeaders = response.headers.getSetCookie()
 		expect(cookieHeaders).toHaveLength(2)
@@ -199,25 +198,7 @@ describe('Stream', () => {
 			yield 'c'
 		})
 
-		const response = await app.handle(req('/')).then((x) => x.headers)
-
-		expect(response.get('access-control-allow-origin')).toBe(
-			'http://saltyaom.com'
-		)
-	})
-
-	it('mutate set before yield is called', async () => {
-		const expected = ['a', 'b', 'c']
-
-		const app = new Elysia().get('/', function* ({ set }) {
-			set.headers['access-control-allow-origin'] = 'http://saltyaom.com'
-
-			yield 'a'
-			yield 'b'
-			yield 'c'
-		})
-
-		const response = await app.handle(req('/')).then((x) => x.headers)
+		const response = await app.handle('/').then((x) => x.headers)
 
 		expect(response.get('access-control-allow-origin')).toBe(
 			'http://saltyaom.com'
@@ -235,7 +216,7 @@ describe('Stream', () => {
 			yield 'c'
 		})
 
-		const response = await app.handle(req('/')).then((x) => x.headers)
+		const response = await app.handle('/').then((x) => x.headers)
 
 		expect(response.get('access-control-allow-origin')).toBe(
 			'http://saltyaom.com'
@@ -257,7 +238,7 @@ describe('Stream', () => {
 			yield expected[2]
 		})
 
-		app.handle(req('/'))
+		app.handle('/')
 			.then((x) => x.body)
 			.then((x) => {
 				if (!x) return
@@ -297,7 +278,7 @@ describe('Stream', () => {
 		)
 
 		proxy
-			.handle(req('/'))
+			.handle('/')
 			.then((x) => x.body)
 			.then((x) => {
 				if (!x) return
@@ -330,7 +311,7 @@ describe('Stream', () => {
 		})
 
 		return app
-			.handle(req('/sse'))
+			.handle('/sse')
 			.then((x) => x.body)
 			.then((x) => {
 				if (!x) return
@@ -377,7 +358,7 @@ describe('Stream', () => {
 		})
 
 		return app
-			.handle(req('/sse'))
+			.handle('/sse')
 			.then((x) => x.body)
 			.then((x) => {
 				if (!x) return
@@ -424,7 +405,7 @@ describe('Stream', () => {
 		})
 
 		return app
-			.handle(req('/sse'))
+			.handle('/sse')
 			.then((x) => x.body)
 			.then((x) => {
 				if (!x) return
@@ -459,7 +440,7 @@ describe('Stream', () => {
 		})
 
 		return app
-			.handle(req('/sse'))
+			.handle('/sse')
 			.then((x) => x.body)
 			.then((x) => {
 				if (!x) return
@@ -506,7 +487,7 @@ describe('Stream', () => {
 			})
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		const result: string[] = []
 
@@ -531,7 +512,7 @@ describe('Stream', () => {
 			})
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		const result: string[] = []
 
@@ -556,7 +537,7 @@ describe('Stream', () => {
 			})
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		const result: string[] = []
 
@@ -583,7 +564,7 @@ describe('Stream', () => {
 			)
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		const result: string[] = []
 
@@ -607,7 +588,7 @@ describe('Stream', () => {
 			yield 'unreachable'
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(500)
 		expect(response.headers.get('access-control-allow-origin')).toBe('*')
@@ -632,7 +613,7 @@ describe('Stream', () => {
 				yield 'unreachable'
 			})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(500)
 		expect(onErrorCalled).toBe(true)
@@ -652,7 +633,8 @@ describe('Stream', () => {
 				.setup(() => {})
 				.cleanup(() => {})
 				.request(() => {})
-				.use(trace()).trace(() => {})
+				.use(trace())
+				.trace(() => {})
 				.as('global')
 
 		const app = new Elysia().use(PluginA()).get('/sse', async function* () {
@@ -661,7 +643,7 @@ describe('Stream', () => {
 			yield sse({ event: 'message', data: { meow: '3' } })
 		})
 
-		const response = await app.handle(req('/sse'))
+		const response = await app.handle('/sse')
 		expect(response.headers.get('content-type')).toBe('text/event-stream')
 
 		const result: string[] = []
@@ -695,7 +677,7 @@ describe('Stream', () => {
 			upstream.handle(new Request('http://e.ly'))
 		)
 
-		const response = await proxy.handle(req('/'))
+		const response = await proxy.handle('/')
 		const reader = response.body!.getReader()
 
 		// Slow consumer: read 3 chunks with pauses between each
@@ -726,7 +708,7 @@ describe('Stream', () => {
 
 		const app = new Elysia().get('/', lazyGenerator)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		const reader = response.body!.getReader()
 
 		// Read only the first 3 chunks
@@ -762,7 +744,7 @@ describe('Stream', () => {
 				})
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		const result = new Uint8Array(await response.arrayBuffer())
 
 		expect(result.byteLength).toBe(payload.byteLength)
@@ -788,7 +770,7 @@ describe('Stream', () => {
 				})
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		const result = new Uint8Array(await response.arrayBuffer())
 
 		expect(result).toEqual(expected)
@@ -811,7 +793,7 @@ describe('Stream', () => {
 			)
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		const result = new Uint8Array(await response.arrayBuffer())
 
 		expect(response.headers.get('x-touch')).toBe('1')
@@ -828,10 +810,8 @@ describe('Stream', () => {
 			yield new Uint8Array([3, 4])
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		const result = new Uint8Array(await response.arrayBuffer())
-
-		// expect(result).toEqual(result.toBase64())
 
 		expect(result).toEqual(new Uint8Array([1, 2, 3, 4]))
 	})
@@ -852,7 +832,7 @@ describe('Stream', () => {
 				})
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(201)
 	})
 
@@ -871,7 +851,7 @@ describe('Stream', () => {
 			})
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(201)
 		expect(res.headers.get('x-custom')).toBe('yes')
 	})
@@ -890,7 +870,7 @@ describe('Stream', () => {
 			})
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(202)
 	})
 })

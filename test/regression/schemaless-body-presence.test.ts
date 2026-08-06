@@ -19,7 +19,7 @@ describe('schema-less body presence gate', () => {
 				body
 			})
 		)
-		expect(await res.json()).toEqual(json)
+		await expect(res.json()).resolves.toEqual(json)
 	})
 
 	it('parses a Request body without framing headers', async () => {
@@ -30,7 +30,7 @@ describe('schema-less body presence gate', () => {
 				body
 			})
 		)
-		expect(await res.json()).toEqual(json)
+		await expect(res.json()).resolves.toEqual(json)
 	})
 
 	it('parses a body framed by Transfer-Encoding', async () => {
@@ -44,7 +44,7 @@ describe('schema-less body presence gate', () => {
 				body
 			})
 		)
-		expect(await res.json()).toEqual(json)
+		await expect(res.json()).resolves.toEqual(json)
 	})
 
 	it('exposes undefined body for Content-Length: 0', async () => {
@@ -58,7 +58,7 @@ describe('schema-less body presence gate', () => {
 			})
 		)
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('EMPTY')
+		await expect(res.text()).resolves.toBe('EMPTY')
 	})
 
 	it('exposes undefined body when no body is present', async () => {
@@ -69,6 +69,6 @@ describe('schema-less body presence gate', () => {
 			})
 		)
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('EMPTY')
+		await expect(res.text()).resolves.toBe('EMPTY')
 	})
 })

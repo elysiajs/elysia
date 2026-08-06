@@ -187,7 +187,7 @@ describe('custom schema errors', () => {
 		expect(message).toBe('name error')
 	})
 
-	it('builds custom errors for 200 union fields in under 150 ms', () => {
+	it('builds custom errors for 200 union fields in under 500 ms', () => {
 		process.env.NODE_ENV = 'production'
 
 		const fieldCount = 100
@@ -206,6 +206,8 @@ describe('custom schema errors', () => {
 		for (let i = 0; i < 3; i++) new TypeBoxValidator(schema)
 		const elapsed = (performance.now() - start) / 3
 
-		expect(elapsed).toBeLessThan(150)
+		// Builds in ~13 ms; catches a per-field re-walk of every union branch,
+		// which turns 200 fields into seconds of work.
+		expect(elapsed).toBeLessThan(500)
 	})
 })

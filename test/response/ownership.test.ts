@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 
 import { borrow, Elysia } from '../../src'
-import { req } from '../utils'
 
 describe('Response ownership', () => {
 	it('transfers an owned handler body without cloning', async () => {
@@ -16,7 +15,7 @@ describe('Response ownership', () => {
 			return original
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response).not.toBe(original)
 		expect(response.headers.get('x-framework')).toBe('yes')
@@ -41,7 +40,7 @@ describe('Response ownership', () => {
 			return response
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.body).toBe(originalBody)
 		await expect(response.text()).resolves.toBe('chunk')
@@ -62,7 +61,7 @@ describe('Response ownership', () => {
 			})
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(201)
 		expect(response.headers.get('x-source')).toBe('response')
@@ -83,7 +82,7 @@ describe('Response ownership', () => {
 		})
 
 		for (let i = 1; i <= 3; i++) {
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 			expect(response.headers.get('x-request')).toBe(String(i))
 			expect(response.headers.get('x-source')).toBe('response')
 			await expect(response.text()).resolves.toBe('shared')
@@ -100,8 +99,8 @@ describe('Response ownership', () => {
 			return shared
 		})
 
-		const first = await app.handle(req('/'))
-		const second = await app.handle(req('/'))
+		const first = await app.handle('/')
+		const second = await app.handle('/')
 
 		const firstBytes = new Uint8Array(await first.arrayBuffer())
 		const secondBytes = new Uint8Array(await second.arrayBuffer())
@@ -123,7 +122,7 @@ describe('Response ownership', () => {
 		)
 
 		for (let i = 0; i < 3; i++) {
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 			expect(response.headers.get('x-static')).toBe('yes')
 			await expect(response.text()).resolves.toBe('static')
 		}
@@ -137,7 +136,7 @@ describe('Response ownership', () => {
 			.mount('/mount', () => new Response('mounted'))
 
 		for (let i = 0; i < 3; i++) {
-			const response = await app.handle(req('/mount'))
+			const response = await app.handle('/mount')
 			expect(response.headers.get('x-outer')).toBe('yes')
 			await expect(response.text()).resolves.toBe('mounted')
 		}
@@ -149,11 +148,11 @@ describe('Response ownership', () => {
 			.headers({ 'x-outer': 'yes' })
 			.mount('/mount', () => shared)
 
-		const first = await app.handle(req('/mount'))
+		const first = await app.handle('/mount')
 		expect(first.headers.get('x-outer')).toBe('yes')
 		await expect(first.text()).resolves.toBe('mounted')
 
-		const second = await app.handle(req('/mount'))
+		const second = await app.handle('/mount')
 		expect(second.status).toBe(500)
 	})
 
@@ -164,7 +163,7 @@ describe('Response ownership', () => {
 			.mount('/mount', () => shared)
 
 		for (let i = 0; i < 3; i++) {
-			const response = await app.handle(req('/mount'))
+			const response = await app.handle('/mount')
 			expect(response.headers.get('x-outer')).toBe('yes')
 			await expect(response.text()).resolves.toBe('mounted')
 		}
@@ -190,7 +189,7 @@ describe('Response ownership', () => {
 			() => 'handler'
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		expect(response.headers.get('x-hook')).toBe('yes')
 		await expect(response.text()).resolves.toBe('hook')
 		expect(mapped.bodyUsed).toBeTrue()
@@ -208,7 +207,7 @@ describe('Response ownership', () => {
 				return response
 			})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		expect(response.status).toBe(409)
 		await expect(response.text()).resolves.toBe('caught')
 	})
@@ -217,11 +216,9 @@ describe('Response ownership', () => {
 		const shared = new Response('shared')
 		const app = new Elysia().get('/', () => shared)
 
-		await expect((await app.handle(req('/'))).text()).resolves.toBe(
-			'shared'
-		)
+		await expect((await app.handle('/')).text()).resolves.toBe('shared')
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		expect(response.status).toBe(500)
 	})
 
@@ -240,7 +237,7 @@ describe('Response ownership', () => {
 			})
 
 		try {
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 			expect(response.status).toBe(409)
 			await expect(response.text()).resolves.toBe('caught')
 		} finally {
@@ -270,12 +267,12 @@ describe('Response ownership', () => {
 			return shared
 		})
 
-		const first = await app.handle(req('/'))
+		const first = await app.handle('/')
 		const reader = first.body!.getReader()
 		await reader.read()
 		await reader.cancel('stop')
 
-		const second = await app.handle(req('/'))
+		const second = await app.handle('/')
 
 		expect(cancelled).toBeFalse()
 		await expect(second.text()).resolves.toBe('firstsecond')
@@ -286,7 +283,7 @@ describe('Response ownership', () => {
 			.headers({ 'x-powered-by': 'Elysia' })
 			.get('/', () => new Response('ok'))
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		expect(response.headers.get('x-powered-by')).toBe('Elysia')
 		await expect(response.text()).resolves.toBe('ok')
 	})
@@ -301,7 +298,7 @@ describe('Response ownership', () => {
 			}))
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response).not.toBe(original)
 		expect(response.headers.get('x-powered-by')).toBe('Elysia')
@@ -317,10 +314,8 @@ describe('Response ownership', () => {
 			return new Response('with-cookie')
 		})
 
-		const response = await app.handle(req('/'))
-		expect(response.headers.getSetCookie()).toEqual([
-			'session=abc; Path=/'
-		])
+		const response = await app.handle('/')
+		expect(response.headers.getSetCookie()).toEqual(['session=abc; Path=/'])
 		await expect(response.text()).resolves.toBe('with-cookie')
 	})
 
@@ -331,7 +326,7 @@ describe('Response ownership', () => {
 			() => (original = new Response('untouched'))
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		expect(response).toBe(original)
 		await expect(response.text()).resolves.toBe('untouched')
 	})
@@ -348,13 +343,13 @@ describe('Response ownership', () => {
 				return new Response('fresh')
 			})
 
-		const first = await app.handle(req('/'))
+		const first = await app.handle('/')
 		expect(first.headers.get('x-default')).toBe('yes')
 		expect(first.headers.get('x-request-id')).toBe('1')
 		expect(first.headers.get('x-only-first')).toBe('yes')
 		await expect(first.text()).resolves.toBe('fresh')
 
-		const second = await app.handle(req('/'))
+		const second = await app.handle('/')
 		expect(second.headers.get('x-default')).toBe('yes')
 		expect(second.headers.get('x-request-id')).toBe('2')
 		expect(second.headers.get('x-only-first')).toBeNull()
@@ -380,7 +375,7 @@ describe('Response ownership', () => {
 			return response
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		expect(response.status).toBe(200)
 		expect(response.body?.locked).toBe(true)
 	})
@@ -401,7 +396,7 @@ describe('Response ownership', () => {
 				return response
 			})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		expect(response.status).toBe(500)
 	})
 
@@ -438,8 +433,8 @@ describe('Response ownership', () => {
 				return shared
 			})
 
-			await app.handle(req('/'))
-			await app.handle(req('/'))
+			await app.handle('/')
+			await app.handle('/')
 
 			const borrowWarnings = warnings.filter((args) =>
 				String(args[0]).includes('borrow()')
@@ -454,8 +449,8 @@ describe('Response ownership', () => {
 				return shared
 			})
 
-			const first = await app.handle(req('/'))
-			const second = await app.handle(req('/'))
+			const first = await app.handle('/')
+			const second = await app.handle('/')
 
 			expect(warnings).toHaveLength(0)
 			await expect(first.text()).resolves.toBe('hello')
@@ -469,7 +464,7 @@ describe('Response ownership', () => {
 				return shared
 			})
 
-			const first = await app.handle(req('/'))
+			const first = await app.handle('/')
 			await expect(first.text()).resolves.toBe('streamed')
 		})
 	})

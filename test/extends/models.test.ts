@@ -2,7 +2,7 @@
 import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { post, req } from '../utils'
+import { post, json } from '../utils'
 
 describe('Model', () => {
 	it('add single', async () => {
@@ -28,7 +28,7 @@ describe('Model', () => {
 		expect(app['~ext']?.models).toContainKeys(['string', 'number'])
 	})
 
-	it('add object', async () => {
+	it('remap object', async () => {
 		const app = new Elysia()
 			.model({
 				string: t.String(),
@@ -168,7 +168,8 @@ describe('Model', () => {
 		expect(error.status).toBe(422)
 
 		const correct = await app.handle(
-			post('/', {
+			'/',
+			json({
 				data: 'hi'
 			})
 		)
@@ -243,10 +244,10 @@ describe('Model', () => {
 			// @ts-expect-error
 			.get('/error', { response: 'res' }, () => 1)
 
-		const error = await app.handle(req('/error'))
+		const error = await app.handle('/error')
 		expect(error.status).toBe(422)
 
-		const correct = await app.handle(req('/correct'))
+		const correct = await app.handle('/correct')
 		expect(correct.status).toBe(200)
 	})
 
@@ -287,13 +288,13 @@ describe('Model', () => {
 				({ status }) => status(400, 1)
 			)
 
-		const error = await app.handle(req('/error'))
+		const error = await app.handle('/error')
 		expect(error.status).toBe(422)
 
-		const correct = await app.handle(req('/correct'))
+		const correct = await app.handle('/correct')
 		expect(correct.status).toBe(200)
 
-		const correct400 = await app.handle(req('/400'))
+		const correct400 = await app.handle('/400')
 		expect(correct400.status).toBe(400)
 	})
 

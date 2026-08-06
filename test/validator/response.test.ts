@@ -3,7 +3,7 @@ import { streamResponse } from '../../src/adapter/utils'
 import * as z from 'zod'
 
 import { describe, expect, it } from 'bun:test'
-import { post, req, upload } from '../utils'
+import { post, upload, json } from '../utils'
 
 // Stream chunks are Uint8Array values.
 const dec = new TextDecoder()
@@ -19,7 +19,7 @@ describe('Response Validator', () => {
 			},
 			() => 'sucrose'
 		)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		await expect(res.text()).resolves.toBe('sucrose')
 		expect(res.status).toBe(200)
@@ -33,7 +33,7 @@ describe('Response Validator', () => {
 			},
 			() => 1
 		)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		await expect(res.text()).resolves.toBe('1')
 		expect(res.status).toBe(200)
@@ -47,7 +47,7 @@ describe('Response Validator', () => {
 			},
 			() => true
 		)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		await expect(res.text()).resolves.toBe('true')
 		expect(res.status).toBe(200)
@@ -61,7 +61,7 @@ describe('Response Validator', () => {
 			},
 			() => 'A' as const
 		)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		await expect(res.text()).resolves.toBe('A')
 		expect(res.status).toBe(200)
@@ -79,7 +79,7 @@ describe('Response Validator', () => {
 				name: 'sucrose'
 			})
 		)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		await expect(res.json()).resolves.toEqual({ name: 'sucrose' })
 		expect(res.status).toBe(200)
@@ -101,7 +101,7 @@ describe('Response Validator', () => {
 				trait: 'dog'
 			})
 		)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
@@ -127,7 +127,7 @@ describe('Response Validator', () => {
 				trait: 'dog'
 			})
 		)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 	})
@@ -147,7 +147,7 @@ describe('Response Validator', () => {
 				job: 'alchemist'
 			})
 		)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
@@ -171,7 +171,7 @@ describe('Response Validator', () => {
 			},
 			() => {}
 		)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('')
@@ -191,7 +191,7 @@ describe('Response Validator', () => {
 			})
 		)
 
-		const res = await app.handle(req('/')).then((x) => x.json())
+		const res = await app.handle('/').then((x) => x.json())
 
 		expect(res).toEqual({
 			name: 'sucrose'
@@ -214,7 +214,7 @@ describe('Response Validator', () => {
 			})
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(422)
 	})
@@ -294,26 +294,30 @@ describe('Response Validator', () => {
 		)
 
 		const r200valid = await app.handle(
-			post('/', {
+			'/',
+			json({
 				status: 200,
 				response: 'String'
 			})
 		)
 		const r200invalid = await app.handle(
-			post('/', {
+			'/',
+			json({
 				status: 200,
 				response: 1
 			})
 		)
 
 		const r201valid = await app.handle(
-			post('/', {
+			'/',
+			json({
 				status: 201,
 				response: 1
 			})
 		)
 		const r201invalid = await app.handle(
-			post('/', {
+			'/',
+			json({
 				status: 201,
 				response: 'String'
 			})
@@ -470,9 +474,9 @@ describe('Response Validator', () => {
 			)
 
 		const response = await Promise.all([
-			app.handle(req('/ok')).then((x) => x.status),
-			app.handle(req('/error')).then((x) => x.status),
-			app.handle(req('/validate-error')).then((x) => x.status)
+			app.handle('/ok').then((x) => x.status),
+			app.handle('/error').then((x) => x.status),
+			app.handle('/validate-error').then((x) => x.status)
 		])
 
 		expect(response).toEqual([200, 418, 422])
@@ -502,7 +506,7 @@ describe('Response Validator', () => {
 			})
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(200)
 	})
 
@@ -522,7 +526,7 @@ describe('Response Validator', () => {
 			}
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(200)
 		expect(res.headers.get('content-type')).toBe('text/event-stream')
 
@@ -553,7 +557,7 @@ describe('Response Validator', () => {
 			}
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(200)
 		expect(res.headers.get('content-type')).toBe('text/event-stream')
 	})
@@ -572,7 +576,7 @@ describe('Response Validator', () => {
 			}
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(200)
 
 		const result: string[] = []
@@ -595,7 +599,7 @@ describe('Response Validator', () => {
 			yield sse({ data: { name: 'Name' } })
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		expect(res.headers.get('content-type')).toBe('text/event-stream')
@@ -627,7 +631,7 @@ describe('Response Validator', () => {
 			)
 			.listen(0)
 
-		const status = app.handle(req('/health')).then((x) => x.status)
+		const status = app.handle('/health').then((x) => x.status)
 
 		expect(status).resolves.toBe(200)
 	})

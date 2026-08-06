@@ -3,7 +3,7 @@ import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
 import { compileHandler } from '../../src/compile/handler'
-import { req, post } from '../utils'
+import { post, json } from '../utils'
 
 /** Body parsing materializes all headers only when route code needs them. */
 
@@ -42,7 +42,7 @@ describe('body parsing without full header access', () => {
 
 	it('parses JSON bodies without a schema', async () => {
 		const app = new Elysia().post('/echo', ({ body }) => body)
-		const res = await app.handle(post('/echo', { name: 'saltyaom' }))
+		const res = await app.handle('/echo', json({ name: 'saltyaom' }))
 		await expect(res.json()).resolves.toEqual({ name: 'saltyaom' })
 	})
 
@@ -68,10 +68,10 @@ describe('body parsing without full header access', () => {
 		expect(source).not.toContain('c.contentType=ct')
 		expect(source).not.toContain('c.headers=')
 
-		const ok = await app.handle(post('/echo', { name: 'x' }))
+		const ok = await app.handle('/echo', json({ name: 'x' }))
 		await expect(ok.json()).resolves.toEqual({ name: 'x' })
 
-		const bad = await app.handle(post('/echo', { name: 1 }))
+		const bad = await app.handle('/echo', json({ name: 1 }))
 		expect(bad.status).toBe(422)
 	})
 
@@ -86,9 +86,10 @@ describe('body parsing without full header access', () => {
 		expect(source).toContain('rc(')
 		expect(source).not.toContain('rm(')
 
-		const res = await app.handle(
-			req('/h', { method: 'POST', headers: { 'x-foo': 'bar' } })
-		)
+		const res = await app.handle('/h', {
+			method: 'POST',
+			headers: { 'x-foo': 'bar' }
+		})
 		await expect(res.text()).resolves.toBe('bar')
 	})
 
@@ -125,13 +126,11 @@ describe('body parsing without full header access', () => {
 		const { source } = compileRoute(app)
 		expect(source).toContain('c.contentType=ct')
 
-		const res = await app.handle(
-			req('/p', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json; charset=utf-8' },
-				body: JSON.stringify({ name: 'saltyaom' })
-			})
-		)
+		const res = await app.handle('/p', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json; charset=utf-8' },
+			body: JSON.stringify({ name: 'saltyaom' })
+		})
 
 		expect(seen).toBe('application/json')
 		await expect(res.json()).resolves.toEqual({ name: 'saltyaom' })
@@ -164,7 +163,7 @@ describe('header reads and response set handling', () => {
 		expect(source).toContain('rc(_r,c.request,true)')
 		expect(source).not.toContain('c.set')
 
-		const res = await app.handle(req('/h', { headers: { 'x-foo': 'baz' } }))
+		const res = await app.handle('/h', { headers: { 'x-foo': 'baz' } })
 		await expect(res.text()).resolves.toBe('baz')
 	})
 
@@ -176,7 +175,7 @@ describe('header reads and response set handling', () => {
 
 		const { source } = compileRoute(app)
 		expect(source).toContain('c.set')
-		const res = await app.handle(req('/s'))
+		const res = await app.handle('/s')
 		expect(res.headers.get('x-y')).toBe('z')
 	})
 
@@ -187,7 +186,7 @@ describe('header reads and response set handling', () => {
 
 		const { source } = compileRoute(app)
 		expect(source).toContain('c.set')
-		const res = await app.handle(req('/d'))
+		const res = await app.handle('/d')
 		expect(res.headers.get('x-app')).toBe('default')
 	})
 
@@ -199,7 +198,7 @@ describe('header reads and response set handling', () => {
 			})
 			.get('/st', ({ status }) => status(418))
 
-		const res = await app.handle(req('/st'))
+		const res = await app.handle('/st')
 		expect(res.status).toBe(418)
 		await new Promise((r) => setTimeout(r, 10))
 		expect(observed).toBe(418)
@@ -216,9 +215,9 @@ describe('header reads and response set handling', () => {
 		)
 
 		expect(compileRoute(writes).source).toContain('c.set')
-		await expect(
-			writes.handle(req('/w')).then((r) => r.status)
-		).resolves.toBe(418)
+		await expect(writes.handle('/w').then((r) => r.status)).resolves.toBe(
+			418
+		)
 		expect(compileRoute(reads).source).toContain('rc(_r,c.request,true)')
 	})
 })

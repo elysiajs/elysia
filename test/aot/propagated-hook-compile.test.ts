@@ -6,7 +6,6 @@ import {
 	runBeforeHandlePrefixAsync
 } from '../../src/compile/handler/utils'
 import type { CompactBeforeHandlePrefix } from '../../src/utils'
-import { req } from '../utils'
 
 const compile = <T extends Elysia>(app: T): T => {
 	;(app as any).compile()
@@ -76,11 +75,11 @@ describe('eager propagated-hook prefixes', () => {
 		for (const plugin of plugins) app.use(plugin)
 		compile(app)
 
-		await app.handle(req('/r0'))
+		await app.handle('/r0')
 		expect(order.splice(0)).toEqual(['a'])
-		await app.handle(req('/r1'))
+		await app.handle('/r1')
 		expect(order.splice(0)).toEqual(['a', 'b'])
-		await app.handle(req('/r2'))
+		await app.handle('/r2')
 		expect(order.splice(0)).toEqual(['a', 'b', 'c'])
 	})
 
@@ -107,7 +106,7 @@ describe('eager propagated-hook prefixes', () => {
 		expect((app as any).handler(routeIndex, true).toString()).toContain(
 			'rbp'
 		)
-		await expect((await app.handle(req('/second'))).text()).resolves.toBe(
+		await expect((await app.handle('/second')).text()).resolves.toBe(
 			'second'
 		)
 		expect(order).toEqual(['first', 'second'])
@@ -136,7 +135,7 @@ describe('eager propagated-hook prefixes', () => {
 
 		const response = await compile(
 			new Elysia().use(first).use(second)
-		).handle(req('/second'))
+		).handle('/second')
 		expect(response.status).toBe(409)
 		await expect(response.text()).resolves.toBe('blocked')
 		expect(order).toEqual(['duplicate', 'duplicate', 'early'])
@@ -244,9 +243,9 @@ describe('eager propagated-hook prefixes', () => {
 					.get(`/deep-${i}`, () => i)
 			)
 
-		const response = await app.handle(req(`/deep-${total - 1}`))
+		const response = await app.handle(`/deep-${total - 1}`)
 		expect(response.status).toBe(200)
-		expect(await response.text()).toBe(String(total - 1))
+		await expect(response.text()).resolves.toBe(String(total - 1))
 		expect(order).toHaveLength(total)
 		expect(order[0]).toBe(0)
 		expect(order.at(-1)).toBe(total - 1)
@@ -289,16 +288,18 @@ describe('eager propagated-hook prefixes', () => {
 		const lazy = build(lazyEvents)
 		const eager = compile(build(eagerEvents))
 
-		const lazyResponse = await lazy.handle(req('/plugin'))
-		const eagerResponse = await eager.handle(req('/plugin'))
+		const lazyResponse = await lazy.handle('/plugin')
+		const eagerResponse = await eager.handle('/plugin')
 		expect(eagerResponse.status).toBe(lazyResponse.status)
-		expect(await eagerResponse.text()).toBe(await lazyResponse.text())
+		await expect(eagerResponse.text()).resolves.toBe(
+			await lazyResponse.text()
+		)
 		await Bun.sleep(0)
 		expect(eagerEvents).toEqual(lazyEvents)
 
-		const lazyError = await lazy.handle(req('/throw'))
-		const eagerError = await eager.handle(req('/throw'))
+		const lazyError = await lazy.handle('/throw')
+		const eagerError = await eager.handle('/throw')
 		expect(eagerError.status).toBe(lazyError.status)
-		expect(await eagerError.text()).toBe(await lazyError.text())
+		await expect(eagerError.text()).resolves.toBe(await lazyError.text())
 	})
 })

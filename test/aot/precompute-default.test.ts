@@ -9,7 +9,6 @@ import {
 } from '../../src/compile/aot-capture'
 import { compileToSource } from '../../src/plugin/aot/source'
 import { claimManifest, materialise, registerManifest } from './_manifest'
-import { req } from '../utils'
 
 /** Frozen defaults must match live validation without runtime TypeBox setup. */
 
@@ -683,11 +682,11 @@ describe('AOT default preallocation — live and frozen parity', () => {
 				.then(async (r) => ({ status: r.status, text: await r.text() }))
 
 		for (const payload of [[{}], [{ x: 5 }], [{}, {}], []])
-			expect(await post(frozen, payload)).toEqual(
+			await expect(post(frozen, payload)).resolves.toEqual(
 				await post(plain, payload)
 			)
 
-		expect(await post(frozen, [{}])).toEqual({
+		await expect(post(frozen, [{}])).resolves.toEqual({
 			status: 200,
 			text: '[{"x":7}]'
 		})
@@ -783,8 +782,8 @@ describe('AOT default preallocation — source emit', () => {
 		plain.compile()
 
 		for (const q of ['', '?name=bob', '?amount=42', '?name=x&amount=7']) {
-			const f = await frozen.handle(req('/u' + q)).then((r) => r.json())
-			const p = await plain.handle(req('/u' + q)).then((r) => r.json())
+			const f = await frozen.handle('/u' + q).then((r) => r.json())
+			const p = await plain.handle('/u' + q).then((r) => r.json())
 			expect(f).toEqual(p)
 		}
 	})

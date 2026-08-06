@@ -1,7 +1,7 @@
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { post, req } from '../utils'
+import { post, json } from '../utils'
 
 describe('mapDerive', () => {
 	it('replaces the derived context with its returned fields', async () => {
@@ -16,8 +16,8 @@ describe('mapDerive', () => {
 			.get('/', ({ hi }) => hi())
 			.get('/h2', ({ hi2 }) => hi2())
 
-		const res = await app.handle(req('/')).then((t) => t.text())
-		const res2 = await app.handle(req('/h2')).then((t) => t.text())
+		const res = await app.handle('/').then((t) => t.text())
+		const res2 = await app.handle('/h2').then((t) => t.text())
 
 		expect(res).toBe('hi')
 		expect(res2).toBe('hi')
@@ -38,7 +38,7 @@ describe('mapDerive', () => {
 			}))
 
 		const res = await app
-			.handle(post('/user/1', { name: 'Elysia' }))
+			.handle('/user/1', json({ name: 'Elysia' }))
 			.then((t) => t.json())
 
 		expect(res).toEqual({
@@ -60,8 +60,8 @@ describe('mapDerive', () => {
 
 		const app = new Elysia().use(plugin).get('/', ({ hi }) => hi())
 
-		const res = await app.handle(req('/')).then((t) => t.text())
-		const res2 = await app.handle(req('/h2')).then((t) => t.text())
+		const res = await app.handle('/').then((t) => t.text())
+		const res2 = await app.handle('/h2').then((t) => t.text())
 
 		expect(res).toBe('hi')
 		expect(res2).toBe('hi')
@@ -84,8 +84,8 @@ describe('mapDerive', () => {
 			.get('/', ({ hi2 }) => typeof hi2 === 'undefined')
 
 		const [outer, inner] = await Promise.all([
-			app.handle(req('/')).then((response) => response.text()),
-			app.handle(req('/mapped')).then((response) => response.text())
+			app.handle('/').then((response) => response.text()),
+			app.handle('/mapped').then((response) => response.text())
 		])
 
 		expect(outer).toBe('true')
@@ -104,7 +104,7 @@ describe('mapDerive', () => {
 				return store.counter
 			})
 
-		const res = await app.handle(req('/')).then((t) => t.text())
+		const res = await app.handle('/').then((t) => t.text())
 		expect(res).toBe('2')
 	})
 
@@ -175,7 +175,7 @@ describe('mapDerive', () => {
 			})
 			.get('/', () => '')
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(order).toEqual(['A', 'B'])
 	})
@@ -194,8 +194,8 @@ describe('mapDerive', () => {
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
 		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
+			app.handle('/inner'),
+			app.handle('/outer')
 		])
 
 		expect(called).toEqual(['/inner'])
@@ -215,8 +215,8 @@ describe('mapDerive', () => {
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
 		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
+			app.handle('/inner'),
+			app.handle('/outer')
 		])
 
 		expect(called).toEqual(['/inner', '/outer'])
@@ -236,7 +236,7 @@ describe('mapDerive', () => {
 			name: context.name
 		}))
 
-		const res = await app.handle(req('/')).then((t) => t.json())
+		const res = await app.handle('/').then((t) => t.json())
 
 		expect(res).toEqual({
 			name: 'Elysia'
@@ -275,7 +275,7 @@ describe('mapDerive', () => {
 				return 'ok'
 			})
 
-		await app.handle(req('/real-path'))
+		await app.handle('/real-path')
 
 		expect(capturedPath).toBe('/real-path')
 	})
@@ -286,8 +286,8 @@ describe('mapDerive', () => {
 
 		const app = new Elysia().mapDerive(() => shared).get('/', () => 'ok')
 
-		await app.handle(req('/'))
-		await app.handle(req('/'))
+		await app.handle('/')
+		await app.handle('/')
 
 		expect(Object.getPrototypeOf(shared)).toBe(originalProto)
 		expect('request' in shared).toBe(false)
@@ -307,8 +307,8 @@ describe('mapDerive', () => {
 				return 'ok'
 			})
 
-		await app.handle(req('/'))
-		await app.handle(req('/'))
+		await app.handle('/')
+		await app.handle('/')
 
 		expect(setValues[0]).toBeUndefined()
 		expect(setValues[1]).toBeUndefined()
@@ -327,9 +327,7 @@ describe('mapDerive', () => {
 			.mapDerive(() => derivative)
 			.get('/', (context: any) => [context.computed, context.computed])
 
-		const res = await app
-			.handle(req('/'))
-			.then((response) => response.json())
+		const res = await app.handle('/').then((response) => response.json())
 
 		expect(res).toEqual(['computed-1', 'computed-1'])
 		expect(callCount).toBe(1)

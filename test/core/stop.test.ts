@@ -70,16 +70,18 @@ describe('Stop', () => {
 	it('stops while async modules resolve without throwing or leaving a server', async () => {
 		let threw: unknown
 		const result = await withServeCount(async () => {
-			const slow = new Promise<any>((resolve) =>
-				setTimeout(() => resolve(new Elysia().get('/p', () => 'p')), 40)
-			)
+			let resolveSlow!: (plugin: any) => void
+			const slow = new Promise<any>((resolve) => {
+				resolveSlow = resolve
+			})
 			const app = new Elysia().use(slow as any).get('/', () => 'hi')
 			app.listen(0)
 
 			try {
-				await new Promise((r) => setTimeout(r, 15))
+				// stop while the async module is still unresolved
 				app.stop()
-				await new Promise((r) => setTimeout(r, 120))
+				resolveSlow(new Elysia().get('/p', () => 'p'))
+				await app.modules
 			} catch (e) {
 				threw = e
 			}
@@ -96,40 +98,37 @@ describe('Stop', () => {
 		const app = new Elysia()
 		app.get('/health', 'hi')
 
-		const port = 8080
-		const server = app.listen(port)
+		const server = app.listen(0)
+		const port = server.server!.port
 
 		await fetch(`http://localhost:${port}/health`)
 
 		await server.stop(true)
 
-		// Check if the server is still running
-		try {
-			await fetch(`http://localhost:${port}/health`)
-			throw new Error('Server is still running after teardown')
-		} catch (error) {
-			expect((error as Error).message).toContain('Unable to connect')
-		}
+		// The server must no longer accept connections
+		await expect(fetch(`http://localhost:${port}/health`)).rejects.toThrow()
 	})
 
 	it('does not shut down the server when stop(false) is called', async () => {
 		const app = new Elysia()
 		app.get('/health', 'hi')
 
-		const port = 8081
-		const server = app.listen(port)
+		const server = app.listen(0)
+		// stop(false) clears `app.server`, so keep a handle for teardown
+		const bunServer = server.server!
+		const port = bunServer.port
 
-		await fetch(`http://localhost:${port}/health`)
-
-		await server.stop(false)
-
-		// Check if the server is still running
 		try {
+			await fetch(`http://localhost:${port}/health`)
+
+			await server.stop(false)
+
+			// Check if the server is still running
 			const response = await fetch(`http://localhost:${port}/health`)
 			expect(response.status).toBe(200)
 			await expect(response.text()).resolves.toBe('hi')
-		} catch (error) {
-			throw new Error('Server unexpectedly shut down')
+		} finally {
+			await bunServer.stop(true)
 		}
 	})
 })

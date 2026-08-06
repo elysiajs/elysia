@@ -57,7 +57,7 @@ describe('object cookie dirty tracking', () => {
 		)
 
 		expect(res.headers.getAll('set-cookie').length).toBe(0)
-		expect(await res.text()).toBe('5')
+		await expect(res.text()).resolves.toBe('5')
 	})
 
 	it('emits when only a cookie attribute changes on an unchanged value', async () => {
@@ -87,7 +87,7 @@ describe('object cookie dirty tracking', () => {
 			})
 		)
 
-		expect(await res.text()).toBe('100%')
+		await expect(res.text()).resolves.toBe('100%')
 	})
 })
 
@@ -141,7 +141,7 @@ describe('schema-validated object cookie dirty tracking', () => {
 					})
 				)
 				expect(res.headers.getAll('set-cookie').length).toBe(0)
-				expect(await res.text()).toBe('5')
+				await expect(res.text()).resolves.toBe('5')
 			})
 
 			it('does not emit for a no-op mutation', async () => {

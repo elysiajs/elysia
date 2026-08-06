@@ -142,6 +142,8 @@ export class Cookie<T = any> implements BaseCookie {
 	}
 }
 
+Object.defineProperty(Cookie, 'name', { value: 'Cookie' })
+
 for (const key of FORWARDED_KEYS)
 	Object.defineProperty(Cookie.prototype, key, {
 		get(this: Cookie<unknown>) {

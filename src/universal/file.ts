@@ -169,3 +169,5 @@ export class ElysiaFile {
 		return value ?? 0
 	}
 }
+
+Object.defineProperty(ElysiaFile, 'name', { value: 'ElysiaFile' })

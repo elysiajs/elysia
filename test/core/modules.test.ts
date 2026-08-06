@@ -2,7 +2,6 @@
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 import { sleep } from 'bun'
 
 const asyncPlugin = async (app: Elysia) => app.get('/async', () => 'async')
@@ -17,7 +16,7 @@ describe('Modules', () => {
 
 		await app.modules
 
-		const res = await app.handle(req('/async')).then((r) => r.text())
+		const res = await app.handle('/async').then((r) => r.text())
 
 		expect(res).toBe('async')
 	})
@@ -27,7 +26,7 @@ describe('Modules', () => {
 
 		await app.modules
 
-		const res = await app.handle(req('/async')).then((r) => r.text())
+		const res = await app.handle('/async').then((r) => r.text())
 
 		expect(res).toBe('async')
 	})
@@ -37,7 +36,7 @@ describe('Modules', () => {
 
 		await app.modules
 
-		const res = await app.handle(req('/lazy')).then((r) => r.text())
+		const res = await app.handle('/lazy').then((r) => r.text())
 
 		expect(res).toBe('lazy')
 	})
@@ -47,7 +46,7 @@ describe('Modules', () => {
 
 		await app.modules
 
-		const res = await app.handle(req('/lazy')).then((r) => r.text())
+		const res = await app.handle('/lazy').then((r) => r.text())
 
 		expect(res).toBe('lazy')
 	})
@@ -57,7 +56,7 @@ describe('Modules', () => {
 
 		await app.modules
 
-		const res = await app.handle(req('/lazy')).then((r) => r.text())
+		const res = await app.handle('/lazy').then((r) => r.text())
 
 		expect(res).toBe('lazy')
 	})
@@ -67,7 +66,7 @@ describe('Modules', () => {
 
 		await app.modules
 
-		const res = await app.handle(req('/lazy')).then((r) => r.text())
+		const res = await app.handle('/lazy').then((r) => r.text())
 
 		expect(res).toBe('lazy')
 	})
@@ -80,7 +79,7 @@ describe('Modules', () => {
 
 		await app.modules
 
-		const res = await app.handle(req('/async'))
+		const res = await app.handle('/async')
 
 		expect(res.status).toEqual(200)
 	})
@@ -88,7 +87,7 @@ describe('Modules', () => {
 	it('handle other routes while lazy load', async () => {
 		const app = new Elysia().use(import('../timeout')).get('/', () => 'hi')
 
-		const res = await app.handle(req('/')).then((r) => r.text())
+		const res = await app.handle('/').then((r) => r.text())
 
 		expect(res).toBe('hi')
 	})
@@ -98,7 +97,7 @@ describe('Modules', () => {
 
 		await app.modules
 
-		const res = await app.handle(req('/lazy')).then((x) => x.text())
+		const res = await app.handle('/lazy').then((x) => x.text())
 
 		expect(res).toBe('lazy')
 	})
@@ -112,7 +111,7 @@ describe('Modules', () => {
 
 		await app.modules
 
-		const res = await app.handle(req('/')).then((x) => x.text())
+		const res = await app.handle('/').then((x) => x.text())
 
 		expect(res).toBe('hi')
 	})
@@ -135,7 +134,7 @@ describe('Modules', () => {
 
 		await app.modules
 
-		const res = await app.handle(req('/')).then((r) => r.json())
+		const res = await app.handle('/').then((r) => r.json())
 
 		expect(res).toEqual({
 			decorated: 'decorated-value',
@@ -157,7 +156,7 @@ describe('Modules', () => {
 			.compile()
 
 		await app.modules
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(fired).toBe(1)
 	})
@@ -175,7 +174,7 @@ describe('Modules', () => {
 			.compile()
 
 		await app.modules
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(fired).toBe(1)
 	})
@@ -193,7 +192,7 @@ describe('Modules', () => {
 
 		await app.modules
 
-		const response = await app.handle(req('/yay'))
+		const response = await app.handle('/yay')
 
 		expect(response.status).toBe(200)
 	})
@@ -213,7 +212,7 @@ describe('Modules', () => {
 
 		await app.modules
 
-		const response = await app.handle(req('/nested'))
+		const response = await app.handle('/nested')
 
 		expect(response.status).toBe(200)
 	})
@@ -225,7 +224,7 @@ describe('Modules', () => {
 
 		await app.modules
 
-		const res = await app.handle(req('/lazy-instance'))
+		const res = await app.handle('/lazy-instance')
 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('lazy-instance')
@@ -248,8 +247,8 @@ describe('Modules', () => {
 
 		await app.modules
 
-		expect((await app.handle(req('/a'))).status).toBe(200)
-		expect((await app.handle(req('/b'))).status).toBe(200)
+		expect((await app.handle('/a')).status).toBe(200)
+		expect((await app.handle('/b')).status).toBe(200)
 		expect(hookCalls).toBe(2)
 	})
 
@@ -267,7 +266,7 @@ describe('Modules', () => {
 
 		await app.modules
 
-		await app.handle(req('/lazy-instance'))
+		await app.handle('/lazy-instance')
 
 		expect(called).toBe(true)
 	})

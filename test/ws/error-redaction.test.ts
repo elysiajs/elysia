@@ -32,7 +32,7 @@ describe('WebSocket error redaction', () => {
 	it('redacts unexpected 4xx messages in production', async () => {
 		process.env.NODE_ENV = 'production'
 
-		expect(await frameFor(throws4xx)).not.toContain(
+		await expect(frameFor(throws4xx)).resolves.not.toContain(
 			'secret internal detail'
 		)
 	})
@@ -40,14 +40,16 @@ describe('WebSocket error redaction', () => {
 	it('includes unexpected 4xx messages during development', async () => {
 		delete process.env.NODE_ENV
 
-		expect(await frameFor(throws4xx)).toContain('secret internal detail')
+		await expect(frameFor(throws4xx)).resolves.toContain(
+			'secret internal detail'
+		)
 	})
 
 	it('preserves explicit error response bodies in production', async () => {
 		process.env.NODE_ENV = 'production'
 
-		expect(await frameFor(() => status(403, 'Forbidden'))).toContain(
-			'Forbidden'
-		)
+		await expect(
+			frameFor(() => status(403, 'Forbidden'))
+		).resolves.toContain('Forbidden')
 	})
 })

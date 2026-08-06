@@ -62,7 +62,7 @@ describe('HTTP request lifecycle', () => {
 			)
 
 		const res = await app.handle(new Request('http://localhost/ctx'))
-		expect(await res.text()).toBe('D:T')
+		await expect(res.text()).resolves.toBe('D:T')
 	})
 
 	it('afterHandle return value replaces the handler response', async () => {
@@ -75,7 +75,7 @@ describe('HTTP request lifecycle', () => {
 		)
 
 		const res = await app.handle(new Request('http://localhost/after'))
-		expect(await res.text()).toBe('AFTER-WINS')
+		await expect(res.text()).resolves.toBe('AFTER-WINS')
 	})
 
 	it('mapResponse transforms a per-route handler response', async () => {
@@ -89,7 +89,7 @@ describe('HTTP request lifecycle', () => {
 			.get('/hello', () => 'world')
 
 		const res = await app.handle(new Request('http://localhost/hello'))
-		expect(await res.text()).toBe('WRAP:world')
+		await expect(res.text()).resolves.toBe('WRAP:world')
 		expect(res.headers.get('x-mapped')).toBe('1')
 	})
 
@@ -107,7 +107,7 @@ describe('HTTP request lifecycle', () => {
 
 		const res = await app.handle(new Request('http://localhost/c'))
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('{"v":"n:42"}')
+		await expect(res.text()).resolves.toBe('{"v":"n:42"}')
 	})
 
 	it('returned and thrown status values produce identical responses', async () => {
@@ -160,7 +160,7 @@ describe('HTTP request lifecycle', () => {
 			new Request('http://localhost/handled')
 		)
 		expect(handled.status).toBe(200)
-		expect(await handled.text()).toBe('handled')
+		await expect(handled.text()).resolves.toBe('handled')
 
 		const unhandled = await app.handle(
 			new Request('http://localhost/unhandled')
@@ -217,7 +217,7 @@ describe('HTTP request lifecycle', () => {
 		)
 
 		const res = await app.handle(new Request('http://localhost/user/42'))
-		expect(await res.text()).toBe('id:42')
+		await expect(res.text()).resolves.toBe('id:42')
 		expect(order).toEqual(['beforeHandle', 'afterHandle'])
 	})
 
@@ -234,7 +234,7 @@ describe('HTTP request lifecycle', () => {
 			})
 
 		const res = await app.handle(new Request('http://localhost/gate'))
-		expect(await res.text()).toBe('GATED')
+		await expect(res.text()).resolves.toBe('GATED')
 		expect(seen).toEqual(['request'])
 	})
 
@@ -255,13 +255,13 @@ describe('HTTP request lifecycle', () => {
 		const routed = await app.handle(
 			new Request('http://localhost/passthrough')
 		)
-		expect(await routed.text()).toBe('WRAP:passthrough')
+		await expect(routed.text()).resolves.toBe('WRAP:passthrough')
 		expect(ran).toContain('mapResponse')
 
 		ran.length = 0
 
 		const gated = await app.handle(new Request('http://localhost/gate'))
-		expect(await gated.text()).toBe('WRAP:GATED')
+		await expect(gated.text()).resolves.toBe('WRAP:GATED')
 		expect(ran).toContain('mapResponse')
 	})
 })

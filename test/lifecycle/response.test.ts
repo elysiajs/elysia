@@ -1,7 +1,6 @@
 import { Elysia, InternalServerError, t } from '../../src'
 
 import { beforeEach, describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('afterResponse', () => {
 	it('runs after an error hook returns a response', async () => {
@@ -20,7 +19,7 @@ describe('afterResponse', () => {
 				})
 			})
 
-		await app.handle(req('/'))
+		await app.handle('/')
 		await Bun.sleep(1)
 
 		expect(isAfterResponseCalled).toBeTrue()
@@ -33,7 +32,7 @@ describe('afterResponse', () => {
 			isAfterResponseCalled = true
 		})
 
-		await app.handle(req('/'))
+		await app.handle('/')
 		await Bun.sleep(1)
 
 		expect(isAfterResponseCalled).toBeTrue()
@@ -51,7 +50,7 @@ describe('afterResponse', () => {
 			})
 			.get('/', () => '')
 
-		await app.handle(req('/'))
+		await app.handle('/')
 		await Bun.sleep(1)
 
 		expect(order).toEqual(['A', 'B'])
@@ -72,7 +71,7 @@ describe('afterResponse', () => {
 				return 'ok'
 			})
 
-		await app.handle(req('/'))
+		await app.handle('/')
 		await Bun.sleep(1)
 
 		expect(order).toEqual(['handler', 'hook', 'first:ok', 'second'])
@@ -88,7 +87,7 @@ describe('afterResponse', () => {
 			return 'ok'
 		})
 
-		await app.handle(req('/'))
+		await app.handle('/')
 		await Bun.sleep(1)
 
 		expect(responseValue).toBe('ok')
@@ -115,10 +114,10 @@ describe('afterResponse', () => {
 			}
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		await Bun.sleep(1)
 
-		expect(await response.text()).toBe('mapped')
+		await expect(response.text()).resolves.toBe('mapped')
 		expect(order).toEqual([
 			'handler',
 			'afterHandle',
@@ -147,7 +146,7 @@ describe('afterResponse', () => {
 			({ params: { id } }) => id
 		)
 
-		await app.handle(req('/id/1'))
+		await app.handle('/id/1')
 
 		await Bun.sleep(1)
 
@@ -165,10 +164,7 @@ describe('afterResponse', () => {
 
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
-		await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
+		await Promise.all([app.handle('/inner'), app.handle('/outer')])
 		await Bun.sleep(1)
 
 		expect(called).toEqual(['/inner', '/outer'])
@@ -185,13 +181,229 @@ describe('afterResponse', () => {
 
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
-		await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
+		await Promise.all([app.handle('/inner'), app.handle('/outer')])
 		await Bun.sleep(1)
 
 		expect(called).toEqual(['/inner'])
+	})
+})
+
+describe('afterResponse drain boundary', () => {
+	// A route with a handler compiles through the JIT lane; a request that
+	// matches no route falls through to the interpreted lane in
+	// `src/handler/fetch.ts`. Both drain the `defer()` queue, so both are pinned.
+
+	const captureWarnings = () => {
+		const warnings: string[] = []
+		const warn = console.warn
+		console.warn = (...values) => warnings.push(values.join(' '))
+
+		return {
+			warnings,
+			restore: () => {
+				console.warn = warn
+			}
+		}
+	}
+
+	it('ignores defer() called from inside the drain', async () => {
+		const { warnings, restore } = captureWarnings()
+
+		try {
+			const calls: string[] = []
+
+			const app = new Elysia().get('/', ({ defer }) => {
+				defer(() => {
+					calls.push('outer')
+					// bounded on purpose: draining appends made mid-drain lets a
+					// self-appending callback spin the loop forever, so an
+					// unbounded version of this test would wedge the suite
+					// instead of failing it
+					if (calls.length < 4) defer(() => calls.push('nested'))
+				})
+
+				return 'ok'
+			})
+
+			await app.handle('/')
+			await Bun.sleep(1)
+
+			expect(calls).toEqual(['outer'])
+			// the wedge used to be silent — the warning is the only signal that
+			// a callback was dropped
+			expect(warnings).toHaveLength(1)
+			expect(warnings[0]).toContain('defer()')
+		} finally {
+			restore()
+		}
+	})
+
+	it('ignores defer() called from inside the drain on the interpreted lane', async () => {
+		const { warnings, restore } = captureWarnings()
+
+		try {
+			const calls: string[] = []
+
+			const app = new Elysia().afterResponse(({ defer }) => {
+				defer(() => {
+					calls.push('outer')
+					if (calls.length < 4) defer(() => calls.push('nested'))
+				})
+			})
+
+			await app.handle('/missing')
+			await Bun.sleep(1)
+
+			expect(calls).toEqual(['outer'])
+			// the interpreted lane drops the re-entrant defer silently; only
+			// the compiled lane emits a dev warning for it
+			expect(warnings).toHaveLength(0)
+		} finally {
+			restore()
+		}
+	})
+
+	it('runs defer() registered by a static hook', async () => {
+		const calls: string[] = []
+
+		const app = new Elysia()
+			.afterResponse(({ defer }) => {
+				calls.push('hook')
+				defer(() => calls.push('deferred'))
+			})
+			.get('/', () => 'ok')
+
+		await app.handle('/')
+		await Bun.sleep(1)
+
+		// the drain snapshot is taken after the static hooks run, so a hook is
+		// still allowed to enqueue
+		expect(calls).toEqual(['hook', 'deferred'])
+	})
+
+	it('runs defer() registered by a static hook on the interpreted lane', async () => {
+		const calls: string[] = []
+
+		const app = new Elysia().afterResponse(({ defer }) => {
+			calls.push('hook')
+			defer(() => calls.push('deferred'))
+		})
+
+		await app.handle('/missing')
+		await Bun.sleep(1)
+
+		expect(calls).toEqual(['hook', 'deferred'])
+	})
+
+	it('runs defer() registered by an async static hook after it awaits', async () => {
+		const jit: string[] = []
+		const interpreted: string[] = []
+
+		const app = new Elysia()
+			.afterResponse(async ({ defer }) => {
+				await Bun.sleep(1)
+				jit.push('hook')
+				defer(() => jit.push('deferred'))
+			})
+			.get('/', () => 'ok')
+
+		const fallthrough = new Elysia().afterResponse(async ({ defer }) => {
+			await Bun.sleep(1)
+			interpreted.push('hook')
+			defer(() => interpreted.push('deferred'))
+		})
+
+		await Promise.all([app.handle('/'), fallthrough.handle('/missing')])
+		await Bun.sleep(10)
+
+		// the hook is awaited before the snapshot is taken, so deferring after
+		// an await is still inside the window
+		expect(jit).toEqual(['hook', 'deferred'])
+		expect(interpreted).toEqual(['hook', 'deferred'])
+	})
+
+	it('runs defer() registered by a promise-returning static hook', async () => {
+		const jit: string[] = []
+		const interpreted: string[] = []
+
+		// deliberately NOT declared `async`: the JIT lane keyed its `await` off
+		// `fn.constructor.name === 'AsyncFunction'`, so this shape was called
+		// fire-and-forget and the defer() landed past the drain's length
+		// snapshot — dropped, and without the warning that normally reports it
+		const hook = (order: string[]) => (c: any) =>
+			Bun.sleep(1).then(() => {
+				order.push('hook')
+				c.defer(() => order.push('deferred'))
+			})
+
+		const app = new Elysia().afterResponse(hook(jit)).get('/', () => 'ok')
+
+		const fallthrough = new Elysia().afterResponse(hook(interpreted))
+
+		await Promise.all([app.handle('/'), fallthrough.handle('/missing')])
+		await Bun.sleep(10)
+
+		expect(jit).toEqual(['hook', 'deferred'])
+		expect(interpreted).toEqual(['hook', 'deferred'])
+	})
+
+	it('runs mixed async, promise-returning and sync hooks in registration order', async () => {
+		const jit: string[] = []
+		const interpreted: string[] = []
+
+		// the promise-returning hook is registered first but resolves last, so
+		// an unawaited call reorders the drain to b, c, a
+		const build = (order: string[]) =>
+			new Elysia()
+				.afterResponse(() =>
+					Bun.sleep(5).then(() => {
+						order.push('a')
+					})
+				)
+				.afterResponse(() => {
+					order.push('b')
+				})
+				.afterResponse(async () => {
+					await Bun.sleep(1)
+					order.push('c')
+				})
+
+		const app = build(jit).get('/', () => 'ok')
+		const fallthrough = build(interpreted)
+
+		await Promise.all([app.handle('/'), fallthrough.handle('/missing')])
+		await Bun.sleep(30)
+
+		expect(jit).toEqual(['a', 'b', 'c'])
+		expect(interpreted).toEqual(['a', 'b', 'c'])
+	})
+
+	it('runs consecutive sync hooks unchanged', async () => {
+		const jit: string[] = []
+		const interpreted: string[] = []
+
+		// three sync hooks inline into one drain scope. The await guard's temp
+		// is declared per hook, so a scope-shared name would be a redeclaration
+		// SyntaxError and the route would fail to compile at all. `push`
+		// returns a number, pinning that a non-promise return stays ignored.
+		const build = (order: string[]) =>
+			new Elysia()
+				.afterResponse(() => {
+					order.push('a')
+				})
+				.afterResponse(() => order.push('b'))
+				.afterResponse(() => {
+					order.push('c')
+				})
+
+		const app = build(jit).get('/', () => 'ok')
+		const fallthrough = build(interpreted)
+
+		await Promise.all([app.handle('/'), fallthrough.handle('/missing')])
+		await Bun.sleep(1)
+
+		expect(jit).toEqual(['a', 'b', 'c'])
+		expect(interpreted).toEqual(['a', 'b', 'c'])
 	})
 })
 

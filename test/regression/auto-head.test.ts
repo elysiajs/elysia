@@ -2,7 +2,6 @@ import { describe, expect, it } from 'bun:test'
 
 import { Elysia } from '../../src'
 import { autoHead } from '../../src/plugin/auto-head'
-import { req } from '../utils'
 
 describe('auto-HEAD response bodies', () => {
 	it('cancels an unknown-length stream without synthesizing content-length', async () => {
@@ -30,11 +29,11 @@ describe('auto-HEAD response bodies', () => {
 		)
 		await app.modules
 
-		await app.handle(req('/stream'))
-		const response = await app.handle(req('/stream', { method: 'HEAD' }))
+		await app.handle('/stream')
+		const response = await app.handle('/stream', { method: 'HEAD' })
 
 		expect(response.status).toBe(200)
-		expect(await response.text()).toBe('')
+		await expect(response.text()).resolves.toBe('')
 		expect(response.headers.get('content-length')).toBeNull()
 	})
 
@@ -48,11 +47,11 @@ describe('auto-HEAD response bodies', () => {
 		)
 		await app.modules
 
-		await app.handle(req('/known'))
-		const response = await app.handle(req('/known', { method: 'HEAD' }))
+		await app.handle('/known')
+		const response = await app.handle('/known', { method: 'HEAD' })
 
 		expect(response.status).toBe(200)
 		expect(response.headers.get('content-length')).toBe('11')
-		expect(await response.text()).toBe('')
+		await expect(response.text()).resolves.toBe('')
 	})
 })

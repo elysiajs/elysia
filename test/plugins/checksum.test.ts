@@ -1,7 +1,6 @@
 import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 import { flattenChain } from '../../src/utils'
 
 describe('Checksum', () => {
@@ -138,7 +137,7 @@ describe('Checksum', () => {
 		const group = new Elysia().use(cookie()).get('/a', () => 'Hi')
 		const app = new Elysia().use(cookie()).use(group)
 
-		await app.handle(req('/a'))
+		await app.handle('/a')
 
 		expect(called).toBe(1)
 	})
@@ -160,7 +159,7 @@ describe('Checksum', () => {
 		const group = new Elysia().use(cookie()).get('/a', () => 'Hi')
 		const app = new Elysia().use(cookie()).use(group)
 
-		await app.handle(req('/a'))
+		await app.handle('/a')
 
 		expect(called).toBe(1)
 	})
@@ -186,7 +185,7 @@ describe('Checksum', () => {
 			.use(group)
 			.get('/cookie', () => 'Hi')
 
-		await Promise.all(['/a', '/cookie'].map((x) => app.handle(req(x))))
+		await Promise.all(['/a', '/cookie'].map((x) => app.handle(x)))
 
 		expect(count).toBe(2)
 	})
@@ -204,7 +203,7 @@ describe('Checksum', () => {
 		)
 
 		const app = new Elysia().use(guard)
-		const res = await app.handle(req('/guard/id/123'))
+		const res = await app.handle('/guard/id/123')
 
 		expect(res.status).toBe(200)
 	})
@@ -234,13 +233,13 @@ describe('Checksum', () => {
 			.use(plugin2)
 			.get('/root', ({ cookie }) => cookie)
 
-		const res1 = await app.handle(req('/v1/plugin')).then((x) => x.text())
+		const res1 = await app.handle('/v1/plugin').then((x) => x.text())
 		expect(res1).toBe('mock')
 
-		const res2 = await app.handle(req('/v1/plugin')).then((x) => x.text())
+		const res2 = await app.handle('/v1/plugin').then((x) => x.text())
 		expect(res2).toBe('mock')
 
-		const root = await app.handle(req('/root')).then((x) => x.text())
+		const root = await app.handle('/root').then((x) => x.text())
 		expect(root).toBe('mock')
 	})
 
@@ -271,7 +270,7 @@ describe('Checksum', () => {
 		const app = new Elysia().use(plugin).get('/', () => 'A')
 
 		await Promise.all(
-			['/v1', '/v1/v1', '/'].map((path) => app.handle(req(path)))
+			['/v1', '/v1/v1', '/'].map((path) => app.handle(path))
 		)
 
 		expect(x).toBe(3)
@@ -319,9 +318,7 @@ describe('Checksum', () => {
 			.get('/all', () => 'A')
 
 		await Promise.all(
-			['/root', '/1', '/2', '/3', '/all'].map((path) =>
-				app.handle(req(path))
-			)
+			['/root', '/1', '/2', '/3', '/all'].map((path) => app.handle(path))
 		)
 
 		expect(a).toBe(4)
@@ -346,7 +343,7 @@ describe('Checksum', () => {
 		const app = new Elysia().use(plugin)
 
 		await Promise.all(
-			['/not-call', '/call'].map((path) => app.handle(req(path)))
+			['/not-call', '/call'].map((path) => app.handle(path))
 		)
 
 		expect(i).toBe(1)
@@ -368,7 +365,7 @@ describe('Checksum', () => {
 			.use(child)
 			.get('/', ({ hi }) => hi())
 
-		const response = await app.handle(req('/')).then((res) => res.text())
+		const response = await app.handle('/').then((res) => res.text())
 
 		expect(response).toBe('hi + bye')
 	})

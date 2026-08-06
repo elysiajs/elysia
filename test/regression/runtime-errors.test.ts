@@ -2,7 +2,6 @@ import { describe, expect, it } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { ValidationError } from '../../src/error'
-import { req } from '../utils'
 
 describe('runtime error responses', () => {
 	it('uses .error(Error, handler) as a catch-all class mapping', async () => {
@@ -12,8 +11,8 @@ describe('runtime error responses', () => {
 				throw new Error('kaboom')
 			})
 
-		const response = await app.handle(req('/boom'))
-		expect(await response.text()).toBe('caught: kaboom')
+		const response = await app.handle('/boom')
+		await expect(response.text()).resolves.toBe('caught: kaboom')
 	})
 
 	it('includes the malformed JSON cause in a non-production 400 response', async () => {
@@ -44,7 +43,7 @@ describe('runtime error responses', () => {
 			({ query }) => query
 		)
 
-		const response = await app.handle(req('/x?page=abc'))
+		const response = await app.handle('/x?page=abc')
 		expect(response.status).toBe(422)
 
 		const body = (await response.json()) as any

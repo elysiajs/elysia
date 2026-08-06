@@ -1,7 +1,20 @@
 import { describe, expect, it } from 'bun:test'
 import type { Static } from 'typebox'
+import { fileTypeFromBlob } from 'file-type'
 import { z } from 'zod'
-import { Elysia, fileType, t, type ValidationError } from '../../src'
+import {
+	Elysia,
+	fileType,
+	setFileTypeDetector,
+	t,
+	type ValidationError
+} from '../../src'
+import { upload } from '../utils'
+
+// The detector is a process-wide global with no default. A whole-suite run only
+// passes because file.test.ts sorts first and leaves one installed; without this
+// every `t.File({ type })` here fails as the wrong type.
+setFileTypeDetector(fileTypeFromBlob)
 
 const variantObject = t.Object({
 	price: t.Number({ minimum: 0 }),
@@ -992,5 +1005,174 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 				featured: true
 			}
 		})
+	})
+})
+
+// Multipart is an all-strings transport: a File-bearing schema coerces scalars
+// at its root properties, as query/headers do. A schema without a File is
+// indistinguishable from a JSON body and keeps `coerceBody`'s stricter
+// Number/Boolean rule, so the two lanes diverge on purpose.
+describe('FormData scalar coercion', () => {
+	const scalar = (n: any) =>
+		new Elysia().post(
+			'/',
+			{ body: t.Object({ file: t.File(), n }) },
+			({ body }: any) => ({ n: body.n })
+		)
+
+	it('should coerce Integer alongside a File', async () => {
+		const response = await scalar(t.Integer()).handle(
+			upload('/', { file: 'aris-yuzu.jpg', n: '1' }).request
+		)
+
+		expect(response.status).toBe(200)
+		await expect(response.json()).resolves.toEqual({ n: 1 })
+	})
+
+	it('should coerce Number alongside a File', async () => {
+		const response = await scalar(t.Number()).handle(
+			upload('/', { file: 'aris-yuzu.jpg', n: '1' }).request
+		)
+
+		expect(response.status).toBe(200)
+		await expect(response.json()).resolves.toEqual({ n: 1 })
+	})
+
+	it('should coerce a fractional Number alongside a File', async () => {
+		// `upload` reads any value containing '.' as an image filename
+		const body = new FormData()
+		body.append('file', Bun.file('./test/images/aris-yuzu.jpg'))
+		body.append('n', '1.5')
+
+		const response = await scalar(t.Number()).handle(
+			new Request('http://localhost/', { method: 'POST', body })
+		)
+
+		expect(response.status).toBe(200)
+		await expect(response.json()).resolves.toEqual({ n: 1.5 })
+	})
+
+	it('should coerce Boolean alongside a File', async () => {
+		const response = await scalar(t.Boolean()).handle(
+			upload('/', { file: 'aris-yuzu.jpg', n: 'true' }).request
+		)
+
+		expect(response.status).toBe(200)
+		await expect(response.json()).resolves.toEqual({ n: true })
+	})
+
+	it('should still reject a non-numeric Integer alongside a File', async () => {
+		const response = await scalar(t.Integer()).handle(
+			upload('/', { file: 'aris-yuzu.jpg', n: 'abc' }).request
+		)
+
+		expect(response.status).toBe(422)
+		await expect(response.json()).resolves.toMatchObject({
+			type: 'validation',
+			property: '/n'
+		})
+	})
+
+	it('should still reject a fractional value for Integer alongside a File', async () => {
+		const body = new FormData()
+		body.append('file', Bun.file('./test/images/aris-yuzu.jpg'))
+		body.append('n', '1.5')
+
+		const response = await scalar(t.Integer()).handle(
+			new Request('http://localhost/', { method: 'POST', body })
+		)
+
+		expect(response.status).toBe(422)
+	})
+
+	// `coerceRoot` descends a root property's combinators, so the Number branch
+	// of a union coerces too — the query lane already decodes `?v=1` to a
+	// number, and both lanes carry the same all-strings transport
+	it('should coerce the Number branch of a root union alongside a File, as query does', async () => {
+		const union = () => t.Union([t.Number(), t.String()])
+
+		const withFile = await new Elysia()
+			.post(
+				'/',
+				{ body: t.Object({ file: t.File(), v: union() }) },
+				({ body }: any) => ({ v: body.v })
+			)
+			.handle(upload('/', { file: 'aris-yuzu.jpg', v: '1' }).request)
+
+		expect(withFile.status).toBe(200)
+		await expect(withFile.json()).resolves.toEqual({ v: 1 })
+
+		const query = await new Elysia()
+			.get(
+				'/',
+				{ query: t.Object({ v: union() }) },
+				({ query }: any) => ({
+					v: query.v
+				})
+			)
+			.handle(new Request('http://localhost/?v=1'))
+
+		expect(query.status).toBe(200)
+		await expect(query.json()).resolves.toEqual({ v: 1 })
+	})
+
+	it('should coerce Integer without a File', async () => {
+		const app = new Elysia().post(
+			'/',
+			{ body: t.Object({ n: t.Integer() }) },
+			({ body }) => ({ n: body.n })
+		)
+
+		const response = await app.handle(upload('/', { n: '1' }).request)
+
+		expect(response.status).toBe(200)
+		await expect(response.json()).resolves.toEqual({ n: 1 })
+	})
+
+	// deeper than `coerceRoot` reaches: the unfiltered Integer entry is what
+	// decodes the JSON string's contents, in both lanes
+	it('should coerce a nested Integer sent as a JSON string, with and without a File', async () => {
+		const nested = t.Object({ n: t.Integer() })
+
+		const withFile = await new Elysia()
+			.post(
+				'/',
+				{ body: t.Object({ file: t.File(), meta: nested }) },
+				({ body }: any) => body.meta
+			)
+			.handle(
+				upload('/', {
+					file: 'aris-yuzu.jpg',
+					meta: JSON.stringify({ n: '2' })
+				}).request
+			)
+
+		expect(withFile.status).toBe(200)
+		await expect(withFile.json()).resolves.toEqual({ n: 2 })
+
+		const app = new Elysia().post(
+			'/',
+			{ body: t.Object({ meta: nested }) },
+			({ body }) => body.meta
+		)
+		const withoutFile = await app.handle(
+			upload('/', { meta: JSON.stringify({ n: '2' }) }).request
+		)
+
+		expect(withoutFile.status).toBe(200)
+		await expect(withoutFile.json()).resolves.toEqual({ n: 2 })
+	})
+
+	// pins the divergence: no File is indistinguishable from a JSON body
+	it('should not coerce Number without a File', async () => {
+		const app = new Elysia().post(
+			'/',
+			{ body: t.Object({ n: t.Number() }) },
+			({ body }) => ({ n: body.n })
+		)
+
+		const response = await app.handle(upload('/', { n: '1' }).request)
+
+		expect(response.status).toBe(422)
 	})
 })

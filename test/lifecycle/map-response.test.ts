@@ -2,7 +2,6 @@ import { Elysia, form } from '../../src'
 import { trace } from '../../src/plugin/trace'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('Map Response', () => {
 	it('work global', async () => {
@@ -10,7 +9,7 @@ describe('Map Response', () => {
 			.mapResponse(() => new Response('A'))
 			.get('/', () => 'Hutao')
 
-		const res = await app.handle(req('/')).then((x) => x.text())
+		const res = await app.handle('/').then((x) => x.text())
 
 		expect(res).toBe('A')
 	})
@@ -26,7 +25,7 @@ describe('Map Response', () => {
 			() => 'Hutao'
 		)
 
-		const res = await app.handle(req('/')).then((x) => x.text())
+		const res = await app.handle('/').then((x) => x.text())
 
 		expect(res).toBe('A')
 	})
@@ -50,7 +49,7 @@ describe('Map Response', () => {
 			}
 		)
 
-		const headers = await app.handle(req('/')).then((x) => x.headers)
+		const headers = await app.handle('/').then((x) => x.headers)
 
 		expect(headers.get('X-Test')).toContain('OK')
 		expect(headers.get('X-Powered-By')).toContain('Elysia')
@@ -64,7 +63,7 @@ describe('Map Response', () => {
 
 		const app = new Elysia().use(plugin).get('/', () => 'a')
 
-		const res = await app.handle(req('/')).then((t) => t.text())
+		const res = await app.handle('/').then((t) => t.text())
 		expect(res).toBe('Fubuki')
 	})
 
@@ -73,7 +72,7 @@ describe('Map Response', () => {
 
 		const app = new Elysia().use(plugin).get('/', () => 'a')
 
-		const res = await app.handle(req('/')).then((t) => t.text())
+		const res = await app.handle('/').then((t) => t.text())
 		expect(res).toBe('a')
 	})
 
@@ -94,7 +93,7 @@ describe('Map Response', () => {
 			() => 'Hutao'
 		)
 
-		const res = await app.handle(req('/')).then((x) => x.text())
+		const res = await app.handle('/').then((x) => x.text())
 
 		expect(res).toBe('A')
 	})
@@ -111,7 +110,7 @@ describe('Map Response', () => {
 			() => 'Hu'
 		)
 
-		const res = await app.handle(req('/')).then((x) => x.text())
+		const res = await app.handle('/').then((x) => x.text())
 
 		expect(res).toBe('Hutao')
 	})
@@ -134,7 +133,7 @@ describe('Map Response', () => {
 			() => 'Hu'
 		)
 
-		const res = await app.handle(req('/')).then((x) => x.headers)
+		const res = await app.handle('/').then((x) => x.headers)
 
 		expect(res.get('X-Powered-By')).toBe('Elysia')
 		expect(res.get('X-Series')).toBe('Genshin')
@@ -145,7 +144,7 @@ describe('Map Response', () => {
 			.mapResponse(async () => new Response('A'))
 			.get('/', () => 'Hutao')
 
-		const res = await app.handle(req('/')).then((x) => x.text())
+		const res = await app.handle('/').then((x) => x.text())
 
 		expect(res).toBe('A')
 	})
@@ -155,7 +154,7 @@ describe('Map Response', () => {
 			.mapResponse(async () => {})
 			.get('/', () => 'Hutao')
 
-		const res = await app.handle(req('/')).then((x) => x.text())
+		const res = await app.handle('/').then((x) => x.text())
 
 		expect(res).toBe('Hutao')
 	})
@@ -172,7 +171,7 @@ describe('Map Response', () => {
 			})
 			.get('/', () => '')
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(order).toEqual(['A', 'B'])
 	})
@@ -189,8 +188,8 @@ describe('Map Response', () => {
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
 		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
+			app.handle('/inner'),
+			app.handle('/outer')
 		])
 
 		expect(called).toEqual(['/inner', '/outer'])
@@ -208,8 +207,8 @@ describe('Map Response', () => {
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
 		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
+			app.handle('/inner'),
+			app.handle('/outer')
 		])
 
 		expect(called).toEqual(['/inner'])
@@ -229,7 +228,7 @@ describe('Map Response', () => {
 			])
 			.get('/', () => 'NOOP')
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(total).toEqual(2)
 	})
@@ -249,7 +248,7 @@ describe('Map Response', () => {
 				throw new Error('Hello')
 			})
 
-		const response = await app.handle(req('/')).then((x) => x.text())
+		const response = await app.handle('/').then((x) => x.text())
 
 		expect(response).toBe('aru')
 	})
@@ -263,7 +262,7 @@ describe('Map Response', () => {
 			})
 			.get('/', async () => 'aru')
 
-		const response = await app.handle(req('/')).then((x) => x.text())
+		const response = await app.handle('/').then((x) => x.text())
 
 		expect(response).toBe('aru')
 	})
@@ -274,7 +273,7 @@ describe('Map Response', () => {
 			.mapResponse(() => {})
 			.get('/', () => 'ok')
 
-		const response = await app.handle(req('/')).then((x) => x.text())
+		const response = await app.handle('/').then((x) => x.text())
 
 		expect(response).toBe('ok')
 	})
@@ -286,7 +285,7 @@ describe('Map Response', () => {
 			})
 			.get('/', new Response('ok'))
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		const value = await response.text()
 
 		expect(value).toBe('ok')
@@ -303,7 +302,9 @@ describe('Map Response', () => {
 				if (mode === 'asynchronous') app.request(async () => 'early')
 				else {
 					if (mode === 'traced')
-						app.use(trace()).trace(({ onRequest }) => onRequest(() => {}))
+						app.use(trace()).trace(({ onRequest }) =>
+							onRequest(() => {})
+						)
 					app.request(() => 'early')
 				}
 
@@ -311,7 +312,7 @@ describe('Map Response', () => {
 					called = true
 				}).get('/', () => 'unreachable')
 
-				await app.handle(req('/'))
+				await app.handle('/')
 
 				expect(called).toBe(true)
 			}
@@ -325,7 +326,7 @@ describe('Map Response', () => {
 				})
 				.get('/', () => 'unreachable')
 
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 
 			await expect(response.text()).resolves.toBe('mapped')
 		})
@@ -340,7 +341,7 @@ describe('Map Response', () => {
 				})
 				.get('/', () => 'unreachable')
 
-			await app.handle(req('/'))
+			await app.handle('/')
 
 			expect(seen).toEqual({ key: 'val' })
 		})
@@ -352,7 +353,9 @@ describe('Map Response', () => {
 
 				if (mode === 'asynchronous') app.request(async () => {})
 				else if (mode === 'traced')
-					app.use(trace()).trace(({ onRequest }) => onRequest(() => {}))
+					app.use(trace()).trace(({ onRequest }) =>
+						onRequest(() => {})
+					)
 
 				app.request(() => 'early')
 					.mapResponse(async ({ responseValue }) => {
@@ -362,7 +365,7 @@ describe('Map Response', () => {
 					.error(({ error }) => error.message)
 					.get('/', () => 'unreachable')
 
-				const response = await app.handle(req('/'))
+				const response = await app.handle('/')
 
 				await expect(response.text()).resolves.toBe(
 					`map failed: ${mode}`

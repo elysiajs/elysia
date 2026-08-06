@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
-import { req, post } from '../utils'
-import { upload } from '../utils'
+import { post, json } from '../utils'
 import { z } from 'zod'
 
 // Returns no fields so each test isolates the TypeBox member.
@@ -22,7 +21,7 @@ describe('TypeBox query coercion with Standard Schema guards', () => {
 			({ query }) => query
 		)
 
-		const res = await app.handle(req('/?page=5')).then((x) => x.json())
+		const res = await app.handle('/?page=5').then((x) => x.json())
 
 		expect(res.page).toBe(5)
 	})
@@ -39,7 +38,7 @@ describe('TypeBox query coercion with Standard Schema guards', () => {
 				({ query }) => query
 			)
 
-		const res = await app.handle(req('/?page=5')).then((x) => x.json())
+		const res = await app.handle('/?page=5').then((x) => x.json())
 
 		expect(res.page).toBe(5)
 	})
@@ -53,7 +52,7 @@ describe('TypeBox query coercion with Standard Schema guards', () => {
 				({ query }) => query
 			)
 
-		const res = await app.handle(req('/?page=abc'))
+		const res = await app.handle('/?page=abc')
 		expect(res.status).toBe(422)
 	})
 })
@@ -66,7 +65,7 @@ describe('TypeBox defaults with Standard Schema guards', () => {
 			({ query }) => query
 		)
 
-		const res = await app.handle(req('/')).then((x) => x.json())
+		const res = await app.handle('/').then((x) => x.json())
 		expect(res).toEqual({ page: 1 })
 	})
 
@@ -79,7 +78,7 @@ describe('TypeBox defaults with Standard Schema guards', () => {
 				({ query }) => query
 			)
 
-		const res = await app.handle(req('/')).then((x) => x.json())
+		const res = await app.handle('/').then((x) => x.json())
 		expect(res).toEqual({ page: 1 })
 	})
 
@@ -92,7 +91,7 @@ describe('TypeBox defaults with Standard Schema guards', () => {
 				({ query }) => query
 			)
 
-		const res = await app.handle(req('/?page=7')).then((x) => x.json())
+		const res = await app.handle('/?page=7').then((x) => x.json())
 		expect(res.page).toBe(7)
 	})
 
@@ -124,7 +123,7 @@ describe('TypeBox normalization with Standard Schema guards', () => {
 			({ body }) => body
 		)
 
-		const res = await app.handle(post('/', { name: 'lilith', extra: true }))
+		const res = await app.handle('/', json({ name: 'lilith', extra: true }))
 		expect(res.status).toBe(422)
 	})
 
@@ -137,7 +136,7 @@ describe('TypeBox normalization with Standard Schema guards', () => {
 				({ body }) => body
 			)
 
-		const res = await app.handle(post('/', { name: 'lilith', extra: true }))
+		const res = await app.handle('/', json({ name: 'lilith', extra: true }))
 		expect(res.status).toBe(422)
 	})
 
@@ -150,7 +149,7 @@ describe('TypeBox normalization with Standard Schema guards', () => {
 				({ body }) => body
 			)
 
-		const res = await app.handle(post('/', { name: 'lilith' }))
+		const res = await app.handle('/', json({ name: 'lilith' }))
 		expect(res.status).toBe(200)
 	})
 

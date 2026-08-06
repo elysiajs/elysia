@@ -2,7 +2,7 @@
 import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { post, req } from '../utils'
+import { post } from '../utils'
 import { hasType } from '../schema/has-type'
 
 const payload = { hello: 'world' }
@@ -165,7 +165,7 @@ describe('Static code analysis', () => {
 
 		await new Promise((resolve) => setTimeout(resolve, 25))
 
-		const response = await app.handle(req('/')).then((x) => x.text())
+		const response = await app.handle('/').then((x) => x.text())
 
 		expect(response).toBe('hi')
 	})
@@ -216,7 +216,7 @@ describe('Static code analysis', () => {
 			)
 
 		const response = await app
-			.handle(req('/products?pageIndex=1&pageSize=2'))
+			.handle('/products?pageIndex=1&pageSize=2')
 			.then((x) => x.text())
 
 		expect(response).toBe(`pageIndex=1; pageSize=2`)
@@ -255,7 +255,7 @@ describe('Static code analysis', () => {
 		)
 
 		const response = await app
-			.handle(req('/what?xxltee=on'))
+			.handle('/what?xxltee=on')
 			.then((x) => x.json())
 
 		expect(response).toEqual({

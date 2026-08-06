@@ -81,7 +81,8 @@ describe('HTTP and WebSocket lifecycle', () => {
 		let inMessage = false
 		const wsOrder: string[] = []
 		const wsApp = new Elysia()
-			.use(websocket()).ws('/order', {
+			.use(websocket())
+			.ws('/order', {
 				transform() {
 					if (inMessage) wsOrder.push('transform')
 				},
@@ -142,7 +143,8 @@ describe('HTTP and WebSocket lifecycle', () => {
 		const httpBody = JSON.parse(await httpRes.text())
 
 		const wsApp = new Elysia()
-			.use(websocket()).ws('/v', {
+			.use(websocket())
+			.ws('/v', {
 				body: t.Object({ n: t.Number() }),
 				message(ws: any) {
 					ws.send(String(ws.body.n))
@@ -191,10 +193,11 @@ describe('HTTP and WebSocket lifecycle', () => {
 				body: JSON.stringify({ n: 5 })
 			})
 		)
-		expect(await httpRes.text()).toBe('5')
+		await expect(httpRes.text()).resolves.toBe('5')
 
 		const wsApp = new Elysia()
-			.use(websocket()).ws('/v', {
+			.use(websocket())
+			.ws('/v', {
 				body: t.Object({ n: t.Number() }),
 				message(ws: any) {
 					ws.send(String(ws.body.n))
@@ -225,7 +228,8 @@ describe('HTTP and WebSocket lifecycle', () => {
 		const httpBody = await httpRes.text()
 
 		const wsApp = new Elysia()
-			.use(websocket()).ws('/date', {
+			.use(websocket())
+			.ws('/date', {
 				response: t.Object({ when: t.Date() }),
 				message(ws: any) {
 					ws.send({ when: new Date(iso) })
@@ -247,10 +251,11 @@ describe('HTTP and WebSocket lifecycle', () => {
 		)
 		const httpRes = await httpApp.handle(new Request('http://localhost/c'))
 		expect(httpRes.status).toBe(200)
-		expect(await httpRes.text()).toBe('{"v":"n:42"}')
+		await expect(httpRes.text()).resolves.toBe('{"v":"n:42"}')
 
 		const wsApp = new Elysia()
-			.use(websocket()).ws('/c', {
+			.use(websocket())
+			.ws('/c', {
 				response: t.Object({ v: Coded }),
 				message(ws: any) {
 					ws.send({ v: 42 })
@@ -274,10 +279,11 @@ describe('HTTP and WebSocket lifecycle', () => {
 		const httpRes = await httpApp.handle(
 			new Request('http://localhost/after')
 		)
-		expect(await httpRes.text()).toBe('AFTER-WINS')
+		await expect(httpRes.text()).resolves.toBe('AFTER-WINS')
 
 		const wsApp = new Elysia()
-			.use(websocket()).ws('/after', {
+			.use(websocket())
+			.ws('/after', {
 				afterHandle: () => 'AFTER-WINS' as any,
 				message(ws: any) {
 					ws.send('handler-body')
@@ -296,10 +302,11 @@ describe('HTTP and WebSocket lifecycle', () => {
 		})
 		const httpRes = await httpApp.handle(new Request('http://localhost/st'))
 		expect(httpRes.status).toBe(418)
-		expect(await httpRes.text()).toBe('teapot')
+		await expect(httpRes.text()).resolves.toBe('teapot')
 
 		const wsApp = new Elysia()
-			.use(websocket()).ws('/st', {
+			.use(websocket())
+			.ws('/st', {
 				message() {
 					throw status(418, 'teapot')
 				}
@@ -312,7 +319,8 @@ describe('HTTP and WebSocket lifecycle', () => {
 		)
 
 		const returnedApp = new Elysia()
-			.use(websocket()).ws('/ret', {
+			.use(websocket())
+			.ws('/ret', {
 				message() {
 					return status(418, 'teapot')
 				}
@@ -348,7 +356,8 @@ describe('HTTP and WebSocket lifecycle', () => {
 		})
 
 		const wsApp = new Elysia()
-			.use(websocket()).ws('/e', {
+			.use(websocket())
+			.ws('/e', {
 				message() {
 					throw new Error('kaboom')
 				}
@@ -371,7 +380,8 @@ describe('HTTP and WebSocket lifecycle', () => {
 		expect(httpText).not.toContain('secret-string')
 
 		const wsApp = new Elysia()
-			.use(websocket()).ws('/ts', {
+			.use(websocket())
+			.ws('/ts', {
 				message() {
 					throw 'secret-string'
 				}
@@ -395,7 +405,8 @@ describe('HTTP and WebSocket lifecycle', () => {
 		expect(httpText).not.toContain('secret-object')
 
 		const wsApp = new Elysia()
-			.use(websocket()).ws('/to', {
+			.use(websocket())
+			.ws('/to', {
 				message() {
 					throw { password: 'secret-object' }
 				}
@@ -412,7 +423,8 @@ describe('HTTP and WebSocket lifecycle', () => {
 
 	it('sends an Error frame before a close queued in finally', async () => {
 		const wsApp = new Elysia()
-			.use(websocket()).ws('/race', {
+			.use(websocket())
+			.ws('/race', {
 				message(ws: any) {
 					try {
 						throw new Error('race')
@@ -451,7 +463,8 @@ describe('HTTP and WebSocket lifecycle', () => {
 		const httpText = await httpRes.text()
 
 		const wsApp = new Elysia()
-			.use(websocket()).ws('/teapot', {
+			.use(websocket())
+			.ws('/teapot', {
 				message(ws: any) {
 					try {
 						throw new Teapot()

@@ -23,7 +23,7 @@ describe('AOT plugin source transforms', () => {
 
 		it('uses the type-import source independently of registerFrom', async () => {
 			const userCode = `import { t } from 'elysia'\nt.Number()`
-			expect(await rewriteTypeImport(userCode)).toBe(
+			expect(rewriteTypeImport(userCode)).toBe(
 				`import * as t from 'elysia/type'\nt.Number()`
 			)
 		})
@@ -32,7 +32,7 @@ describe('AOT plugin source transforms', () => {
 	describe('import attributes', () => {
 		it('keeps a with-attribute on the namespace import', async () => {
 			expect(
-				await rewriteTypeImport(
+				rewriteTypeImport(
 					`import { t } from 'elysia' with { type: 'macro' }\nt.Number()`
 				)
 			).toBe(
@@ -42,7 +42,7 @@ describe('AOT plugin source transforms', () => {
 
 		it('copies a with-attribute to both split imports', async () => {
 			expect(
-				await rewriteTypeImport(
+				rewriteTypeImport(
 					`import { Elysia, t } from 'elysia' with { type: 'json' }\nt.Object()`
 				)
 			).toBe(
@@ -54,7 +54,7 @@ describe('AOT plugin source transforms', () => {
 
 		it('handles the legacy `assert` attribute keyword', async () => {
 			expect(
-				await rewriteTypeImport(
+				rewriteTypeImport(
 					`import { t } from 'elysia' assert { type: 'macro' }\nt.X()`
 				)
 			).toBe(
@@ -64,7 +64,7 @@ describe('AOT plugin source transforms', () => {
 
 		it('does not swallow a trailing semicolon as an attribute', async () => {
 			expect(
-				await rewriteTypeImport(`import { t } from 'elysia';\nt.X()`)
+				rewriteTypeImport(`import { t } from 'elysia';\nt.X()`)
 			).toBe(`import * as t from 'elysia/type';\nt.X()`)
 		})
 	})

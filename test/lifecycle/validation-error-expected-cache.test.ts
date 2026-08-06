@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 
 import { Elysia, t, ValidationError } from '../../src'
-import { post } from '../utils'
+import { post, json } from '../utils'
 
 describe('ValidationError expected values', () => {
 	it('caches and deeply freezes expected values by schema', async () => {
@@ -32,8 +32,8 @@ describe('ValidationError expected values', () => {
 				({ body }) => body
 			)
 
-		await app.handle(post('/', { profile: { name: 123 } }))
-		await app.handle(post('/', { profile: { name: 123 } }))
+		await app.handle('/', json({ profile: { name: 123 } }))
+		await app.handle('/', json({ profile: { name: 123 } }))
 
 		expect(expectedValues).toHaveLength(2)
 		expect(expectedValues[0]).toBe(expectedValues[1])
@@ -57,7 +57,7 @@ describe('ValidationError expected values', () => {
 				({ body }) => body
 			)
 
-		await app.handle(post('/', { name: 123, age: 'x' }))
+		await app.handle('/', json({ name: 123, age: 'x' }))
 
 		expect(expected).toEqual({ name: '', age: 0 })
 	})

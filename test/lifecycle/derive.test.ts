@@ -1,7 +1,6 @@
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('derive', () => {
 	it('adds returned fields to the request context', async () => {
@@ -11,7 +10,7 @@ describe('derive', () => {
 			}))
 			.get('/', ({ hi }) => hi())
 
-		const res = await app.handle(req('/')).then((t) => t.text())
+		const res = await app.handle('/').then((t) => t.text())
 		expect(res).toBe('hi')
 	})
 
@@ -22,7 +21,7 @@ describe('derive', () => {
 
 		const app = new Elysia().use(plugin).get('/', ({ hi }) => hi())
 
-		const res = await app.handle(req('/')).then((t) => t.text())
+		const res = await app.handle('/').then((t) => t.text())
 		expect(res).toBe('hi')
 	})
 
@@ -36,7 +35,7 @@ describe('derive', () => {
 			// @ts-expect-error
 			.get('/', ({ hi }) => typeof hi === 'undefined')
 
-		const res = await app.handle(req('/')).then((t) => t.text())
+		const res = await app.handle('/').then((t) => t.text())
 		expect(res).toBe('true')
 	})
 
@@ -54,7 +53,7 @@ describe('derive', () => {
 			})
 			.get('/', () => '')
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(order).toEqual(['A', 'B'])
 	})
@@ -71,7 +70,7 @@ describe('derive', () => {
 				return store.counter
 			})
 
-		const res = await app.handle(req('/')).then((t) => t.text())
+		const res = await app.handle('/').then((t) => t.text())
 		expect(res).toBe('2')
 	})
 
@@ -117,7 +116,7 @@ describe('derive', () => {
 				({ name }) => name
 			)
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(order).toEqual([
 			'app beforeHandle',
@@ -140,8 +139,8 @@ describe('derive', () => {
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
 		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
+			app.handle('/inner'),
+			app.handle('/outer')
 		])
 
 		expect(called).toEqual(['/inner', '/outer'])
@@ -161,8 +160,8 @@ describe('derive', () => {
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
 		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
+			app.handle('/inner'),
+			app.handle('/outer')
 		])
 
 		expect(called).toEqual(['/inner'])
@@ -184,9 +183,9 @@ describe('derive', () => {
 		const app = new Elysia().use(middle).get('/outer', () => 'NOOP')
 
 		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/middle')),
-			app.handle(req('/outer'))
+			app.handle('/inner'),
+			app.handle('/middle'),
+			app.handle('/outer')
 		])
 
 		expect(called).toEqual(['/inner', '/middle'])
@@ -197,7 +196,7 @@ describe('derive', () => {
 			.derive(({ status }) => status(418))
 			.get('/', () => '')
 
-		const res = await app.handle(req('/')).then((x) => x.text())
+		const res = await app.handle('/').then((x) => x.text())
 
 		expect(res).toEqual("I'm a teapot")
 	})
@@ -212,7 +211,7 @@ describe('derive', () => {
 			.derive(({ status }) => status(418))
 			.get('/', () => '')
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(isOnErrorCalled).toBe(false)
 	})
@@ -222,7 +221,7 @@ describe('derive', () => {
 			.derive(({ status }) => status(418))
 			.get('/', () => '')
 
-		const response = await new Elysia().use(route).handle(req('/'))
+		const response = await new Elysia().use(route).handle('/')
 
 		expect(response.status).toBe(418)
 		await expect(response.text()).resolves.toBe("I'm a teapot")

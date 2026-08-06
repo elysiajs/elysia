@@ -1,7 +1,7 @@
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { delay, req } from '../utils'
+import { delay } from '../utils'
 
 describe('beforeHandle', () => {
 	it('an app hook can short-circuit the route handler', async () => {
@@ -12,7 +12,7 @@ describe('beforeHandle', () => {
 			})
 			.get('/name/:name', ({ params: { name } }) => name)
 
-		const res = await app.handle(req('/name/Fubuki'))
+		const res = await app.handle('/name/Fubuki')
 
 		await expect(res.text()).resolves.toBe('Cat')
 	})
@@ -28,7 +28,7 @@ describe('beforeHandle', () => {
 			({ params: { name } }) => name
 		)
 
-		const res = await app.handle(req('/name/Fubuki'))
+		const res = await app.handle('/name/Fubuki')
 
 		await expect(res.text()).resolves.toBe('Cat')
 	})
@@ -45,8 +45,8 @@ describe('beforeHandle', () => {
 			)
 			.get('/name/:name', ({ params: { name } }) => name)
 
-		const base = await app.handle(req('/name/fubuki'))
-		const scoped = await app.handle(req('/type/name/fubuki'))
+		const base = await app.handle('/name/fubuki')
+		const scoped = await app.handle('/type/name/fubuki')
 
 		await expect(base.text()).resolves.toBe('fubuki')
 		await expect(scoped.text()).resolves.toBe('cat')
@@ -64,7 +64,7 @@ describe('beforeHandle', () => {
 			.use(transformId)
 			.get('/name/:name', ({ params: { name } }) => name)
 
-		const res = await app.handle(req('/name/Fubuki'))
+		const res = await app.handle('/name/Fubuki')
 
 		await expect(res.text()).resolves.toBe('Cat')
 	})
@@ -80,7 +80,7 @@ describe('beforeHandle', () => {
 			.use(beforeHandle)
 			.get('/name/:name', ({ params: { name } }) => name)
 
-		const res = await app.handle(req('/name/Fubuki'))
+		const res = await app.handle('/name/Fubuki')
 
 		await expect(res.text()).resolves.toBe('Fubuki')
 	})
@@ -97,7 +97,7 @@ describe('beforeHandle', () => {
 			})
 			.get('/', () => '')
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(order).toEqual(['A', 'B'])
 	})
@@ -118,8 +118,8 @@ describe('beforeHandle', () => {
 				({ params: { name } }) => name
 			)
 
-		const fubuki = await app.handle(req('/name/fubuki'))
-		const korone = await app.handle(req('/name/korone'))
+		const fubuki = await app.handle('/name/fubuki')
+		const korone = await app.handle('/name/korone')
 
 		await expect(fubuki.text()).resolves.toBe('cat')
 		await expect(korone.text()).resolves.toBe('dog')
@@ -137,8 +137,8 @@ describe('beforeHandle', () => {
 			})
 			.get('/name/:name', ({ params: { name } }) => name)
 
-		const fubuki = await app.handle(req('/name/fubuki'))
-		const korone = await app.handle(req('/name/korone'))
+		const fubuki = await app.handle('/name/fubuki')
+		const korone = await app.handle('/name/korone')
 
 		await expect(fubuki.text()).resolves.toBe('cat')
 		await expect(korone.text()).resolves.toBe('dog')
@@ -157,7 +157,7 @@ describe('beforeHandle', () => {
 			({ params: { name } }) => name
 		)
 
-		const res = await app.handle(req('/name/Watame'))
+		const res = await app.handle('/name/Watame')
 
 		await expect(res.text()).resolves.toBe('Warukunai yo ne')
 	})
@@ -174,7 +174,7 @@ describe('beforeHandle', () => {
 			})
 			.get('/name/:name', ({ params: { name } }) => name)
 
-		const res = await app.handle(req('/name/Fubuki'))
+		const res = await app.handle('/name/Fubuki')
 
 		await expect(res.text()).resolves.toBe('Not cat')
 	})
@@ -190,10 +190,7 @@ describe('beforeHandle', () => {
 
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
-		await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
+		await Promise.all([app.handle('/inner'), app.handle('/outer')])
 
 		expect(called).toEqual(['/inner', '/outer'])
 	})
@@ -209,10 +206,7 @@ describe('beforeHandle', () => {
 
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
-		await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
+		await Promise.all([app.handle('/inner'), app.handle('/outer')])
 
 		expect(called).toEqual(['/inner'])
 	})
@@ -238,7 +232,7 @@ describe('beforeHandle', () => {
 			}
 		)
 
-		await app.handle(req('/handler'))
+		await app.handle('/handler')
 		await delay(10)
 
 		expect(hasAfterHandleResponse).toBe(true)

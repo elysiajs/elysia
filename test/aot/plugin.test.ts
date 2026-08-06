@@ -1,7 +1,7 @@
 import { describe, it, expect, spyOn } from 'bun:test'
 import { resolve } from 'node:path'
 import { rm } from 'node:fs/promises'
-import { post } from '../utils'
+import { post, json } from '../utils'
 
 const APP = resolve(import.meta.dir, 'fixtures/app.ts')
 // In-repo `Compiled` source (the stale built `dist` can't resolve `elysia/compile`).
@@ -236,12 +236,12 @@ describe('AOT plugin', () => {
 			// Serve through frozen validators after capture ends.
 			delete process.env.ELYSIA_AOT_BUILD
 
-			const ok = await mod.app.handle(post('/body', { hello: 'world' }))
+			const ok = await mod.app.handle('/body', json({ hello: 'world' }))
 			expect(ok.status).toBe(200)
 			await expect(ok.json()).resolves.toEqual({ hello: 'world' })
 
 			// frozen check rejects (the group materialized synchronously on first hit)
-			const bad = await mod.app.handle(post('/body', { hello: 123 }))
+			const bad = await mod.app.handle('/body', json({ hello: 123 }))
 			expect(bad.status).toBe(422)
 		} finally {
 			delete process.env.ELYSIA_AOT_BUILD

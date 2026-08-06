@@ -3,7 +3,6 @@ import { describe, expect, it } from 'bun:test'
 import { Value } from 'typebox/value'
 import { flushMemory } from '../../src/memory'
 import { SHARED_REFERENCE_CACHE_LIMIT } from '../../src/type/shared'
-import { req } from '../utils'
 
 // Reusing a schema or options object must not let one constructor call change
 // another route's validation.
@@ -35,22 +34,18 @@ describe('schema helpers preserve reusable inputs', () => {
 					({ body }) => body
 				)
 
-			const bad = await app.handle(
-				req('/validated', {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({ id: 'not-a-number' })
-				})
-			)
+			const bad = await app.handle('/validated', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ id: 'not-a-number' })
+			})
 			expect(bad.status).toBe(422)
 
-			const ok = await app.handle(
-				req('/validated', {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({ id: 1 })
-				})
-			)
+			const ok = await app.handle('/validated', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ id: 1 })
+			})
 			expect(ok.status).toBe(200)
 		})
 
@@ -90,22 +85,18 @@ describe('schema helpers preserve reusable inputs', () => {
 					({ body }) => body
 				)
 
-			const missing = await app.handle(
-				req('/required', {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({})
-				})
-			)
+			const missing = await app.handle('/required', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({})
+			})
 			expect(missing.status).toBe(422)
 
-			const omitted = await app.handle(
-				req('/optional', {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({})
-				})
-			)
+			const omitted = await app.handle('/optional', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({})
+			})
 			expect(omitted.status).toBe(200)
 		})
 

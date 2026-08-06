@@ -40,8 +40,8 @@ describe('WebSocket connection id', () => {
 	it('reuses one id for every message on a connection', async () => {
 		const app = new Elysia()
 			.use(websocket()).ws('/ws', {
-				message(ws) {
-					ws.send(ws.id)
+				message(ws, message) {
+					ws.send(`${message}:${ws.id}`)
 				}
 			})
 			.listen(0)
@@ -49,14 +49,18 @@ describe('WebSocket connection id', () => {
 		const ws = newWebsocket(app.server!)
 		await wsOpen(ws)
 
+		// Stacked waiters: replies must come back in arrival order,
+		// so each reply is provably a distinct message.
 		const first = wsMessage(ws)
-		ws.send('1')
-		const firstId = (await first).data as string
-
 		const second = wsMessage(ws)
+		ws.send('1')
 		ws.send('2')
-		const secondId = (await second).data as string
 
+		const [firstTag, firstId] = ((await first).data as string).split(':')
+		const [secondTag, secondId] = ((await second).data as string).split(':')
+
+		expect(firstTag).toBe('1')
+		expect(secondTag).toBe('2')
 		expect(firstId).toBeTruthy()
 		expect(firstId).toBe(secondId)
 

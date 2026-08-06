@@ -1,6 +1,5 @@
 import { Elysia } from '../../src'
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 class CustomResponse extends Response {}
 
@@ -16,7 +15,7 @@ describe('Custom Response Type', () => {
 			})
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		await expect(response.text()).resolves.toBe('Shuba Shuba')
 		expect(response.headers.get('duck')).toBe('shuba duck')
@@ -29,7 +28,7 @@ describe('Custom Response Type', () => {
 			return new CustomResponse('Shuba Shuba')
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		await expect(response.text()).resolves.toBe('Shuba Shuba')
 	})
@@ -49,7 +48,7 @@ describe('Custom Response Type', () => {
 				})
 			})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.headers.get('Content-Type')).toBe('text/plain')
 		expect(response.headers.get('X-Framework')).toBe('Elysia')

@@ -1,7 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
-	"version": "2.0.0-beta.1",
+	"version": "2.0.0-beta.2",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
@@ -255,7 +255,7 @@
 		"esbuild": "0.25.4",
 		"eslint": "^9.24.0",
 		"eslint-plugin-sonarjs": "^4.0.2",
-		"exact-mirror": "1.2.2",
+		"exact-mirror": "^1.2.3",
 		"expect-type": "^1.2.1",
 		"file-type": "^22.0.0",
 		"globals": "^17.4.0",

@@ -386,13 +386,20 @@ export function createFetchHandler(
 						console.error(e)
 					}
 
-			if (queue)
-				for (let i = 0; i < queue.length; i++)
+			const deferred = (context as any)['~afterResponse'] as
+				| ((context: Context) => unknown)[]
+				| undefined
+
+			if (deferred) {
+				const total = deferred.length
+
+				for (let i = 0; i < total; i++)
 					try {
-						await queue[i](context)
+						await deferred[i](context)
 					} catch (e) {
 						console.error(e)
 					}
+			}
 
 			if (traceAfterResponsePhase) {
 				let cache = (context as any).trace as any[] | undefined

@@ -50,12 +50,12 @@ describe('application default headers', () => {
 				return 'ok'
 			})
 
-		const first = await app.handle(req('/'))
+		const first = await app.handle('/')
 		expect(first.headers.get('x-default')).toBe('first')
 		expect(first.headers.get('x-only-first')).toBe('yes')
 		expect(first.headers.get('x-remove')).toBeNull()
 
-		const second = await app.handle(req('/'))
+		const second = await app.handle('/')
 		expect(second.headers.get('x-default')).toBe('base')
 		expect(second.headers.get('x-only-first')).toBeNull()
 		expect(second.headers.get('x-remove')).toBe('keep')
@@ -75,7 +75,7 @@ describe('application default headers', () => {
 			.get('/', () => shared)
 
 		for (let i = 0; i < 2; i++) {
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 			expect(response.headers.get('x-default')).toBe('base')
 			expect(response.headers.get('x-response')).toBe('yes')
 			await expect(response.text()).resolves.toBe('payload')
@@ -93,7 +93,7 @@ describe('application default headers', () => {
 				yield 'b'
 			})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		expect(response.headers.get('x-default')).toBe('base')
 		expect(response.headers.get('transfer-encoding')).toBe('chunked')
 		await expect(response.text()).resolves.toBe('ab')
@@ -108,8 +108,8 @@ describe('application default headers', () => {
 			})
 			.get('/', () => 'ok')
 
-		expect((await app.handle(req('/'))).headers.get('x-first')).toBe('yes')
-		expect((await app.handle(req('/'))).headers.get('x-first')).toBeNull()
+		expect((await app.handle('/')).headers.get('x-first')).toBe('yes')
+		expect((await app.handle('/')).headers.get('x-first')).toBeNull()
 	})
 
 	it('uses one request-local header record across hooks and handlers', async () => {
@@ -125,7 +125,7 @@ describe('application default headers', () => {
 				return 'ok'
 			})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		expect(response.headers.get('x-route')).toBe('yes')
 		expect(seen[0]).toBe(seen[1])
 	})
@@ -139,7 +139,7 @@ describe('application default headers', () => {
 			.headers({ 'x-default': 'base' })
 			.get('/', (context) => opaque(context))
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		expect(response.status).toBe(200)
 		expect(response.headers.get('x-opaque')).toBe('yes')
 		expect(
@@ -157,7 +157,7 @@ describe('application default headers', () => {
 			.get('/', () => {
 				throw new Error('boom')
 			})
-		const errorResponse = await errorApp.handle(req('/'))
+		const errorResponse = await errorApp.handle('/')
 		expect(errorResponse.headers.get('x-error')).toBe('yes')
 	})
 
@@ -165,14 +165,14 @@ describe('application default headers', () => {
 		const statusApp = new Elysia()
 			.headers({ 'x-default': 'base' })
 			.get('/', () => new ElysiaStatus(201, 'ok', { 'x-status': 'yes' }))
-		const statusResponse = await statusApp.handle(req('/'))
+		const statusResponse = await statusApp.handle('/')
 		expect(statusResponse.status).toBe(201)
 		expect(statusResponse.headers.get('x-status')).toBe('yes')
 	})
 
 	it('uses the problem content type for an unmatched route', async () => {
 		const notFoundApp = new Elysia().headers({ 'x-default': 'base' })
-		const notFoundResponse = await notFoundApp.handle(req('/missing'))
+		const notFoundResponse = await notFoundApp.handle('/missing')
 		expect(notFoundResponse.status).toBe(404)
 		expect(notFoundResponse.headers.get('content-type')).toBe(
 			'application/problem+json'
@@ -186,7 +186,7 @@ describe('application default headers', () => {
 				cookie.session.value = 'yes'
 				return 'ok'
 			})
-		const cookieResponse = await cookieApp.handle(req('/'))
+		const cookieResponse = await cookieApp.handle('/')
 		expect(cookieResponse.headers.getSetCookie()).toEqual([
 			'session=yes; Path=/'
 		])
@@ -215,7 +215,7 @@ describe('application default headers', () => {
 			.get('/', () => 'ok')
 
 		for (let i = 0; i < 2; i++) {
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 			expect(response.headers.get('x-default')).toBe('base')
 			expect(response.headers.get('x-adapter')).toBe('yes')
 		}
@@ -233,8 +233,8 @@ describe('application default headers', () => {
 				return 'ok'
 			})
 
-		await app.handle(req('/default'))
-		await app.handle(req('/set'))
+		await app.handle('/default')
+		await app.handle('/set')
 
 		const descriptors = routeDescriptors.get(app as any)!
 		expect(descriptors.get('GET /default')?.responseMode).toBe(
@@ -249,7 +249,7 @@ describe('application default headers', () => {
 		const app = new Elysia({ introspect: true })
 			.headers({})
 			.get('/', () => 'ok')
-		await app.handle(req('/'))
+		await app.handle('/')
 		expect(
 			routeDescriptors.get(app as any)?.get('GET /')?.responseMode
 		).toBe('compact')

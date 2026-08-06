@@ -1223,7 +1223,7 @@ type UnwrapResponseSchema<
 	Schema extends AnySchema | string | undefined,
 	Definitions extends DefinitionBase['typebox'] = {}
 > = Schema extends TypeBoxSchema
-	? StaticEncode<Schema> extends { '~ely-form': any }
+	? StaticEncode<Schema> extends ElysiaFormData<any>
 		? ElysiaFormData<{
 				[K in keyof FormInnerProperties<Schema>]: Static<
 					FormInnerProperties<Schema>[K] & TSchema

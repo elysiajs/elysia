@@ -61,12 +61,12 @@ describe('AOT unplugin Vite adapter', () => {
 		).toBe(28)
 		expect(vt).toBe(native.load(native.resolveId('elysia/type')!)!)
 
-		expect(await (plugin.transform as any).call(ctx, 'x', COMPAT)).toBe(
-			'export function setupTypebox(){}\n'
-		)
-		expect(
-			await (plugin.transform as any).call(ctx, 'x', BRIDGE)
-		).toBeUndefined()
+		await expect(
+			(plugin.transform as any).call(ctx, 'x', COMPAT)
+		).resolves.toBe('export function setupTypebox(){}\n')
+		await expect(
+			(plugin.transform as any).call(ctx, 'x', BRIDGE)
+		).resolves.toBeUndefined()
 	})
 
 	it('wired builds reroute the bridge like the native plugin', async () => {
@@ -81,13 +81,13 @@ describe('AOT unplugin Vite adapter', () => {
 		await (plugin.buildStart as any).call(ctx)
 		await native.buildStart()
 
-		expect(await (plugin.transform as any).call(ctx, 'x', COMPAT)).toBe(
-			'export function setupTypebox(){}\n'
-		)
-		expect(await (plugin.transform as any).call(ctx, 'x', BRIDGE)).toBe(
-			"export * from './bridge-live'\n"
-		)
-		expect(await native.transform('x', BRIDGE)).toBe(
+		await expect(
+			(plugin.transform as any).call(ctx, 'x', COMPAT)
+		).resolves.toBe('export function setupTypebox(){}\n')
+		await expect(
+			(plugin.transform as any).call(ctx, 'x', BRIDGE)
+		).resolves.toBe("export * from './bridge-live'\n")
+		await expect(native.transform('x', BRIDGE)).resolves.toBe(
 			"export * from './bridge-live'\n"
 		)
 	})
@@ -114,13 +114,9 @@ describe('AOT unplugin Vite adapter', () => {
 			await native.transform('export const app = 1', SEALED_VITE_APP)
 		)
 
-		expect(
-			await (plugin.transform as any).call(
-				ctx,
-				'x',
-				'/some/other/file.ts'
-			)
-		).toBeUndefined()
+		await expect(
+			(plugin.transform as any).call(ctx, 'x', '/some/other/file.ts')
+		).resolves.toBeUndefined()
 	})
 
 	it('limits transforms to the entry and Elysia modules', async () => {
@@ -128,8 +124,9 @@ describe('AOT unplugin Vite adapter', () => {
 		const aot = createUnplugin(aotFactory)
 		const plugin = single(aot.vite({ entry: SEALED_VITE_APP }))
 
-		const { createAotPluginHooks } =
-			await import('../../src/plugin/aot/hooks')
+		const { createAotPluginHooks } = await import(
+			'../../src/plugin/aot/hooks'
+		)
 		const hooks = createAotPluginHooks(SEALED_VITE_APP)
 
 		expect(hooks.isTransformCandidate(SEALED_VITE_APP)).toBe(true)

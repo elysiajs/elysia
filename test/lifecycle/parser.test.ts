@@ -1,7 +1,7 @@
 import { Elysia, ParseError, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { post } from '../utils'
+import { post, json } from '../utils'
 
 describe('Parser', () => {
 	it('handle onParse', async () => {
@@ -151,7 +151,7 @@ describe('Parser', () => {
 			})
 			.post('/', ({ body }) => 'NOOP')
 
-		const res = await app.handle(post('/', {}))
+		const res = await app.handle('/', json({}))
 
 		expect(order).toEqual(['A', 'B'])
 	})
@@ -161,7 +161,7 @@ describe('Parser', () => {
 
 		const app = new Elysia().use(plugin).post('/', ({ body }) => body)
 
-		const res = await app.handle(post('/', {})).then((t) => t.text())
+		const res = await app.handle('/', json({})).then((t) => t.text())
 		expect(res).toBe('Kozeki Ui')
 	})
 
@@ -171,7 +171,7 @@ describe('Parser', () => {
 		const app = new Elysia().use(plugin).post('/', ({ body }) => body)
 
 		const res = await app
-			.handle(post('/', { name: 'Kozeki Ui' }))
+			.handle('/', json({ name: 'Kozeki Ui' }))
 			.then((t) => t.json())
 
 		expect(res).toEqual({ name: 'Kozeki Ui' })
@@ -189,8 +189,8 @@ describe('Parser', () => {
 		const app = new Elysia().use(plugin).post('/outer', () => 'NOOP')
 
 		const res = await Promise.all([
-			app.handle(post('/inner', {})),
-			app.handle(post('/outer', {}))
+			app.handle('/inner', json({})),
+			app.handle('/outer', json({}))
 		])
 
 		expect(called).toEqual(['/inner', '/outer'])
@@ -208,8 +208,8 @@ describe('Parser', () => {
 		const app = new Elysia().use(plugin).post('/outer', () => 'NOOP')
 
 		const res = await Promise.all([
-			app.handle(post('/inner', {})),
-			app.handle(post('/outer', {}))
+			app.handle('/inner', json({})),
+			app.handle('/outer', json({}))
 		])
 
 		expect(called).toEqual(['/inner'])
@@ -229,7 +229,7 @@ describe('Parser', () => {
 			])
 			.post('/', ({ body }) => 'NOOP')
 
-		const res = await app.handle(post('/', {}))
+		const res = await app.handle('/', json({}))
 
 		expect(total).toEqual(2)
 	})
@@ -252,9 +252,9 @@ describe('Parser', () => {
 		)
 
 		const [correct, incorrect, custom] = await Promise.all([
-			app.handle(post('/json', { name: 'Aru' })).then((x) => x.text()),
+			app.handle('/json', json({ name: 'Aru' })).then((x) => x.text()),
 			app
-				.handle(post('/json', { school: 'Gehenna' }))
+				.handle('/json', json({ school: 'Gehenna' }))
 				.then((x) => x.status),
 			app
 				.handle(
@@ -519,8 +519,8 @@ describe('Parser', () => {
 				)
 				.then((r) => r.json())
 
-		expect(await call('/g/x')).toEqual({ hijacked: true })
-		expect(await call('/before')).toEqual({ real: 'payload' })
-		expect(await call('/after')).toEqual({ real: 'payload' })
+		await expect(call('/g/x')).resolves.toEqual({ hijacked: true })
+		await expect(call('/before')).resolves.toEqual({ real: 'payload' })
+		await expect(call('/after')).resolves.toEqual({ real: 'payload' })
 	})
 })

@@ -1,7 +1,7 @@
 import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { Value } from 'typebox/value'
-import { req, upload } from '../utils'
+import { upload } from '../utils'
 
 describe('t.UnionEnum options', () => {
 	it('prefers an explicit default over the first enum member', () => {
@@ -47,22 +47,18 @@ describe('t.UnionEnum options', () => {
 			({ body }) => body
 		)
 
-		const ok = await app.handle(
-			req('/color', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ color: 'red' })
-			})
-		)
+		const ok = await app.handle('/color', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ color: 'red' })
+		})
 		expect(ok.status).toBe(200)
 
-		const bad = await app.handle(
-			req('/color', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ color: 'green' })
-			})
-		)
+		const bad = await app.handle('/color', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ color: 'green' })
+		})
 		expect(bad.status).toBe(422)
 	})
 })
@@ -145,13 +141,11 @@ describe('File and binary schema metadata', () => {
 			() => 'ok'
 		)
 
-		const res = await app.handle(
-			req('/', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ file: 'not-a-file' })
-			})
-		)
+		const res = await app.handle('/', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ file: 'not-a-file' })
+		})
 		expect(res.status).toBe(422)
 	})
 

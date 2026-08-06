@@ -20,10 +20,7 @@ const { Elysia } = (await import('elysia')) as typeof import('../../src')
 // Validator dependencies determine whether a build is sealed or wired.
 const SEALED_APP = resolve(import.meta.dir, 'fixtures/sealed-app.ts')
 const WIRED_APP = resolve(import.meta.dir, 'fixtures/wired-app.ts')
-const MERGE_SCHEMA_APP = resolve(
-	import.meta.dir,
-	'fixtures/mode-guard-app.ts'
-)
+const MERGE_SCHEMA_APP = resolve(import.meta.dir, 'fixtures/mode-guard-app.ts')
 const MACRO_SCHEMA_APP = resolve(import.meta.dir, 'fixtures/mode-macro-app.ts')
 const LATE_ROUTE_APP = resolve(import.meta.dir, 'fixtures/mode-late-app.ts')
 const EMPTY_APP = resolve(import.meta.dir, 'fixtures/mode-empty-app.ts')
@@ -150,8 +147,7 @@ async function loadApp(label: string) {
 }
 
 // TypeBox codec/value engine markers remain only in wired output.
-const dragsTypeBox = (source: string) =>
-	/typebox\/(value|compile)/.test(source)
+const dragsTypeBox = (source: string) => /typebox\/(value|compile)/.test(source)
 
 describe('AOT mode selection', () => {
 	it('picks mode=sealed when every validator is bridge-free', async () => {
@@ -174,9 +170,7 @@ describe('AOT mode selection', () => {
 /** Seal eligibility must match the runtime reconstruction limits. */
 describe('AOT seal eligibility', () => {
 	it('keeps merge guard schemas wired', async () => {
-		const { mode, stub } = await generateCompiledArtifacts(
-			MERGE_SCHEMA_APP
-		)
+		const { mode, stub } = await generateCompiledArtifacts(MERGE_SCHEMA_APP)
 		expect(mode).toBe('wired')
 		expect(stub.compat).toBe(true)
 		expect(stub.bridge).toBe(true)
@@ -321,15 +315,12 @@ describe('AOT sealing with Standard Schema', () => {
 	})
 
 	it('a merge Standard Schema app seals', async () => {
-		const { mode } = await generateCompiledArtifacts(
-			STANDARD_MERGE_APP
-		)
+		const { mode } = await generateCompiledArtifacts(STANDARD_MERGE_APP)
 		expect(mode).toBe('sealed')
 	})
 
 	it('keeps a Standard merge route wired when it also has a TypeBox slot', async () => {
-		const { mode, stub } =
-			await generateCompiledArtifacts(MIXED_MERGE_APP)
+		const { mode, stub } = await generateCompiledArtifacts(MIXED_MERGE_APP)
 		expect(mode).toBe('wired')
 		expect(stub.bridge).toBe(true)
 	})
@@ -516,7 +507,7 @@ describe('wired esbuild output', () => {
 
 		const coerced = await app.handle(new Request('http://localhost/n?n=1'))
 		expect(coerced.status).toBe(200)
-		expect(await coerced.text()).toBe('1')
+		await expect(coerced.text()).resolves.toBe('1')
 
 		expect(
 			(await app.handle(new Request('http://localhost/n?n=notnum')))
@@ -554,7 +545,7 @@ describe('wired Bun output', () => {
 
 		const coerced = await app.handle(new Request('http://localhost/n?n=1'))
 		expect(coerced.status).toBe(200)
-		expect(await coerced.text()).toBe('1')
+		await expect(coerced.text()).resolves.toBe('1')
 
 		const unionValid = await app.handle(
 			new Request('http://localhost/u', {
@@ -586,10 +577,10 @@ describe('AOT Vite hook contract', () => {
 			vt.split('\n').filter((l) => l.startsWith('export')).length
 		).toBe(28)
 
-		expect(await plugin.transform('x', COMPAT)).toBe(
+		await expect(plugin.transform('x', COMPAT)).resolves.toBe(
 			'export function setupTypebox(){}\n'
 		)
-		expect(await plugin.transform('x', BRIDGE)).toBeUndefined()
+		await expect(plugin.transform('x', BRIDGE)).resolves.toBeUndefined()
 	})
 
 	it('wired builds serve virtual types and reroute the bridge', async () => {
@@ -601,10 +592,10 @@ describe('AOT Vite hook contract', () => {
 
 		expect(plugin.resolveId('elysia/type')).toBe('\0elysia/type')
 
-		expect(await plugin.transform('x', COMPAT)).toBe(
+		await expect(plugin.transform('x', COMPAT)).resolves.toBe(
 			'export function setupTypebox(){}\n'
 		)
-		expect(await plugin.transform('x', BRIDGE)).toBe(
+		await expect(plugin.transform('x', BRIDGE)).resolves.toBe(
 			"export * from './bridge-live'\n"
 		)
 	})

@@ -18,8 +18,8 @@ describe('context.path', () => {
 			const request = () =>
 				app.handle(new Request('http://localhost/original'))
 
-			expect(await (await request()).text()).toBe('moved')
-			expect(await (await request()).text()).toBe('moved')
+			await expect((await request()).text()).resolves.toBe('moved')
+			await expect((await request()).text()).resolves.toBe('moved')
 			expect(warnings).toHaveLength(1)
 			expect(warnings[0]).toContain('context.path is readonly')
 		} finally {

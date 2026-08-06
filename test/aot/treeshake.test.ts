@@ -21,21 +21,19 @@ describe('AOT tree-shake transform', () => {
 
 	it('collapses a sole-t import to just the namespace', async () => {
 		expect(
-			await rewriteTypeImport(`import { t } from 'elysia'\nt.Number()`)
+			rewriteTypeImport(`import { t } from 'elysia'\nt.Number()`)
 		).toBe(`import * as t from 'elysia/type'\nt.Number()`)
 	})
 
 	it('preserves a renamed import (t as x)', async () => {
 		expect(
-			await rewriteTypeImport(
-				`import { t as x } from 'elysia'\nx.Object()`
-			)
+			rewriteTypeImport(`import { t as x } from 'elysia'\nx.Object()`)
 		).toBe(`import * as x from 'elysia/type'\nx.Object()`)
 	})
 
 	it('rewrites even when t is aliased/passed as a value — 1:1 makes it safe', async () => {
 		expect(
-			await rewriteTypeImport(
+			rewriteTypeImport(
 				`import { t } from 'elysia'\nconst x = t\nx.Object()`
 			)
 		).toBe(`import * as t from 'elysia/type'\nconst x = t\nx.Object()`)
@@ -43,15 +41,15 @@ describe('AOT tree-shake transform', () => {
 
 	it('never touches type-only or t-less imports', async () => {
 		const typeOnly = `import type { t } from 'elysia'\nconst x = 1`
-		expect(await rewriteTypeImport(typeOnly)).toBe(typeOnly)
+		expect(rewriteTypeImport(typeOnly)).toBe(typeOnly)
 
 		const noT = `import { Elysia } from 'elysia'\nnew Elysia()`
-		expect(await rewriteTypeImport(noT)).toBe(noT)
+		expect(rewriteTypeImport(noT)).toBe(noT)
 	})
 
 	it('only touches the configured specifier', async () => {
 		const other = `import { t } from 'not-elysia'\nt.Object()`
-		expect(await rewriteTypeImport(other)).toBe(other)
+		expect(rewriteTypeImport(other)).toBe(other)
 	})
 
 	it.each([
@@ -96,16 +94,16 @@ schema.String()`)
 
 	it('never rewrites import-shaped text inside a template literal', async () => {
 		const doc = "const doc = `\nimport { t } from 'elysia'\n`\nexport {}"
-		expect(await rewriteTypeImport(doc)).toBe(doc)
+		expect(rewriteTypeImport(doc)).toBe(doc)
 	})
 
 	it('never rewrites a commented-out import', async () => {
 		const commented = `// import { t } from 'elysia'\nexport {}`
-		expect(await rewriteTypeImport(commented)).toBe(commented)
+		expect(rewriteTypeImport(commented)).toBe(commented)
 	})
 
 	it('leaves a syntactically invalid file for the bundler to diagnose', async () => {
 		const broken = `import { t from 'elysia'\nt.Object(`
-		expect(await rewriteTypeImport(broken)).toBe(broken)
+		expect(rewriteTypeImport(broken)).toBe(broken)
 	})
 })

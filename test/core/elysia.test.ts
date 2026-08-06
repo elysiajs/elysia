@@ -3,7 +3,6 @@ import { websocket } from '../../src/plugin/websocket'
 import { autoHead } from '../../src/plugin/auto-head'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 import z from 'zod'
 
 describe('Edge Case', () => {
@@ -11,7 +10,7 @@ describe('Edge Case', () => {
 		const app = new Elysia()
 			.state('a', 'a')
 			.get('/', ({ store: { a } }) => a)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		await expect(res.text()).resolves.toBe('a')
 	})
@@ -24,7 +23,7 @@ describe('Edge Case', () => {
 			return 'hi'
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(200)
 	})
 
@@ -37,8 +36,8 @@ describe('Edge Case', () => {
 			})
 			.get('/2', () => 'hi')
 
-		const res1 = await app.handle(req('/1'))
-		const res2 = await app.handle(req('/2'))
+		const res1 = await app.handle('/1')
+		const res2 = await app.handle('/2')
 
 		expect(res1.headers.get('x-server')).toBe('Elysia')
 		expect(res2.headers.get('x-server')).toBe(null)
@@ -50,14 +49,14 @@ describe('Edge Case', () => {
 			() => new Promise((resolve) => resolve('h'))
 		)
 
-		const res = await app.handle(req('/')).then((x) => x.text())
+		const res = await app.handle('/').then((x) => x.text())
 		expect(res).toBe('h')
 	})
 
 	it('handle dynamic all method', async () => {
 		const app = new Elysia().all('/all/*', () => 'ALL')
 
-		const res = await app.handle(req('/all/world')).then((x) => x.text())
+		const res = await app.handle('/all/world').then((x) => x.text())
 		expect(res).toBe('ALL')
 	})
 
@@ -66,23 +65,23 @@ describe('Edge Case', () => {
 			app.get('/', () => 'Hi')
 		)
 
-		await expect(
-			loose.handle(req('/a')).then((x) => x.status)
-		).resolves.toBe(200)
-		await expect(
-			loose.handle(req('/a/')).then((x) => x.status)
-		).resolves.toBe(200)
+		await expect(loose.handle('/a').then((x) => x.status)).resolves.toBe(
+			200
+		)
+		await expect(loose.handle('/a/').then((x) => x.status)).resolves.toBe(
+			200
+		)
 
 		const strict = new Elysia({
 			strictPath: true
 		}).group('/a', (app) => app.get('/', () => 'Hi'))
 
-		await expect(
-			strict.handle(req('/a')).then((x) => x.status)
-		).resolves.toBe(404)
-		await expect(
-			strict.handle(req('/a/')).then((x) => x.status)
-		).resolves.toBe(200)
+		await expect(strict.handle('/a').then((x) => x.status)).resolves.toBe(
+			404
+		)
+		await expect(strict.handle('/a/').then((x) => x.status)).resolves.toBe(
+			200
+		)
 	})
 
 	it('return cookie with file', async () => {
@@ -98,9 +97,7 @@ describe('Edge Case', () => {
 			return kyuukararin
 		})
 
-		const response = await app
-			.handle(req('/'))
-			.then((x) => x.headers.toJSON())
+		const response = await app.handle('/').then((x) => x.headers.toJSON())
 
 		expect(response['set-cookie']).toHaveLength(1)
 		expect(response['content-type']).toBe('video/mp4')
@@ -116,7 +113,7 @@ describe('Edge Case', () => {
 			return kyuukararin
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.headers.get('content-type')).toBe('video/mp4')
 		expect(response.headers.getSetCookie()).toEqual([
@@ -202,11 +199,11 @@ describe('Edge Case', () => {
 		expect(a[6]).toBeDefined()
 		expect(a[6]).toBe(b[6]!)
 
-		const resA = await app.handle(req('/a'))
+		const resA = await app.handle('/a')
 		await expect(resA.text()).resolves.toBe('a')
 		const forA = called.splice(0)
 
-		const resB = await app.handle(req('/b'))
+		const resB = await app.handle('/b')
 		await expect(resB.text()).resolves.toBe('b')
 		const forB = called.splice(0)
 
@@ -261,14 +258,15 @@ describe('Edge Case', () => {
 			.use(autoHead())
 			.get('/a', () => 'a')
 			.get('/c/:id', ({ params }) => params.id)
-			.use(websocket()).ws('/ws', { message() {} })
+			.use(websocket())
+			.ws('/ws', { message() {} })
 		await app.modules
 
 		const before = app.routes
 		const beforeSnapshot = before.map((r) => `${r.method} ${r.path}`).sort()
 
-		await app.handle(req('/a'))
-		await app.handle(req('/c/5'))
+		await app.handle('/a')
+		await app.handle('/c/5')
 		await app.handle(new Request('http://localhost/a', { method: 'HEAD' }))
 
 		const after = app.routes
@@ -329,8 +327,8 @@ describe('Edge Case', () => {
 		const app = new Elysia({ name: 'main' }).use(Path).use(Module)
 
 		const responses = await Promise.all([
-			app.handle(req('/AB')).then((x) => x.text()),
-			app.handle(req('/BA')).then((x) => x.text())
+			app.handle('/AB').then((x) => x.text()),
+			app.handle('/BA').then((x) => x.text())
 		])
 
 		expect(responses).toEqual(['AB', 'BA'])
@@ -374,7 +372,7 @@ describe('Edge Case', () => {
 			})
 		)
 
-		const response = await app.handle(req('/')).then((x) => x.json())
+		const response = await app.handle('/').then((x) => x.json())
 
 		expect(response).toEqual({
 			type: 'Elysia',
@@ -423,7 +421,7 @@ describe('Edge Case', () => {
 			})
 		)
 
-		const response = await app.handle(req('/')).then((x) => x.json())
+		const response = await app.handle('/').then((x) => x.json())
 
 		expect(response).toEqual({
 			wrap: {
@@ -437,11 +435,11 @@ describe('Edge Case', () => {
 	it('serves an async static response repeatedly', async () => {
 		const app = new Elysia().get('/', Promise.resolve(new Response('hi')))
 
-		const first = await app.handle(req('/'))
+		const first = await app.handle('/')
 		expect(first.status).toBe(200)
 		await expect(first.text()).resolves.toBe('hi')
 
-		const second = await app.handle(req('/'))
+		const second = await app.handle('/')
 		expect(second.status).toBe(200)
 		await expect(second.text()).resolves.toBe('hi')
 	})
@@ -472,7 +470,7 @@ describe('Edge Case', () => {
 			() => payload
 		)
 
-		const response = await app.handle(req('/')).then((x) => x.json())
+		const response = await app.handle('/').then((x) => x.json())
 
 		let node: any = response
 		let depth = 0
@@ -515,7 +513,7 @@ describe('Edge Case', () => {
 			precompile: true
 		}).group('/group', (app) => app.use(group))
 
-		const response = await app.handle(req('/group')).then((x) => x.json())
+		const response = await app.handle('/group').then((x) => x.json())
 
 		expect(response).toEqual({
 			hello: 'hanabi'
@@ -557,7 +555,7 @@ describe('Edge Case', () => {
 			})
 		)
 
-		const value = await app.handle(req('/')).then((x) => x.json())
+		const value = await app.handle('/').then((x) => x.json())
 
 		expect(value).toEqual({
 			keys: [{ a: 1 }],
@@ -578,7 +576,7 @@ describe('Edge Case', () => {
 					.get('/bar', { response: { 200: t.Integer() } }, () => 12)
 		)
 
-		const response = await app.handle(req('/foo'))
+		const response = await app.handle('/foo')
 
 		expect(response.status).toBe(200)
 	})
@@ -595,7 +593,7 @@ describe('Edge Case', () => {
 
 		expect(response.status).toBe(200)
 		expect(response.headers.get('content-length')).toBeNull()
-		expect(await response.text()).toBe('')
+		await expect(response.text()).resolves.toBe('')
 	})
 
 	it('automatically handle HEAD request for GET dynamic path', async () => {
@@ -612,7 +610,7 @@ describe('Edge Case', () => {
 
 		expect(response.status).toBe(200)
 		expect(response.headers.get('content-length')).toBeNull()
-		expect(await response.text()).toBe('')
+		await expect(response.text()).resolves.toBe('')
 	})
 
 	it('prefers an explicit HEAD route over auto-HEAD for a static GET', async () => {
@@ -710,7 +708,7 @@ describe('Edge Case', () => {
 		)
 
 		const response = await app
-			.handle(req('/?name=saltyaom'))
+			.handle('/?name=saltyaom')
 			.then((x) => x.text())
 
 		expect(response).toBe('safe')

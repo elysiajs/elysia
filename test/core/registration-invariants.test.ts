@@ -2,7 +2,7 @@ import { Elysia, t } from '../../src'
 import { websocket } from '../../src/plugin/websocket'
 
 import { describe, expect, it } from 'bun:test'
-import { req, post } from '../utils'
+import { post, json } from '../utils'
 
 describe('guard registration', () => {
 	it('keeps query validation on a guard that also declares derive', async () => {
@@ -13,11 +13,14 @@ describe('guard registration', () => {
 			})
 			.get('/', ({ query, k }: any) => ({ query, k }))
 
-		expect((await app.handle(req('/'))).status).toBe(422)
+		expect((await app.handle('/')).status).toBe(422)
 
-		const ok = await app.handle(req('/?x=hello'))
+		const ok = await app.handle('/?x=hello')
 		expect(ok.status).toBe(200)
-		expect(await ok.json()).toEqual({ query: { x: 'hello' }, k: 42 })
+		await expect(ok.json()).resolves.toEqual({
+			query: { x: 'hello' },
+			k: 42
+		})
 	})
 
 	it('keeps body validation on a guard that also declares derive', async () => {
@@ -28,8 +31,8 @@ describe('guard registration', () => {
 			})
 			.post('/', ({ body }: any) => body)
 
-		expect((await app.handle(post('/', {}))).status).toBe(422)
-		expect((await app.handle(post('/', { name: 'a' }))).status).toBe(200)
+		expect((await app.handle('/', json({}))).status).toBe(422)
+		expect((await app.handle('/', json({ name: 'a' }))).status).toBe(200)
 	})
 
 	it('keeps query validation on group(prefix, { query, derive }, run)', async () => {
@@ -39,8 +42,8 @@ describe('guard registration', () => {
 			(g) => g.get('/x', ({ query }: any) => query)
 		)
 
-		expect((await app.handle(req('/api/x'))).status).toBe(422)
-		expect((await app.handle(req('/api/x?x=ok'))).status).toBe(200)
+		expect((await app.handle('/api/x')).status).toBe(422)
+		expect((await app.handle('/api/x?x=ok')).status).toBe(200)
 	})
 
 	it('merges every array-valued derive into context instead of returning it', async () => {
@@ -54,9 +57,9 @@ describe('guard registration', () => {
 				handlerRan: true
 			}))
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(200)
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			user: 'bob',
 			role: 'admin',
 			handlerRan: true
@@ -70,8 +73,12 @@ describe('loose path registration', () => {
 			.get('/foo', () => 'real-foo')
 			.get('/foo/', () => 'foo-slash')
 
-		expect(await (await app.handle(req('/foo'))).text()).toBe('real-foo')
-		expect(await (await app.handle(req('/foo/'))).text()).toBe('foo-slash')
+		await expect((await app.handle('/foo')).text()).resolves.toBe(
+			'real-foo'
+		)
+		await expect((await app.handle('/foo/')).text()).resolves.toBe(
+			'foo-slash'
+		)
 	})
 
 	it('keeps trailing-slash routes distinct in reverse registration order', async () => {
@@ -79,14 +86,18 @@ describe('loose path registration', () => {
 			.get('/foo/', () => 'foo-slash')
 			.get('/foo', () => 'real-foo')
 
-		expect(await (await app.handle(req('/foo'))).text()).toBe('real-foo')
-		expect(await (await app.handle(req('/foo/'))).text()).toBe('foo-slash')
+		await expect((await app.handle('/foo')).text()).resolves.toBe(
+			'real-foo'
+		)
+		await expect((await app.handle('/foo/')).text()).resolves.toBe(
+			'foo-slash'
+		)
 	})
 
 	it('still serves the loose twin when only one variant is declared', async () => {
 		const app = new Elysia().get('/bar', () => 'bar')
 
-		expect(await (await app.handle(req('/bar/'))).text()).toBe('bar')
+		await expect((await app.handle('/bar/')).text()).resolves.toBe('bar')
 	})
 })
 
@@ -98,15 +109,15 @@ describe('routing edge contracts', () => {
 			.get('/empty/:id/tail', ({ params }: any) => params.id)
 
 		await expect(
-			app.handle(req('/timeUTC')).then((r) => r.text())
+			app.handle('/timeUTC').then((r) => r.text())
 		).resolves.toBe('zone:UTC')
 		await expect(
-			app.handle(req('/assetfoo/bar')).then((r) => r.text())
+			app.handle('/assetfoo/bar').then((r) => r.text())
 		).resolves.toBe('asset:foo/bar')
-		await expect(
-			app.handle(req('/asset')).then((r) => r.text())
-		).resolves.toBe('asset:')
-		expect((await app.handle(req('/empty//tail'))).status).toBe(404)
+		await expect(app.handle('/asset').then((r) => r.text())).resolves.toBe(
+			'asset:'
+		)
+		expect((await app.handle('/empty//tail')).status).toBe(404)
 	})
 
 	it('keeps the last raw or encoded alias for both request spellings', async () => {
@@ -117,14 +128,14 @@ describe('routing edge contracts', () => {
 			.get('/alias-b/café', () => 'raw-last')
 
 		for (const path of ['/alias-a/café', '/alias-a/caf%C3%A9'])
-			await expect(
-				app.handle(req(path)).then((r) => r.text())
-			).resolves.toBe('encoded-last')
+			await expect(app.handle(path).then((r) => r.text())).resolves.toBe(
+				'encoded-last'
+			)
 
 		for (const path of ['/alias-b/café', '/alias-b/caf%C3%A9'])
-			await expect(
-				app.handle(req(path)).then((r) => r.text())
-			).resolves.toBe('raw-last')
+			await expect(app.handle(path).then((r) => r.text())).resolves.toBe(
+				'raw-last'
+			)
 	})
 })
 
@@ -135,8 +146,8 @@ describe('route introspection', () => {
 			.guard({ query: t.Object({ q: t.String() }) })
 			.use(inner)
 
-		expect((await app.handle(req('/x'))).status).toBe(422)
-		expect((await app.handle(req('/x?q=hi'))).status).toBe(200)
+		expect((await app.handle('/x')).status).toBe(422)
+		expect((await app.handle('/x?q=hi')).status).toBe(200)
 
 		const route = app.routes.find((r) => r.path === '/x')
 		expect(route).toBeDefined()
@@ -254,9 +265,9 @@ describe('inlined route registration parity', () => {
 		expect(hooked.length).toBe(5)
 		expect(hooked[4]).toBeDefined()
 
-		const chained = new Elysia()
-			.beforeHandle(() => {})
-			.get('/a', handler)['~routes'][0]
+		const chained = new Elysia().beforeHandle(() => {}).get('/a', handler)[
+			'~routes'
+		][0]
 		expect(chained.length).toBe(6)
 		expect(chained[4]).toBeUndefined()
 		expect(chained[5]).toBeDefined()
@@ -285,7 +296,7 @@ describe('inlined route registration parity', () => {
 
 		app.get('/late', () => 'late')
 
-		expect(await (await app.handle(req('/late'))).text()).toBe('late')
+		await expect((await app.handle('/late')).text()).resolves.toBe('late')
 	})
 
 	it('refuses both paths once the app is sealed', async () => {
@@ -297,8 +308,8 @@ describe('inlined route registration parity', () => {
 
 		const registered = new Elysia().get('/a', handler)
 		registered.compile()
-		expect(() => registered['~addRoute'](entry(registered, '/late'))).toThrow(
-			'[Elysia] .route() called after the app was sealed'
-		)
+		expect(() =>
+			registered['~addRoute'](entry(registered, '/late'))
+		).toThrow('[Elysia] .route() called after the app was sealed')
 	})
 })

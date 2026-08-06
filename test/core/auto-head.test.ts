@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../src'
 import { autoHead } from '../../src/plugin/auto-head'
-import { req } from '../utils'
 
 describe('autoHead plugin', () => {
 	it('registers nested plugin routes as declarations', async () => {
@@ -11,12 +10,10 @@ describe('autoHead plugin', () => {
 		const app = new Elysia().get('/root', () => 'root').use(plugin)
 		await app.modules
 
-		expect(
-			(await app.handle(req('/root', { method: 'HEAD' }))).status
-		).toBe(404)
-		expect(
-			(await app.handle(req('/plugin', { method: 'HEAD' }))).status
-		).toBe(200)
+		expect((await app.handle('/root', { method: 'HEAD' })).status).toBe(404)
+		expect((await app.handle('/plugin', { method: 'HEAD' })).status).toBe(
+			200
+		)
 		expect(
 			app.history.some(
 				(route) => route.method === 'HEAD' && route.path === '/plugin'
@@ -38,9 +35,9 @@ describe('autoHead plugin', () => {
 			.use(autoHead())
 		await app.modules
 
-		const response = await app.handle(req('/x', { method: 'HEAD' }))
+		const response = await app.handle('/x', { method: 'HEAD' })
 		expect(response.headers.get('x-source')).toBe('explicit')
-		expect(await response.text()).toBe('')
+		await expect(response.text()).resolves.toBe('')
 	})
 
 	it('registers HEAD routes when applied after GET routes', async () => {
@@ -48,16 +45,12 @@ describe('autoHead plugin', () => {
 		app.use(autoHead())
 		await app.modules
 
-		expect((await app.handle(req('/x', { method: 'HEAD' }))).status).toBe(
-			200
-		)
+		expect((await app.handle('/x', { method: 'HEAD' })).status).toBe(200)
 	})
 
 	it('throws when auto-head is applied after the first request', async () => {
 		const app = new Elysia().get('/x', () => 'get')
-		expect((await app.handle(req('/x', { method: 'HEAD' }))).status).toBe(
-			404
-		)
+		expect((await app.handle('/x', { method: 'HEAD' })).status).toBe(404)
 
 		expect(() => app.use(autoHead())).toThrow('after the app was sealed')
 	})
@@ -81,10 +74,10 @@ describe('autoHead plugin', () => {
 			)
 		await app.modules
 
-		const response = await app.handle(req('/x', { method: 'HEAD' }))
+		const response = await app.handle('/x', { method: 'HEAD' })
 
 		expect(response.headers.get('x-mapped')).toBe('yes')
-		expect(await response.text()).toBe('')
+		await expect(response.text()).resolves.toBe('')
 		expect(requests).toBe(1)
 		expect(beforeHandle).toBe(1)
 	})

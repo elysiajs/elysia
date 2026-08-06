@@ -141,7 +141,7 @@ describe('published bundle without the TypeBox bridge', () => {
 
 		const ok = await app.handle(new Request('http://localhost/'))
 		expect(ok.status).toBe(200)
-		expect(await ok.text()).toBe('hi')
+		await expect(ok.text()).resolves.toBe('hi')
 
 		const valid = await app.handle(
 			new Request('http://localhost/u', {

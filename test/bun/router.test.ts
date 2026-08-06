@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
 import { trace as traceCap } from '../../src/plugin/trace'
-import { req } from '../utils'
 
 describe('Bun router', () => {
 	it('works', async () => {
@@ -179,34 +178,6 @@ describe('Bun router', () => {
 	})
 
 	it('handle trace url with wrap', async () => {
-		let url = ''
-		let hasRequestId = false
-		let hasWrap = false
-
-		const app = new Elysia()
-			.wrap((fn) => {
-				hasWrap = true
-
-				return fn
-			})
-			.use(traceCap()).trace((a) => {
-				a.onHandle(() => {
-					url = a.context.request.url
-
-					hasRequestId = !!a.context.rid
-				})
-			})
-			.get('/', () => 'ok')
-			.listen(0)
-
-		await fetch(`http://localhost:${app.server!.port}/`)
-
-		expect(url).toBe(`http://localhost:${app.server!.port}/`)
-		expect(hasWrap).toBe(true)
-		expect(hasRequestId).toBe(true)
-	})
-
-	it('handle mount', async () => {
 		let url = ''
 		let hasRequestId = false
 		let hasWrap = false

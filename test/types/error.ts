@@ -383,3 +383,41 @@ class OtherError extends Error {
 		(typeof app)['~Routes']['get']['response'][409]['detail']
 	>().toEqualTypeOf<'literal detail'>()
 }
+
+// An annotated envelope member replaces the default one: it narrows to the
+// literal supplied and stops being optional, while the members left alone
+// keep the envelope's own declarations.
+{
+	const app = new Elysia().get('/', () =>
+		problem(409, { title: 'Sold out' as const })
+	)
+
+	type Body = (typeof app)['~Routes']['get']['response'][409]
+
+	expectTypeOf<Body['title']>().toEqualTypeOf<'Sold out'>()
+	expectTypeOf<Body['type']>().toEqualTypeOf<string>()
+	expectTypeOf<Body['detail']>().toEqualTypeOf<string | undefined>()
+}
+
+// `instance` narrows the same way.
+{
+	const app = new Elysia().get('/', () =>
+		problem(409, { instance: '/order/1' as const })
+	)
+
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['response'][409]['instance']
+	>().toEqualTypeOf<'/order/1'>()
+}
+
+{
+	// The status-first overload rejects a second `status`: the positional one wins
+	// at runtime, so accepting it in the detail would silently discard it.
+	// @ts-expect-error
+	problem(409, { status: 200 })
+	// @ts-expect-error
+	problem(409, { status: 'Conflict' })
+
+	// an extension member that merely *contains* a status is untouched
+	problem(409, { meta: { status: 'nested' } })
+}

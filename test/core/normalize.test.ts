@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 import type { Static } from 'typebox'
 import { Elysia, t } from '../../src'
-import { post, req } from '../utils'
+import { post, json } from '../utils'
 
 describe('Normalize', () => {
 	it('normalize response', async () => {
@@ -20,7 +20,7 @@ describe('Normalize', () => {
 			}
 		)
 
-		const response = await app.handle(req('/')).then((x) => x.json())
+		const response = await app.handle('/').then((x) => x.json())
 
 		expect(response).toEqual({
 			hello: 'world'
@@ -45,7 +45,7 @@ describe('Normalize', () => {
 			}
 		)
 
-		const response = await app.handle(req('/')).then((x) => x.json())
+		const response = await app.handle('/').then((x) => x.json())
 
 		expect(response).toEqual({
 			hello: 'world'
@@ -68,7 +68,7 @@ describe('Normalize', () => {
 			}
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toEqual(422)
 	})
@@ -90,7 +90,7 @@ describe('Normalize', () => {
 			({ status }) => status(418, { name: 'Nagisa', hifumi: 'daisuki' })
 		)
 
-		const response = await app.handle(req('/')).then((x) => x.json())
+		const response = await app.handle('/').then((x) => x.json())
 
 		expect(response).toEqual({
 			name: 'Nagisa'
@@ -116,7 +116,7 @@ describe('Normalize', () => {
 			({ status }) => status(418, { name: 'Nagisa', hifumi: 'daisuki' })
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toEqual(422)
 	})
@@ -142,7 +142,7 @@ describe('Normalize', () => {
 			}
 		)
 
-		const response = await app.handle(req('/')).then((x) => x.json())
+		const response = await app.handle('/').then((x) => x.json())
 
 		expect(response).toEqual({
 			hello: 'Nagisa'
@@ -170,7 +170,7 @@ describe('Normalize', () => {
 			}
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toEqual(422)
 	})
@@ -194,7 +194,7 @@ describe('Normalize', () => {
 			}
 		)
 
-		const response = await app.handle(req('/')).then((x) => x.json())
+		const response = await app.handle('/').then((x) => x.json())
 
 		expect(response).toEqual({
 			hello: 'world',
@@ -215,7 +215,8 @@ describe('Normalize', () => {
 
 		const response = await app
 			.handle(
-				post('/', {
+				'/',
+				json({
 					name: 'nagisa',
 					hifumi: 'daisuki'
 				})
@@ -242,7 +243,8 @@ describe('Normalize', () => {
 
 		const response = await app
 			.handle(
-				post('/', {
+				'/',
+				json({
 					name: 'nagisa',
 					hifumi: 'daisuki'
 				})
@@ -266,7 +268,8 @@ describe('Normalize', () => {
 		)
 
 		const response = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'nagisa',
 				hifumi: 'daisuki'
 			})
@@ -292,7 +295,8 @@ describe('Normalize', () => {
 		)
 
 		const response = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'nagisa',
 				hifumi: 'daisuki'
 			})
@@ -317,7 +321,7 @@ describe('Normalize', () => {
 		)
 
 		const response = await app
-			.handle(req('/?name=nagisa&hifumi=daisuki'))
+			.handle('/?name=nagisa&hifumi=daisuki')
 			.then((x) => x.json())
 
 		expect(response).toEqual({
@@ -340,7 +344,7 @@ describe('Normalize', () => {
 		)
 
 		const response = await app
-			.handle(req('/?name=nagisa&hifumi=daisuki'))
+			.handle('/?name=nagisa&hifumi=daisuki')
 			.then((x) => x.json())
 
 		expect(response).toEqual({
@@ -366,7 +370,7 @@ describe('Normalize', () => {
 		)
 
 		const response = await app
-			.handle(req('/?name=nagisa&hifumi=daisuki'))
+			.handle('/?name=nagisa&hifumi=daisuki')
 			.then((x) => x.json())
 
 		expect(response).toEqual({
@@ -387,14 +391,12 @@ describe('Normalize', () => {
 		)
 
 		const response = await app
-			.handle(
-				req('/', {
-					headers: {
-						name: 'nagisa',
-						hifumi: 'daisuki'
-					}
-				})
-			)
+			.handle('/', {
+				headers: {
+					name: 'nagisa',
+					hifumi: 'daisuki'
+				}
+			})
 			.then((x) => x.json())
 
 		expect(response).toEqual({
@@ -417,11 +419,9 @@ describe('Normalize', () => {
 			name: 'sucrose',
 			job: 'alchemist'
 		}
-		const res = await app.handle(
-			req('/', {
-				headers
-			})
-		)
+		const res = await app.handle('/', {
+			headers
+		})
 
 		await expect(res.json()).resolves.toEqual(headers)
 		expect(res.status).toBe(200)
@@ -443,7 +443,8 @@ describe('Normalize', () => {
 			)
 
 			const res = await app.handle(
-				post('/', { 'a"b': 'value', extra: 'strip-me' })
+				'/',
+				json({ 'a"b': 'value', extra: 'strip-me' })
 			)
 
 			expect(res.status).toBe(200)
@@ -465,7 +466,8 @@ describe('Normalize', () => {
 		)
 
 		const res = await app.handle(
-			post('/', { name: 'sucrose', extra: 'strip-me' })
+			'/',
+			json({ name: 'sucrose', extra: 'strip-me' })
 		)
 
 		expect(res.status).toBe(200)
@@ -483,14 +485,12 @@ describe('Normalize', () => {
 			({ headers }) => headers
 		)
 
-		const res = await app.handle(
-			req('/', {
-				headers: {
-					name: 'sucrose',
-					job: 'alchemist'
-				}
-			})
-		)
+		const res = await app.handle('/', {
+			headers: {
+				name: 'sucrose',
+				job: 'alchemist'
+			}
+		})
 
 		await expect(res.json()).resolves.toEqual({ name: 'sucrose' })
 		expect(res.status).toBe(200)
@@ -507,13 +507,11 @@ describe('Normalize', () => {
 			({ cookie: { name } }) => name.value!
 		)
 
-		const res = await app.handle(
-			req('/', {
-				headers: {
-					cookie: 'name=sucrose; extra=alchemist'
-				}
-			})
-		)
+		const res = await app.handle('/', {
+			headers: {
+				cookie: 'name=sucrose; extra=alchemist'
+			}
+		})
 
 		await expect(res.text()).resolves.toBe('sucrose')
 		expect(res.status).toBe(200)
@@ -535,14 +533,12 @@ describe('Normalize', () => {
 			({ headers }) => headers
 		)
 
-		const response = await app.handle(
-			req('/', {
-				headers: {
-					name: 'nagisa',
-					hifumi: 'daisuki'
-				}
-			})
-		)
+		const response = await app.handle('/', {
+			headers: {
+				name: 'nagisa',
+				hifumi: 'daisuki'
+			}
+		})
 
 		expect(response.status).toBe(422)
 	})
@@ -658,7 +654,7 @@ describe('Normalize', () => {
 			})
 		)
 
-		const data = await app.handle(req('/')).then((x) => x.json())
+		const data = await app.handle('/').then((x) => x.json())
 
 		expect(data).toEqual({
 			hasMore: true,

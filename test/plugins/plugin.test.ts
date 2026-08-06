@@ -1,7 +1,6 @@
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('Plugin', () => {
 	it('await async nested plugin', async () => {
@@ -17,7 +16,7 @@ describe('Plugin', () => {
 
 		await app.modules
 
-		const response = await app.handle(req('/yay'))
+		const response = await app.handle('/yay')
 
 		expect(response.status).toBe(200)
 	})
@@ -41,7 +40,7 @@ describe('Plugin', () => {
 		await app.modules
 
 		for (const path of ['/async', '/fn', '/instance', '/']) {
-			const response = await app.handle(req(path))
+			const response = await app.handle(path)
 			expect(response.status).toBe(200)
 		}
 	})

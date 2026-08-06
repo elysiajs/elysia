@@ -7,12 +7,8 @@ import {
 	endHandlerCapture
 } from '../../src/compile/aot-capture'
 import { compileToSource } from '../../src/plugin/aot/source'
-import {
-	materialise,
-	materialiseHandlers,
-	registerManifest
-} from './_manifest'
-import { post, req } from '../utils'
+import { materialise, materialiseHandlers, registerManifest } from './_manifest'
+import { post, json } from '../utils'
 
 /** Captured handlers bind emitted factories without request-time evaluation. */
 
@@ -72,7 +68,7 @@ describe('AOT handler freeze', () => {
 		;(frozenApp as any).compile()
 		expect(factoryCalls).toBe(1)
 
-		const frozen = await frozenApp.handle(post('/x', { n: 5 }))
+		const frozen = await frozenApp.handle('/x', json({ n: 5 }))
 		expect(frozen.status).toBe(200)
 		await expect(frozen.json()).resolves.toEqual({ ok: true, n: 5 })
 
@@ -80,7 +76,7 @@ describe('AOT handler freeze', () => {
 		Validator.clear()
 		const jitApp = build()
 		;(jitApp as any).compile()
-		const jit = await jitApp.handle(post('/x', { n: 5 }))
+		const jit = await jitApp.handle('/x', json({ n: 5 }))
 		expect(jit.status).toBe(200)
 		await expect(jit.json()).resolves.toEqual({ ok: true, n: 5 })
 	})
@@ -112,14 +108,14 @@ describe('AOT handler freeze', () => {
 			const frozen = buildError()
 			;(frozen as any).compile()
 
-			const development = await frozen.handle(req('/status'))
+			const development = await frozen.handle('/status')
 			expect(development.status).toBe(503)
 			await expect(development.text()).resolves.toBe(
 				'upstream unavailable'
 			)
 
 			process.env.NODE_ENV = 'production'
-			const production = await frozen.handle(req('/status'))
+			const production = await frozen.handle('/status')
 			expect(production.status).toBe(503)
 			await expect(production.text()).resolves.toBe(
 				'Internal Server Error'
@@ -226,8 +222,8 @@ describe('AOT static & promise handler freeze', () => {
 		expect(calls['/s']).toBe(1)
 		expect(calls['/p']).toBe(1)
 
-		const s = await frozenApp.handle(req('/s'))
-		const p = await frozenApp.handle(req('/p'))
+		const s = await frozenApp.handle('/s')
+		const p = await frozenApp.handle('/p')
 		expect(s.status).toBe(200)
 		await expect(s.text()).resolves.toBe('hello')
 		expect(p.status).toBe(200)
@@ -237,8 +233,8 @@ describe('AOT static & promise handler freeze', () => {
 		Validator.clear()
 		const jitApp = build()
 		;(jitApp as any).compile()
-		const js = await jitApp.handle(req('/s'))
-		const jp = await jitApp.handle(req('/p'))
+		const js = await jitApp.handle('/s')
+		const jp = await jitApp.handle('/p')
 		expect(js.status).toBe(200)
 		await expect(js.text()).resolves.toBe('hello')
 		expect(jp.status).toBe(200)

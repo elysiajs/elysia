@@ -13,7 +13,6 @@ import {
 	materialiseHandlers,
 	registerManifest
 } from '../aot/_manifest'
-import { req } from '../utils'
 
 afterEach(() => {
 	Compiled.clear()
@@ -154,7 +153,7 @@ describe('compiled query parse tables', () => {
 			({ query }) => query
 		)
 
-		const res = await app.handle(req('/?tags=x,y,z'))
+		const res = await app.handle('/?tags=x,y,z')
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({ tags: ['x', 'y', 'z'] })
 	})
@@ -211,7 +210,7 @@ describe('AOT query parsing', () => {
 			) as any
 
 		await freeze(build, async (frozen) => {
-			const res = await frozen.handle(req('/?tags=a,b'))
+			const res = await frozen.handle('/?tags=a,b')
 			expect(res.status).toBe(200)
 			await expect(res.json()).resolves.toEqual({ tags: ['a', 'b'] })
 		})

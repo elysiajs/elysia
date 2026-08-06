@@ -2,7 +2,6 @@ import { describe, expect, it } from 'bun:test'
 
 import { Elysia, t, type AnyElysia } from '../../src'
 import type { InternalRoute } from '../../src/types'
-import { req } from '../utils'
 
 const route = (app: AnyElysia, path: string): InternalRoute => {
 	const found = app['~routes']?.find((entry) => entry[1] === path)
@@ -29,11 +28,9 @@ describe('route absorption', () => {
 
 		expectOwner(root, '/hook', lifecycle)
 		expectOwner(root, '/error', error)
-		await expect((await root.handle(req('/hook'))).text()).resolves.toBe(
-			'hook'
-		)
+		await expect((await root.handle('/hook')).text()).resolves.toBe('hook')
 		expect(order).toEqual(['plugin'])
-		await expect((await root.handle(req('/error'))).text()).resolves.toBe(
+		await expect((await root.handle('/error')).text()).resolves.toBe(
 			'recovered'
 		)
 	})
@@ -51,8 +48,8 @@ describe('route absorption', () => {
 		const root = new Elysia().use(macro)
 
 		expectOwner(root, '/macro', macro)
-		const response = await root.handle(req('/macro'))
-		expect(await response.text()).toBe('macro')
+		const response = await root.handle('/macro')
+		await expect(response.text()).resolves.toBe('macro')
 		expect(response.headers.get('x-macro')).toBe('yes')
 	})
 
@@ -70,12 +67,12 @@ describe('route absorption', () => {
 
 		expect(route(root, '/group/own')[3]).toBe(groupedOwner)
 		expect(route(root, '/scope/nested')[3]).toBe(nestedOwner)
-		await expect(
-			(await root.handle(req('/group/own'))).text()
-		).resolves.toBe('group')
-		await expect(
-			(await root.handle(req('/scope/nested'))).text()
-		).resolves.toBe('nested')
+		await expect((await root.handle('/group/own')).text()).resolves.toBe(
+			'group'
+		)
+		await expect((await root.handle('/scope/nested')).text()).resolves.toBe(
+			'nested'
+		)
 	})
 
 	it('preserves model-string owners after models merge', async () => {
@@ -85,9 +82,7 @@ describe('route absorption', () => {
 		const root = new Elysia().use(plugin)
 
 		expectOwner(root, '/model', plugin)
-		await expect(
-			(await root.handle(req('/model'))).json()
-		).resolves.toEqual({
+		await expect((await root.handle('/model')).json()).resolves.toEqual({
 			value: 'ok'
 		})
 	})
@@ -104,9 +99,7 @@ describe('route absorption', () => {
 			.beforeHandle(() => void order.push('after-use'))
 
 		expectOwner(root, '/ordered', plugin)
-		await expect((await root.handle(req('/ordered'))).text()).resolves.toBe(
-			'ok'
-		)
+		await expect((await root.handle('/ordered')).text()).resolves.toBe('ok')
 		expect(order).toEqual(['before-use', 'after-use', 'handler'])
 	})
 
@@ -118,10 +111,10 @@ describe('route absorption', () => {
 		expectOwner(rootA, '/shared', plugin)
 		expectOwner(rootB, '/shared', plugin)
 		expect(route(plugin, '/shared')[3]).toBe(plugin)
-		await expect((await rootA.handle(req('/shared'))).text()).resolves.toBe(
+		await expect((await rootA.handle('/shared')).text()).resolves.toBe(
 			'shared'
 		)
-		await expect((await rootB.handle(req('/shared'))).text()).resolves.toBe(
+		await expect((await rootB.handle('/shared')).text()).resolves.toBe(
 			'shared'
 		)
 	})
@@ -134,8 +127,8 @@ describe('route absorption', () => {
 		const root = new Elysia().use(plugin)
 
 		expectOwner(root, '/static', plugin)
-		const handled = await root.handle(req('/static'))
-		expect(await handled.text()).toBe('static')
+		const handled = await root.handle('/static')
+		await expect(handled.text()).resolves.toBe('static')
 		expect(handled.headers.get('x-static')).toBe('yes')
 	})
 
@@ -154,11 +147,11 @@ describe('route absorption', () => {
 		expect(
 			lazy.routes.map(({ method, path }) => ({ method, path }))
 		).toEqual(eager.routes.map(({ method, path }) => ({ method, path })))
-		await expect((await lazy.handle(req('/compile'))).text()).resolves.toBe(
+		await expect((await lazy.handle('/compile')).text()).resolves.toBe(
 			'compiled'
 		)
-		await expect(
-			(await eager.handle(req('/compile'))).text()
-		).resolves.toBe('compiled')
+		await expect((await eager.handle('/compile')).text()).resolves.toBe(
+			'compiled'
+		)
 	})
 })

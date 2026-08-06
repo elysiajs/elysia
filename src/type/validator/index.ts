@@ -46,7 +46,7 @@ import {
 	type PendingFileTypeCheck
 } from '../elysia/file'
 import { isAsyncPredicate } from '../elysia/file-type'
-import { nullObject } from '../../utils'
+import { ELYSIA_FORM_PROTOTYPE, nullObject } from '../../utils'
 import { ValidationError } from '../../error'
 import {
 	applyPrecomputed,
@@ -1103,32 +1103,25 @@ export class TypeBoxValidator<
 	}
 
 	#markForm(value: unknown) {
-		if (
-			this.#isForm &&
-			value !== null &&
-			typeof value === 'object' &&
-			!('~ely-form' in value)
-		) {
-			Object.defineProperty(value, '~ely-form', {
-				value: 1,
-				configurable: true
-			})
+		if (this.#isForm && value !== null && typeof value === 'object') {
+			const previous = Object.getPrototypeOf(value)
+			if (previous === ELYSIA_FORM_PROTOTYPE) return
 
-			return true
+			Object.setPrototypeOf(value, ELYSIA_FORM_PROTOTYPE)
+
+			return previous as object | null
 		}
 
-		return false
+		return undefined
 	}
 
-	#unmarkForm(value: unknown) {
+	#unmarkForm(value: unknown, previous: object | null) {
 		if (
-			this.#isForm &&
 			value !== null &&
 			typeof value === 'object' &&
-			'~ely-form' in value &&
-			Object.getOwnPropertyDescriptor(value, '~ely-form')?.configurable
+			Object.getPrototypeOf(value) === ELYSIA_FORM_PROTOTYPE
 		)
-			delete (value as Record<string, unknown>)['~ely-form']
+			Object.setPrototypeOf(value, previous)
 	}
 
 	From(value: Static<T>, type?: string): MaybePromise<Static<T>> {
@@ -1207,7 +1200,7 @@ export class TypeBoxValidator<
 		}
 
 		const markedValue = value
-		const marked = this.#isForm ? this.#markForm(value) : false
+		const marked = this.#isForm ? this.#markForm(value) : undefined
 		try {
 			if (this.hasCodec) {
 				if (!this.#noValidate) {
@@ -1288,7 +1281,7 @@ export class TypeBoxValidator<
 
 			return value
 		} finally {
-			if (marked) this.#unmarkForm(markedValue)
+			if (marked !== undefined) this.#unmarkForm(markedValue, marked)
 		}
 	}
 
@@ -1319,7 +1312,7 @@ export class TypeBoxValidator<
 		}
 
 		const markedValue = value
-		const marked = this.#isForm ? this.#markForm(value) : false
+		const marked = this.#isForm ? this.#markForm(value) : undefined
 		try {
 			if (this.hasCodec) {
 				// See FromAsync for the rationale on skipping `Convert`
@@ -1371,7 +1364,7 @@ export class TypeBoxValidator<
 
 			return value
 		} finally {
-			if (marked) this.#unmarkForm(markedValue)
+			if (marked !== undefined) this.#unmarkForm(markedValue, marked)
 		}
 	}
 }

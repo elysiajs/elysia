@@ -2,7 +2,7 @@ import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { Value } from 'typebox/value'
 import type { TUnion } from 'typebox'
-import { post } from '../utils'
+import { post, json } from '../utils'
 
 describe('TypeSystem - Date', () => {
 	it('does not synthesize a Date without a default', () => {
@@ -81,21 +81,24 @@ describe('TypeSystem - Date', () => {
 		)
 
 		const res1 = await app.handle(
-			post('/', {
+			'/',
+			json({
 				date: new Date()
 			})
 		)
 		expect(res1.status).toBe(200)
 
 		const res2 = await app.handle(
-			post('/', {
+			'/',
+			json({
 				date: '2021/1/1'
 			})
 		)
 		expect(res2.status).toBe(200)
 
 		const res3 = await app.handle(
-			post('/', {
+			'/',
+			json({
 				date: 'Skibidi dom dom yes yes'
 			})
 		)

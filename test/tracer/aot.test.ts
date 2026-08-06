@@ -1,7 +1,6 @@
 import { Context, Elysia } from '../../src'
 import { trace } from '../../src/plugin/trace'
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('Trace AoT', async () => {
 	it('try-catch edge case', async () => {
@@ -34,7 +33,8 @@ describe('Trace AoT', async () => {
 		let called = 0
 
 		const plugin = new Elysia()
-			.use(trace()).trace(({ onHandle }) => {
+			.use(trace())
+			.trace(({ onHandle }) => {
 				onHandle(() => {
 					called++
 				})
@@ -43,10 +43,7 @@ describe('Trace AoT', async () => {
 
 		const app = new Elysia().use(plugin).get('/main', () => 'ok')
 
-		await Promise.all([
-			app.handle(req('/plugin')),
-			app.handle(req('/main'))
-		])
+		await Promise.all([app.handle('/plugin'), app.handle('/main')])
 
 		expect(called).toBe(1)
 	})

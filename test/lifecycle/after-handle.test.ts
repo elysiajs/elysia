@@ -1,13 +1,12 @@
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('afterHandle', () => {
 	it('replaces a response from an app hook', async () => {
 		const app = new Elysia().afterHandle(() => 'A').get('/', () => 'NOOP')
 
-		const res = await app.handle(req('/')).then((x) => x.text())
+		const res = await app.handle('/').then((x) => x.text())
 
 		expect(res).toBe('A')
 	})
@@ -23,7 +22,7 @@ describe('afterHandle', () => {
 			() => 'NOOP'
 		)
 
-		const res = await app.handle(req('/')).then((x) => x.text())
+		const res = await app.handle('/').then((x) => x.text())
 
 		expect(res).toBe('A')
 	})
@@ -41,7 +40,7 @@ describe('afterHandle', () => {
 			.use(transformType)
 			.get('/id/:id', ({ params: { id } }) => typeof id)
 
-		const res = await app.handle(req('/id/1'))
+		const res = await app.handle('/id/1')
 
 		await expect(res.text()).resolves.toBe('number')
 	})
@@ -56,7 +55,7 @@ describe('afterHandle', () => {
 			.use(transformType)
 			.get('/id/:id', ({ params: { id } }) => typeof id)
 
-		const res = await app.handle(req('/id/1'))
+		const res = await app.handle('/id/1')
 
 		await expect(res.text()).resolves.toBe('string')
 	})
@@ -73,7 +72,7 @@ describe('afterHandle', () => {
 			})
 			.get('/', () => '')
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(order).toEqual(['A', 'B'])
 	})
@@ -90,7 +89,7 @@ describe('afterHandle', () => {
 			() => 'NOOP'
 		)
 
-		const res = await app.handle(req('/')).then((x) => x.text())
+		const res = await app.handle('/').then((x) => x.text())
 
 		expect(res).toBe('NOOP')
 	})
@@ -106,10 +105,7 @@ describe('afterHandle', () => {
 
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
-		await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
+		await Promise.all([app.handle('/inner'), app.handle('/outer')])
 
 		expect(called).toEqual(['/inner', '/outer'])
 	})
@@ -125,10 +121,7 @@ describe('afterHandle', () => {
 
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
-		await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
+		await Promise.all([app.handle('/inner'), app.handle('/outer')])
 
 		expect(called).toEqual(['/inner'])
 	})
@@ -147,7 +140,7 @@ describe('afterHandle', () => {
 			])
 			.get('/', () => 'NOOP')
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(total).toEqual(2)
 	})

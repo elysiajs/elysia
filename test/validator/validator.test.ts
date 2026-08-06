@@ -1,7 +1,7 @@
 import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { post, req } from '../utils'
+import { post } from '../utils'
 
 describe('Validator Additional Case', () => {
 	it('validate beforeHandle', async () => {
@@ -25,8 +25,8 @@ describe('Validator Additional Case', () => {
 				() => 1 as any
 			)
 
-		const res = await app.handle(req('/'))
-		const invalid = await app.handle(req('/invalid'))
+		const res = await app.handle('/')
+		const invalid = await app.handle('/invalid')
 
 		await expect(res.text()).resolves.toBe('Mutsuki need correction 💢💢💢')
 		expect(res.status).toBe(200)
@@ -53,8 +53,8 @@ describe('Validator Additional Case', () => {
 				() => 1 as any
 			)
 
-		const res = await app.handle(req('/'))
-		const invalid = await app.handle(req('/invalid'))
+		const res = await app.handle('/')
+		const invalid = await app.handle('/invalid')
 
 		await expect(res.text()).resolves.toBe('Mutsuki need correction 💢💢💢')
 
@@ -85,8 +85,8 @@ describe('Validator Additional Case', () => {
 				},
 				() => 1 as any
 			)
-		const res = await app.handle(req('/'))
-		const invalid = await app.handle(req('/invalid'))
+		const res = await app.handle('/')
+		const invalid = await app.handle('/invalid')
 
 		await expect(res.text()).resolves.toBe('Mutsuki need correction 💢💢💢')
 		expect(res.status).toBe(200)
@@ -181,8 +181,8 @@ describe('Validator Additional Case', () => {
 			)
 
 		const res = await Promise.all([
-			app.handle(req('/')),
-			app.handle(req('/', { headers: { Cookie: 'session=value' } }))
+			app.handle('/'),
+			app.handle('/', { headers: { Cookie: 'session=value' } })
 		])
 
 		expect(res[0].status).toBe(422)
@@ -198,7 +198,7 @@ describe('Validator Additional Case', () => {
 			() => 'SAFE'
 		)
 
-		const response = await app.handle(req('/?x=1'))
+		const response = await app.handle('/?x=1')
 
 		expect(response.status).toBe(200)
 	})

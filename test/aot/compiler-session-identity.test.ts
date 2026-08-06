@@ -9,7 +9,7 @@ import {
 } from '../../src/compile/aot-capture'
 import { captureArtifacts } from '../../src/plugin/aot/source'
 import { Validator } from '../../src/validator'
-import { post } from '../utils'
+import { post, json } from '../utils'
 import { materialise, materialiseHandlers } from './_manifest'
 
 const buildA = () =>
@@ -58,7 +58,7 @@ describe('AOT manifest ownership and compiler sessions', () => {
 		}
 
 		const appA = buildA()
-		const a = await appA.handle(post('/x', { a: 'ok' }))
+		const a = await appA.handle('/x', json({ a: 'ok' }))
 		expect(a.status).toBe(200)
 		expect(frozenFactoryCalls).toBe(1)
 
@@ -67,13 +67,13 @@ describe('AOT manifest ownership and compiler sessions', () => {
 			{ body: t.Object({ b: t.Number() }) },
 			({ body }) => body
 		)
-		expect((await appB.handle(post('/x', { b: 1 }))).status).toBe(200)
-		expect((await appB.handle(post('/x', { a: 'wrong' }))).status).toBe(422)
+		expect((await appB.handle('/x', json({ b: 1 }))).status).toBe(200)
+		expect((await appB.handle('/x', json({ a: 'wrong' }))).status).toBe(422)
 
 		const appC = buildA()
-		const c = await appC.handle(post('/x', { a: 'ok' }))
+		const c = await appC.handle('/x', json({ a: 'ok' }))
 		expect(c.status).toBe(a.status)
-		expect(await c.text()).toBe(await a.text())
+		await expect(c.text()).resolves.toBe(await a.text())
 		expect(frozenFactoryCalls).toBe(1)
 	})
 
@@ -102,11 +102,9 @@ describe('AOT manifest ownership and compiler sessions', () => {
 			() => 'other'
 		)
 		expect(() => void other.fetch).not.toThrow()
-		expect(
-			await (
-				await other.handle(new Request('http://localhost/other'))
-			).text()
-		).toBe('other')
+		await expect(
+			(await other.handle(new Request('http://localhost/other'))).text()
+		).resolves.toBe('other')
 	})
 
 	it('uses the manifest for captured routes and JIT for later routes', async () => {
@@ -119,12 +117,10 @@ describe('AOT manifest ownership and compiler sessions', () => {
 		}
 
 		const app = buildA().get('/late', () => 'late')
-		expect((await app.handle(post('/x', { a: 'ok' }))).status).toBe(200)
-		expect(
-			await (
-				await app.handle(new Request('http://localhost/late'))
-			).text()
-		).toBe('late')
+		expect((await app.handle('/x', json({ a: 'ok' }))).status).toBe(200)
+		await expect(
+			(await app.handle(new Request('http://localhost/late'))).text()
+		).resolves.toBe('late')
 		expect(frozenFactoryCalls).toBe(1)
 	})
 
@@ -139,7 +135,7 @@ describe('AOT manifest ownership and compiler sessions', () => {
 
 		void new Elysia({ precompile: true }).fetch
 
-		const response = await buildA().handle(post('/x', { a: 'ok' }))
+		const response = await buildA().handle('/x', json({ a: 'ok' }))
 		expect(response.status).toBe(200)
 		expect(frozenFactoryCalls).toBe(1)
 	})
@@ -151,7 +147,7 @@ describe('AOT manifest ownership and compiler sessions', () => {
 		await register()
 
 		const app = buildA().get('/late', () => 'fresh')
-		expect((await app.handle(post('/x', { a: 'ok' }))).status).toBe(200)
+		expect((await app.handle('/x', json({ a: 'ok' }))).status).toBe(200)
 
 		// a registration arriving after the claim must never rebind the app
 		Compiled.register({
@@ -161,7 +157,7 @@ describe('AOT manifest ownership and compiler sessions', () => {
 		})
 
 		const response = await app.handle(new Request('http://localhost/late'))
-		expect(await response.text()).toBe('fresh')
+		await expect(response.text()).resolves.toBe('fresh')
 	})
 
 	it('releases sessions after successful and failed builds', () => {

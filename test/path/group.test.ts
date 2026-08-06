@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
-import { post, req } from '../utils'
+import { post, json } from '../utils'
 
 describe('group', () => {
 	// Route schemas override inherited fields unless the group is merge.
@@ -16,8 +16,8 @@ describe('group', () => {
 					.get('', ({ store: { counter } }) => counter)
 			)
 
-		await app.handle(req('/'))
-		const res = await app.handle(req('/counter')).then((r) => r.text())
+		await app.handle('/')
+		const res = await app.handle('/counter').then((r) => r.text())
 
 		expect(res).toBe('2')
 	})
@@ -27,7 +27,7 @@ describe('group', () => {
 			app.decorate('a', 'b').get('/', ({ a }) => a)
 		)
 
-		const res = await app.handle(req('/v1/')).then((x) => x.text())
+		const res = await app.handle('/v1/').then((x) => x.text())
 
 		expect(res).toBe('b')
 	})
@@ -43,7 +43,7 @@ describe('group', () => {
 			(app) => app.get('', () => 'Hello')
 		)
 
-		const error = await app.handle(req('/v1'))
+		const error = await app.handle('/v1')
 		const correct = await app.handle(
 			new Request('http://localhost/v1', {
 				headers: {
@@ -70,8 +70,8 @@ describe('group', () => {
 			(app) => app.get('/id/:id', () => 'Hello')
 		)
 
-		const error = await app.handle(req('/v1/id/a'))
-		const correct = await app.handle(req('/v1/id/1'))
+		const error = await app.handle('/v1/id/a')
+		const correct = await app.handle('/v1/id/1')
 
 		expect(correct.status).toBe(200)
 		expect(error.status).toBe(422)
@@ -88,8 +88,8 @@ describe('group', () => {
 			(app) => app.get('', () => 'Hello')
 		)
 
-		const error = await app.handle(req('/v1?id=1'))
-		const correct = await app.handle(req('/v1?name=a'))
+		const error = await app.handle('/v1?id=1')
+		const correct = await app.handle('/v1?name=a')
 
 		expect(correct.status).toBe(200)
 		expect(error.status).toBe(422)
@@ -107,12 +107,14 @@ describe('group', () => {
 		)
 
 		const error = await app.handle(
-			post('/v1', {
+			'/v1',
+			json({
 				id: 'hi'
 			})
 		)
 		const correct = await app.handle(
-			post('/v1', {
+			'/v1',
+			json({
 				name: 'hi'
 			})
 		)
@@ -135,8 +137,8 @@ describe('group', () => {
 					.get('/error', () => 1)
 		)
 
-		const error = await app.handle(req('/v1/error'))
-		const correct = await app.handle(req('/v1/correct'))
+		const error = await app.handle('/v1/error')
+		const correct = await app.handle('/v1/correct')
 
 		expect(correct.status).toBe(200)
 		expect(error.status).toBe(422)
@@ -147,7 +149,7 @@ describe('group', () => {
 			app.get('', () => 'Hello')
 		)
 
-		const res = await app.handle(req('/api/v1'))
+		const res = await app.handle('/api/v1')
 
 		expect(res.status).toBe(200)
 	})
@@ -232,7 +234,7 @@ describe('group', () => {
 		expect(Object.keys(app['~ext']?.store ?? {})).toEqual(['a', 'b'])
 		expect(Object.keys(app['~ext']?.models ?? {})).toEqual(['a', 'b'])
 
-		const response = await app.handle(req('/posts')).then((x) => x.text())
+		const response = await app.handle('/posts').then((x) => x.text())
 
 		expect(response).toEqual('a')
 	})
@@ -251,10 +253,8 @@ describe('group', () => {
 				)
 		)
 
-		const valid = app.handle(req('/group/1/saltyaom')).then((x) => x.json())
-		const invalid = app
-			.handle(req('/group/a/saltyaom'))
-			.then((x) => x.status)
+		const valid = app.handle('/group/1/saltyaom').then((x) => x.json())
+		const invalid = app.handle('/group/a/saltyaom').then((x) => x.status)
 
 		await expect(valid).resolves.toEqual({ name: 'saltyaom' })
 		await expect(invalid).resolves.toBe(200)
@@ -277,10 +277,8 @@ describe('group', () => {
 				)
 		)
 
-		const valid = app.handle(req('/group/1/saltyaom')).then((x) => x.json())
-		const invalid = app
-			.handle(req('/group/a/saltyaom'))
-			.then((x) => x.status)
+		const valid = app.handle('/group/1/saltyaom').then((x) => x.json())
+		const invalid = app.handle('/group/a/saltyaom').then((x) => x.status)
 
 		await expect(valid).resolves.toEqual({ id: 1, name: 'saltyaom' })
 		await expect(invalid).resolves.toBe(422)
@@ -303,7 +301,7 @@ describe('group', () => {
 		)
 
 		const value = await app
-			.handle(req('/?playing=true&limit=10'))
+			.handle('/?playing=true&limit=10')
 			.then((x) => x.json())
 
 		expect(value).toEqual({
@@ -342,7 +340,7 @@ describe('group', () => {
 		)
 
 		const value = await app
-			.handle(req('/?name=lilith&playing=true&limit=10'))
+			.handle('/?name=lilith&playing=true&limit=10')
 			.then((x) => x.json())
 
 		expect(value).toEqual({
@@ -350,7 +348,7 @@ describe('group', () => {
 		})
 
 		const error = await app
-			.handle(req('/?name=lilith&playing=true'))
+			.handle('/?name=lilith&playing=true')
 			.then((x) => x.status)
 
 		expect(error).toBe(200)
@@ -388,7 +386,7 @@ describe('group', () => {
 		)
 
 		const value = await app
-			.handle(req('/?name=lilith&playing=true&limit=10'))
+			.handle('/?name=lilith&playing=true&limit=10')
 			.then((x) => x.json())
 
 		expect(value).toEqual({
@@ -398,7 +396,7 @@ describe('group', () => {
 		})
 
 		const error = await app
-			.handle(req('/?name=lilith&playing=true'))
+			.handle('/?name=lilith&playing=true')
 			.then((x) => x.status)
 
 		expect(error).toBe(422)

@@ -1,7 +1,6 @@
 import { Elysia, t, ValidationError } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('Header Validator', () => {
 	it('validate single', async () => {
@@ -14,13 +13,11 @@ describe('Header Validator', () => {
 			},
 			({ headers: { name } }) => name
 		)
-		const res = await app.handle(
-			req('/', {
-				headers: {
-					name: 'sucrose'
-				}
-			})
-		)
+		const res = await app.handle('/', {
+			headers: {
+				name: 'sucrose'
+			}
+		})
 
 		await expect(res.text()).resolves.toBe('sucrose')
 		expect(res.status).toBe(200)
@@ -38,15 +35,13 @@ describe('Header Validator', () => {
 			},
 			({ headers }) => headers
 		)
-		const res = await app.handle(
-			req('/', {
-				headers: {
-					name: 'sucrose',
-					job: 'alchemist',
-					trait: 'dog'
-				}
-			})
-		)
+		const res = await app.handle('/', {
+			headers: {
+				name: 'sucrose',
+				job: 'alchemist',
+				trait: 'dog'
+			}
+		})
 
 		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
@@ -68,15 +63,13 @@ describe('Header Validator', () => {
 			},
 			() => ''
 		)
-		const res = await app.handle(
-			req('/', {
-				headers: {
-					name: 'sucrose',
-					job: 'alchemist',
-					trait: 'dog'
-				}
-			})
-		)
+		const res = await app.handle('/', {
+			headers: {
+				name: 'sucrose',
+				job: 'alchemist',
+				trait: 'dog'
+			}
+		})
 
 		expect(res.status).toBe(200)
 	})
@@ -93,14 +86,12 @@ describe('Header Validator', () => {
 			},
 			({ headers }) => headers
 		)
-		const res = await app.handle(
-			req('/', {
-				headers: {
-					name: 'sucrose',
-					job: 'alchemist'
-				}
-			})
-		)
+		const res = await app.handle('/', {
+			headers: {
+				name: 'sucrose',
+				job: 'alchemist'
+			}
+		})
 
 		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
@@ -122,15 +113,13 @@ describe('Header Validator', () => {
 			},
 			({ headers }) => headers
 		)
-		const res = await app.handle(
-			req('/', {
-				headers: {
-					name: 'sucrose',
-					job: 'alchemist',
-					age: '16'
-				}
-			})
-		)
+		const res = await app.handle('/', {
+			headers: {
+				name: 'sucrose',
+				job: 'alchemist',
+				age: '16'
+			}
+		})
 
 		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
@@ -154,16 +143,14 @@ describe('Header Validator', () => {
 			},
 			({ headers }) => headers
 		)
-		const res = await app.handle(
-			req('/', {
-				headers: {
-					name: 'sucrose',
-					job: 'alchemist',
-					age: '16',
-					rank: '4'
-				}
-			})
-		)
+		const res = await app.handle('/', {
+			headers: {
+				name: 'sucrose',
+				job: 'alchemist',
+				age: '16',
+				rank: '4'
+			}
+		})
 
 		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
@@ -184,13 +171,11 @@ describe('Header Validator', () => {
 			},
 			({ headers }) => headers
 		)
-		const res = await app.handle(
-			req('/', {
-				headers: {
-					limit: '16'
-				}
-			})
-		)
+		const res = await app.handle('/', {
+			headers: {
+				limit: '16'
+			}
+		})
 
 		await expect(res.json()).resolves.toEqual({
 			limit: 16
@@ -209,14 +194,12 @@ describe('Header Validator', () => {
 			},
 			({ headers }) => headers
 		)
-		const res = await app.handle(
-			req('/', {
-				headers: {
-					limit: '16',
-					offset: '4'
-				}
-			})
-		)
+		const res = await app.handle('/', {
+			headers: {
+				limit: '16',
+				offset: '4'
+			}
+		})
 
 		await expect(res.json()).resolves.toEqual({
 			limit: 16,
@@ -239,7 +222,7 @@ describe('Header Validator', () => {
 			},
 			({ headers }) => headers
 		)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({})
@@ -261,7 +244,7 @@ describe('Header Validator', () => {
 			},
 			({ headers }) => headers
 		)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({})
@@ -284,14 +267,12 @@ describe('Header Validator', () => {
 		)
 
 		const [valid, invalid] = await Promise.all([
-			app.handle(
-				req('/', {
-					headers: {
-						name: 'sucrose'
-					}
-				})
-			),
-			app.handle(req('/'))
+			app.handle('/', {
+				headers: {
+					name: 'sucrose'
+				}
+			}),
+			app.handle('/')
 		])
 
 		await expect(valid.text()).resolves.toBe('sucrose')
@@ -314,13 +295,11 @@ describe('Header Validator', () => {
 		)
 
 		const value = await app
-			.handle(
-				req('/', {
-					headers: {
-						name: 'nagisa'
-					}
-				})
-			)
+			.handle('/', {
+				headers: {
+					name: 'nagisa'
+				}
+			})
 			.then((x) => x.json())
 
 		expect(value).toEqual({
@@ -342,13 +321,11 @@ describe('Header Validator', () => {
 		)
 
 		const value = await app
-			.handle(
-				req('/', {
-					headers: {
-						name: 'nagisa'
-					}
-				})
-			)
+			.handle('/', {
+				headers: {
+					name: 'nagisa'
+				}
+			})
 			.then((x) => x.json())
 
 		expect(value).toEqual({
@@ -369,13 +346,11 @@ describe('Header Validator', () => {
 		)
 
 		const value = await app
-			.handle(
-				req('/', {
-					headers: {
-						id: '1'
-					}
-				})
-			)
+			.handle('/', {
+				headers: {
+					id: '1'
+				}
+			})
 			.then((x) => x.text())
 
 		expect(value).toBe('number')
@@ -393,13 +368,11 @@ describe('Header Validator', () => {
 		)
 
 		const value = await app
-			.handle(
-				req('/', {
-					headers: {
-						'is-admin': 'true'
-					}
-				})
-			)
+			.handle('/', {
+				headers: {
+					'is-admin': 'true'
+				}
+			})
 			.then((x) => x.text())
 
 		expect(value).toBe('boolean')
@@ -419,15 +392,13 @@ describe('Header Validator', () => {
 		)
 
 		const res = await Promise.all([
-			app.handle(req('/')).then((x) => x.json()),
+			app.handle('/').then((x) => x.json()),
 			app
-				.handle(
-					req('/', {
-						headers: {
-							id: '1'
-						}
-					})
-				)
+				.handle('/', {
+					headers: {
+						id: '1'
+					}
+				})
 				.then((x) => x.json())
 		])
 
@@ -452,13 +423,11 @@ describe('Header Validator', () => {
 			)
 			.listen(0)
 
-		await app.handle(
-			req('/', {
-				headers: {
-					year: '3000'
-				}
-			})
-		)
+		await app.handle('/', {
+			headers: {
+				year: '3000'
+			}
+		})
 
 		expect(err instanceof ValidationError).toBe(true)
 	})

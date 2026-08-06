@@ -1,7 +1,6 @@
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('Promise-returning hooks', () => {
 	it('.request() returning a Promise<undefined> continues to the handler', async () => {
@@ -9,7 +8,7 @@ describe('Promise-returning hooks', () => {
 			.request(() => new Promise<void>((resolve) => resolve()) as any)
 			.get('/', () => 'handler')
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('handler')
@@ -20,7 +19,7 @@ describe('Promise-returning hooks', () => {
 			.request(() => new Promise<string>((resolve) => resolve('early')))
 			.get('/', () => 'handler')
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('early')
@@ -36,7 +35,7 @@ describe('Promise-returning hooks', () => {
 			() => 'handler'
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('handler')
@@ -52,7 +51,7 @@ describe('Promise-returning hooks', () => {
 			() => 'handler'
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('before')
@@ -65,7 +64,7 @@ describe('Promise-returning hooks', () => {
 				throw new Error('boom')
 			})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(500)
 		const body = await res.text()
@@ -80,7 +79,7 @@ describe('Promise-returning hooks', () => {
 				throw new Error('boom')
 			})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		await expect(res.text()).resolves.toBe('handled')
 	})
@@ -99,7 +98,7 @@ describe('Promise-returning hooks', () => {
 			ok: true
 		}))
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({ ok: true })

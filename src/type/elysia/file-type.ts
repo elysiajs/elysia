@@ -1,6 +1,7 @@
 import type { FileType, FileUnit } from '../types'
 import type { MaybeArray, MaybePromise } from '../../types'
 import { isAsyncFunction } from '../../compile/utils'
+import { isProduction } from '../../universal/is-production'
 
 export type FileTypeDetector = (
 	file: File
@@ -10,6 +11,16 @@ let fileTypeDetectors: FileTypeDetector[] | undefined
 
 export function setFileTypeDetector(detector: MaybeArray<FileTypeDetector>) {
 	fileTypeDetectors = Array.isArray(detector) ? detector : [detector]
+}
+
+let warnedMissingDetector = false
+
+function warnMissingFileTypeDetector() {
+	warnedMissingDetector = true
+
+	console.warn(
+		'[elysia] missing file type detector'
+	)
 }
 
 async function detectFileType(file: File): Promise<string | undefined> {
@@ -37,7 +48,12 @@ export async function fileType(
 
 	if (!matchesAnyFileType(file.type, types)) return false
 
-	if (!fileTypeDetectors) return false
+	if (!fileTypeDetectors) {
+		if (!isProduction() && !warnedMissingDetector)
+			warnMissingFileTypeDetector()
+
+		return false
+	}
 
 	const mime = await detectFileType(file)
 	if (mime && matchesAnyFileType(mime, types)) return true
@@ -87,6 +103,8 @@ export function maybeQueueFileTypeCheck(
 	if (!collecting) return
 
 	if (!fileTypeDetectors) {
+		if (!isProduction() && !warnedMissingDetector)
+			warnMissingFileTypeDetector()
 		;(pendingFileTypeChecks ??= []).push({
 			file: value,
 			check: Promise.resolve(message)

@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'bun:test'
 
 import { Elysia } from '../../src'
-import { req } from '../utils'
 
 describe('Static Content', () => {
 	it('work', async () => {
 		const app = new Elysia().get('/', 'Static Content')
 
-		const response = await app.handle(req('/')).then((x) => x.text())
+		const response = await app.handle('/').then((x) => x.text())
 
 		expect(response).toBe('Static Content')
 	})
@@ -17,7 +16,7 @@ describe('Static Content', () => {
 			.request(() => 'request')
 			.get('/', 'Static Content')
 
-		const response = await app.handle(req('/')).then((x) => x.text())
+		const response = await app.handle('/').then((x) => x.text())
 
 		expect(response).toBe('request')
 	})
@@ -33,7 +32,7 @@ describe('Static Content', () => {
 			'Static Content'
 		)
 
-		const response = await app.handle(req('/')).then((x) => x.text())
+		const response = await app.handle('/').then((x) => x.text())
 
 		expect(response).toBe('beforeHandle')
 	})
@@ -49,7 +48,7 @@ describe('Static Content', () => {
 			'Static Content'
 		)
 
-		const headers = await app.handle(req('/')).then((x) => x.headers)
+		const headers = await app.handle('/').then((x) => x.headers)
 
 		expect(headers.get('X-Powered-By')).toBe('Elysia')
 	})
@@ -61,12 +60,12 @@ describe('Static Content', () => {
 			})
 			.get('/', 'Static Content')
 
-		const headers = await app.handle(req('/')).then((x) => x.headers)
+		const headers = await app.handle('/').then((x) => x.headers)
 
 		expect(headers.get('X-Powered-By')).toBe('Elysia')
 	})
 
-	it('handle errror after routing', async () => {
+	it('handle error thrown from beforeHandle after routing', async () => {
 		const app = new Elysia().get(
 			'/',
 			{
@@ -80,12 +79,12 @@ describe('Static Content', () => {
 			'Static Content'
 		)
 
-		const response = await app.handle(req('/')).then((x) => x.text())
+		const response = await app.handle('/').then((x) => x.text())
 
 		expect(response).toBe('handled')
 	})
 
-	it('handle errror after routing', async () => {
+	it('handle error thrown from request hook before routing', async () => {
 		const app = new Elysia()
 			.error(() => 'handled')
 			.request(() => {
@@ -93,7 +92,7 @@ describe('Static Content', () => {
 			})
 			.get('/', 'Static Content')
 
-		const response = await app.handle(req('/')).then((x) => x.text())
+		const response = await app.handle('/').then((x) => x.text())
 
 		expect(response).toBe('handled')
 	})
@@ -109,9 +108,9 @@ describe('Static Content', () => {
 			'Static Content'
 		)
 
-		await app.handle(req('/'))
-		await app.handle(req('/'))
-		const headers = await app.handle(req('/')).then((x) => x.headers)
+		await app.handle('/')
+		await app.handle('/')
+		const headers = await app.handle('/').then((x) => x.headers)
 
 		expect(headers.get('X-Powered-By')).toBe('Elysia')
 	})

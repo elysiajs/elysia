@@ -23,7 +23,7 @@ import {
 	materialiseHandlers,
 	registerManifest
 } from './_manifest'
-import { post, req } from '../utils'
+import { post, json } from '../utils'
 
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
 const STRIP_E2E_APP = resolve(import.meta.dir, 'fixtures/strip-e2e-app.ts')
@@ -79,7 +79,9 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 
 	// WebSocket routes do not call the HTTP handler compiler.
 	it('WS-only app: handler JIT is stubbable (WS never reaches sucrose)', async () => {
-		const app = new Elysia().use(websocket()).ws('/ws', { message: () => {} })
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws', { message: () => {} })
 		const r = await analyzeStubbability(app as any)
 		expect(r.jit).toBe(true)
 		expect(r.reasons).toEqual([])
@@ -93,7 +95,8 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 				({ body }) => body
 			)
 			.get('/g', () => 'ok')
-			.use(websocket()).ws('/ws', { message: () => {} })
+			.use(websocket())
+			.ws('/ws', { message: () => {} })
 		const r = await analyzeStubbability(app as any)
 		expect(r.jit).toBe(true)
 	})
@@ -266,23 +269,19 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		frozen.compile()
 
 		const ok = await frozen
-			.handle(
-				req('/u', {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({ name: 'a', age: 1 })
-				})
-			)
+			.handle('/u', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name: 'a', age: 1 })
+			})
 			.then((r) => r.json())
 		expect(ok).toEqual({ name: 'a', age: 1 })
 
-		const bad = await frozen.handle(
-			req('/u', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ name: 'a' })
-			})
-		)
+		const bad = await frozen.handle('/u', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ name: 'a' })
+		})
 		expect(bad.status).toBe(422)
 	})
 
@@ -464,11 +463,11 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			const mod: any = await import(tmp)
 			delete process.env.ELYSIA_AOT_BUILD
 
-			const ok = await mod.app.handle(post('/body', { hello: 'world' }))
+			const ok = await mod.app.handle('/body', json({ hello: 'world' }))
 			expect(ok.status).toBe(200)
 			await expect(ok.json()).resolves.toEqual({ hello: 'world' })
 
-			const bad = await mod.app.handle(post('/body', { hello: 123 }))
+			const bad = await mod.app.handle('/body', json({ hello: 123 }))
 			expect(bad.status).toBe(422)
 		} finally {
 			delete process.env.ELYSIA_AOT_BUILD

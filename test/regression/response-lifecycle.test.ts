@@ -31,7 +31,7 @@ describe('response lifecycle resources', () => {
 				})
 				.get('/', () => 'ok')
 
-			await app.handle(req())
+			await app.handle('/')
 			await Bun.sleep(1)
 
 			expect(ran).toBe(true)
@@ -70,9 +70,9 @@ describe('response lifecycle resources', () => {
 			yield 'ok'
 		})
 
-		const response = await app.handle(req('/', { signal }))
+		const response = await app.handle('/', { signal })
 
-		expect(await response.text()).toBe('ok')
+		await expect(response.text()).resolves.toBe('ok')
 		expect(added).toBe(1)
 		expect(removed).toBe(1)
 	})

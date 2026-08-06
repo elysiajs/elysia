@@ -26,7 +26,7 @@ describe('typed SSE (sse()-marked) no-eager-pull', () => {
 		// If the eager pull were still present, handle() would not resolve
 		// until `gate` does — the race would time out instead
 		const response = await Promise.race([
-			app.handle(req('/')),
+			app.handle('/'),
 			new Promise<never>((_, reject) =>
 				setTimeout(
 					() => reject(new Error('headers were withheld')),
@@ -39,7 +39,7 @@ describe('typed SSE (sse()-marked) no-eager-pull', () => {
 		expect(response.headers.get('content-type')).toBe('text/event-stream')
 
 		release()
-		expect(await response.text()).toContain('data: late')
+		await expect(response.text()).resolves.toContain('data: late')
 	})
 
 	it('does not set transfer-encoding on the typed lane', async () => {
@@ -51,12 +51,12 @@ describe('typed SSE (sse()-marked) no-eager-pull', () => {
 			)
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.headers.get('transfer-encoding')).toBe(null)
 		expect(response.headers.get('content-type')).toBe('text/event-stream')
 		expect(response.headers.get('cache-control')).toBe('no-cache')
-		expect(await response.text()).toBe('data: a\n\n')
+		await expect(response.text()).resolves.toBe('data: a\n\n')
 	})
 
 	it('handles sse()-marked ReadableStream without transfer-encoding', async () => {
@@ -71,11 +71,11 @@ describe('typed SSE (sse()-marked) no-eager-pull', () => {
 			)
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.headers.get('content-type')).toBe('text/event-stream')
 		expect(response.headers.get('transfer-encoding')).toBe(null)
-		expect(await response.text()).toBe('data: hello\n\n')
+		await expect(response.text()).resolves.toBe('data: hello\n\n')
 	})
 
 	it('surfaces an early throw as a mid-stream error, not a pre-response error', async () => {
@@ -90,7 +90,7 @@ describe('typed SSE (sse()-marked) no-eager-pull', () => {
 			)
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(200)
 		expect(response.headers.get('content-type')).toBe('text/event-stream')
@@ -109,7 +109,7 @@ describe('typed SSE (sse()-marked) no-eager-pull', () => {
 			yield 'unreachable'
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(500)
 		expect(response.headers.get('content-type')).not.toBe(
@@ -133,7 +133,7 @@ describe('typed SSE (sse()-marked) no-eager-pull', () => {
 			)
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		const reader = response.body!.getReader()
 
 		const first = await reader.read()
@@ -159,7 +159,7 @@ describe('typed SSE (sse()-marked) no-eager-pull', () => {
 			)
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		const reader = response.body!.getReader()
 
 		await reader.read()

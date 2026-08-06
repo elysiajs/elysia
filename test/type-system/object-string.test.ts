@@ -1,7 +1,6 @@
 import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { Value } from 'typebox/value'
-import { req } from '../utils'
 
 describe('TypeSystem - ObjectString', () => {
 	it('creates an empty object unless a default is provided', () => {
@@ -85,11 +84,11 @@ describe('TypeSystem - ObjectString', () => {
 		)
 
 		const res1 = await app.handle(
-			req('/?pagination={"pageIndex":1,"pageLimit":1}')
+			'/?pagination={"pageIndex":1,"pageLimit":1}'
 		)
 		expect(res1.status).toBe(200)
 
-		const res2 = await app.handle(req('/?pagination={"pageLimit":1}'))
+		const res2 = await app.handle('/?pagination={"pageLimit":1}')
 		expect(res2.status).toBe(422)
 	})
 

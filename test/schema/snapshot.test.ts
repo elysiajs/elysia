@@ -2,13 +2,7 @@ import { describe, expect, it } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { snapshotSchema, snapshotHookSchemas } from '../../src/schema-snapshot'
-
-const post = (path: string, body: unknown) =>
-	new Request(`http://localhost${path}`, {
-		method: 'POST',
-		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify(body)
-	})
+import { json } from '../utils'
 
 describe('routes keep the schema registered at definition time', () => {
 	for (const precompile of [false, true]) {
@@ -26,9 +20,9 @@ describe('routes keep the schema registered at definition time', () => {
 			;(schema.properties as any).extra = t.String()
 			schema.required = ['name', 'extra']
 
-			const res = await app.handle(post('/', { name: 'salt' }))
+			const res = await app.handle('/', json({ name: 'salt' }))
 			expect(res.status).toBe(200)
-			expect(await res.json()).toEqual({ name: 'salt' })
+			await expect(res.json()).resolves.toEqual({ name: 'salt' })
 		})
 
 		it(`ignores later query schema mutations (${mode})`, async () => {
@@ -63,7 +57,7 @@ describe('routes keep the schema registered at definition time', () => {
 
 			const res = await app.handle(new Request('http://localhost/'))
 			expect(res.status).toBe(200)
-			expect(await res.json()).toEqual({ ok: true })
+			await expect(res.json()).resolves.toEqual({ ok: true })
 		})
 
 		it(`ignores later mutations to a merge guard schema (${mode})`, async () => {
@@ -76,7 +70,7 @@ describe('routes keep the schema registered at definition time', () => {
 			;(schema.properties as any).extra = t.String()
 			schema.required = ['name', 'extra']
 
-			const res = await app.handle(post('/', { name: 'salt' }))
+			const res = await app.handle('/', json({ name: 'salt' }))
 			expect(res.status).toBe(200)
 		})
 
@@ -90,7 +84,7 @@ describe('routes keep the schema registered at definition time', () => {
 			;(schema.properties as any).extra = t.String()
 			schema.required = ['name', 'extra']
 
-			const res = await app.handle(post('/', { name: 'salt' }))
+			const res = await app.handle('/', json({ name: 'salt' }))
 			expect(res.status).toBe(200)
 		})
 
@@ -104,7 +98,7 @@ describe('routes keep the schema registered at definition time', () => {
 			;(schema.properties as any).extra = t.String()
 			schema.required = ['name', 'extra']
 
-			const res = await app.handle(post('/', { name: 'salt' }))
+			const res = await app.handle('/', json({ name: 'salt' }))
 			expect(res.status).toBe(200)
 		})
 
@@ -119,7 +113,7 @@ describe('routes keep the schema registered at definition time', () => {
 
 			;(schema.properties.age as any).minimum = 1000
 
-			const res = await app.handle(post('/', { age: 5 }))
+			const res = await app.handle('/', json({ age: 5 }))
 			expect(res.status).toBe(200)
 		})
 
@@ -132,12 +126,12 @@ describe('routes keep the schema registered at definition time', () => {
 				({ body }) => body
 			)
 
-			const first = await app.handle(post('/', { name: 'a' }))
+			const first = await app.handle('/', json({ name: 'a' }))
 			expect(first.status).toBe(200)
 			;(schema.properties as any).extra = t.String()
 			schema.required = ['name', 'extra']
 
-			const second = await app.handle(post('/', { name: 'b' }))
+			const second = await app.handle('/', json({ name: 'b' }))
 			expect(second.status).toBe(200)
 		})
 	}

@@ -380,6 +380,8 @@ export const coerceBody = () =>
 let _coerceFormData: CoerceOption[]
 export const coerceFormData = () =>
 	(_coerceFormData ??= [
+		[[['Integer', IntegerString]]],
+		...coerceRoot(),
 		[
 			[['Object', toObjectString]],
 			{

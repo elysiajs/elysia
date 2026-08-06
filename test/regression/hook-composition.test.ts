@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
 import { Elysia, t } from '../../src'
-import { req } from '../utils'
 
 describe('hook composition', () => {
 	it('enforces every merge schema propagated by a plugin', async () => {
@@ -17,11 +16,10 @@ describe('hook composition', () => {
 		const app = new Elysia().use(plugin).get('/', () => 'ok')
 
 		expect(
-			(await app.handle(req('/', { headers: { 'x-test': 'y' } }))).status
+			(await app.handle('/', { headers: { 'x-test': 'y' } })).status
 		).toBe(422)
 		expect(
-			(await app.handle(req('/?q=1', { headers: { 'x-test': 'y' } })))
-				.status
+			(await app.handle('/?q=1', { headers: { 'x-test': 'y' } })).status
 		).toBe(200)
 	})
 
@@ -39,7 +37,7 @@ describe('hook composition', () => {
 			.guard({ beforeHandle: () => {} })
 			.get('/', { gate: true } as any, ({ user }: any) => user)
 
-		await app.handle(req('/'))
+		await app.handle('/')
 		expect(count).toBe(1)
 	})
 })

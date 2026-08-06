@@ -131,13 +131,13 @@ describe('mapResponse — shared Response body reuse', () => {
 				headers: { 'x-req': String(n) }
 			} as any) as Response
 
-			expect(await res.text()).toBe('hello')
+			await expect(res.text()).resolves.toBe('hello')
 			expect(res.status).toBe(200)
 			expect(res.headers.get('content-type')).toBe('text/plain')
 			expect(res.headers.get('x-req')).toBe(String(n))
 		}
 
-		expect(await shared.clone().text()).toBe('hello')
+		await expect(shared.clone().text()).resolves.toBe('hello')
 		expect(shared.headers.get('x-req')).toBeNull()
 	})
 })
@@ -192,8 +192,8 @@ describe('mapResponse — Response body ownership', () => {
 			headers: { 'x-add': '1' }
 		} as any) as Response
 
-		expect(await mapped.text()).toBe('hello')
-		expect(await shared.clone().text()).toBe('hello')
+		await expect(mapped.text()).resolves.toBe('hello')
+		await expect(shared.clone().text()).resolves.toBe('hello')
 	})
 })
 
@@ -222,7 +222,7 @@ describe('mapResponse — shared chunked Response reuse', () => {
 
 			expect(res.headers.get('transfer-encoding')).toBe('chunked')
 			expect(res.headers.get('x-req')).toBe(String(n))
-			expect(await read(res)).toBe('shared-chunk')
+			await expect(read(res)).resolves.toBe('shared-chunk')
 		}
 	})
 })

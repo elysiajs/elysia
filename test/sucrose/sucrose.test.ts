@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../src'
 
 import { separateFunction, sucrose, clearSucroseCache } from '../../src/sucrose'
-import { post, req } from '../utils'
+import { post, json } from '../utils'
 
 describe('sucrose', () => {
 	it('common 1', () => {
@@ -91,7 +91,7 @@ describe('sucrose', () => {
 
 		new Array(5).fill(0).map(async (_, i) => {
 			const result = await app
-				.handle(req(`/${i + 1}?a=a&b=b`))
+				.handle(`/${i + 1}?a=a&b=b`)
 				.then((x) => x.text())
 
 			expect(result).toBe('a')
@@ -110,7 +110,7 @@ describe('sucrose', () => {
 				if (!session.value) return error(401, 'Unauthorized')
 			})
 
-		const status = await app.handle(req('/')).then((x) => x.status)
+		const status = await app.handle('/').then((x) => x.status)
 		expect(status).toBe(200)
 	})
 
@@ -177,7 +177,7 @@ describe('sucrose', () => {
 		})
 	})
 
-	it('infer all inferences if context is passed to function', () => {
+	it('infer all inferences if context rest spread is passed to function', () => {
 		expect(
 			sucrose(
 				({ ...context }) => {
@@ -341,7 +341,7 @@ describe('sucrose', () => {
 		)
 
 		const response = await app
-			.handle(post('/', { hello: 'world' }))
+			.handle('/', json({ hello: 'world' }))
 			.then((x) => x.json())
 
 		expect(response).toEqual({ hello: 'world' })
@@ -374,7 +374,7 @@ describe('sucrose', () => {
 		const app = new Elysia().get('/', eval('$c=>$c.query.a'))
 		const response = await app.handle(new Request('http://localhost/?a=hi'))
 		expect(response.status).toBe(200)
-		expect(await response.text()).toBe('hi')
+		await expect(response.text()).resolves.toBe('hi')
 	})
 
 	it('memoize analysis by function identity', () => {

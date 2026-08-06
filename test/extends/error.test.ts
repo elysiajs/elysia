@@ -2,7 +2,7 @@
 import { Elysia, NotFound, ValidationError, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { post, req } from '../utils'
+import { post, json } from '../utils'
 
 import z from 'zod'
 import type { AnyElysia } from '../../src/base'
@@ -68,7 +68,7 @@ describe('Error extends', () => {
 			if (error instanceof NotFound) return 'UwU'
 		})
 
-		const response = await app.handle(req('/not/found'))
+		const response = await app.handle('/not/found')
 
 		await expect(response.text()).resolves.toBe('UwU')
 		expect(response.status).toBe(404)
@@ -84,7 +84,7 @@ describe('Error extends', () => {
 			() => '1'
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(422)
 		expect(response.headers.get('content-type')).toBe(
@@ -123,7 +123,7 @@ describe('Error extends', () => {
 				({ body, set }) => 'ok'
 			)
 
-		const response = await app.handle(post('/', {}))
+		const response = await app.handle('/', json({}))
 
 		expect(response.status).toBe(422)
 	})

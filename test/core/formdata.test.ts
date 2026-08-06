@@ -1,7 +1,6 @@
 import { Elysia, t, form, file } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { fileTypeFromBlob } from 'file-type'
-import { req } from '../utils'
 import { formDataToObject } from '../../src/adapter/web-standard/utils'
 import { TypeBoxValidator } from '../../src/type/validator'
 import { setFileTypeDetector } from '../../src/type/elysia/file-type'
@@ -104,7 +103,7 @@ describe('Form Data', () => {
 		)
 
 		const contentType = await app
-			.handle(req('/'))
+			.handle('/')
 			.then((x) => x.headers.get('content-type'))
 
 		expect(contentType).toStartWith('multipart/form-data')
@@ -119,22 +118,7 @@ describe('Form Data', () => {
 		)
 
 		const contentType = await app
-			.handle(req('/'))
-			.then((x) => x.headers.get('content-type'))
-
-		expect(contentType).toStartWith('multipart/form-data')
-	})
-
-	it('return Elysia.file', async () => {
-		const app = new Elysia().get('/', () =>
-			form({
-				a: 'hello',
-				b: file('test/kyuukurarin.mp4')
-			})
-		)
-
-		const contentType = await app
-			.handle(req('/'))
+			.handle('/')
 			.then((x) => x.headers.get('content-type'))
 
 		expect(contentType).toStartWith('multipart/form-data')
@@ -156,7 +140,7 @@ describe('Form Data', () => {
 				})
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(200)
 		expect(response.headers.get('content-type')).toStartWith(
@@ -167,7 +151,7 @@ describe('Form Data', () => {
 	it('return single file', async () => {
 		const app = new Elysia().get('/', () => file('test/kyuukurarin.mp4'))
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(200)
 		expect(response.headers.get('content-type')).toStartWith('video/mp4')
@@ -176,7 +160,7 @@ describe('Form Data', () => {
 	it('inline single file', async () => {
 		const app = new Elysia().get('/', file('test/kyuukurarin.mp4'))
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(200)
 		expect(response.headers.get('content-type')).toStartWith('video/mp4')

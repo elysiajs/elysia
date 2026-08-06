@@ -151,7 +151,7 @@ describe('EncodeFrom error path', () => {
 				() => ({ id: 'value' })
 			)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(422)
 		expect(
 			(caught as { isValidation?: boolean } | null)?.isValidation
@@ -177,7 +177,7 @@ describe('t.Cookie field-form ignores `sign` option', () => {
 		)
 
 		const setCookie = await app
-			.handle(req('/'))
+			.handle('/')
 			.then((x) => x.headers.get('set-cookie')!)
 
 		expect(setCookie).toContain('token=plain')

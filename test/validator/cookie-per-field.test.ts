@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia, t, InvalidCookie } from '../../src'
 import { signCookie } from '../../src/cookie'
-import { req } from '../utils'
 
 describe('Cookie Per-field Configuration', () => {
 	it('auto-signs a field that has its own secrets', async () => {
@@ -22,7 +21,7 @@ describe('Cookie Per-field Configuration', () => {
 			}
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		const setCookie = response.headers.get('set-cookie')!
 
 		expect(response.status).toBe(200)
@@ -47,9 +46,9 @@ describe('Cookie Per-field Configuration', () => {
 		)
 
 		const signed = await signCookie('session-id', secret)
-		const response = await app.handle(
-			req('/', { headers: { cookie: `token=${signed}` } })
-		)
+		const response = await app.handle('/', {
+			headers: { cookie: `token=${signed}` }
+		})
 
 		expect(response.status).toBe(200)
 		await expect(response.text()).resolves.toBe('session-id')
@@ -74,11 +73,9 @@ describe('Cookie Per-field Configuration', () => {
 				({ cookie: { token } }) => token.value
 			)
 
-		const response = await app.handle(
-			req('/', {
-				headers: { cookie: 'token=session-id.bogus-signature' }
-			})
-		)
+		const response = await app.handle('/', {
+			headers: { cookie: 'token=session-id.bogus-signature' }
+		})
 
 		expect(response.status).toBe(401)
 		await expect(response.text()).resolves.toBe('bad-sig')
@@ -100,7 +97,7 @@ describe('Cookie Per-field Configuration', () => {
 			}
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		const setCookies = response.headers.getSetCookie()
 
 		expect(response.status).toBe(200)
@@ -125,7 +122,7 @@ describe('Cookie Per-field Configuration', () => {
 			}
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		const setCookie = response.headers.get('set-cookie')!
 
 		expect(response.status).toBe(200)
@@ -152,7 +149,7 @@ describe('Cookie Per-field Configuration', () => {
 			}
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		const setCookie = decodeURIComponent(
 			response.headers.get('set-cookie')!
 		)

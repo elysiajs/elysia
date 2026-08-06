@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
-import { req } from '../utils'
 
 describe('Decorate', () => {
 	it('decorate primitive', async () => {
@@ -61,7 +60,7 @@ describe('Decorate', () => {
 
 		const app = new Elysia().use(plugin()).get('/', ({ hi }) => hi())
 
-		const res = await app.handle(req('/')).then((r) => r.text())
+		const res = await app.handle('/').then((r) => r.text())
 		expect(res).toBe('hi')
 	})
 
@@ -70,7 +69,7 @@ describe('Decorate', () => {
 
 		const app = new Elysia().use(plugin).get('/', ({ hi }) => hi())
 
-		const res = await app.handle(req('/')).then((r) => r.text())
+		const res = await app.handle('/').then((r) => r.text())
 		expect(res).toBe('hi')
 	})
 

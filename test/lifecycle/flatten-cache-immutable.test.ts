@@ -1,7 +1,6 @@
 import { Elysia, t, TypeBoxValidator } from '../../src'
 
 import { describe, expect, it, spyOn } from 'bun:test'
-import { req } from '../utils'
 
 describe('Inherited plugin hook isolation', () => {
 	it('keeps hook order isolated across sibling routes and repeated requests', async () => {
@@ -40,7 +39,7 @@ describe('Inherited plugin hook isolation', () => {
 		for (const path of ['/a', '/b', '/c', '/d']) {
 			for (let pass = 0; pass < 2; pass++) {
 				trace.length = 0
-				const res = await app.handle(req(path))
+				const res = await app.handle(path)
 
 				await expect(res.text()).resolves.toBe(path.slice(1))
 				expect(trace).toEqual(expected[path])
@@ -65,7 +64,7 @@ describe('Inherited plugin hook isolation', () => {
 			app.compile()
 
 			for (const path of ['/a', '/b', '/c']) {
-				const res = await app.handle(req(path))
+				const res = await app.handle(path)
 				expect(res.status).toBe(200)
 			}
 
@@ -93,7 +92,7 @@ describe('Inherited plugin hook isolation', () => {
 
 		for (const path of ['/a', '/b', '/c']) {
 			counts[path] = 0
-			const res = await app.handle(req(path))
+			const res = await app.handle(path)
 			await expect(res.text()).resolves.toBe('ok')
 			expect(counts[path]).toBe(1)
 		}

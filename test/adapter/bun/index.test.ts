@@ -77,7 +77,7 @@ describe('Bun adapter', () => {
 		expect(caughtError?.message).toBe('A')
 
 		const handled = await app.handle(new Request('http://localhost/'))
-		expect(await handled.text()).toBe('handled')
+		await expect(handled.text()).resolves.toBe('handled')
 		expect(handled.status).toBe(400)
 	})
 

@@ -1,7 +1,6 @@
 import { Elysia } from '../../src'
 import { trace } from '../../src/plugin/trace'
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 // Known subscriptions instrument only their phases; ambiguous subscriptions
 // conservatively instrument every phase.
@@ -10,7 +9,7 @@ async function routeSource(
 	method = 'GET',
 	path = '/'
 ): Promise<string> {
-	await app.handle(req(path, { method }))
+	await app.handle(path, { method })
 	const fn = app['~map']?.[method]?.[path]
 	if (typeof fn !== 'function') throw new Error('route not compiled')
 	return fn.toString()
@@ -52,7 +51,8 @@ describe('trace subscription gating', () => {
 	it('instruments only the subscribed phase', async () => {
 		const src = await routeSource(
 			new Elysia()
-				.use(trace()).trace(({ onHandle }) => onHandle(() => {}))
+				.use(trace())
+				.trace(({ onHandle }) => onHandle(() => {}))
 				.get('/', () => 'hi')
 		)
 
@@ -68,7 +68,8 @@ describe('trace subscription gating', () => {
 
 		const src = await routeSource(
 			new Elysia()
-				.use(trace()).trace(({ set }) => {
+				.use(trace())
+				.trace(({ set }) => {
 					ran = true
 					set.headers['x-trace'] = 'seen'
 				})
@@ -79,12 +80,13 @@ describe('trace subscription gating', () => {
 		expect(perfNowCount(src)).toBe(0)
 
 		const res = await new Elysia()
-			.use(trace()).trace(({ set }) => {
+			.use(trace())
+			.trace(({ set }) => {
 				ran = true
 				set.headers['x-trace'] = 'seen'
 			})
 			.get('/', () => 'hi')
-			.handle(req('/'))
+			.handle('/')
 
 		expect(ran).toBe(true)
 		expect(res.headers.get('x-trace')).toBe('seen')
@@ -93,7 +95,8 @@ describe('trace subscription gating', () => {
 	it('a parse-only trace on a POST route instruments only parse', async () => {
 		const src = await routeSource(
 			new Elysia()
-				.use(trace()).trace(({ onParse }) => onParse(() => {}))
+				.use(trace())
+				.trace(({ onParse }) => onParse(() => {}))
 				.post('/', ({ body }) => 'hi'),
 			'POST'
 		)
@@ -106,7 +109,8 @@ describe('trace subscription gating', () => {
 	it('instruments every phase for a dynamic subscription', async () => {
 		const src = await routeSource(
 			new Elysia()
-				.use(trace()).trace((lifecycle: any) => {
+				.use(trace())
+				.trace((lifecycle: any) => {
 					const phase = (globalThis as any).__tracePick ?? 'Handle'
 					lifecycle['on' + phase]?.(() => {})
 				})
@@ -122,7 +126,8 @@ describe('trace subscription gating', () => {
 
 		const src = await routeSource(
 			new Elysia()
-				.use(trace()).trace((lifecycle: any) => register(lifecycle))
+				.use(trace())
+				.trace((lifecycle: any) => register(lifecycle))
 				.get('/', () => 'hi')
 		)
 
@@ -134,7 +139,8 @@ describe('trace subscription gating', () => {
 		let fired = false
 
 		const app = new Elysia()
-			.use(trace()).trace(({ onAfterResponse }) =>
+			.use(trace())
+			.trace(({ onAfterResponse }) =>
 				onAfterResponse(({ onStop }: any) =>
 					onStop(() => {
 						fired = true
@@ -143,7 +149,7 @@ describe('trace subscription gating', () => {
 			)
 			.get('/exists', () => 'hi')
 
-		const res = await app.handle(req('/does-not-exist'))
+		const res = await app.handle('/does-not-exist')
 		expect(res.status).toBe(404)
 
 		await Bun.sleep(5)
@@ -154,7 +160,8 @@ describe('trace subscription gating', () => {
 		let count = 0
 
 		const app = new Elysia()
-			.use(trace()).trace(({ onAfterResponse }) =>
+			.use(trace())
+			.trace(({ onAfterResponse }) =>
 				onAfterResponse(({ onStop }: any) =>
 					onStop(() => {
 						count++
@@ -163,7 +170,7 @@ describe('trace subscription gating', () => {
 			)
 			.get('/', () => 'hi')
 
-		await app.handle(req('/'))
+		await app.handle('/')
 		await Bun.sleep(5)
 		expect(count).toBe(1)
 	})
@@ -171,7 +178,8 @@ describe('trace subscription gating', () => {
 	it('waits for a promise-returning handler before afterResponse traces and hooks', async () => {
 		const events: string[] = []
 		const app = new Elysia()
-			.use(trace()).trace(({ onAfterResponse }) => {
+			.use(trace())
+			.trace(({ onAfterResponse }) => {
 				onAfterResponse(() => {
 					events.push('trace')
 				})
@@ -214,7 +222,8 @@ describe('trace subscription gating', () => {
 		]
 
 		const app = new Elysia()
-			.use(trace()).trace((lifecycle: any) => {
+			.use(trace())
+			.trace((lifecycle: any) => {
 				for (const name of events)
 					lifecycle[name]?.(({ onStop }: any) =>
 						onStop(() => {
@@ -230,7 +239,7 @@ describe('trace subscription gating', () => {
 			.afterResponse(() => {})
 			.get('/', () => 'hi')
 
-		await app.handle(req('/'))
+		await app.handle('/')
 		await Bun.sleep(5)
 
 		for (const name of events) expect(called.has(name)).toBe(true)

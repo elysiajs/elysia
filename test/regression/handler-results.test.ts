@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
 import { Elysia, sse, status, t } from '../../src'
-import { req } from '../utils'
 
 describe('handler result processing', () => {
 	it('awaits a handler Promise before response validation', async () => {
@@ -11,9 +10,9 @@ describe('handler result processing', () => {
 			() => Promise.resolve({ name: 'a' })
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		expect(response.status).toBe(200)
-		expect(await response.json()).toEqual({ name: 'a' })
+		await expect(response.json()).resolves.toEqual({ name: 'a' })
 	})
 
 	it('streams a ReadableStream instead of applying an object response schema', async () => {
@@ -29,9 +28,9 @@ describe('handler result processing', () => {
 				}) as any
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		expect(response.status).toBe(200)
-		expect(await response.text()).toBe('hi')
+		await expect(response.text()).resolves.toBe('hi')
 	})
 
 	it('routes a rejected handler Promise through a synchronous error hook', async () => {
@@ -41,9 +40,9 @@ describe('handler result processing', () => {
 				Promise.reject(new Error('boom'))
 			)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		expect(response.status).toBe(500)
-		expect(await response.text()).toBe('handled')
+		await expect(response.text()).resolves.toBe('handled')
 	})
 
 	// The inline fast-path route (no hooks, no error handler) compiles to a
@@ -57,7 +56,7 @@ describe('handler result processing', () => {
 		)
 
 		// warm/compile then assert the inline closure shape (2-capture, no root)
-		await app.handle(req('/'))
+		await app.handle('/')
 		const compiled = (app as any)['~map']?.GET?.['/']
 		expect(String(compiled).trimStart().startsWith('(c)')).toBe(true)
 
@@ -65,9 +64,9 @@ describe('handler result processing', () => {
 		const onUnhandled = (e: any) => unhandled.push(e?.reason ?? e)
 		process.on('unhandledRejection', onUnhandled)
 		try {
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 			expect(response.status).toBe(500)
-			expect(await response.json()).toMatchObject({
+			await expect(response.json()).resolves.toMatchObject({
 				type: 'internal-server-error'
 			})
 			// let any stray rejection surface on the microtask queue
@@ -96,7 +95,7 @@ describe('handler result processing', () => {
 				Promise.reject(new Error('thenable-boom'))
 			)
 
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 			expect(response.status).toBe(500)
 			await new Promise((r) => setTimeout(r, 10))
 			expect(unhandled).toHaveLength(0)
@@ -113,18 +112,18 @@ describe('response status and headers', () => {
 			return status(201, { ok: true })
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		expect(response.status).toBe(201)
 		expect(response.headers.getSetCookie()).toEqual(['a=1', 'b=2'])
-		expect(await response.json()).toEqual({ ok: true })
+		await expect(response.json()).resolves.toEqual({ ok: true })
 	})
 
 	it('produces the same empty 204 response for named and numeric statuses', async () => {
 		const named = new Elysia().get('/named', () => status('No Content'))
 		const numeric = new Elysia().get('/numeric', () => status(204))
 
-		const namedResponse = await named.handle(req('/named'))
-		const numericResponse = await numeric.handle(req('/numeric'))
+		const namedResponse = await named.handle('/named')
+		const numericResponse = await numeric.handle('/numeric')
 
 		expect(namedResponse.status).toBe(204)
 		expect(numericResponse.status).toBe(204)
@@ -141,10 +140,12 @@ describe('response status and headers', () => {
 			yield sse('two')
 		})
 
-		const response = await app.handle(req('/stream'))
+		const response = await app.handle('/stream')
 		expect(response.headers.get('content-type')).toBe('text/event-stream')
 		expect(response.headers.get('cache-control')).toBe('no-cache')
 		expect(response.headers.getAll('set-cookie')).toHaveLength(2)
-		expect(await response.text()).toBe('data: one\n\ndata: two\n\n')
+		await expect(response.text()).resolves.toBe(
+			'data: one\n\ndata: two\n\n'
+		)
 	})
 })

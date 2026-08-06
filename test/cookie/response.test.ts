@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia, t } from '../../src'
-import { req } from '../utils'
 import { signCookie } from '../../src/cookie'
 
 const secrets = 'We long for the seven wailings. We bear the koan of Jericho.'
@@ -81,13 +80,13 @@ const app = new Elysia()
 
 describe('Cookie Response', () => {
 	it('set cookie', async () => {
-		const response = await app.handle(req('/create'))
+		const response = await app.handle('/create')
 
 		expect(getCookies(response)).toEqual(['name=Himari; Path=/'])
 	})
 
 	it('set multiple cookie', async () => {
-		const response = await app.handle(req('/multiple'))
+		const response = await app.handle('/multiple')
 
 		expect(getCookies(response)).toEqual([
 			'name=Himari; Path=/',
@@ -96,7 +95,7 @@ describe('Cookie Response', () => {
 	})
 
 	it('set JSON cookie', async () => {
-		const response = await app.handle(req('/council'))
+		const response = await app.handle('/council')
 
 		expect(getCookies(response)).toEqual([
 			'council=[{"name":"Rin","affilation":"Administration"}]; Path=/'
@@ -104,22 +103,20 @@ describe('Cookie Response', () => {
 	})
 
 	it('write cookie on different value', async () => {
-		const response = await app.handle(
-			req('/council', {
-				headers: {
-					cookie:
-						'council=' +
-						encodeURIComponent(
-							JSON.stringify([
-								{
-									name: 'Aoi',
-									affilation: 'Financial'
-								}
-							])
-						)
-				}
-			})
-		)
+		const response = await app.handle('/council', {
+			headers: {
+				cookie:
+					'council=' +
+					encodeURIComponent(
+						JSON.stringify([
+							{
+								name: 'Aoi',
+								affilation: 'Financial'
+							}
+						])
+					)
+			}
+		})
 
 		expect(getCookies(response)).toEqual([
 			'council=[{"name":"Rin","affilation":"Administration"}]; Path=/'
@@ -127,22 +124,20 @@ describe('Cookie Response', () => {
 	})
 
 	it('remove cookie', async () => {
-		const response = await app.handle(
-			req('/remove', {
-				headers: {
-					cookie:
-						'council=' +
-						encodeURIComponent(
-							JSON.stringify([
-								{
-									name: 'Rin',
-									affilation: 'Administration'
-								}
-							])
-						)
-				}
-			})
-		)
+		const response = await app.handle('/remove', {
+			headers: {
+				cookie:
+					'council=' +
+					encodeURIComponent(
+						JSON.stringify([
+							{
+								name: 'Rin',
+								affilation: 'Administration'
+							}
+						])
+					)
+			}
+		})
 
 		expect(getCookies(response)[0]).toInclude(
 			`council=; Max-Age=0; Path=/; Expires=${new Date(0).toUTCString()}`
@@ -150,7 +145,7 @@ describe('Cookie Response', () => {
 	})
 
 	it('sign cookie', async () => {
-		const response = await app.handle(req('/update'))
+		const response = await app.handle('/update')
 
 		expect(getCookies(response)).toEqual([
 			`name=${await signCookie('seminar: Himari', secrets)}; Path=/`
@@ -158,16 +153,11 @@ describe('Cookie Response', () => {
 	})
 
 	it('sign/unsign cookie', async () => {
-		const response = await app.handle(
-			req('/update', {
-				headers: {
-					cookie: `name=${await signCookie(
-						'seminar: Himari',
-						secrets
-					)}`
-				}
-			})
-		)
+		const response = await app.handle('/update', {
+			headers: {
+				cookie: `name=${await signCookie('seminar: Himari', secrets)}`
+			}
+		})
 
 		expect(response.status).toBe(200)
 	})
@@ -192,16 +182,11 @@ describe('Cookie Response', () => {
 			}
 		)
 
-		const response = await app.handle(
-			req('/update', {
-				headers: {
-					cookie: `name=${await signCookie(
-						'seminar: Himari',
-						secrets
-					)}`
-				}
-			})
-		)
+		const response = await app.handle('/update', {
+			headers: {
+				cookie: `name=${await signCookie('seminar: Himari', secrets)}`
+			}
+		})
 
 		expect(response.status).toBe(200)
 	})
@@ -226,16 +211,11 @@ describe('Cookie Response', () => {
 			}
 		)
 
-		const response = await app.handle(
-			req('/update', {
-				headers: {
-					cookie: `name=${await signCookie(
-						'seminar: Himari',
-						secrets
-					)}`
-				}
-			})
-		)
+		const response = await app.handle('/update', {
+			headers: {
+				cookie: `name=${await signCookie('seminar: Himari', secrets)}`
+			}
+		})
 
 		expect(response.status).toBe(200)
 	})
@@ -248,7 +228,7 @@ describe('Cookie Response', () => {
 			}
 		}).get('/create', ({ cookie: { name } }) => (name.value = 'Himari'))
 
-		const response = await app.handle(req('/create'))
+		const response = await app.handle('/create')
 
 		expect(response.headers.getAll('Set-Cookie')).toEqual([
 			'name=Himari; Path=/; HttpOnly'
@@ -256,7 +236,7 @@ describe('Cookie Response', () => {
 	})
 
 	it('retain cookie value when using set if not provided', async () => {
-		const response = await app.handle(req('/set'))
+		const response = await app.handle('/set')
 
 		expect(response.headers.getAll('Set-Cookie')).toEqual([
 			'session=rin; Path=/'
@@ -282,13 +262,11 @@ describe('Cookie Response', () => {
 			affilation: 'Administration'
 		}
 
-		const response = await app.handle(
-			req('/council', {
-				headers: {
-					cookie: 'council=' + JSON.stringify(expected)
-				}
-			})
-		)
+		const response = await app.handle('/council', {
+			headers: {
+				cookie: 'council=' + JSON.stringify(expected)
+			}
+		})
 
 		expect(response.status).toBe(200)
 		await expect(response.json()).resolves.toEqual(expected)
@@ -308,15 +286,13 @@ describe('Cookie Response', () => {
 		)
 
 		const res = await Promise.all([
-			app.handle(req('/')).then((x) => x.text()),
+			app.handle('/').then((x) => x.text()),
 			app
-				.handle(
-					req('/', {
-						headers: {
-							cookie: 'id=1'
-						}
-					})
-				)
+				.handle('/', {
+					headers: {
+						cookie: 'id=1'
+					}
+				})
 				.then((x) => x.text())
 		])
 
@@ -330,7 +306,7 @@ describe('Cookie Response', () => {
 			return 'a'
 		})
 
-		const res = app.handle(req('/')).then((x) => x.headers.toJSON())
+		const res = app.handle('/').then((x) => x.headers.toJSON())
 
 		// @ts-expect-error
 		expect(res).toEqual({})
@@ -385,13 +361,11 @@ describe('Cookie Response', () => {
 			distinct: cookie.session !== cookie.other
 		}))
 
-		const response = await app.handle(
-			req('/identity', {
-				headers: {
-					cookie: 'session=a'
-				}
-			})
-		)
+		const response = await app.handle('/identity', {
+			headers: {
+				cookie: 'session=a'
+			}
+		})
 
 		await expect(response.json()).resolves.toEqual({
 			same: true,
@@ -406,13 +380,11 @@ describe('Cookie Response', () => {
 			return 'ok'
 		})
 
-		const response = await app.handle(
-			req('/attr', {
-				headers: {
-					cookie: 'session=a'
-				}
-			})
-		)
+		const response = await app.handle('/attr', {
+			headers: {
+				cookie: 'session=a'
+			}
+		})
 
 		expect(getCookies(response)).toEqual([
 			'session=a; Domain=elysiajs.com; Path=/'
@@ -437,11 +409,40 @@ describe('Cookie Response', () => {
 				}
 			)
 
-		const response = await app.handle(req('/boom'))
+		const response = await app.handle('/boom')
 
 		await expect(response.text()).resolves.toBe('handled')
 		expect(getCookies(response)).toEqual([
 			`name=${await signCookie('seminar: Himari', secrets)}; Path=/`
 		])
+	})
+
+	// Returning a `Cookie` serves its value. The dispatch arm used to gate on a
+	// public `jar` that does not exist (the jar is a private field), so it never
+	// fired and the cookie fell through to `new Response(cookie)` — the value
+	// arrived via `toString()` with no content-type. An object value must be
+	// mapped as JSON like any other object response.
+	it('serves a returned cookie value with the right content-type', async () => {
+		const app = new Elysia()
+			.get('/object', ({ cookie: { a } }) => {
+				a.value = { x: 1 }
+
+				return a
+			})
+			.get('/string', ({ cookie: { b } }) => {
+				b.value = 'v'
+
+				return b
+			})
+
+		const object = await app.handle('/object')
+		expect(object.headers.get('content-type')).toStartWith(
+			'application/json'
+		)
+		await expect(object.json()).resolves.toEqual({ x: 1 })
+
+		// a string maps exactly as any other string response does
+		const string = await app.handle('/string')
+		await expect(string.text()).resolves.toBe('v')
 	})
 })

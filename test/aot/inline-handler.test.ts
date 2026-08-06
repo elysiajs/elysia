@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
 import { compileHandler } from '../../src/compile/handler'
-import { req } from '../utils'
 
 /** Inline handlers avoid new Function without changing error or Promise behavior. */
 
@@ -52,8 +51,8 @@ describe('inline handler fast path (no new Function eval)', () => {
 			headers['x'] ? 'x' : new Error('boom')
 		)
 
-		const ri = await inline.handle(req('/'))
-		const rc = await codegen.handle(req('/'))
+		const ri = await inline.handle('/')
+		const rc = await codegen.handle('/')
 
 		expect(ri.status).toBe(500)
 		const bi = await ri.json()
@@ -71,7 +70,7 @@ describe('inline handler fast path (no new Function eval)', () => {
 		const app = new Elysia().get('/', () =>
 			Promise.reject(new Error('rejected'))
 		)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(500)
 		await expect(res.json()).resolves.toMatchObject({
 			type: 'internal-server-error',
@@ -83,7 +82,7 @@ describe('inline handler fast path (no new Function eval)', () => {
 
 	it('resolves a Promise returned by a sync handler to its value', async () => {
 		const app = new Elysia().get('/', () => Promise.resolve('async-ok'))
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('async-ok')
 	})
@@ -96,7 +95,7 @@ describe('inline handler fast path (no new Function eval)', () => {
 			})
 			.get('/', () => new Error('boom'))
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(418)
 		await expect(res.text()).resolves.toBe('caught:boom')
 	})

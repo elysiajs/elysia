@@ -11,6 +11,6 @@ describe('custom HTTP methods', () => {
 		)
 
 		expect(response.status).toBe(200)
-		expect(await response.text()).toBe('purged')
+		await expect(response.text()).resolves.toBe('purged')
 	})
 })

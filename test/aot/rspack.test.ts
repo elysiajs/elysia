@@ -114,7 +114,7 @@ describe('AOT Rspack integration', () => {
 
 			const res = await app.handle(new Request('http://localhost/'))
 			expect(res.status).toBe(200)
-			expect(await res.text()).toBe('hi')
+			await expect(res.text()).resolves.toBe('hi')
 		} finally {
 			if (previous === undefined) delete process.env.ELYSIA_AOT_BUILD
 			else process.env.ELYSIA_AOT_BUILD = previous

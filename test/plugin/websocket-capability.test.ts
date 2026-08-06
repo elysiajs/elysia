@@ -2,12 +2,6 @@ import { describe, it, expect, afterEach, spyOn } from 'bun:test'
 
 import { Elysia } from '../../src'
 import { websocket } from '../../src/plugin/websocket'
-import {
-	buildWSRoute,
-	buildGlobalWSHandler,
-	resolveWSOptions,
-	accumulateWSOptions
-} from '../../src/ws/route'
 import { Compiled } from '../../src/compile/aot'
 import { Validator } from '../../src/validator'
 
@@ -130,38 +124,6 @@ describe('websocket capability', () => {
 				warn.mockRestore()
 			}
 		})
-
-		// it('a dual-package provider warns naming both ids', () => {
-		// 	const secondProvider = {
-		// 		id: '@elysia/websocket@duplicate-copy',
-		// 		buildWSRoute,
-		// 		buildGlobalWSHandler,
-		// 		resolveOptions: resolveWSOptions,
-		// 		accumulateOptions: accumulateWSOptions
-		// 	}
-		// 	const secondRegistrar = () => {
-		// 		const app = new Elysia({
-		// 			name: '@elysia/websocket',
-		// 			seed: secondProvider.id
-		// 		})
-		// 		;(app as any)['~ext'] = {
-		// 			capability: { ws: { provider: secondProvider } }
-		// 		}
-		// 		return app
-		// 	}
-
-		// 	const warn = spyOn(console, 'warn').mockImplementation(() => {})
-		// 	try {
-		// 		new Elysia().use(websocket()).use(secondRegistrar())
-
-		// 		// expect(warn).toHaveBeenCalled()
-		// 		// const message = warn.mock.calls[0]!.join(' ')
-		// 		// expect(message).toContain('Duplicate WebSocket capability')
-		// 		// expect(message).toContain('@elysia/websocket@duplicate-copy')
-		// 	} finally {
-		// 		warn.mockRestore()
-		// 	}
-		// })
 
 		it('diamond re-append dedups by origin (single options entry)', () => {
 			const shared = websocket({ idleTimeout: 42 })

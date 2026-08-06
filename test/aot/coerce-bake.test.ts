@@ -8,12 +8,7 @@ import {
 	endHandlerCapture,
 	endValidatorCapture
 } from '../../src/compile/aot-capture'
-import {
-	materialise,
-	materialiseHandlers,
-	registerManifest
-} from './_manifest'
-import { req } from '../utils'
+import { materialise, materialiseHandlers, registerManifest } from './_manifest'
 
 /** Baked coercion must match live validation or fall back completely. */
 
@@ -108,21 +103,19 @@ describe('frozen reconstruction coerces identically to the live path', () => {
 
 	it('the spliced schema produces the same coerced values as JIT', async () => {
 		const live = build()
-		const liveRes = await live.handle(
-			req('/s?page=3&active=true&count=7&q=hi')
-		)
+		const liveRes = await live.handle('/s?page=3&active=true&count=7&q=hi')
 		const liveBody = await liveRes.json()
 		expect(liveBody).toEqual({ page: 3, active: true, count: 7, q: 'hi' })
 
 		const { app } = freeze(build)
-		const res = await app.handle(req('/s?page=3&active=true&count=7&q=hi'))
+		const res = await app.handle('/s?page=3&active=true&count=7&q=hi')
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual(liveBody)
 	})
 
 	it('rejects out-of-range values like live validation', async () => {
 		const { app } = freeze(build)
-		const res = await app.handle(req('/s?page=0&active=true&count=7&q=hi'))
+		const res = await app.handle('/s?page=0&active=true&count=7&q=hi')
 		expect(res.status).toBe(422)
 	})
 
@@ -147,11 +140,11 @@ describe('optional coerced fields keep their optionality', () => {
 
 	it('coerces present values without requiring absent fields', async () => {
 		const { app } = freeze(build)
-		const present = await app.handle(req('/o?page=4&q=x'))
+		const present = await app.handle('/o?page=4&q=x')
 		expect(present.status).toBe(200)
 		await expect(present.json()).resolves.toEqual({ page: 4, q: 'x' })
 
-		const absent = await app.handle(req('/o?q=x'))
+		const absent = await app.handle('/o?q=x')
 		expect(absent.status).toBe(200)
 		await expect(absent.json()).resolves.toEqual({ q: 'x' })
 	})
@@ -176,8 +169,8 @@ describe('nested object query coercion', () => {
 
 		const { app } = freeze(build)
 		const url = '/n?page=2&filter=' + encodeURIComponent('{"since":9}')
-		expect((await build().handle(req(url))).status).toBe(200)
-		const res = await app.handle(req(url))
+		expect((await build().handle(url)).status).toBe(200)
+		const res = await app.handle(url)
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({
 			page: 2,
@@ -207,7 +200,7 @@ describe('array element coercion fallback', () => {
 
 		const { app } = freeze(build)
 		const url = '/arr?page=2&tags=' + encodeURIComponent('[1,2]')
-		const res = await app.handle(req(url))
+		const res = await app.handle(url)
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({ page: 2, tags: [1, 2] })
 	})
@@ -233,13 +226,13 @@ describe('string array coercion plans', () => {
 		).toBeDefined()
 
 		const url = '/sarr?page=2&tags=' + encodeURIComponent('["a","b"]')
-		const liveRes = await build().handle(req(url))
+		const liveRes = await build().handle(url)
 		expect(liveRes.status).toBe(200)
 		const liveBody = (await liveRes.json()) as any
 		expect(liveBody.page).toBe(2) // page coerced to a number
 
 		const { app } = freeze(build)
-		const res = await app.handle(req(url))
+		const res = await app.handle(url)
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual(liveBody)
 	})
@@ -261,8 +254,8 @@ describe('non-JSON-safe constraint fallback', () => {
 		).toBeUndefined()
 
 		const { app } = freeze(build)
-		expect((await build().handle(req('/inf?n=5'))).status).toBe(422)
-		expect((await app.handle(req('/inf?n=5'))).status).toBe(422)
+		expect((await build().handle('/inf?n=5')).status).toBe(422)
+		expect((await app.handle('/inf?n=5')).status).toBe(422)
 	})
 
 	it('a finite bound still bakes and enforces the bound', async () => {
@@ -279,8 +272,8 @@ describe('non-JSON-safe constraint fallback', () => {
 		).toBeDefined()
 
 		const { app } = freeze(build)
-		expect((await app.handle(req('/fin?n=5'))).status).toBe(422)
-		expect((await app.handle(req('/fin?n=20'))).status).toBe(200)
+		expect((await app.handle('/fin?n=5')).status).toBe(422)
+		expect((await app.handle('/fin?n=20')).status).toBe(200)
 	})
 })
 
@@ -299,8 +292,8 @@ describe('shared leaf is not corrupted across optional/required reuse', () => {
 			)
 
 		const { app } = freeze(build)
-		expect((await app.handle(req('/m?b=2'))).status).toBe(422)
-		const ok = await app.handle(req('/m?a=5&b=2'))
+		expect((await app.handle('/m?b=2')).status).toBe(422)
+		const ok = await app.handle('/m?a=5&b=2')
 		expect(ok.status).toBe(200)
 		await expect(ok.json()).resolves.toEqual({ a: 5, b: 2 })
 	})

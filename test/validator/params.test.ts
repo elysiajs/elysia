@@ -1,12 +1,11 @@
 import { Elysia, t, ValidationError } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('Params Validator', () => {
 	it('parse params without validator', async () => {
 		const app = new Elysia().get('/id/:id', ({ params: { id } }) => id)
-		const res = await app.handle(req('/id/617'))
+		const res = await app.handle('/id/617')
 
 		await expect(res.text()).resolves.toBe('617')
 		expect(res.status).toBe(200)
@@ -22,7 +21,7 @@ describe('Params Validator', () => {
 			},
 			({ params: { id } }) => id
 		)
-		const res = await app.handle(req('/id/617'))
+		const res = await app.handle('/id/617')
 
 		await expect(res.text()).resolves.toBe('617')
 		expect(res.status).toBe(200)
@@ -39,7 +38,7 @@ describe('Params Validator', () => {
 			},
 			({ params }) => params
 		)
-		const res = await app.handle(req('/id/617/name/Ga1ahad'))
+		const res = await app.handle('/id/617/name/Ga1ahad')
 
 		await expect(res.json()).resolves.toEqual({
 			id: '617',
@@ -58,7 +57,7 @@ describe('Params Validator', () => {
 			},
 			() => ''
 		)
-		const res = await app.handle(req('/id/617'))
+		const res = await app.handle('/id/617')
 
 		expect(res.status).toBe(200)
 	})
@@ -73,7 +72,7 @@ describe('Params Validator', () => {
 			},
 			({ params }) => params
 		)
-		const res = await app.handle(req('/id/617'))
+		const res = await app.handle('/id/617')
 
 		await expect(res.json()).resolves.toEqual({
 			id: 617
@@ -92,7 +91,7 @@ describe('Params Validator', () => {
 			},
 			({ params }) => params
 		)
-		const res = await app.handle(req('/id/617/chapter/12'))
+		const res = await app.handle('/id/617/chapter/12')
 
 		await expect(res.json()).resolves.toEqual({
 			id: 617,
@@ -111,7 +110,7 @@ describe('Params Validator', () => {
 			},
 			({ params }) => params
 		)
-		const res = await app.handle(req('/id/617'))
+		const res = await app.handle('/id/617')
 		await expect(res.json()).resolves.toEqual({
 			id: 617
 		})
@@ -129,7 +128,7 @@ describe('Params Validator', () => {
 			({ params }) => params
 		)
 
-		const res = await app.handle(req('/id/617.1234'))
+		const res = await app.handle('/id/617.1234')
 		const body = (await res.json()) as any
 		expect(body).toMatchObject({
 			type: 'validation',
@@ -164,7 +163,7 @@ describe('Params Validator', () => {
 			},
 			({ params }) => params
 		)
-		const res = await app.handle(req('/id/617/chapter/12'))
+		const res = await app.handle('/id/617/chapter/12')
 		await expect(res.json()).resolves.toEqual({
 			id: 617,
 			chapterId: 12
@@ -184,7 +183,7 @@ describe('Params Validator', () => {
 			({ params }) => params
 		)
 
-		const value = await app.handle(req('/nagisa')).then((x) => x.json())
+		const value = await app.handle('/nagisa').then((x) => x.json())
 
 		expect(value).toEqual({
 			name: 'nagisa',
@@ -204,7 +203,7 @@ describe('Params Validator', () => {
 			({ params }) => params
 		)
 
-		const value = await app.handle(req('/nagisa')).then((x) => x.json())
+		const value = await app.handle('/nagisa').then((x) => x.json())
 
 		expect(value).toEqual({
 			name: 'nagisa',
@@ -223,7 +222,7 @@ describe('Params Validator', () => {
 			({ params: { id } }) => typeof id
 		)
 
-		const value = await app.handle(req('/id/1')).then((x) => x.text())
+		const value = await app.handle('/id/1').then((x) => x.text())
 
 		expect(value).toBe('number')
 	})
@@ -239,9 +238,7 @@ describe('Params Validator', () => {
 			({ params: { value } }) => typeof value
 		)
 
-		const value = await app
-			.handle(req('/is-admin/true'))
-			.then((x) => x.text())
+		const value = await app.handle('/is-admin/true').then((x) => x.text())
 
 		expect(value).toBe('boolean')
 	})
@@ -264,9 +261,9 @@ describe('Params Validator', () => {
 			)
 
 			const res = await Promise.all([
-				app.handle(req('/name')).then((x) => x.text()),
-				app.handle(req('/name/kurokami')).then((x) => x.text()),
-				app.handle(req('/name/kurokami/sucorn')).then((x) => x.text())
+				app.handle('/name').then((x) => x.text()),
+				app.handle('/name/kurokami').then((x) => x.text()),
+				app.handle('/name/kurokami/sucorn').then((x) => x.text())
 			])
 
 			expect(res).toEqual([
@@ -295,7 +292,7 @@ describe('Params Validator', () => {
 			)
 			.listen(0)
 
-		await app.handle(req('/id/3000'))
+		await app.handle('/id/3000')
 
 		expect(err instanceof ValidationError).toBe(true)
 	})

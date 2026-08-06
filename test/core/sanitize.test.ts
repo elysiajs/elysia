@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { TypeBoxValidator } from '../../src/type/validator'
-import { post } from '../utils'
+import { post, json } from '../utils'
 
 describe('Sanitize', () => {
 	it('sanitizes bodies whether additionalProperties is false or true', async () => {
@@ -33,7 +33,7 @@ describe('Sanitize', () => {
 		const responses = await Promise.all(
 			['/closed', '/open'].map((path) =>
 				app
-					.handle(post(path, { value: '<script>' }))
+					.handle(path, json({ value: '<script>' }))
 					.then((x) => x.json())
 			)
 		)
@@ -79,7 +79,8 @@ describe('Sanitize', () => {
 
 		const response = await app
 			.handle(
-				post('/', {
+				'/',
+				json({
 					a: 'a',
 					b: 'b',
 					c: 'c'
@@ -110,7 +111,8 @@ describe('Sanitize', () => {
 
 		const response = await app
 			.handle(
-				post('/', {
+				'/',
+				json({
 					a: 'a',
 					b: 'b',
 					c: 'c'
@@ -140,7 +142,8 @@ describe('Sanitize', () => {
 
 		const response = await app
 			.handle(
-				post('/', {
+				'/',
+				json({
 					a: 'a',
 					b: 'b',
 					c: 'c'

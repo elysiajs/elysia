@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { autoHead } from '../../src/plugin/auto-head'
-import { req } from '../utils'
 
 describe('loose path aliases', () => {
 	it('preserves explicit slash and non-slash routes', async () => {
@@ -9,8 +8,12 @@ describe('loose path aliases', () => {
 			.get('/foo', () => 'real-foo')
 			.get('/foo/', () => 'foo-slash')
 
-		expect(await (await app.handle(req('/foo'))).text()).toBe('real-foo')
-		expect(await (await app.handle(req('/foo/'))).text()).toBe('foo-slash')
+		await expect((await app.handle('/foo')).text()).resolves.toBe(
+			'real-foo'
+		)
+		await expect((await app.handle('/foo/')).text()).resolves.toBe(
+			'foo-slash'
+		)
 	})
 
 	it('preserves both routes regardless of registration order', async () => {
@@ -18,14 +21,18 @@ describe('loose path aliases', () => {
 			.get('/foo/', () => 'foo-slash')
 			.get('/foo', () => 'real-foo')
 
-		expect(await (await app.handle(req('/foo'))).text()).toBe('real-foo')
-		expect(await (await app.handle(req('/foo/'))).text()).toBe('foo-slash')
+		await expect((await app.handle('/foo')).text()).resolves.toBe(
+			'real-foo'
+		)
+		await expect((await app.handle('/foo/')).text()).resolves.toBe(
+			'foo-slash'
+		)
 	})
 
 	it('still serves the loose twin when only one variant is declared', async () => {
 		const app = new Elysia().get('/bar', () => 'bar')
 
-		expect(await (await app.handle(req('/bar/'))).text()).toBe('bar')
+		await expect((await app.handle('/bar/')).text()).resolves.toBe('bar')
 	})
 })
 
@@ -33,37 +40,37 @@ describe('JIT route aliases', () => {
 	it('encoded-twin alias resolves consistently across repeated requests', async () => {
 		const app = new Elysia().get('/café', () => 'coffee')
 
-		expect(await (await app.handle(req('/café'))).text()).toBe('coffee')
-		expect(await (await app.handle(req(encodeURI('/café')))).text()).toBe(
-			'coffee'
-		)
-		expect(await (await app.handle(req('/café'))).text()).toBe('coffee')
+		await expect((await app.handle('/café')).text()).resolves.toBe('coffee')
+		await expect(
+			(await app.handle(encodeURI('/café'))).text()
+		).resolves.toBe('coffee')
+		await expect((await app.handle('/café')).text()).resolves.toBe('coffee')
 	})
 
 	it('auto-HEAD twin heals and returns headers-only', async () => {
 		const app = new Elysia().use(autoHead()).get('/h', () => 'body-here')
 		await app.modules
 
-		expect(await (await app.handle(req('/h'))).text()).toBe('body-here')
+		await expect((await app.handle('/h')).text()).resolves.toBe('body-here')
 
-		const head = await app.handle(req('/h', { method: 'HEAD' }))
+		const head = await app.handle('/h', { method: 'HEAD' })
 		expect(head.status).toBe(200)
-		expect(await head.text()).toBe('')
+		await expect(head.text()).resolves.toBe('')
 	})
 
 	it('loose alias of a trailing-slash route heals', async () => {
 		const app = new Elysia().get('/dir/', () => 'dir')
 
-		expect(await (await app.handle(req('/dir/'))).text()).toBe('dir')
-		expect(await (await app.handle(req('/dir'))).text()).toBe('dir')
-		expect(await (await app.handle(req('/dir/'))).text()).toBe('dir')
+		await expect((await app.handle('/dir/')).text()).resolves.toBe('dir')
+		await expect((await app.handle('/dir')).text()).resolves.toBe('dir')
+		await expect((await app.handle('/dir/')).text()).resolves.toBe('dir')
 	})
 
 	it('warmed aliases share the canonical compiled handler', async () => {
 		const app = new Elysia().get('/dir/', () => 'dir')
 
-		await app.handle(req('/dir/'))
-		await app.handle(req('/dir'))
+		await app.handle('/dir/')
+		await app.handle('/dir')
 
 		const map = (app as any)['~map'].GET
 		expect(map['/dir/']).toBe(map['/dir'])
@@ -81,9 +88,9 @@ describe('per-route hook composition', () => {
 			.get('/a', ({ ticket }: any) => ticket)
 			.get('/b', ({ ticket }: any) => ticket)
 
-		const a1 = await (await app.handle(req('/a'))).text()
-		const b1 = await (await app.handle(req('/b'))).text()
-		const a2 = await (await app.handle(req('/a'))).text()
+		const a1 = await (await app.handle('/a')).text()
+		const b1 = await (await app.handle('/b')).text()
+		const a2 = await (await app.handle('/a')).text()
 
 		expect(Number(a1)).toBeGreaterThan(0)
 		expect(Number(b1)).toBe(Number(a1) + 1)
@@ -106,10 +113,10 @@ describe('per-route hook composition', () => {
 			)
 			.get('/b', () => 'b')
 
-		await app.handle(req('/b'))
+		await app.handle('/b')
 		expect(marks).toEqual([])
 
-		await app.handle(req('/a'))
+		await app.handle('/a')
 		expect(marks).toEqual(['a-local'])
 	})
 })
@@ -209,13 +216,13 @@ describe('model references', () => {
 
 		expect(() => app.fetch).toThrow(/Missing/)
 		expect(() => app.fetch).toThrow(/Missing/)
-		await expect(app.handle(req('/ok'))).rejects.toThrow(/Missing/)
+		await expect(app.handle('/ok')).rejects.toThrow(/Missing/)
 		expect(() => app.compile()).toThrow(/Missing/)
 
 		app.model({ Missing: t.Object({}) })
 		expect(() => app.compile()).not.toThrow()
-		expect(await (await app.handle(req('/ok'))).text()).toBe('ok')
-		expect(await (await app.handle(req('/bad'))).text()).toBe('bad')
+		await expect((await app.handle('/ok')).text()).resolves.toBe('ok')
+		await expect((await app.handle('/bad')).text()).resolves.toBe('bad')
 	})
 
 	it('an eager compile failure cannot expose earlier partial routes', () => {

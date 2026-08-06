@@ -8,11 +8,7 @@ import {
 	endValidatorCapture
 } from '../../src/compile/aot-capture'
 import { compileHandler } from '../../src/compile/handler'
-import {
-	materialise,
-	materialiseHandlers,
-	registerManifest
-} from './_manifest'
+import { materialise, materialiseHandlers, registerManifest } from './_manifest'
 import { post, req } from '../utils'
 
 afterEach(() => {
@@ -79,7 +75,7 @@ describe('route error hook merging', () => {
 
 		const app = new Elysia().use(plugin)
 
-		const res = await app.handle(req('/y'))
+		const res = await app.handle('/y')
 		expect(res.status).toBe(599)
 		await expect(res.text()).resolves.toBe('Y')
 	})
@@ -94,7 +90,7 @@ describe('sync handler returning a stored Promise is awaited', () => {
 			() => cached
 		)
 
-		const res = await app.handle(req('/x'))
+		const res = await app.handle('/x')
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({ ok: true })
 	})
@@ -172,14 +168,14 @@ describe('compile rebuild and sealed-app immutability', () => {
 	it('rejects route registration after the first request seals the app', async () => {
 		const app = new Elysia().get('/a', () => 'a')
 
-		expect((await app.handle(req('/a'))).status).toBe(200)
+		expect((await app.handle('/a')).status).toBe(200)
 
 		expect(() => app.get('/b', () => 'b')).toThrow(
 			'after the app was sealed'
 		)
 
 		app.compile()
-		expect((await app.handle(req('/a'))).status).toBe(200)
+		expect((await app.handle('/a')).status).toBe(200)
 	})
 
 	it('serves routes registered after async plugins settle and before sealing', async () => {
@@ -192,11 +188,9 @@ describe('compile rebuild and sealed-app immutability', () => {
 		app.get('/warm', () => 'warm')
 		app.compile()
 
-		expect((await app.handle(req('/warm'))).status).toBe(200)
-		await expect((await app.handle(req('/warm'))).text()).resolves.toBe(
-			'warm'
-		)
-		expect((await app.handle(req('/late'))).status).toBe(200)
+		expect((await app.handle('/warm')).status).toBe(200)
+		await expect((await app.handle('/warm')).text()).resolves.toBe('warm')
+		expect((await app.handle('/late')).status).toBe(200)
 	})
 
 	it('keeps a Bun.serve fetch reference current after an internal rebuild', async () => {

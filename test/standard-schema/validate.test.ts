@@ -1,7 +1,7 @@
 import { Elysia } from '../../src'
 import { describe, it, expect } from 'bun:test'
 import { z } from 'zod'
-import { post, req } from '../utils'
+import { post, json } from '../utils'
 
 describe('Standard Schema Validate', () => {
 	it('validate body', async () => {
@@ -17,7 +17,8 @@ describe('Standard Schema Validate', () => {
 
 		const value = await app
 			.handle(
-				post('/', {
+				'/',
+				json({
 					id: 1
 				})
 			)
@@ -26,7 +27,8 @@ describe('Standard Schema Validate', () => {
 		expect(value).toEqual({ id: 1 })
 
 		const invalid = await app.handle(
-			post('/', {
+			'/',
+			json({
 				id: '1'
 			})
 		)
@@ -45,11 +47,11 @@ describe('Standard Schema Validate', () => {
 			({ query }) => query
 		)
 
-		const value = await app.handle(req('/?id=1')).then((x) => x.json())
+		const value = await app.handle('/?id=1').then((x) => x.json())
 
 		expect(value).toEqual({ id: 1 })
 
-		const invalid = await app.handle(req('/?id=a'))
+		const invalid = await app.handle('/?id=a')
 
 		expect(invalid.status).toBe(422)
 	})
@@ -65,11 +67,11 @@ describe('Standard Schema Validate', () => {
 			({ params }) => params
 		)
 
-		const value = await app.handle(req('/user/1')).then((x) => x.json())
+		const value = await app.handle('/user/1').then((x) => x.json())
 
 		expect(value).toEqual({ id: 1 })
 
-		const invalid = await app.handle(req('/user/a'))
+		const invalid = await app.handle('/user/a')
 
 		expect(invalid.status).toBe(422)
 	})
@@ -86,18 +88,16 @@ describe('Standard Schema Validate', () => {
 		)
 
 		const value = await app
-			.handle(
-				req('/', {
-					headers: {
-						id: '1'
-					}
-				})
-			)
+			.handle('/', {
+				headers: {
+					id: '1'
+				}
+			})
 			.then((x) => x.json())
 
 		expect(value).toEqual({ id: 1 })
 
-		const invalid = await app.handle(req('/', {}))
+		const invalid = await app.handle('/', {})
 
 		expect(invalid.status).toBe(422)
 	})
@@ -112,8 +112,8 @@ describe('Standard Schema Validate', () => {
 			({ params: { name } }) => (name === 'lilith' ? undefined : true)
 		)
 
-		const exists = await app.handle(req('/fouco'))
-		const nonExists = await app.handle(req('/lilith'))
+		const exists = await app.handle('/fouco')
+		const nonExists = await app.handle('/lilith')
 
 		expect(exists.status).toBe(200)
 		expect(nonExists.status).toBe(422)
@@ -134,13 +134,13 @@ describe('Standard Schema Validate', () => {
 					: status(418, name as any)
 		)
 
-		const exists = await app.handle(req('/fouco'))
-		const nonExists = await app.handle(req('/lilith'))
+		const exists = await app.handle('/fouco')
+		const nonExists = await app.handle('/lilith')
 
 		expect(exists.status).toBe(418)
 		expect(nonExists.status).toBe(404)
 
-		const invalid = await app.handle(req('/unknown'))
+		const invalid = await app.handle('/unknown')
 		expect(invalid.status).toBe(422)
 	})
 

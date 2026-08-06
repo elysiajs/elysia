@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia, type TraceProcess, type TraceEvent } from '../../src'
 import { trace } from '../../src/plugin/trace'
-import { delay, req } from '../utils'
+import { delay } from '../utils'
 
 describe('trace', () => {
 	it('inherits plugin', async () => {
@@ -16,7 +16,7 @@ describe('trace', () => {
 
 		const app = new Elysia().use(a).get('/', () => 'hi')
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.headers.get('X-Powered-By')).toBe('elysia')
 		expect(response.status).toBe(200)
@@ -39,7 +39,7 @@ describe('trace', () => {
 			.use(b)
 			.get('/', () => 'hi')
 
-		const response = await app.handle(req('/scoped'))
+		const response = await app.handle('/scoped')
 
 		expect(response.headers.get('X-Powered-By')).toBe('elysia')
 		expect(response.status).toBe(200)
@@ -56,77 +56,9 @@ describe('trace', () => {
 				})
 			}
 
-		const plugin = new Elysia().use(trace()).trace(
-			'plugin',
-			({
-				onRequest,
-				onParse,
-				onTransform,
-				onBeforeHandle,
-				onHandle,
-				onAfterHandle,
-				onMapResponse,
-				onAfterResponse
-			}) => {
-				onRequest(detectEvent('request'))
-				onParse(detectEvent('parse'))
-				onTransform(detectEvent('transform'))
-				onBeforeHandle(detectEvent('beforeHandle'))
-				onHandle(detectEvent('handle'))
-				onAfterHandle(detectEvent('afterHandle'))
-				onMapResponse(detectEvent('mapResponse'))
-				onAfterResponse(detectEvent('afterResponse'))
-
-				onAfterResponse(() => {
-					expect(called).toEqual([
-						'request',
-						'parse',
-						'transform',
-						'beforeHandle',
-						'handle',
-						'afterHandle',
-						'mapResponse'
-						// afterResponse is being called so we can't check it yet
-					])
-				})
-			}
-		)
-
-		const app = new Elysia().use(plugin).get('/', 'hi')
-
-		await app.handle(req('/'))
-
-		// wait for next tick
-		await Bun.sleep(1)
-
-		expect(called).toEqual([
-			'request',
-			'parse',
-			'transform',
-			'beforeHandle',
-			'handle',
-			'afterHandle',
-			'mapResponse',
-			'afterResponse'
-		])
-	})
-
-	it("don't crash on composer", async () => {
-		const called = <string[]>[]
-
-		const detectEvent =
-			(event: TraceEvent) =>
-			({ onStop }: TraceProcess<'begin'>) => {
-				onStop(() => {
-					called.push(event)
-				})
-			}
-
 		const plugin = new Elysia()
-			.request(() => {})
-			.transform(() => {})
-			.error(() => {})
-			.use(trace()).trace(
+			.use(trace())
+			.trace(
 				'plugin',
 				({
 					onRequest,
@@ -164,7 +96,78 @@ describe('trace', () => {
 
 		const app = new Elysia().use(plugin).get('/', 'hi')
 
-		await app.handle(req('/'))
+		await app.handle('/')
+
+		// wait for next tick
+		await Bun.sleep(1)
+
+		expect(called).toEqual([
+			'request',
+			'parse',
+			'transform',
+			'beforeHandle',
+			'handle',
+			'afterHandle',
+			'mapResponse',
+			'afterResponse'
+		])
+	})
+
+	it("don't crash on composer", async () => {
+		const called = <string[]>[]
+
+		const detectEvent =
+			(event: TraceEvent) =>
+			({ onStop }: TraceProcess<'begin'>) => {
+				onStop(() => {
+					called.push(event)
+				})
+			}
+
+		const plugin = new Elysia()
+			.request(() => {})
+			.transform(() => {})
+			.error(() => {})
+			.use(trace())
+			.trace(
+				'plugin',
+				({
+					onRequest,
+					onParse,
+					onTransform,
+					onBeforeHandle,
+					onHandle,
+					onAfterHandle,
+					onMapResponse,
+					onAfterResponse
+				}) => {
+					onRequest(detectEvent('request'))
+					onParse(detectEvent('parse'))
+					onTransform(detectEvent('transform'))
+					onBeforeHandle(detectEvent('beforeHandle'))
+					onHandle(detectEvent('handle'))
+					onAfterHandle(detectEvent('afterHandle'))
+					onMapResponse(detectEvent('mapResponse'))
+					onAfterResponse(detectEvent('afterResponse'))
+
+					onAfterResponse(() => {
+						expect(called).toEqual([
+							'request',
+							'parse',
+							'transform',
+							'beforeHandle',
+							'handle',
+							'afterHandle',
+							'mapResponse'
+							// afterResponse is being called so we can't check it yet
+						])
+					})
+				}
+			)
+
+		const app = new Elysia().use(plugin).get('/', 'hi')
+
+		await app.handle('/')
 
 		// wait for next tick
 		await Bun.sleep(1)
@@ -191,13 +194,13 @@ describe('trace', () => {
 		const parent = new Elysia().use(plugin)
 		const main = new Elysia().use(parent).get('/', () => 'h')
 
-		await main.handle(req('/'))
+		await main.handle('/')
 		expect(called).toBe(false)
 
-		await parent.handle(req('/'))
+		await parent.handle('/')
 		expect(called).toBe(false)
 
-		await plugin.handle(req('/'))
+		await plugin.handle('/')
 		expect(called).toBe(true)
 	})
 
@@ -211,13 +214,13 @@ describe('trace', () => {
 		const parent = new Elysia().use(plugin)
 		const main = new Elysia().use(parent).get('/', () => 'h')
 
-		await main.handle(req('/'))
+		await main.handle('/')
 		expect(called).toBe(false)
 
-		await parent.handle(req('/'))
+		await parent.handle('/')
 		expect(called).toBe(true)
 
-		await plugin.handle(req('/'))
+		await plugin.handle('/')
 		expect(called).toBe(true)
 	})
 
@@ -231,13 +234,13 @@ describe('trace', () => {
 		const parent = new Elysia().use(plugin)
 		const main = new Elysia().use(parent).get('/', () => 'h')
 
-		await main.handle(req('/'))
+		await main.handle('/')
 		expect(called).toBe(true)
 
-		await parent.handle(req('/'))
+		await parent.handle('/')
 		expect(called).toBe(true)
 
-		await plugin.handle(req('/'))
+		await plugin.handle('/')
 		expect(called).toBe(true)
 	})
 
@@ -251,18 +254,20 @@ describe('trace', () => {
 		const parent = new Elysia().use(plugin).as('plugin')
 		const main = new Elysia().use(parent).get('/', () => 'h')
 
-		await main.handle(req('/'))
+		await main.handle('/')
 		expect(called).toBe(true)
 
-		await parent.handle(req('/'))
+		await parent.handle('/')
 		expect(called).toBe(true)
 
-		await plugin.handle(req('/'))
+		await plugin.handle('/')
 		expect(called).toBe(true)
 	})
 
 	it('deduplicate plugin when name is provided', () => {
-		const a = new Elysia({ name: 'a' }).use(trace()).trace('global', () => {})
+		const a = new Elysia({ name: 'a' })
+			.use(trace())
+			.trace('global', () => {})
 		const b = new Elysia().use(a)
 
 		const app = new Elysia()
@@ -279,7 +284,8 @@ describe('trace', () => {
 		let isCalled = false
 
 		const app = new Elysia()
-			.use(trace()).trace(({ onBeforeHandle }) => {
+			.use(trace())
+			.trace(({ onBeforeHandle }) => {
 				onBeforeHandle(({ onEvent }) => {
 					onEvent(({ onStop }) => {
 						onStop(({ error }) => {
@@ -299,16 +305,17 @@ describe('trace', () => {
 				() => 'ok'
 			)
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(isCalled).toBeTrue()
 	})
 
-	it('report error return in lifecycle event', async () => {
+	it('report error return in lifecycle event unit', async () => {
 		let isCalled = false
 
 		const app = new Elysia()
-			.use(trace()).trace(({ onBeforeHandle }) => {
+			.use(trace())
+			.trace(({ onBeforeHandle }) => {
 				onBeforeHandle(({ onEvent }) => {
 					onEvent(({ onStop }) => {
 						onStop(({ error }) => {
@@ -328,7 +335,7 @@ describe('trace', () => {
 				() => 'ok'
 			)
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(isCalled).toBeTrue()
 	})
@@ -337,7 +344,8 @@ describe('trace', () => {
 		let isCalled = false
 
 		const app = new Elysia()
-			.use(trace()).trace(({ onBeforeHandle }) => {
+			.use(trace())
+			.trace(({ onBeforeHandle }) => {
 				onBeforeHandle(({ onStop }) => {
 					onStop(({ error }) => {
 						if (error) isCalled = true
@@ -355,7 +363,7 @@ describe('trace', () => {
 				() => 'ok'
 			)
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(isCalled).toBeTrue()
 	})
@@ -364,7 +372,8 @@ describe('trace', () => {
 		let isCalled = false
 
 		const app = new Elysia()
-			.use(trace()).trace(({ onBeforeHandle }) => {
+			.use(trace())
+			.trace(({ onBeforeHandle }) => {
 				onBeforeHandle(async ({ error: err }) => {
 					const error = await err
 					if (error) isCalled = true
@@ -381,34 +390,7 @@ describe('trace', () => {
 				() => 'ok'
 			)
 
-		await app.handle(req('/'))
-
-		expect(isCalled).toBeTrue()
-	})
-
-	it('report error return in lifecycle event', async () => {
-		let isCalled = false
-
-		const app = new Elysia()
-			.use(trace()).trace(({ onBeforeHandle }) => {
-				onBeforeHandle(({ onStop }) => {
-					onStop(({ error }) => {
-						if (error) isCalled = true
-						expect(error).toBeInstanceOf(Error)
-					})
-				})
-			})
-			.get(
-				'/',
-				{
-					beforeHandle() {
-						return new Error('A')
-					}
-				},
-				() => 'ok'
-			)
-
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(isCalled).toBeTrue()
 	})
@@ -417,7 +399,8 @@ describe('trace', () => {
 		let isCalled = false
 
 		const app = new Elysia()
-			.use(trace()).trace(({ onHandle }) => {
+			.use(trace())
+			.trace(({ onHandle }) => {
 				onHandle(({ onStop }) => {
 					onStop(({ error }) => {
 						if (error) isCalled = true
@@ -429,7 +412,7 @@ describe('trace', () => {
 				throw new Error('A')
 			})
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(isCalled).toBeTrue()
 	})
@@ -438,7 +421,8 @@ describe('trace', () => {
 		let isCalled = false
 
 		const app = new Elysia()
-			.use(trace()).trace(({ onHandle }) => {
+			.use(trace())
+			.trace(({ onHandle }) => {
 				onHandle(({ onStop }) => {
 					onStop(({ error }) => {
 						if (error) isCalled = true
@@ -450,28 +434,7 @@ describe('trace', () => {
 				return new Error('A')
 			})
 
-		await app.handle(req('/'))
-
-		expect(isCalled).toBeTrue()
-	})
-
-	it('report error throw in handle', async () => {
-		let isCalled = false
-
-		const app = new Elysia()
-			.use(trace()).trace(({ onHandle }) => {
-				onHandle(({ onStop }) => {
-					onStop(({ error }) => {
-						if (error) isCalled = true
-						expect(error).toBeInstanceOf(Error)
-					})
-				})
-			})
-			.get('/', () => {
-				throw new Error('A')
-			})
-
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(isCalled).toBeTrue()
 	})
@@ -480,7 +443,8 @@ describe('trace', () => {
 		let route: string | undefined
 
 		const app = new Elysia()
-			.use(trace()).trace(({ onHandle, context }) => {
+			.use(trace())
+			.trace(({ onHandle, context }) => {
 				onHandle(({ onStop }) => {
 					onStop(({ error }) => {
 						route = context.route
@@ -492,7 +456,7 @@ describe('trace', () => {
 				throw new Error('A')
 			})
 
-		await app.handle(req('/id/1'))
+		await app.handle('/id/1')
 
 		expect(route).toBe('/id/:id')
 	})
@@ -505,7 +469,8 @@ describe('trace', () => {
 		let resolvedError: Error | null | undefined
 
 		const app = new Elysia()
-			.use(trace()).trace(async (t) => {
+			.use(trace())
+			.trace(async (t) => {
 				// Late subscribers read the recorded event after the request finishes.
 				await new Promise((resolve) => setTimeout(resolve, 20))
 
@@ -520,7 +485,7 @@ describe('trace', () => {
 				return 'hi'
 			})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		await expect(response.text()).resolves.toBe('hi')
 
 		await done.promise
@@ -536,7 +501,8 @@ describe('trace', () => {
 		let resolvedError: Error | null | undefined
 
 		const app = new Elysia()
-			.use(trace()).trace(async (t) => {
+			.use(trace())
+			.trace(async (t) => {
 				await new Promise((resolve) => setTimeout(resolve, 20))
 
 				// the error returned by a child lifecycle must still reach a
@@ -555,7 +521,7 @@ describe('trace', () => {
 				() => 'ok'
 			)
 
-		await app.handle(req('/'))
+		await app.handle('/')
 		await done.promise
 
 		expect(resolvedError).toBeInstanceOf(Error)
@@ -565,7 +531,8 @@ describe('trace', () => {
 		const order = <string[]>[]
 
 		const app = new Elysia()
-			.use(trace()).trace(({ onHandle, onAfterResponse }) => {
+			.use(trace())
+			.trace(({ onHandle, onAfterResponse }) => {
 				onHandle(({ onStop }) => {
 					onStop(({ error }) => {
 						order.push('HANDLE')
@@ -585,7 +552,7 @@ describe('trace', () => {
 
 		expect(order).toEqual([])
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		expect(order).toEqual([])
 
 		await response.text()
@@ -593,44 +560,49 @@ describe('trace', () => {
 	})
 
 	it('reports real handle duration for a promise-returning plain handler', async () => {
-		let elapsed = -1
+		const { promise, resolve } = Promise.withResolvers<number>()
 
 		const app = new Elysia()
-			.use(trace()).trace(({ onHandle }) =>
+			.use(trace())
+			.trace(({ onHandle }) =>
 				onHandle(({ onStop }) =>
-					onStop(({ elapsed: e }) => {
-						elapsed = e
+					onStop(({ elapsed }) => {
+						resolve(elapsed)
 					})
 				)
 			)
 			.get('/', () => new Promise((r) => setTimeout(() => r('x'), 25)))
 
-		await app.handle(req('/'))
-		await delay(60)
+		await app.handle('/')
 
-		expect(elapsed).toBeGreaterThan(5)
+		await expect(promise).resolves.toBeGreaterThan(5)
 	})
 
 	it('fires the onError trace span when a promise-returning plain handler rejects', async () => {
+		const { promise, resolve } = Promise.withResolvers<void>()
+
 		let errored = false
 
 		const app = new Elysia()
-			.use(trace()).trace(({ onError }) =>
+			.use(trace())
+			.trace(({ onError }) =>
 				onError(() => {
 					errored = true
+					resolve()
 				})
 			)
 			.get('/', () => Promise.reject(new Error('boom')))
 
-		await app.handle(req('/'))
-		await delay(60)
+		await app.handle('/')
+		await promise
 
 		expect(errored).toBe(true)
 	})
 
 	it('streams async generator when trace + app-level headers are set', async () => {
 		const app = new Elysia()
-			.use(trace()).trace(() => {})
+			.use(trace())
+			.trace(() => {})
 			.headers({ 'x-powered-by': 'elysia' })
 			.post('/', async function* () {
 				yield '1'
@@ -650,7 +622,8 @@ describe('trace', () => {
 
 	it('streams async generator when trace + set.headers mutation in handler', async () => {
 		const app = new Elysia()
-			.use(trace()).trace(() => {})
+			.use(trace())
+			.trace(() => {})
 			.post('/', async function* ({ set }) {
 				set.headers['x-custom'] = 'yes'
 				yield '1'

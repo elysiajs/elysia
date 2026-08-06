@@ -40,7 +40,7 @@ if (!hasSyncHmac) {
 
 			const res = await app.handle(req('/', `sid=${val}`))
 			expect(res.status).toBe(200)
-			expect(await res.text()).toBe('hello')
+			await expect(res.text()).resolves.toBe('hello')
 		})
 
 		it('rejects an invalid signature when the handler reads it', async () => {
@@ -59,7 +59,7 @@ if (!hasSyncHmac) {
 
 			const res = await app.handle(req('/', 'sid=garbage.nothmac'))
 			expect(res.status).toBe(200)
-			expect(await res.text()).toBe('ok')
+			await expect(res.text()).resolves.toBe('ok')
 		})
 
 		it('verifies an invalid signature only on the branch that reads it', async () => {
@@ -74,7 +74,7 @@ if (!hasSyncHmac) {
 				req('/?flag=', 'sid=garbage.nothmac')
 			)
 			expect(noFlag.status).toBe(200)
-			expect(await noFlag.text()).toBe('skip')
+			await expect(noFlag.text()).resolves.toBe('skip')
 
 			const withFlag = await app.handle(
 				req('/?flag=1', 'sid=garbage.nothmac')
@@ -93,7 +93,7 @@ if (!hasSyncHmac) {
 
 			const unread = await app.handle(req('/', 'sid=garbage.nothmac'))
 			expect(unread.status).toBe(200)
-			expect(await unread.text()).toBe('ok')
+			await expect(unread.text()).resolves.toBe('ok')
 
 			const read = await app.handle(
 				req('/?read=1', 'sid=garbage.nothmac')
@@ -141,7 +141,7 @@ if (!hasSyncHmac) {
 			const value = signed('hello', SECRET)
 			const valid = await app.handle(req('/', `sid=${value}`))
 			expect(valid.status).toBe(200)
-			expect(await valid.text()).toBe('hello')
+			await expect(valid.text()).resolves.toBe('hello')
 			expect(pending).toBe(false)
 			expect(exposedSecret).toBeUndefined()
 
@@ -216,7 +216,7 @@ if (!hasSyncHmac) {
 
 			const res = await app.handle(req('/', `sid=${val}`))
 			expect(res.status).toBe(200)
-			expect(await res.text()).toBe('world')
+			await expect(res.text()).resolves.toBe('world')
 		})
 
 		it('accepts a cookie signed with an older rotation secret', async () => {
@@ -229,7 +229,7 @@ if (!hasSyncHmac) {
 
 			const res = await app.handle(req('/', `sid=${val}`))
 			expect(res.status).toBe(200)
-			expect(await res.text()).toBe('rotated')
+			await expect(res.text()).resolves.toBe('rotated')
 		})
 
 		it('round-trips an unchanged signed JSON object without re-signing it', async () => {
@@ -330,11 +330,11 @@ if (!hasSyncHmac) {
 
 			const resSigned = await app.handle(req('/', `sid=${signedVal}`))
 			expect(resSigned.status).toBe(200)
-			expect(await resSigned.text()).toBe('myval')
+			await expect(resSigned.text()).resolves.toBe('myval')
 
 			const resUnsigned = await app.handle(req('/', 'sid=plain'))
 			expect(resUnsigned.status).toBe(200)
-			expect(await resUnsigned.text()).toBe('plain')
+			await expect(resUnsigned.text()).resolves.toBe('plain')
 		})
 
 		it('rejects a forged unsigned JSON object on a signed name', async () => {

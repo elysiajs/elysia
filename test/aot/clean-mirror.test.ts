@@ -9,7 +9,6 @@ import {
 	endValidatorCapture
 } from '../../src/compile/aot-capture'
 import { claimManifest, materialise, registerManifest } from './_manifest'
-import { req } from '../utils'
 
 /** Frozen codec validators clean values the same way as runtime validators. */
 
@@ -116,10 +115,10 @@ describe('frozen codec cleaning', () => {
 
 		const app = build()
 		app.compile()
-		const ok = await app.handle(req('/q?page=3&limit=10&extra=strip'))
+		const ok = await app.handle('/q?page=3&limit=10&extra=strip')
 		expect(ok.status).toBe(200)
 		await expect(ok.json()).resolves.toEqual({ page: 3, limit: 10 })
-		const bad = await app.handle(req('/q?page=abc&limit=10'))
+		const bad = await app.handle('/q?page=abc&limit=10')
 		expect(bad.status).toBe(422)
 	})
 })

@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
-import { req } from '../utils'
 
 describe('as', () => {
 	it('scoped', async () => {
@@ -22,8 +21,8 @@ describe('as', () => {
 			.get('/', ({ hi }) => hi ?? 'none')
 
 		const res = await Promise.all([
-			app.handle(req('/')).then((x) => x.text()),
-			app.handle(req('/inner')).then((x) => x.text())
+			app.handle('/').then((x) => x.text()),
+			app.handle('/inner').then((x) => x.text())
 		])
 
 		expect(res).toEqual(['none', 'hi'])
@@ -45,8 +44,8 @@ describe('as', () => {
 		const app = new Elysia().use(plugin).get('/', ({ hi }) => hi ?? 'none')
 
 		const res = await Promise.all([
-			app.handle(req('/')).then((x) => x.text()),
-			app.handle(req('/inner')).then((x) => x.text())
+			app.handle('/').then((x) => x.text()),
+			app.handle('/inner').then((x) => x.text())
 		])
 
 		expect(res).toEqual(['hi', 'hi'])
@@ -68,8 +67,8 @@ describe('as', () => {
 		const app = new Elysia().use(plugin).get('/', ({ hi }) => hi ?? 'none')
 
 		const res = await Promise.all([
-			app.handle(req('/')).then((x) => x.text()),
-			app.handle(req('/inner')).then((x) => x.text())
+			app.handle('/').then((x) => x.text()),
+			app.handle('/inner').then((x) => x.text())
 		])
 
 		expect(res).toEqual(['hi', 'hi'])
@@ -98,9 +97,9 @@ describe('as', () => {
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')
 
 		const response = await Promise.all([
-			app.handle(req('/inner')).then((x) => x.status),
-			app.handle(req('/plugin')).then((x) => x.status),
-			app.handle(req('/')).then((x) => x.status)
+			app.handle('/inner').then((x) => x.status),
+			app.handle('/plugin').then((x) => x.status),
+			app.handle('/').then((x) => x.status)
 		])
 
 		expect(called).toBe(3)
@@ -135,9 +134,9 @@ describe('as', () => {
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')
 
 		const response = await Promise.all([
-			app.handle(req('/inner')).then((x) => x.status),
-			app.handle(req('/plugin')).then((x) => x.status),
-			app.handle(req('/')).then((x) => x.status)
+			app.handle('/inner').then((x) => x.status),
+			app.handle('/plugin').then((x) => x.status),
+			app.handle('/').then((x) => x.status)
 		])
 
 		expect(called).toBe(4)
@@ -171,9 +170,9 @@ describe('as', () => {
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')
 
 		const response = await Promise.all([
-			app.handle(req('/inner')).then((x) => x.status),
-			app.handle(req('/plugin')).then((x) => x.status),
-			app.handle(req('/')).then((x) => x.status)
+			app.handle('/inner').then((x) => x.status),
+			app.handle('/plugin').then((x) => x.status),
+			app.handle('/').then((x) => x.status)
 		])
 
 		expect(called).toBe(5)
@@ -202,9 +201,9 @@ describe('as', () => {
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')
 
 		const response = await Promise.all([
-			app.handle(req('/inner')).then((x) => x.status),
-			app.handle(req('/plugin')).then((x) => x.status),
-			app.handle(req('/')).then((x) => x.status)
+			app.handle('/inner').then((x) => x.status),
+			app.handle('/plugin').then((x) => x.status),
+			app.handle('/').then((x) => x.status)
 		])
 
 		expect(called).toBe(2)
@@ -235,9 +234,9 @@ describe('as', () => {
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')
 
 		const response = await Promise.all([
-			app.handle(req('/inner')).then((x) => x.status),
-			app.handle(req('/plugin')).then((x) => x.status),
-			app.handle(req('/')).then((x) => x.status)
+			app.handle('/inner').then((x) => x.status),
+			app.handle('/plugin').then((x) => x.status),
+			app.handle('/').then((x) => x.status)
 		])
 
 		expect(called).toBe(3)

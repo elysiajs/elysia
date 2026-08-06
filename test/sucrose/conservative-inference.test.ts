@@ -2,7 +2,6 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../src'
 import { sucrose } from '../../src/sucrose'
-import { req } from '../utils'
 
 const allContextProperties = {
 	query: true,
@@ -26,7 +25,7 @@ const queryOnly = {
 const responseText = async (handler: any, name: string) => {
 	const response = await new Elysia()
 		.get('/', handler)
-		.handle(req(`/?name=${name}`))
+		.handle(`/?name=${name}`)
 
 	expect(response.status).toBe(200)
 	return response.text()
@@ -39,7 +38,9 @@ describe('context access that cannot be statically identified', () => {
 			return context[key].name
 		}
 
-		expect(await responseText(handler, 'computed')).toBe('computed')
+		await expect(responseText(handler, 'computed')).resolves.toBe(
+			'computed'
+		)
 	})
 
 	it('keeps query available through a global key', async () => {
@@ -47,7 +48,7 @@ describe('context access that cannot be statically identified', () => {
 		const handler = (context: any) =>
 			context[(globalThis as any).__sucroseContextKey].name
 
-		expect(await responseText(handler, 'global')).toBe('global')
+		await expect(responseText(handler, 'global')).resolves.toBe('global')
 		delete (globalThis as any).__sucroseContextKey
 	})
 
@@ -57,7 +58,7 @@ describe('context access that cannot be statically identified', () => {
 			return copy.query.name
 		}
 
-		expect(await responseText(handler, 'spread')).toBe('spread')
+		await expect(responseText(handler, 'spread')).resolves.toBe('spread')
 	})
 
 	it('keeps query available through arguments[0]', async () => {
@@ -65,19 +66,25 @@ describe('context access that cannot be statically identified', () => {
 			return arguments[0].query.name
 		}
 
-		expect(await responseText(handler, 'arguments')).toBe('arguments')
+		await expect(responseText(handler, 'arguments')).resolves.toBe(
+			'arguments'
+		)
 	})
 
 	it('keeps query available with whitespace before the dot', async () => {
 		const handler = eval('(context) => context .query.name')
 
-		expect(await responseText(handler, 'before-dot')).toBe('before-dot')
+		await expect(responseText(handler, 'before-dot')).resolves.toBe(
+			'before-dot'
+		)
 	})
 
 	it('keeps query available with whitespace after the dot', async () => {
 		const handler = eval('(context) => context.  query.name')
 
-		expect(await responseText(handler, 'after-dot')).toBe('after-dot')
+		await expect(responseText(handler, 'after-dot')).resolves.toBe(
+			'after-dot'
+		)
 	})
 
 	it('marks every context property as accessed', () => {

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../src'
-import { req } from '../utils'
 
 describe('Redirect', () => {
 	it('handles redirect without explicit status', async () => {
@@ -8,7 +7,7 @@ describe('Redirect', () => {
 			redirect('/hello')
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(302)
 		expect(res.headers.get('location')).toBe('/hello')
 	})
@@ -18,7 +17,7 @@ describe('Redirect', () => {
 			redirect('/hello', 303)
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(303)
 		expect(res.headers.get('location')).toBe('/hello')
 	})

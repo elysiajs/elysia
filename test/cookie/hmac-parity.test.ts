@@ -9,7 +9,6 @@ import {
 	endHandlerCapture
 } from '../../src/compile/aot-capture'
 import { compileHandler } from '../../src/compile/handler'
-import { req } from '../utils'
 
 import {
 	hasSyncHmac,
@@ -127,15 +126,15 @@ describe('compiled signed-cookie handlers', () => {
 	it('signed-cookie route round-trips correctly through app.handle', async () => {
 		const app = signedApp()
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		const setCookie = res.headers.get('set-cookie') ?? ''
 
 		expect(setCookie.startsWith('name=himari.')).toBe(true)
 
 		const value = setCookie.split(';')[0].slice('name='.length)
-		const echo = await app.handle(
-			req('/', { headers: { cookie: `name=${value}` } })
-		)
+		const echo = await app.handle('/', {
+			headers: { cookie: `name=${value}` }
+		})
 		expect(echo.status).toBe(200)
 	})
 

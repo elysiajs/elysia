@@ -1,7 +1,6 @@
 import { Elysia, NotFound } from '../../src'
 import { trace } from '../../src/plugin/trace'
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 const NOT_FOUND_BODY = JSON.stringify({
 	type: 'not-found',
@@ -20,22 +19,22 @@ describe('NotFound miss sentinel', () => {
 	it('plain miss with no hooks returns the byte-identical cached 404', async () => {
 		const app = new Elysia().get('/', () => 'hi')
 
-		const response = await app.handle(req('/missing'))
+		const response = await app.handle('/missing')
 
 		expect(response.status).toBe(404)
 		expect(response.headers.get('content-type')).toBe(
 			'application/problem+json'
 		)
-		expect(await response.text()).toBe(NOT_FOUND_BODY)
+		await expect(response.text()).resolves.toBe(NOT_FOUND_BODY)
 	})
 
 	it('dynamic-route miss with no hooks returns the byte-identical cached 404', async () => {
 		const app = new Elysia().get('/user/:id', ({ params }) => params.id)
 
-		const response = await app.handle(req('/missing'))
+		const response = await app.handle('/missing')
 
 		expect(response.status).toBe(404)
-		expect(await response.text()).toBe(NOT_FOUND_BODY)
+		await expect(response.text()).resolves.toBe(NOT_FOUND_BODY)
 	})
 
 	it('error hook observes a real NotFound Error with fields and stack', async () => {
@@ -47,7 +46,7 @@ describe('NotFound miss sentinel', () => {
 				observed = error
 			})
 
-		const response = await app.handle(req('/missing'))
+		const response = await app.handle('/missing')
 
 		expect(observed instanceof NotFound).toBe(true)
 		expect((observed as NotFound).status).toBe(404)
@@ -57,7 +56,7 @@ describe('NotFound miss sentinel', () => {
 
 		// hook returned undefined -> response identical to the no-hook 404
 		expect(response.status).toBe(404)
-		expect(await response.text()).toBe(NOT_FOUND_BODY)
+		await expect(response.text()).resolves.toBe(NOT_FOUND_BODY)
 	})
 
 	it('dynamic-route miss with error hook observes a real NotFound', async () => {
@@ -69,11 +68,11 @@ describe('NotFound miss sentinel', () => {
 				observed = error
 			})
 
-		const response = await app.handle(req('/missing'))
+		const response = await app.handle('/missing')
 
 		expect(observed instanceof NotFound).toBe(true)
 		expect(response.status).toBe(404)
-		expect(await response.text()).toBe(NOT_FOUND_BODY)
+		await expect(response.text()).resolves.toBe(NOT_FOUND_BODY)
 	})
 
 	it('error hook can return a custom response for a miss', async () => {
@@ -87,10 +86,10 @@ describe('NotFound miss sentinel', () => {
 				}
 			})
 
-		const response = await app.handle(req('/missing'))
+		const response = await app.handle('/missing')
 
 		expect(response.status).toBe(404)
-		expect(await response.text()).toBe('custom not found')
+		await expect(response.text()).resolves.toBe('custom not found')
 	})
 
 	it('rethrowing error hook never leaks the sentinel', async () => {
@@ -103,7 +102,7 @@ describe('NotFound miss sentinel', () => {
 				throw error
 			})
 
-		const response = await app.handle(req('/missing'))
+		const response = await app.handle('/missing')
 		const body = await response.text()
 
 		expect(response.status).toBe(500)
@@ -128,11 +127,11 @@ describe('NotFound miss sentinel', () => {
 				observed = error
 			})
 
-		const response = await app.handle(req('/missing'))
+		const response = await app.handle('/missing')
 
 		expect(observed instanceof NotFound).toBe(true)
 		expect(response.status).toBe(404)
-		expect(await response.text()).toBe(NOT_FOUND_BODY)
+		await expect(response.text()).resolves.toBe(NOT_FOUND_BODY)
 	})
 
 	it('miss with trace and afterResponse observes consistent state, no leak', async () => {
@@ -141,7 +140,8 @@ describe('NotFound miss sentinel', () => {
 		let hookError: unknown
 
 		const app = new Elysia()
-			.use(trace()).trace(({ onRequest }) => {
+			.use(trace())
+			.trace(({ onRequest }) => {
 				traced = true
 				onRequest(({ onStop }) => {
 					onStop(() => {})
@@ -155,7 +155,7 @@ describe('NotFound miss sentinel', () => {
 				afterResponseError = (context as any).error
 			})
 
-		const response = await app.handle(req('/missing'))
+		const response = await app.handle('/missing')
 		const body = await response.text()
 
 		expect(traced).toBe(true)
@@ -180,11 +180,11 @@ describe('NotFound miss sentinel', () => {
 				observed = error
 			})
 
-		const response = await app.handle(req('/missing'))
+		const response = await app.handle('/missing')
 
 		expect(observed instanceof NotFound).toBe(true)
 		expect(response.status).toBe(404)
-		expect(await response.text()).toBe(NOT_FOUND_BODY)
+		await expect(response.text()).resolves.toBe(NOT_FOUND_BODY)
 	})
 
 	it('static-route hit is unaffected', async () => {
@@ -192,10 +192,10 @@ describe('NotFound miss sentinel', () => {
 			.get('/', () => 'hi')
 			.error(() => 'should not run')
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(200)
-		expect(await response.text()).toBe('hi')
+		await expect(response.text()).resolves.toBe('hi')
 	})
 
 	it('user-thrown NotFound is a real Error, not conflated with the sentinel', async () => {
@@ -211,7 +211,7 @@ describe('NotFound miss sentinel', () => {
 				observed = error
 			})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		// exact user instance, custom field intact — a sentinel swap would
 		// lose identity and reset the message
@@ -225,9 +225,9 @@ describe('NotFound miss sentinel', () => {
 			throw new NotFound()
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(404)
-		expect(await response.text()).toBe(NOT_FOUND_BODY)
+		await expect(response.text()).resolves.toBe(NOT_FOUND_BODY)
 	})
 })

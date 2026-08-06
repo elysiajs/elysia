@@ -1,6 +1,6 @@
 import { Elysia, t } from '../../src'
 import { describe, it, expect } from 'bun:test'
-import { post } from '../utils'
+import { post, json } from '../utils'
 
 describe('merge validator', () => {
 	it('handle guard without local schema', async () => {
@@ -15,7 +15,8 @@ describe('merge validator', () => {
 			}))
 
 		const correct = await app.handle(
-			post('/name/cantarella', {
+			'/name/cantarella',
+			json({
 				id: 1
 			})
 		)
@@ -24,7 +25,8 @@ describe('merge validator', () => {
 		await expect(correct.json()).resolves.toEqual({ name: 'cantarella' })
 
 		const incorrect = await app.handle(
-			post('/name/jinhsi', {
+			'/name/jinhsi',
+			json({
 				id: 1
 			})
 		)
@@ -51,7 +53,8 @@ describe('merge validator', () => {
 			)
 
 		const correct = await app.handle(
-			post('/name/cantarella', {
+			'/name/cantarella',
+			json({
 				id: 1
 			})
 		)
@@ -63,7 +66,8 @@ describe('merge validator', () => {
 		})
 
 		const incorrect = await app.handle(
-			post('/name/jinhsi', {
+			'/name/jinhsi',
+			json({
 				id: 1
 			})
 		)
@@ -83,7 +87,8 @@ describe('merge validator', () => {
 			}))
 
 		const correct = await app.handle(
-			post('/name/cantarella', {
+			'/name/cantarella',
+			json({
 				id: 1
 			})
 		)
@@ -92,7 +97,8 @@ describe('merge validator', () => {
 		await expect(correct.json()).resolves.toEqual({ name: 'cantarella' })
 
 		const incorrect = await app.handle(
-			post('/name/jinhsi', {
+			'/name/jinhsi',
+			json({
 				id: 1
 			})
 		)
@@ -122,7 +128,8 @@ describe('merge validator', () => {
 			)
 
 		const correct = await app.handle(
-			post('/name/cantarella', {
+			'/name/cantarella',
+			json({
 				id: 1
 			})
 		)
@@ -134,7 +141,8 @@ describe('merge validator', () => {
 		})
 
 		const incorrect = await app.handle(
-			post('/name/jinhsi', {
+			'/name/jinhsi',
+			json({
 				id: 1
 			})
 		)
@@ -161,7 +169,8 @@ describe('merge validator', () => {
 			}))
 
 		const correct = await app.handle(
-			post('/name/cantarella', {
+			'/name/cantarella',
+			json({
 				id: 1
 			})
 		)
@@ -170,7 +179,8 @@ describe('merge validator', () => {
 		await expect(correct.json()).resolves.toEqual({ name: 'cantarella' })
 
 		const incorrect = await app.handle(
-			post('/name/jinhsi', {
+			'/name/jinhsi',
+			json({
 				id: 1
 			})
 		)
@@ -198,7 +208,8 @@ describe('merge validator', () => {
 			)
 
 		const correct = await app.handle(
-			post('/name/cantarella', {
+			'/name/cantarella',
+			json({
 				id: 1
 			})
 		)
@@ -207,7 +218,8 @@ describe('merge validator', () => {
 		await expect(correct.json()).resolves.toEqual({ id: 1 })
 
 		const incorrect = await app.handle(
-			post('/name/jinhsi', {
+			'/name/jinhsi',
+			json({
 				name: 'cantarella'
 			})
 		)
@@ -249,7 +261,8 @@ describe('merge validator', () => {
 			)
 
 		const correct = await app.handle(
-			post('/name/cantarella', {
+			'/name/cantarella',
+			json({
 				id: 1,
 				name: 'cantarella'
 			})
@@ -262,7 +275,8 @@ describe('merge validator', () => {
 		})
 
 		const incorrect = await app.handle(
-			post('/name/jinhsi', {
+			'/name/jinhsi',
+			json({
 				id: 1,
 				familia: 'fisalia',
 				a: 'b'
@@ -302,7 +316,8 @@ describe('merge validator', () => {
 			)
 
 		const correct = await app.handle(
-			post('/name/cantarella', {
+			'/name/cantarella',
+			json({
 				id: 1,
 				name: 'cantarella'
 			})
@@ -315,7 +330,8 @@ describe('merge validator', () => {
 		})
 
 		const incorrect = await app.handle(
-			post('/name/jinhsi', {
+			'/name/jinhsi',
+			json({
 				id: 1,
 				family: 'fisalia'
 			})
@@ -352,67 +368,8 @@ describe('merge validator', () => {
 		)
 
 		const correct1 = await app.handle(
-			post('/main', {
-				id: 1,
-				name: 'cantarella'
-			})
-		)
-
-		expect(correct1.status).toBe(200)
-		await expect(correct1.json()).resolves.toEqual({ success: true })
-
-		const correct2 = await app.handle(
-			post('/local', {
-				id: 1
-			})
-		)
-
-		expect(correct2.status).toBe(200)
-		await expect(correct2.json()).resolves.toEqual({ success: true, id: 1 })
-
-		const correct3 = await app.handle(post('/main'))
-
-		expect(correct3.status).toBe(200)
-		await expect(correct3.json()).resolves.toEqual({ success: true })
-
-		const incorrect1 = await app.handle(
-			post('/local', {
-				name: 'cantarella'
-			})
-		)
-
-		expect(incorrect1.status).toBe(422)
-	})
-
-	it('handle local scope', async () => {
-		const local = new Elysia()
-			.guard({
-				schema: 'merge',
-				body: t.Object({ id: t.Number() })
-			})
-			.post(
-				'/local',
-				{
-					response: t.Object({ success: t.Boolean(), id: t.Number() })
-				},
-				({ body }) => ({
-					success: true,
-					...body
-				})
-			)
-
-		const app = new Elysia().use(local).post(
 			'/main',
-			{
-				response: t.Object({ success: t.Boolean() })
-			},
-			() => ({
-				success: true
-			})
-		)
-
-		const correct1 = await app.handle(
-			post('/main', {
+			json({
 				id: 1,
 				name: 'cantarella'
 			})
@@ -422,7 +379,8 @@ describe('merge validator', () => {
 		await expect(correct1.json()).resolves.toEqual({ success: true })
 
 		const correct2 = await app.handle(
-			post('/local', {
+			'/local',
+			json({
 				id: 1
 			})
 		)
@@ -436,7 +394,8 @@ describe('merge validator', () => {
 		await expect(correct3.json()).resolves.toEqual({ success: true })
 
 		const correct4 = await app.handle(
-			post('/main', {
+			'/main',
+			json({
 				id: 1,
 				name: 'cantarella'
 			})
@@ -446,7 +405,8 @@ describe('merge validator', () => {
 		await expect(correct4.json()).resolves.toEqual({ success: true })
 
 		const incorrect1 = await app.handle(
-			post('/local', {
+			'/local',
+			json({
 				name: 'cantarella'
 			})
 		)
@@ -488,7 +448,8 @@ describe('merge validator', () => {
 			)
 
 		const correct1 = await app.handle(
-			post('/main', {
+			'/main',
+			json({
 				id: 1,
 				name: 'cantarella'
 			})
@@ -498,7 +459,8 @@ describe('merge validator', () => {
 		await expect(correct1.json()).resolves.toEqual({ success: true })
 
 		const correct2 = await app.handle(
-			post('/local', {
+			'/local',
+			json({
 				id: 1
 			})
 		)
@@ -507,7 +469,8 @@ describe('merge validator', () => {
 		await expect(correct2.json()).resolves.toEqual({ success: true, id: 1 })
 
 		const correct3 = await app.handle(
-			post('/main', {
+			'/main',
+			json({
 				id: 1,
 				name: 'cantarella'
 			})
@@ -517,7 +480,8 @@ describe('merge validator', () => {
 		await expect(correct3.json()).resolves.toEqual({ success: true })
 
 		const incorrect1 = await app.handle(
-			post('/local', {
+			'/local',
+			json({
 				name: 'cantarella'
 			})
 		)
@@ -525,7 +489,8 @@ describe('merge validator', () => {
 		expect(incorrect1.status).toBe(422)
 
 		const incorrect2 = await app.handle(
-			post('/main', {
+			'/main',
+			json({
 				name: 'cantarella'
 			})
 		)
@@ -571,7 +536,8 @@ describe('merge validator', () => {
 		)
 
 		const correct1 = await app.handle(
-			post('/parent', {
+			'/parent',
+			json({
 				id: 1,
 				name: 'cantarella'
 			})
@@ -581,7 +547,8 @@ describe('merge validator', () => {
 		await expect(correct1.json()).resolves.toEqual({ success: true })
 
 		const correct2 = await app.handle(
-			post('/local', {
+			'/local',
+			json({
 				id: 1
 			})
 		)
@@ -590,7 +557,8 @@ describe('merge validator', () => {
 		await expect(correct2.json()).resolves.toEqual({ success: true, id: 1 })
 
 		const correct3 = await app.handle(
-			post('/parent', {
+			'/parent',
+			json({
 				id: 1,
 				name: 'cantarella'
 			})
@@ -605,7 +573,8 @@ describe('merge validator', () => {
 		await expect(correct4.json()).resolves.toEqual({ success: true })
 
 		const incorrect1 = await app.handle(
-			post('/local', {
+			'/local',
+			json({
 				name: 'cantarella'
 			})
 		)
@@ -613,7 +582,8 @@ describe('merge validator', () => {
 		expect(incorrect1.status).toBe(422)
 
 		const incorrect2 = await app.handle(
-			post('/parent', {
+			'/parent',
+			json({
 				name: 'cantarella'
 			})
 		)
@@ -659,7 +629,8 @@ describe('merge validator', () => {
 		)
 
 		const correct1 = await app.handle(
-			post('/parent', {
+			'/parent',
+			json({
 				id: 1,
 				name: 'cantarella'
 			})
@@ -669,7 +640,8 @@ describe('merge validator', () => {
 		await expect(correct1.json()).resolves.toEqual({ success: true })
 
 		const correct2 = await app.handle(
-			post('/local', {
+			'/local',
+			json({
 				id: 1
 			})
 		)
@@ -678,7 +650,8 @@ describe('merge validator', () => {
 		await expect(correct2.json()).resolves.toEqual({ success: true, id: 1 })
 
 		const correct3 = await app.handle(
-			post('/parent', {
+			'/parent',
+			json({
 				id: 1,
 				name: 'cantarella'
 			})
@@ -688,7 +661,8 @@ describe('merge validator', () => {
 		await expect(correct3.json()).resolves.toEqual({ success: true })
 
 		const incorrect1 = await app.handle(
-			post('/local', {
+			'/local',
+			json({
 				name: 'cantarella'
 			})
 		)
@@ -696,7 +670,8 @@ describe('merge validator', () => {
 		expect(incorrect1.status).toBe(422)
 
 		const incorrect2 = await app.handle(
-			post('/parent', {
+			'/parent',
+			json({
 				name: 'cantarella'
 			})
 		)
@@ -761,7 +736,8 @@ describe('merge validator', () => {
 		})
 
 		const incorrect = await app.handle(
-			post('/hsi/jinhsi', {
+			'/hsi/jinhsi',
+			json({
 				id: 1
 			})
 		)
@@ -842,7 +818,8 @@ describe('merge validator', () => {
 		})
 
 		const incorrect1 = await app.handle(
-			post('/hsi/jinhsi', {
+			'/hsi/jinhsi',
+			json({
 				id: 1
 			})
 		)
@@ -850,7 +827,8 @@ describe('merge validator', () => {
 		expect(incorrect1.status).toBe(422)
 
 		const incorrect2 = await app.handle(
-			post('/hsi', {
+			'/hsi',
+			json({
 				id: 1
 			})
 		)
@@ -967,7 +945,8 @@ describe('merge validator', () => {
 		})
 
 		const incorrect1 = await app.handle(
-			post('/hsi/jinhsi', {
+			'/hsi/jinhsi',
+			json({
 				id: 1
 			})
 		)
@@ -975,7 +954,8 @@ describe('merge validator', () => {
 		expect(incorrect1.status).toBe(422)
 
 		const incorrect2 = await app.handle(
-			post('/hsi', {
+			'/hsi',
+			json({
 				id: 1
 			})
 		)
@@ -983,7 +963,8 @@ describe('merge validator', () => {
 		expect(incorrect2.status).toBe(422)
 
 		const incorrect3 = await app.handle(
-			post('/family/hsi/jinhsi', {
+			'/family/hsi/jinhsi',
+			json({
 				id: 1
 			})
 		)
@@ -1015,11 +996,11 @@ describe('merge validator', () => {
 			.guard({ schema: 'merge', body: 'sign' })
 			.post('/', ({ body }) => body)
 
-		const correct = await app.handle(post('/', { name: 'a', id: 1 }))
+		const correct = await app.handle('/', json({ name: 'a', id: 1 }))
 		expect(correct.status).toBe(200)
 		await expect(correct.json()).resolves.toEqual({ name: 'a', id: 1 })
 
-		const incorrect = await app.handle(post('/', { name: 'a' }))
+		const incorrect = await app.handle('/', json({ name: 'a' }))
 		expect(incorrect.status).toBe(422)
 	})
 })

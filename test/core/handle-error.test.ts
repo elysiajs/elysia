@@ -1,7 +1,6 @@
 import { Elysia, InternalServerError, NotFound, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('Handle Error', () => {
 	it('handle NOT_FOUND', async () => {
@@ -9,7 +8,7 @@ describe('Handle Error', () => {
 			.get('/', () => {
 				throw new NotFound()
 			})
-			.handle(req('/'))
+			.handle('/')
 
 		await expect(res.json()).resolves.toEqual({
 			type: 'not-found',
@@ -25,7 +24,7 @@ describe('Handle Error', () => {
 			.get('/', () => {
 				throw new InternalServerError()
 			})
-			.handle(req('/'))
+			.handle('/')
 
 		await expect(res.json()).resolves.toEqual({
 			type: 'internal-server-error',
@@ -46,7 +45,7 @@ describe('Handle Error', () => {
 				},
 				() => 'Hi'
 			)
-			.handle(req('/'))
+			.handle('/')
 
 		expect(res.status).toBe(422)
 	})
@@ -60,7 +59,7 @@ describe('Handle Error', () => {
 						status: 418
 					})
 			})
-			.handle(req('/not-found'))
+			.handle('/not-found')
 
 		await expect(res.text()).resolves.toBe("I'm a teapot")
 		expect(res.status).toBe(418)
@@ -75,7 +74,7 @@ describe('Handle Error', () => {
 				throw new NotFound()
 			})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*')
 		expect(res.status).toBe(404)
@@ -92,7 +91,7 @@ describe('Handle Error', () => {
 				throw new NotFound()
 			})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		await expect(res.text()).resolves.toBe('aw man')
 		expect(res.status).toBe(418)
@@ -111,7 +110,7 @@ describe('Handle Error', () => {
 
 		const app = new Elysia().use(authenticate)
 
-		const response = await app.handle(req('/group/inner'))
+		const response = await app.handle('/group/inner')
 
 		await expect(response.text()).resolves.toEqual('handled')
 		expect(response.status).toEqual(500)
@@ -132,7 +131,7 @@ describe('Handle Error', () => {
 
 		const app = new Elysia().use(authenticate)
 
-		const response = await app.handle(req('/group/inner'))
+		const response = await app.handle('/group/inner')
 
 		await expect(response.text()).resolves.toEqual('handled')
 		expect(response.status).toEqual(418)
@@ -143,7 +142,7 @@ describe('Handle Error', () => {
 			throw status(404, 'Not Found :(')
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		await expect(response.text()).resolves.toEqual('Not Found :(')
 		expect(response.status).toEqual(404)
@@ -154,7 +153,7 @@ describe('Handle Error', () => {
 			throw status(404, 'Not Found :(')
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		await expect(response.text()).resolves.toEqual('Not Found :(')
 		expect(response.status).toEqual(404)
@@ -195,9 +194,9 @@ describe('Handle Error', () => {
 
 		const app = new Elysia().use(errors).use(requestHandler)
 
-		await expect(
-			app.handle(req('/')).then((req) => req.text())
-		).resolves.toBe('APIError')
+		await expect(app.handle('/').then((req) => req.text())).resolves.toBe(
+			'APIError'
+		)
 	})
 
 	it('parse headers', async () => {
@@ -235,7 +234,7 @@ describe('Handle Error', () => {
 			({ query: { aid } }) => aid
 		)
 
-		const response = await new Elysia().use(route).handle(req('/?aid=a'))
+		const response = await new Elysia().use(route).handle('/?aid=a')
 
 		expect(response.status).toEqual(404)
 		await expect(response.json()).resolves.toEqual({
@@ -253,7 +252,7 @@ describe('Handle Error', () => {
 			.get('/', ({ status }) => {
 				throw status(422, value)
 			})
-			.handle(req('/'))
+			.handle('/')
 
 		await expect(response.json()).resolves.toEqual(value)
 		expect(response.headers.get('content-type')).toStartWith(
@@ -277,7 +276,7 @@ describe('Handle Error', () => {
 			.get('/', ({ status }) => {
 				throw status(422, value)
 			})
-			.handle(req('/'))
+			.handle('/')
 
 		await expect(response.text()).resolves.toBe('Don Quixote')
 		expect(response.headers.get('content-type')).toStartWith('text/plain')
@@ -290,7 +289,7 @@ describe('Handle Error', () => {
 				// https://youtube.com/shorts/PbIWVPKHfrQ
 				throw new Error('a')
 			})
-			.handle(req('/'))
+			.handle('/')
 
 		await expect(res.json()).resolves.toMatchObject({
 			type: 'internal-server-error',
@@ -306,7 +305,7 @@ describe('Handle Error', () => {
 			throw new Error('a')
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		await expect(res.json()).resolves.toMatchObject({
 			type: 'internal-server-error',
@@ -328,7 +327,7 @@ describe('Handle Error', () => {
 			return new ErrorA()
 		})
 
-		const res = await app.handle(req('/A'))
+		const res = await app.handle('/A')
 
 		await expect(res.json()).resolves.toEqual({ error: 'hello' })
 		expect(res.status).toBe(418)
@@ -345,7 +344,7 @@ describe('Handle Error', () => {
 			throw new ErrorA()
 		})
 
-		const res = await app.handle(req('/A'))
+		const res = await app.handle('/A')
 
 		await expect(res.json()).resolves.toEqual({ error: 'hello' })
 		expect(res.status).toBe(418)
@@ -366,7 +365,7 @@ describe('Handle Error', () => {
 			throw new ErrorA()
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res).toBe(original)
 		expect(res.status).toBe(418)
@@ -384,7 +383,7 @@ describe('Handle Error', () => {
 			return new ErrorB()
 		})
 
-		const res = await app.handle(req('/B'))
+		const res = await app.handle('/B')
 
 		await expect(res.json()).resolves.toEqual({ error: 'hello' })
 		expect(res.status).toBe(418)
@@ -401,7 +400,7 @@ describe('Handle Error', () => {
 			throw new ErrorB()
 		})
 
-		const res = await app.handle(req('/B'))
+		const res = await app.handle('/B')
 
 		await expect(res.json()).resolves.toEqual({ error: 'hello' })
 		expect(res.status).toBe(418)
@@ -427,7 +426,7 @@ describe('Handle Error', () => {
 			throw new ErrorWithHeaders()
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		await expect(res.json()).resolves.toEqual({ error: 'custom error' })
 		expect(res.status).toBe(418)
@@ -447,7 +446,7 @@ describe('Handle Error', () => {
 			throw new AsyncError()
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		await expect(res.json()).resolves.toEqual({ error: 'async error' })
 		expect(res.status).toBe(418)
@@ -466,7 +465,7 @@ describe('Handle Error', () => {
 			return new AsyncError()
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		await expect(res.json()).resolves.toEqual({ error: 'async error' })
 		expect(res.status).toBe(418)
@@ -492,7 +491,7 @@ describe('Handle Error', () => {
 			throw new AsyncErrorWithHeaders()
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		await expect(res.json()).resolves.toEqual({
 			error: 'async with headers'
@@ -516,7 +515,7 @@ describe('Handle Error', () => {
 			throw new AsyncNonError()
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		await expect(res.json()).resolves.toEqual({ error: 'non-error async' })
 		expect(res.status).toBe(418)
@@ -533,7 +532,7 @@ describe('Handle Error', () => {
 			throw new BrokenError('original error')
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(500)
 		await expect(res.json()).resolves.toMatchObject({
@@ -555,7 +554,7 @@ describe('Handle Error', () => {
 			throw new BrokenAsyncError('original error')
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(500)
 		await expect(res.json()).resolves.toMatchObject({
@@ -582,7 +581,7 @@ describe('Handle Error', () => {
 				throw new AsyncError('boom')
 			})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(503)
 		await expect(res.text()).resolves.toBe('custom')
@@ -604,7 +603,7 @@ describe('Handle Error', () => {
 				throw new SyncError('boom')
 			})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(502)
 		await expect(res.text()).resolves.toBe('custom-sync')
@@ -623,7 +622,7 @@ describe('Handle Error', () => {
 				throw new BrokenAsyncError('original error')
 			})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(500)
 		await expect(res.json()).resolves.toMatchObject({
@@ -640,7 +639,7 @@ describe('Handle Error', () => {
 			throw new Error('test error')
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(500)
 		expect(res.headers.get('set-cookie')).toContain(
@@ -661,7 +660,7 @@ describe('Handle Error', () => {
 			}
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(422)
 		expect(res.headers.get('set-cookie')).toContain(
@@ -679,7 +678,7 @@ describe('Handle Error', () => {
 				throw new Error('custom error')
 			})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(500)
 		await expect(res.text()).resolves.toBe('custom error')
@@ -694,7 +693,7 @@ describe('Handle Error', () => {
 			throw new NotFound()
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(404)
 		expect(res.headers.get('set-cookie')).toContain(
@@ -708,21 +707,7 @@ describe('Handle Error', () => {
 			throw new InternalServerError()
 		})
 
-		const res = await app.handle(req('/'))
-
-		expect(res.status).toBe(500)
-		expect(res.headers.get('set-cookie')).toContain(
-			'session=test-session-id'
-		)
-	})
-
-	it('send set-cookie header when error is thrown', async () => {
-		const app = new Elysia().get('/', ({ cookie }) => {
-			cookie.session.value = 'test-session-id'
-			throw new Error('test error')
-		})
-
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(500)
 		expect(res.headers.get('set-cookie')).toContain(
@@ -737,7 +722,7 @@ describe('Handle Error', () => {
 			throw new Error('test error')
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(500)
 		const setCookie = res.headers.get('set-cookie')
@@ -752,7 +737,7 @@ describe('Handle Error', () => {
 			throw new Error('test error')
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.headers.get('set-cookie')).toContain(
 			'session=test-session-id'

@@ -36,12 +36,12 @@ describe('error handlers', () => {
 				throw new OtherError('B')
 			})
 
-		await expect(
-			app.handle(req('/custom')).then((x) => x.text())
-		).resolves.toBe('custom')
-		await expect(
-			app.handle(req('/other')).then((x) => x.text())
-		).resolves.toBe('other')
+		await expect(app.handle('/custom').then((x) => x.text())).resolves.toBe(
+			'custom'
+		)
+		await expect(app.handle('/other').then((x) => x.text())).resolves.toBe(
+			'other'
+		)
 	})
 
 	it('maps status() returned by an error handler', async () => {
@@ -51,7 +51,7 @@ describe('error handlers', () => {
 				throw new CustomError('A')
 			})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(418)
 		await expect(response.text()).resolves.toBe('A')
@@ -62,7 +62,7 @@ describe('error handlers', () => {
 			.error(CustomError, ({ error }) => status(418, error.message))
 			.get('/', () => new CustomError('A'))
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(418)
 		await expect(response.text()).resolves.toBe('A')
@@ -83,7 +83,7 @@ describe('error handlers', () => {
 				() => new CustomError('A')
 			)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(418)
 		expect(ranAfterHandle).toBe(false)
@@ -94,7 +94,7 @@ describe('error handlers', () => {
 			.error(CustomError, ({ error }) => status(418, error.message))
 			.get('/', async () => new CustomError('A'))
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(418)
 		await expect(response.text()).resolves.toBe('A')
@@ -105,7 +105,7 @@ describe('error handlers', () => {
 			.error(CustomError, ({ error }) => status(418, error.message))
 			.get('/', new CustomError('A'))
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(418)
 		await expect(response.text()).resolves.toBe('A')
@@ -114,7 +114,7 @@ describe('error handlers', () => {
 	it('maps an unregistered returned error to 500 problem details', async () => {
 		const app = new Elysia().get('/', () => new Error('oops'))
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(500)
 		await expect(response.json()).resolves.toMatchObject({
@@ -130,7 +130,7 @@ describe('error handlers', () => {
 			Promise.resolve(new Error('oops'))
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(500)
 		await expect(response.json()).resolves.toMatchObject({
@@ -157,10 +157,10 @@ describe('error handlers', () => {
 			})
 
 		await expect(
-			parentFirst.handle(req('/')).then((x) => x.text())
+			parentFirst.handle('/').then((x) => x.text())
 		).resolves.toBe('parent')
 		await expect(
-			childFirst.handle(req('/')).then((x) => x.text())
+			childFirst.handle('/').then((x) => x.text())
 		).resolves.toBe('child')
 	})
 
@@ -172,7 +172,7 @@ describe('error handlers', () => {
 				throw new ChildError('A')
 			})
 
-		await expect(app.handle(req('/')).then((x) => x.text())).resolves.toBe(
+		await expect(app.handle('/').then((x) => x.text())).resolves.toBe(
 			'parent'
 		)
 	})
@@ -184,7 +184,7 @@ describe('error handlers', () => {
 				throw new NotFound()
 			})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(404)
 		await expect(response.text()).resolves.toBe('Not Found')
@@ -211,16 +211,16 @@ describe('error handlers', () => {
 			.get('/', route)
 
 		await expect(
-			fromLocal.handle(req('/')).then((x) => x.json())
+			fromLocal.handle('/').then((x) => x.json())
 		).resolves.toMatchObject({ status: 500, detail: 'A' })
 		await expect(
-			fromPlugin.handle(req('/')).then((x) => x.text())
+			fromPlugin.handle('/').then((x) => x.text())
 		).resolves.toBe('handled')
 		await expect(
-			fromPluginDeep.handle(req('/')).then((x) => x.json())
+			fromPluginDeep.handle('/').then((x) => x.json())
 		).resolves.toMatchObject({ status: 500, detail: 'A' })
 		await expect(
-			fromGlobalDeep.handle(req('/')).then((x) => x.text())
+			fromGlobalDeep.handle('/').then((x) => x.text())
 		).resolves.toBe('handled')
 	})
 
@@ -236,11 +236,11 @@ describe('error handlers', () => {
 				throw new Error('plain')
 			})
 
-		await expect(
-			app.handle(req('/custom')).then((x) => x.text())
-		).resolves.toBe('custom')
+		await expect(app.handle('/custom').then((x) => x.text())).resolves.toBe(
+			'custom'
+		)
 
-		const plain = await app.handle(req('/plain'))
+		const plain = await app.handle('/plain')
 
 		expect(plain.status).toBe(500)
 		await expect(plain.json()).resolves.toMatchObject({
@@ -264,7 +264,7 @@ describe('error handlers', () => {
 			)
 
 		const app = new Elysia().use(plugin)
-		const res = await app.handle(req('/boom'))
+		const res = await app.handle('/boom')
 
 		expect(res.status).toBe(418)
 		await expect(res.text()).resolves.toBe('mapped')
@@ -277,7 +277,7 @@ describe('error handlers', () => {
 				throw new Error('x')
 			})
 
-		const res = await app.handle(req('/boom'))
+		const res = await app.handle('/boom')
 		expect(res.status).toBe(500)
 		await expect(res.text()).resolves.toBe('error-asset')
 

@@ -15,7 +15,7 @@ describe('HOC', () => {
 			})
 			.get('/', () => 'ok')
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(called).toBe(1)
 	})
@@ -30,7 +30,7 @@ describe('HOC', () => {
 				return 'ok'
 			})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		await expect(response.text()).resolves.toBe('intercepted')
 		expect(handlerRan).toBe(false)
@@ -44,7 +44,7 @@ describe('HOC', () => {
 			})
 			.get('/', () => 'ok')
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		await expect(response.text()).resolves.toBe('ok!')
 	})
@@ -67,7 +67,7 @@ describe('HOC', () => {
 			})
 			.get('/', () => 'ok')
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		// First-registered = outermost: A wraps B wraps the handler.
 		expect(order).toEqual(['A in', 'B in', 'B out', 'A out'])
@@ -103,7 +103,7 @@ describe('HOC', () => {
 
 		const app = new Elysia().use(plugin).get('/', () => 'ok')
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(wrapped).toBe(true)
 	})
@@ -137,7 +137,7 @@ describe('HOC', () => {
 			.use(plugin)
 			.get('/', () => 'ok')
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(calls).toBe(1)
 	})

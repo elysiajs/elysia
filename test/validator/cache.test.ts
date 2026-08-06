@@ -5,7 +5,7 @@ import { afterEach, describe, it, expect } from 'bun:test'
 import { Type } from 'typebox'
 
 import { Elysia, t } from '../../src'
-import { post } from '../utils'
+import { post, json } from '../utils'
 import { TypeBoxValidatorCache } from '../../src/type/validator'
 import { fnKey, schemaCacheKey } from '../../src/type/validator/validator-cache'
 import { Validator } from '../../src/validator'
@@ -100,17 +100,17 @@ describe('TypeBoxValidatorCache models identity', () => {
 			.post('/x', { body }, ({ body }) => body)
 
 		expect(
-			(await numberApp.handle(post('/x', { nested: { v: 1 } }))).status
+			(await numberApp.handle('/x', json({ nested: { v: 1 } }))).status
 		).toBe(200)
 
 		expect(
-			(await stringApp.handle(post('/x', { nested: { v: 42 } }))).status
+			(await stringApp.handle('/x', json({ nested: { v: 42 } }))).status
 		).toBe(422)
 		expect(
-			(await stringApp.handle(post('/x', { nested: { v: 'hi' } }))).status
+			(await stringApp.handle('/x', json({ nested: { v: 'hi' } }))).status
 		).toBe(200)
 		expect(
-			(await numberApp.handle(post('/x', { nested: { v: 'x' } }))).status
+			(await numberApp.handle('/x', json({ nested: { v: 'x' } }))).status
 		).toBe(422)
 	})
 })
@@ -230,16 +230,16 @@ describe('cross-app validator cache sharing', () => {
 			.post('/x', { body }, ({ body }) => body)
 
 		expect(
-			(await numberApp.handle(post('/x', { nested: { v: 1 } }))).status
+			(await numberApp.handle('/x', json({ nested: { v: 1 } }))).status
 		).toBe(200)
 		expect(
-			(await numberApp.handle(post('/x', { nested: { v: 'x' } }))).status
+			(await numberApp.handle('/x', json({ nested: { v: 'x' } }))).status
 		).toBe(422)
 		expect(
-			(await stringApp.handle(post('/x', { nested: { v: 'hi' } }))).status
+			(await stringApp.handle('/x', json({ nested: { v: 'hi' } }))).status
 		).toBe(200)
 		expect(
-			(await stringApp.handle(post('/x', { nested: { v: 42 } }))).status
+			(await stringApp.handle('/x', json({ nested: { v: 42 } }))).status
 		).toBe(422)
 	})
 

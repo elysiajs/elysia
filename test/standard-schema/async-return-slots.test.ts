@@ -1,6 +1,6 @@
 import { Elysia } from '../../src'
 import { describe, it, expect } from 'bun:test'
-import { req, post } from '../utils'
+import { post, json } from '../utils'
 
 // Standard Schema permits a non-async `validate` function to return a Promise.
 // Every request schema position must await that result.
@@ -43,46 +43,41 @@ describe('Standard Schema — sync-declared validate returning a Promise', () =>
 		)
 
 	it('body: valid -> 200, invalid -> 422 (control, already worked)', async () => {
-		expect((await app.handle(post('/body', { id: '7' }))).status).toBe(200)
-		expect((await app.handle(post('/body', { id: 'abc' }))).status).toBe(
+		expect((await app.handle('/body', json({ id: '7' }))).status).toBe(200)
+		expect((await app.handle('/body', json({ id: 'abc' }))).status).toBe(
 			422
 		)
 	})
 
 	it('query: valid -> 200, invalid -> 422 (was 500)', async () => {
-		const ok = await app.handle(req('/query?id=7'))
+		const ok = await app.handle('/query?id=7')
 		expect(ok.status).toBe(200)
-		expect(await ok.json()).toEqual({ id: 7 })
-		expect((await app.handle(req('/query?id=abc'))).status).toBe(422)
+		await expect(ok.json()).resolves.toEqual({ id: 7 })
+		expect((await app.handle('/query?id=abc')).status).toBe(422)
 	})
 
 	it('headers: valid -> 200, invalid -> 422 (was 500)', async () => {
 		expect(
-			(await app.handle(req('/headers', { headers: { 'x-id': '7' } })))
-				.status
+			(await app.handle('/headers', { headers: { 'x-id': '7' } })).status
 		).toBe(200)
 		expect(
-			(await app.handle(req('/headers', { headers: { 'x-id': 'z' } })))
-				.status
+			(await app.handle('/headers', { headers: { 'x-id': 'z' } })).status
 		).toBe(422)
 	})
 
 	it('params: valid -> 200, invalid -> 422 (was 500)', async () => {
-		expect((await app.handle(req('/params/7'))).status).toBe(200)
-		expect((await app.handle(req('/params/abc'))).status).toBe(422)
+		expect((await app.handle('/params/7')).status).toBe(200)
+		expect((await app.handle('/params/abc')).status).toBe(422)
 	})
 
 	it('cookie: valid -> 200, invalid -> 422 (was 500)', async () => {
 		expect(
-			(await app.handle(req('/cookie', { headers: { cookie: 'sid=7' } })))
+			(await app.handle('/cookie', { headers: { cookie: 'sid=7' } }))
 				.status
 		).toBe(200)
 		expect(
-			(
-				await app.handle(
-					req('/cookie', { headers: { cookie: 'sid=abc' } })
-				)
-			).status
+			(await app.handle('/cookie', { headers: { cookie: 'sid=abc' } }))
+				.status
 		).toBe(422)
 	})
 })

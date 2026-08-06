@@ -1,7 +1,6 @@
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('afterResponse status', () => {
 	it('observes an explicit response status', async () => {
@@ -13,7 +12,7 @@ describe('afterResponse status', () => {
 			})
 			.get('/error', (c) => c.status(401, { error: 'Unauthorized' }))
 
-		const res = await app.handle(req('/error')).then((x) => x.json())
+		const res = await app.handle('/error').then((x) => x.json())
 		expect(res).toEqual({ error: 'Unauthorized' })
 
 		await Bun.sleep(1)
@@ -27,7 +26,7 @@ describe('afterResponse status', () => {
 			status = set.status as number
 		})
 
-		const res = await app.handle(req('/error'))
+		const res = await app.handle('/error')
 		expect(res.status).toEqual(404)
 
 		await Bun.sleep(1)

@@ -37,7 +37,7 @@ describe('SSE field framing', () => {
 
 		const res = await app.handle(new Request('http://localhost/'))
 		expect(res.headers.get('content-type')).toBe('text/event-stream')
-		expect(await res.text()).toBe('data: ok\n\n')
+		await expect(res.text()).resolves.toBe('data: ok\n\n')
 	})
 
 	it('single-line data produces exact frame bytes', () => {

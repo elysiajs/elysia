@@ -4,7 +4,6 @@ import { Elysia, file, form, redirect, status } from '../../../src'
 
 import { mapResponse } from '../../../src/adapter/web-standard/handler'
 import { Passthrough } from './utils'
-import { req } from '../../utils'
 
 const createContext = () => ({
 	cookie: {},
@@ -336,7 +335,7 @@ describe('Web Standard - Map Response', () => {
 
 		expect(response).toBeInstanceOf(Response)
 		expect(response.status).toBe(302)
-		// expect(await response.text()).toEqual('Shiroko')
+		// await expect(response.text()).resolves.toEqual('Shiroko')
 		expect(response.headers.toJSON()).toEqual({
 			name: 'Sorasaki Hina',
 			location: 'https://cunny.school'
@@ -428,11 +427,12 @@ describe('Web Standard - Map Response', () => {
 			createContext()
 		)
 
+		// ? Auto appended by Bun. Read before formData() consumes the
+		// body, which drops the lazily-materialised header.
+		expect(response.headers.get('content-type')).toStartWith(
+			'multipart/form-data'
+		)
 		await expect(response.formData()).resolves.toBeInstanceOf(FormData)
-		// ? Auto appended by Bun
-		// expect(response.headers.get('content-type')).toStartWith(
-		// 	'multipart/form-data'
-		// )
 		expect(response.status).toBe(200)
 	})
 
@@ -451,7 +451,7 @@ describe('Web Standard - Map Response', () => {
 				() => 'a'
 			)
 
-		const response = await app.handle(req('/')).then((x) => x.text())
+		const response = await app.handle('/').then((x) => x.text())
 
 		expect(response).toBe('b')
 	})
@@ -471,7 +471,7 @@ describe('Web Standard - Map Response', () => {
 				() => 'a'
 			)
 
-		const response = await app.handle(req('/')).then((x) => x.text())
+		const response = await app.handle('/').then((x) => x.text())
 
 		expect(response).toBe('b')
 	})
@@ -485,7 +485,7 @@ describe('Web Standard - Map Response', () => {
 			})
 			.get('/', () => 'a')
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.headers.get('content-type')).toBe(
 			'text/html; charset=utf8'
@@ -576,7 +576,7 @@ describe('Web Standard - Map Response with untouched set', () => {
 			})
 			.get('/', () => Promise.resolve(status(418, 'teapot')))
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(418)
 		await expect(response.text()).resolves.toBe('teapot')

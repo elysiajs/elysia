@@ -1,7 +1,7 @@
 import { Elysia, setupTypebox, t } from '../../src'
 
 import { afterEach, describe, expect, it } from 'bun:test'
-import { post, req } from '../utils'
+import { post, json } from '../utils'
 import { TypeBoxValidator } from '../../src/type/validator'
 import {
 	getExactMirror,
@@ -57,9 +57,9 @@ describe('without exact-mirror', () => {
 		expect(
 			() => new TypeBoxValidator(schema, { normalize: 'exactMirror' })
 		).toThrow('exact-mirror is required')
-		expect(
-			() => new TypeBoxValidator(schema, { normalize: true })
-		).toThrow('exact-mirror is required')
+		expect(() => new TypeBoxValidator(schema, { normalize: true })).toThrow(
+			'exact-mirror is required'
+		)
 		expect(
 			() =>
 				new TypeBoxValidator(schema, {
@@ -116,7 +116,7 @@ describe('Exact Mirror', () => {
 		)
 
 		const response = await app.handle(
-			post('/test', {
+			'/test', json({
 				foo: 'asd'
 			})
 		)
@@ -150,7 +150,7 @@ describe('Exact Mirror', () => {
 			}
 		)
 
-		const response = await app.handle(req('/')).then((x) => x.json())
+		const response = await app.handle('/').then((x) => x.json())
 
 		expect(response).toEqual({
 			messages: [{ message: 'Hello, world!' }]
@@ -176,7 +176,7 @@ describe('Exact Mirror', () => {
 			() => [{ bar: 'asd', baz: true, qux: 'b', foo: 1 }]
 		)
 
-		const response = await app.handle(req('/')).then((x) => x.json())
+		const response = await app.handle('/').then((x) => x.json())
 
 		expect(response).toEqual([{ qux: 'b', foo: 1 }])
 	})
@@ -196,7 +196,7 @@ describe('Exact Mirror', () => {
 			() => ({ baz: true, foo: 1 })
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(200)
 		await expect(response.json()).resolves.toEqual({ foo: 1 })
@@ -219,7 +219,7 @@ describe('Exact Mirror', () => {
 			() => ({ baz: true, foo: 1 })
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(200)
 		await expect(response.json()).resolves.toEqual({ foo: 1 })

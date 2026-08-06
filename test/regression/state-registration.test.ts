@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
 import { Elysia } from '../../src'
-import { req } from '../utils'
 
 describe('state registration', () => {
 	it('preserves named empty arrays and objects at runtime', async () => {
@@ -16,7 +15,7 @@ describe('state registration', () => {
 			}))
 
 		await expect(
-			app.handle(req('/')).then((response) => response.json())
+			app.handle('/').then((response) => response.json())
 		).resolves.toEqual({
 			list: [],
 			obj: {},

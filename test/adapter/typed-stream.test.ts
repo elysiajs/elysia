@@ -49,9 +49,7 @@ describe('certified byte streams', () => {
 			'application/vnd.example.bytes'
 		)
 		expect(response.headers.get('x-byte-stream')).toBe('yes')
-		expect(response.headers.getSetCookie()).toEqual([
-			'session=ok; Path=/'
-		])
+		expect(response.headers.getSetCookie()).toEqual(['session=ok; Path=/'])
 	})
 
 	it('delegates cancellation to the source exactly once', async () => {
@@ -104,6 +102,6 @@ describe('certified byte streams', () => {
 		expect(response.headers.get('content-type')).toBe('text/plain')
 		expect(response.headers.get('transfer-encoding')).toBe('chunked')
 		expect(response.headers.get('cache-control')).toBe('no-cache')
-		expect(await response.text()).toBe('ok')
+		await expect(response.text()).resolves.toBe('ok')
 	})
 })

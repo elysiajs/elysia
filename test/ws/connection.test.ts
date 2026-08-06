@@ -2,12 +2,12 @@ import { describe, it, expect } from 'bun:test'
 import { Elysia, t, status } from '../../src'
 import { websocket } from '../../src/plugin/websocket'
 import { newWebsocket, wsOpen, wsClose, wsClosed, wsMessage } from './utils'
-import { req } from '../utils'
 
 describe('WebSocket connection', () => {
 	it('should connect and close', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message() {}
 			})
 			.listen(0)
@@ -21,7 +21,8 @@ describe('WebSocket connection', () => {
 
 	it('should close by server', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message(ws) {
 					ws.close()
 				}
@@ -43,7 +44,8 @@ describe('WebSocket connection', () => {
 
 	it('should terminate by server', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message(ws) {
 					ws.terminate()
 				}
@@ -65,7 +67,8 @@ describe('WebSocket connection', () => {
 
 	it('should separate get from ws', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message() {}
 			})
 			.get('/ws', () => 'hi')
@@ -76,7 +79,7 @@ describe('WebSocket connection', () => {
 		await wsOpen(ws)
 		await wsClosed(ws)
 
-		const response = await app.handle(req('/ws')).then((x) => x.text())
+		const response = await app.handle('/ws').then((x) => x.text())
 		expect(response).toBe('hi')
 
 		app.stop()
@@ -85,7 +88,8 @@ describe('WebSocket connection', () => {
 	it('should separate all from ws', async () => {
 		const app = new Elysia()
 			.all('/ws', () => 'hi')
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message() {}
 			})
 			.listen(0)
@@ -95,7 +99,7 @@ describe('WebSocket connection', () => {
 		await wsOpen(ws)
 		await wsClosed(ws)
 
-		const response = await app.handle(req('/ws')).then((x) => x.text())
+		const response = await app.handle('/ws').then((x) => x.text())
 		expect(response).toBe('hi')
 
 		app.stop()
@@ -103,7 +107,8 @@ describe('WebSocket connection', () => {
 
 	it('should separate dynamic get from ws', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws/:id', {
+			.use(websocket())
+			.ws('/ws/:id', {
 				message() {}
 			})
 			.get('/ws/:id', () => 'hi')
@@ -114,7 +119,7 @@ describe('WebSocket connection', () => {
 		await wsOpen(ws)
 		await wsClosed(ws)
 
-		const response = await app.handle(req('/ws/1')).then((x) => x.text())
+		const response = await app.handle('/ws/1').then((x) => x.text())
 		expect(response).toBe('hi')
 
 		app.stop()
@@ -123,7 +128,8 @@ describe('WebSocket connection', () => {
 	it('should separate dynamic all from ws', async () => {
 		const app = new Elysia()
 			.all('/ws/:id', () => 'hi')
-			.use(websocket()).ws('/ws/:id', {
+			.use(websocket())
+			.ws('/ws/:id', {
 				message() {}
 			})
 			.listen(0)
@@ -133,7 +139,7 @@ describe('WebSocket connection', () => {
 		await wsOpen(ws)
 		await wsClosed(ws)
 
-		const response = await app.handle(req('/ws/1')).then((x) => x.text())
+		const response = await app.handle('/ws/1').then((x) => x.text())
 		expect(response).toBe('hi')
 
 		app.stop()
@@ -155,7 +161,8 @@ describe('WebSocket connection', () => {
 					} as const
 				}
 			}))
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				open(ws) {
 					sessionId = (ws as any).sessionId
 					user = (ws as any).getUser()
@@ -183,7 +190,8 @@ describe('WebSocket connection', () => {
 				deriveCalls++
 				return { token: `t${deriveCalls}` }
 			})
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message(ws: any) {
 					ws.send(ws.token)
 				}
@@ -213,7 +221,8 @@ describe('WebSocket connection', () => {
 		let calls = 0
 
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				transform() {
 					calls++
 				},
@@ -243,7 +252,8 @@ describe('WebSocket connection', () => {
 
 	it('beforeHandle short-circuits the upgrade with HTTP response', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				beforeHandle() {
 					return new Response('forbidden', { status: 403 })
 				},
@@ -271,7 +281,8 @@ describe('WebSocket connection', () => {
 
 	it('beforeHandle status response rejects an upgrade with its status and body', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				beforeHandle() {
 					return status(401, 'no')
 				},
@@ -299,7 +310,8 @@ describe('WebSocket connection', () => {
 
 	it('beforeHandle upgrade rejection preserves headers, cookies and JSON content type', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				beforeHandle({ set }) {
 					;(set.headers as any)['x-custom'] = 'yes'
 					// jar-shaped cookie so serializeCookie emits `sid=abc`
@@ -338,7 +350,8 @@ describe('WebSocket connection', () => {
 		let ponged = false
 
 		const app = new Elysia()
-			.use(websocket()).ws('/', {
+			.use(websocket())
+			.ws('/', {
 				ping() {
 					pinged = true
 				},

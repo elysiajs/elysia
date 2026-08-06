@@ -1,13 +1,12 @@
 import { Elysia, problem } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('problem()', () => {
 	it('fills the default type and title', async () => {
 		const app = new Elysia().get('/', () => problem({ status: 409 }))
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(409)
 		expect(res.headers.get('content-type')).toBe('application/problem+json')
@@ -21,7 +20,7 @@ describe('problem()', () => {
 	it('accepts a StatusMap name and normalizes it to the numeric code', async () => {
 		const app = new Elysia().get('/', () => problem({ status: 'Conflict' }))
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(409)
 		await expect(res.json()).resolves.toEqual({
@@ -42,7 +41,7 @@ describe('problem()', () => {
 			})
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(409)
 		await expect(res.json()).resolves.toEqual({
@@ -62,7 +61,7 @@ describe('problem()', () => {
 			})
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(409)
 		expect(res.headers.get('content-type')).toBe('application/problem+json')
@@ -80,7 +79,7 @@ describe('problem()', () => {
 			throw problem({ status: 418, detail: 'teapot' })
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(418)
 		expect(res.headers.get('content-type')).toBe('application/problem+json')
@@ -97,7 +96,7 @@ describe('problem()', () => {
 				throw problem({ status: 418, detail: 'teapot' })
 			})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(418)
 		expect(res.headers.get('content-type')).toBe('application/problem+json')
@@ -116,7 +115,7 @@ describe('problem()', () => {
 				throw new Error('kaboom')
 			})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(500)
 		expect(res.headers.get('content-type')).toBe('application/problem+json')

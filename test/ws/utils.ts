@@ -21,7 +21,60 @@ export const wsClosed = async (ws: WebSocket) => {
 	await closed
 }
 
-export const wsMessage = (ws: WebSocket) =>
-	new Promise<MessageEvent<string | Buffer>>((resolve) => {
-		ws.onmessage = resolve
+type WsEvent = MessageEvent<string | Buffer>
+
+interface Inbox {
+	events: WsEvent[]
+	waiters: {
+		resolve: (event: WsEvent) => void
+		reject: (error: Error) => void
+	}[]
+	closed: boolean
+}
+
+const inboxes = new WeakMap<WebSocket, Inbox>()
+
+const inboxOf = (ws: WebSocket) => {
+	let inbox = inboxes.get(ws)
+	if (inbox) return inbox
+
+	const state: Inbox = { events: [], waiters: [], closed: false }
+	inboxes.set(ws, state)
+
+	// One persistent listener per socket: messages arriving between
+	// wsMessage calls are buffered instead of dropped, and stacked
+	// wsMessage calls resolve in FIFO arrival order.
+	ws.addEventListener('message', (event) => {
+		const waiter = state.waiters.shift()
+		if (waiter) waiter.resolve(event as WsEvent)
+		else state.events.push(event as WsEvent)
 	})
+
+	// Reject pending waiters on close so a missing message fails fast
+	// instead of hanging until the test timeout.
+	ws.addEventListener('close', () => {
+		state.closed = true
+		for (const waiter of state.waiters.splice(0))
+			waiter.reject(
+				new Error('WebSocket closed while awaiting a message')
+			)
+	})
+
+	return state
+}
+
+export const wsMessage = (ws: WebSocket) => {
+	const inbox = inboxOf(ws)
+
+	const buffered = inbox.events.shift()
+	if (buffered) return Promise.resolve(buffered)
+
+	if (inbox.closed || ws.readyState === WebSocket.CLOSED)
+		return Promise.reject(
+			new Error('WebSocket closed while awaiting a message')
+		)
+
+	return new Promise<WsEvent>((resolve, reject) => {
+		inbox.waiters.push({ resolve, reject })
+	})
+}

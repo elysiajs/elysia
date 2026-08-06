@@ -2,7 +2,7 @@ import { Elysia } from '../../src'
 import { trace } from '../../src/plugin/trace'
 
 import { describe, expect, it } from 'bun:test'
-import { req, delay } from '../utils'
+import { delay } from '../utils'
 
 describe('request hooks', () => {
 	it('inject headers to response', async () => {
@@ -12,7 +12,7 @@ describe('request hooks', () => {
 			})
 			.get('/', () => 'hi')
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*')
 	})
@@ -30,7 +30,7 @@ describe('request hooks', () => {
 			.use(local)
 			.get('/', () => 'hi')
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.headers.get('x-plain')).toBe('yes')
 		expect(res.headers.get('x-local')).toBe('yes')
@@ -44,7 +44,7 @@ describe('request hooks', () => {
 			})
 			.get('/', () => 'hi')
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.headers.get('name')).toBe('llama')
 	})
@@ -60,7 +60,7 @@ describe('request hooks', () => {
 				return "You shouldn't see this"
 			})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		await expect(res.text()).resolves.toBe('Unauthorized')
 		expect(res.status).toBe(401)
 	})
@@ -79,7 +79,7 @@ describe('request hooks', () => {
 			])
 			.get('/', () => 'NOOP')
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(total).toEqual(2)
 	})
@@ -103,7 +103,7 @@ describe('request hooks', () => {
 				return 'NOOP'
 			})
 
-		const res = await app.handle(req('/', { signal: controller.signal }))
+		const res = await app.handle('/', { signal: controller.signal })
 
 		expect(secondHookCalled).toBe(false)
 		expect(handlerCalled).toBe(false)
@@ -131,7 +131,7 @@ describe('request hooks', () => {
 				return 'NOOP'
 			})
 
-		const res = await app.handle(req('/', { signal: controller.signal }))
+		const res = await app.handle('/', { signal: controller.signal })
 
 		expect(secondHookCalled).toBe(false)
 		expect(handlerCalled).toBe(false)
@@ -145,7 +145,8 @@ describe('request hooks', () => {
 		let handlerCalled = false
 
 		const app = new Elysia()
-			.use(trace()).trace(({ onRequest }) => {
+			.use(trace())
+			.trace(({ onRequest }) => {
 				onRequest(() => {})
 			})
 			.request([
@@ -162,7 +163,7 @@ describe('request hooks', () => {
 				return 'NOOP'
 			})
 
-		const res = await app.handle(req('/', { signal: controller.signal }))
+		const res = await app.handle('/', { signal: controller.signal })
 
 		expect(secondHookCalled).toBe(false)
 		expect(handlerCalled).toBe(false)
@@ -182,7 +183,7 @@ describe('request hooks', () => {
 			})
 			.get('/', () => '')
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(order).toEqual(['A', 'B'])
 	})

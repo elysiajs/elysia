@@ -1,7 +1,6 @@
 import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('Encode response', () => {
 	it('handle default status', async () => {
@@ -20,7 +19,7 @@ describe('Encode response', () => {
 			})
 		)
 
-		const response = await app.handle(req('/')).then((x) => x.json())
+		const response = await app.handle('/').then((x) => x.json())
 
 		expect(response).toEqual({
 			id: 'encoded'
@@ -56,8 +55,8 @@ describe('Encode response', () => {
 		)
 
 		const response = await Promise.all([
-			app.handle(req('/200')).then((x) => x.json()),
-			app.handle(req('/418')).then((x) => x.json())
+			app.handle('/200').then((x) => x.json()),
+			app.handle('/418').then((x) => x.json())
 		])
 
 		expect(response[0]).toEqual({

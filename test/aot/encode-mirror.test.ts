@@ -9,7 +9,6 @@ import {
 	endValidatorCapture
 } from '../../src/compile/aot-capture'
 import { claimManifest, materialise, registerManifest } from './_manifest'
-import { req } from '../utils'
 
 /** Frozen codec responses encode and clean without interpreted TypeBox calls. */
 
@@ -142,7 +141,7 @@ describe('frozen response encoding', () => {
 		const app = build()
 		app.compile()
 
-		const res = await app.handle(req('/u'))
+		const res = await app.handle('/u')
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({
 			id: 1,

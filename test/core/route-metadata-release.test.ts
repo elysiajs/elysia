@@ -1,7 +1,6 @@
 import { describe, it, expect, afterEach } from 'bun:test'
 
 import { Elysia } from '../../src'
-import { req } from '../utils'
 
 /**
  * Plan 007 — after a production seal, a fast-path (non-macro) app releases its
@@ -63,13 +62,22 @@ describe('plan 007 — declaredRoutes release + rematerialize', () => {
 			])
 			expect(app.history).toEqual([
 				{ sequence: 0, method: 'GET', path: '/first', source: 'child' },
-				{ sequence: 1, method: 'GET', path: '/second', source: 'child' },
+				{
+					sequence: 1,
+					method: 'GET',
+					path: '/second',
+					source: 'child'
+				},
 				{ sequence: 2, method: 'GET', path: '/root' }
 			])
 
 			// Dispatch still works for every route after the release.
-			expect(await (await app.handle(req('/first'))).text()).toBe('first')
-			expect(await (await app.handle(req('/root'))).text()).toBe('root')
+			await expect((await app.handle('/first')).text()).resolves.toBe(
+				'first'
+			)
+			await expect((await app.handle('/root')).text()).resolves.toBe(
+				'root'
+			)
 
 			// Repeated introspection stays stable (rematerialized once, cached).
 			expect(app.routes.map((r) => r.path)).toEqual([
@@ -86,7 +94,7 @@ describe('plan 007 — declaredRoutes release + rematerialize', () => {
 
 			// Seal → release #declaredRoutes.
 			void app.fetch
-			expect((await app.handle(req('/a'))).status).toBe(200)
+			expect((await app.handle('/a')).status).toBe(200)
 
 			// Mirror generation.test.ts: clear the generation, register a new
 			// route (registerRoute must rematerialize the released array before
@@ -96,9 +104,9 @@ describe('plan 007 — declaredRoutes release + rematerialize', () => {
 			app['~newGeneration']()
 
 			// Old AND new routes must respond; none dropped on rebuild.
-			expect(await (await app.handle(req('/a'))).text()).toBe('a')
-			expect(await (await app.handle(req('/b'))).text()).toBe('b')
-			expect(await (await app.handle(req('/c'))).text()).toBe('c')
+			await expect((await app.handle('/a')).text()).resolves.toBe('a')
+			await expect((await app.handle('/b')).text()).resolves.toBe('b')
+			await expect((await app.handle('/c')).text()).resolves.toBe('c')
 			expect(app.routes.map((r) => r.path)).toEqual(['/a', '/b', '/c'])
 		})
 	})
@@ -111,7 +119,7 @@ describe('plan 007 — declaredRoutes release + rematerialize', () => {
 
 			// Seal the child independently → its #declaredRoutes is released.
 			void child.fetch
-			expect((await child.handle(req('/c1'))).status).toBe(200)
+			expect((await child.handle('/c1')).status).toBe(200)
 
 			// A fresh parent merges the released child: the merge site must
 			// rematerialize the child before reading its routes.
@@ -122,9 +130,13 @@ describe('plan 007 — declaredRoutes release + rematerialize', () => {
 				'/c2',
 				'/p'
 			])
-			expect(await (await parent.handle(req('/c1'))).text()).toBe('c1')
-			expect(await (await parent.handle(req('/c2'))).text()).toBe('c2')
-			expect(await (await parent.handle(req('/p'))).text()).toBe('p')
+			await expect((await parent.handle('/c1')).text()).resolves.toBe(
+				'c1'
+			)
+			await expect((await parent.handle('/c2')).text()).resolves.toBe(
+				'c2'
+			)
+			await expect((await parent.handle('/p')).text()).resolves.toBe('p')
 		})
 	})
 
@@ -147,7 +159,7 @@ describe('plan 007 — declaredRoutes release + rematerialize', () => {
 			void app.fetch
 
 			// The macro hook still runs and introspection resolves it.
-			expect((await app.handle(req('/m'))).status).toBe(200)
+			expect((await app.handle('/m')).status).toBe(200)
 			expect(ran).toBeGreaterThan(0)
 			expect(app.routes.map((r) => r.path)).toEqual(['/m'])
 			expect(
@@ -158,9 +170,7 @@ describe('plan 007 — declaredRoutes release + rematerialize', () => {
 
 	it('dev mode does not release: introspection identical before/after seal', async () => {
 		// No NODE_ENV=production → publish-time release block does not run.
-		const app = new Elysia()
-			.get('/x', () => 'x')
-			.get('/y', () => 'y')
+		const app = new Elysia().get('/x', () => 'x').get('/y', () => 'y')
 
 		const before = app.routes.map((r) => r.path)
 		const beforeHistory = app.history.map((h) => h.path)
@@ -169,6 +179,6 @@ describe('plan 007 — declaredRoutes release + rematerialize', () => {
 
 		expect(app.routes.map((r) => r.path)).toEqual(before)
 		expect(app.history.map((h) => h.path)).toEqual(beforeHistory)
-		expect((await app.handle(req('/x'))).status).toBe(200)
+		expect((await app.handle('/x')).status).toBe(200)
 	})
 })

@@ -3,11 +3,7 @@ import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { websocket } from '../../src/plugin/websocket'
 import { Compiled, createAotFingerprint } from '../../src/compile/aot'
-import {
-	abortCapture,
-	installCaptureImpl
-} from '../../src/compile/aot-capture'
-import { req } from '../utils'
+import { abortCapture, installCaptureImpl } from '../../src/compile/aot-capture'
 
 const PROBE_PATH = '/__p5-probe'
 
@@ -61,8 +57,8 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 			// eager build consumed the manifest before publish → released
 			expect(programAlive(app)).toBe(false)
 
-			expect((await app.handle(req('/r0'))).status).toBe(200)
-			expect((await app.handle(req('/r19'))).status).toBe(200)
+			expect((await app.handle('/r0')).status).toBe(200)
+			expect((await app.handle('/r19')).status).toBe(200)
 		})
 	})
 
@@ -75,7 +71,7 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 			void app.fetch
 
 			expect(programAlive(app)).toBe(true)
-			expect((await app.handle(req('/jit'))).status).toBe(200)
+			expect((await app.handle('/jit')).status).toBe(200)
 		})
 	})
 
@@ -92,18 +88,18 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 
 			expect(programAlive(app)).toBe(true)
 
-			expect((await app.handle(req('/a'))).status).toBe(200)
+			expect((await app.handle('/a')).status).toBe(200)
 			expect(programAlive(app)).toBe(true)
-			expect((await app.handle(req('/b'))).status).toBe(200)
+			expect((await app.handle('/b')).status).toBe(200)
 			expect(programAlive(app)).toBe(true)
 
 			// last cold route compiles → program fully consumed → released
-			expect((await app.handle(req('/c'))).status).toBe(200)
+			expect((await app.handle('/c')).status).toBe(200)
 			expect(programAlive(app)).toBe(false)
 
 			// released, but every route keeps serving from compiled handlers
-			expect(await (await app.handle(req('/a'))).text()).toBe('a')
-			expect(await (await app.handle(req('/c'))).text()).toBe('c')
+			await expect((await app.handle('/a')).text()).resolves.toBe('a')
+			await expect((await app.handle('/c')).text()).resolves.toBe('c')
 		})
 	})
 
@@ -119,9 +115,9 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 
 			// hit only one route (repeatedly): the countdown must not
 			// double-decrement on the thunk's warm early-return
-			expect((await app.handle(req('/a'))).status).toBe(200)
-			expect((await app.handle(req('/a'))).status).toBe(200)
-			expect((await app.handle(req('/a'))).status).toBe(200)
+			expect((await app.handle('/a')).status).toBe(200)
+			expect((await app.handle('/a')).status).toBe(200)
+			expect((await app.handle('/a')).status).toBe(200)
 
 			// two routes still cold → program must stay alive
 			expect(programAlive(app)).toBe(true)
@@ -134,7 +130,7 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 
 			const app = new Elysia().get('/a', () => 'a').get('/b', () => 'b')
 			void app.fetch
-			await app.handle(req('/a')) // partial warmup: one route still cold
+			await app.handle('/a') // partial warmup: one route still cold
 			expect(programAlive(app)).toBe(true)
 
 			// force a sealed-generation rebuild (mirror generation.test.ts):
@@ -147,9 +143,9 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 			expect(programAlive(app)).toBe(true)
 
 			// warm every route in the new generation → release again
-			expect(await (await app.handle(req('/a'))).text()).toBe('a')
-			expect(await (await app.handle(req('/b'))).text()).toBe('b')
-			expect(await (await app.handle(req('/c'))).text()).toBe('c')
+			await expect((await app.handle('/a')).text()).resolves.toBe('a')
+			await expect((await app.handle('/b')).text()).resolves.toBe('b')
+			await expect((await app.handle('/c')).text()).resolves.toBe('c')
 			expect(programAlive(app)).toBe(false)
 		})
 	})
@@ -161,8 +157,8 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 			const app = new Elysia().get('/a', () => 'a').get('/b', () => 'b')
 			void app.fetch
 
-			expect((await app.handle(req('/a'))).status).toBe(200)
-			expect((await app.handle(req('/b'))).status).toBe(200)
+			expect((await app.handle('/a')).status).toBe(200)
+			expect((await app.handle('/b')).status).toBe(200)
 
 			// dev keeps the program: no countdown is armed outside production
 			expect(programAlive(app)).toBe(true)
@@ -177,7 +173,7 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 			app.compile()
 
 			expect(programAlive(app)).toBe(true)
-			expect((await app.handle(req('/dev'))).status).toBe(200)
+			expect((await app.handle('/dev')).status).toBe(200)
 		})
 	})
 
@@ -205,7 +201,8 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 			registerProbeManifest()
 
 			const app = new Elysia()
-				.use(websocket()).ws('/ws', { message: () => {} })
+				.use(websocket())
+				.ws('/ws', { message: () => {} })
 				.get('/a', () => 'a')
 			// JIT publish (no precompile): arms the cold-route countdown.
 			// The WS row is consumed eagerly at build time and must be
@@ -215,7 +212,7 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 			expect(programAlive(app)).toBe(true)
 
 			// only the HTTP route ever reaches #jitDispatch
-			expect((await app.handle(req('/a'))).status).toBe(200)
+			expect((await app.handle('/a')).status).toBe(200)
 			expect(programAlive(app)).toBe(false)
 		})
 	})
@@ -225,8 +222,10 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 			registerProbeManifest()
 
 			const app = new Elysia()
-				.use(websocket()).ws('/a', { message: () => {} })
-				.use(websocket()).ws('/b', { message: () => {} })
+				.use(websocket())
+				.ws('/a', { message: () => {} })
+				.use(websocket())
+				.ws('/b', { message: () => {} })
 			// no HTTP route ever cold-compiles, so every row must be
 			// excluded from the count at arming time -> released at publish
 			void app.fetch
@@ -239,15 +238,19 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 		await withEnv({ NODE_ENV: 'production' }, async () => {
 			const app = new Elysia()
 				.get('/plain', () => 'ok')
-				.post('/typed', { body: t.Object({ n: t.Number() }) }, ({ body }) => body)
+				.post(
+					'/typed',
+					{ body: t.Object({ n: t.Number() }) },
+					({ body }) => body
+				)
 			app.compile()
 
-			expect((await app.handle(req('/plain'))).status).toBe(200)
+			expect((await app.handle('/plain')).status).toBe(200)
 
 			// second eager compile after the release must rebuild from scratch
 			app.compile()
 
-			expect((await app.handle(req('/plain'))).status).toBe(200)
+			expect((await app.handle('/plain')).status).toBe(200)
 			const typed = await app.handle(
 				new Request('http://localhost/typed', {
 					method: 'POST',
@@ -256,7 +259,7 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 				})
 			)
 			expect(typed.status).toBe(200)
-			expect(await typed.json()).toEqual({ n: 1 })
+			await expect(typed.json()).resolves.toEqual({ n: 1 })
 		})
 	})
 
@@ -264,7 +267,7 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 		await withEnv({ NODE_ENV: 'production' }, async () => {
 			const first = new Elysia().get('/a', () => 'a')
 			first.compile()
-			expect((await first.handle(req('/a'))).status).toBe(200)
+			expect((await first.handle('/a')).status).toBe(200)
 
 			// app B builds after A's release: recomputes shared analysis
 			const second = new Elysia()
@@ -272,12 +275,12 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 				.get('/guarded', ({ query: { name } }) => name ?? 'none')
 			second.compile()
 
-			expect((await second.handle(req('/b'))).status).toBe(200)
-			expect(
-				await (await second.handle(req('/guarded?name=x'))).text()
-			).toBe('x')
+			expect((await second.handle('/b')).status).toBe(200)
+			await expect(
+				(await second.handle('/guarded?name=x')).text()
+			).resolves.toBe('x')
 			// and A keeps serving
-			expect((await first.handle(req('/a'))).status).toBe(200)
+			expect((await first.handle('/a')).status).toBe(200)
 		})
 	})
 })

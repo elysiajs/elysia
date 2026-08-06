@@ -66,5 +66,14 @@ export const post = (path: string, body?: string | Record<string, any>) =>
 				body: body ? JSON.stringify(body) : body
 			})
 
+export const json = (body: Record<string, any> | any[]): RequestInit => ({
+	method: 'POST',
+	headers: {
+		'Content-Type': 'application/json',
+		'Content-Length': String(Buffer.byteLength(JSON.stringify(body)))
+	},
+	body: JSON.stringify(body)
+})
+
 export const delay = (delay: number) =>
 	new Promise((resolve) => setTimeout(resolve, delay))

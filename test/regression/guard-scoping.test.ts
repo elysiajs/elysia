@@ -18,8 +18,8 @@ describe('guard and group scoping', () => {
 				)
 				.get('/out', () => 'out')
 
-			expect((await app.handle(req('/g/in'))).status).toBe(500)
-			expect((await app.handle(req('/out'))).status).toBe(200)
+			expect((await app.handle('/g/in')).status).toBe(500)
+			expect((await app.handle('/out')).status).toBe(200)
 		})
 
 		it('keeps guard hooks away from parent siblings when the parent uses as: global', async () => {
@@ -29,10 +29,10 @@ describe('guard and group scoping', () => {
 				)
 				.get('/sibling', () => 'sibling')
 
-			expect(await (await app.handle(req('/inner'))).text()).toBe(
+			await expect((await app.handle('/inner')).text()).resolves.toBe(
 				'guarded'
 			)
-			expect(await (await app.handle(req('/sibling'))).text()).toBe(
+			await expect((await app.handle('/sibling')).text()).resolves.toBe(
 				'sibling'
 			)
 		})
@@ -48,13 +48,11 @@ describe('guard and group scoping', () => {
 		)
 
 		const send = (payload: object) =>
-			app.handle(
-				req('/', {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify(payload)
-				})
-			)
+			app.handle('/', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(payload)
+			})
 
 		expect((await send({ b: 'y' })).status).toBe(200)
 		expect((await send({ a: 'x' })).status).toBe(422)

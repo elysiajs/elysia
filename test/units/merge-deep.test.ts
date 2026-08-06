@@ -2,7 +2,6 @@ import { describe, expect, it } from 'bun:test'
 
 import { Elysia } from '../../src'
 import { mergeDeep } from '../../src/utils'
-import { req } from '../utils'
 
 describe('mergeDeep', () => {
 	it('merge empty object', () => {
@@ -88,7 +87,7 @@ describe('mergeDeep', () => {
 			.use(userRoutes)
 			.get('/health', ({ db }) => db.health())
 
-		const response = await app.handle(req('/health')).then((x) => x.text())
+		const response = await app.handle('/health').then((x) => x.text())
 
 		expect(response).toBe('ok')
 	})
@@ -162,10 +161,10 @@ describe('mergeDeep', () => {
 
 		const app = new Elysia().use(ModuleA).use(ModuleB)
 
-		const resA = await app.handle(req('/moda/a')).then((x) => x.text())
-		const resB = await app.handle(req('/modb/a')).then((x) => x.text())
-		const resC = await app.handle(req('/moda/b')).then((x) => x.text())
-		const resD = await app.handle(req('/modb/b')).then((x) => x.text())
+		const resA = await app.handle('/moda/a').then((x) => x.text())
+		const resB = await app.handle('/modb/a').then((x) => x.text())
+		const resC = await app.handle('/moda/b').then((x) => x.text())
+		const resD = await app.handle('/modb/b').then((x) => x.text())
 
 		expect(resA).toBe('1')
 		expect(resB).toBe('1')

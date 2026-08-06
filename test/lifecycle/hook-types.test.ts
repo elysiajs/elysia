@@ -1,5 +1,4 @@
 import { Elysia } from '../../src'
-import { req } from '../utils'
 import { describe, it, expect } from 'bun:test'
 
 const lastHookScope = (app: any): string | undefined => {
@@ -29,8 +28,8 @@ describe('plugin hook scope', () => {
 		expect(lastHookScope(plugin)).toBe('plugin')
 
 		const [res1, res2] = await Promise.all([
-			a.handle(req('/foo')).then((x) => x.json()),
-			b.handle(req('/bar')).then((x) => x.json())
+			a.handle('/foo').then((x) => x.json()),
+			b.handle('/bar').then((x) => x.json())
 		])
 
 		expect(res1).toEqual({ id: 1, name: 'foo' })

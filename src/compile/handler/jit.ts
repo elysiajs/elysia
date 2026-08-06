@@ -18,7 +18,12 @@ import {
 
 import type { RouteCompileState } from './descriptor'
 
-import { ElysiaStatus, ParseError, ValidationError } from '../../error'
+import {
+	ElysiaStatus,
+	ParseError,
+	ValidationError,
+	isProduction
+} from '../../error'
 import { isDynamicRegex, traceEventIndex } from '../../constants'
 import { fallbackResponse } from '../../handler/error'
 import { finalizeRouteError, forwardError } from '../../handler/utils'
@@ -777,7 +782,13 @@ export function compileHandlerJit({
 						])
 					: '') +
 				(hasDynamicAfterResponse
-					? `if(c['~afterResponse'])for(let i=0;i<c['~afterResponse'].length;i++){try{await c['~afterResponse'][i](c)}catch{}}\n`
+					? `let _q=c['~afterResponse']\n` +
+						`if(_q){let _l=_q.length\n` +
+						`for(let _i=0;_i<_l;_i++){try{await _q[_i](c)}catch{}}\n` +
+						(!isProduction()
+							? `if(_q.length!==_l)console.warn('[elysia] defer() called from inside the afterResponse drain is ignored')\n`
+							: '') +
+						`}\n`
 					: '') +
 				endTrace('afterResponse') +
 				`})\n`

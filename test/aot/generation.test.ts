@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect } from 'bun:test'
 import { Context, Elysia, t } from '../../src'
-import { post, req } from '../utils'
+import { post } from '../utils'
 
 describe('code generation', () => {
 	it('fallback query if not presented', async () => {
@@ -15,7 +15,7 @@ describe('code generation', () => {
 			() => 'hi'
 		)
 
-		const res = await app.handle(req('/')).then((x) => x.text())
+		const res = await app.handle('/').then((x) => x.text())
 
 		expect(res).toBe('hi')
 	})

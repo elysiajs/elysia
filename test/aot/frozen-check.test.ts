@@ -8,7 +8,7 @@ import {
 	endValidatorCapture
 } from '../../src/compile/aot-capture'
 import { claimManifest, materialise, registerManifest } from './_manifest'
-import { post } from '../utils'
+import { post, json } from '../utils'
 
 /** Frozen checks are selected by method, path, and validator slot. */
 
@@ -70,11 +70,11 @@ describe('frozen validator checks', () => {
 		app.compile()
 		expect(frozenBound).toBe(true)
 
-		const ok = await app.handle(post('/body', { hello: 'world' }))
+		const ok = await app.handle('/body', json({ hello: 'world' }))
 		expect(ok.status).toBe(200)
 		await expect(ok.json()).resolves.toEqual({ hello: 'world' })
 
-		const bad = await app.handle(post('/body', { hello: 123 }))
+		const bad = await app.handle('/body', json({ hello: 123 }))
 		expect(bad.status).toBe(422)
 	})
 
@@ -97,7 +97,7 @@ describe('frozen validator checks', () => {
 
 	it('falls back to JIT when no manifest is registered', async () => {
 		const app = bodyApp()
-		const ok = await app.handle(post('/body', { hello: 'x' }))
+		const ok = await app.handle('/body', json({ hello: 'x' }))
 		expect(ok.status).toBe(200)
 		await expect(ok.json()).resolves.toEqual({ hello: 'x' })
 	})

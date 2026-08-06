@@ -29,9 +29,9 @@ describe('registration footguns', () => {
 				.get('/out', () => 'out')
 
 			// hook applies inside the group
-			expect((await app.handle(req('/g/in'))).status).toBe(500)
+			expect((await app.handle('/g/in')).status).toBe(500)
 			// hook must NOT escape onto the sibling registered on the parent
-			expect((await app.handle(req('/out'))).status).toBe(200)
+			expect((await app.handle('/out')).status).toBe(200)
 		})
 
 		it('guard(hook, run) child does not inherit config.as either', async () => {
@@ -43,11 +43,11 @@ describe('registration footguns', () => {
 				.get('/sibling', () => 'sibling')
 
 			// The guard's beforeHandle short-circuits inside its own scope
-			expect(await (await app.handle(req('/inner'))).text()).toBe(
+			await expect((await app.handle('/inner')).text()).resolves.toBe(
 				'guarded'
 			)
 			// but must not leak onto the parent sibling
-			expect(await (await app.handle(req('/sibling'))).text()).toBe(
+			await expect((await app.handle('/sibling')).text()).resolves.toBe(
 				'sibling'
 			)
 		})
@@ -63,13 +63,11 @@ describe('registration footguns', () => {
 		)
 
 		const send = (payload: object) =>
-			app.handle(
-				req('/', {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify(payload)
-				})
-			)
+			app.handle('/', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(payload)
+			})
 
 		// override: only inner `b` is required
 		expect((await send({ b: 'y' })).status).toBe(200)

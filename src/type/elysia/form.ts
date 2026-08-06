@@ -8,6 +8,7 @@ import type {
 } from 'typebox'
 
 import { ELYSIA_TYPES } from '../constants'
+import { isElysiaForm } from '../../utils'
 import { Intersect } from './intersect'
 import type { ElysiaFormData } from '../../types'
 import { ObjectType } from './object'
@@ -27,10 +28,7 @@ export const Form = <T extends TProperties>(
 		Decode(
 			Refine(
 				Unsafe<any>({ '~kind': 'FormData' }),
-				(value) =>
-					typeof value === 'object' &&
-					value !== null &&
-					'~ely-form' in value,
+				(value) => isElysiaForm(value),
 				() => 'must be instance of Elysia.form'
 			),
 			(value) => value

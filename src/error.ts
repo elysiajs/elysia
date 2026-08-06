@@ -721,6 +721,8 @@ export class ElysiaStatus<
 	}
 }
 
+Object.defineProperty(ElysiaStatus, 'name', { value: 'ElysiaStatus' })
+
 export const status = <
 	const Code extends number | keyof StatusMap,
 	const T = Code extends keyof StatusMapBack ? StatusMapBack[Code] : Code
@@ -867,7 +869,7 @@ export function internalServerErrorResponse(error: any) {
  */
 export function problem<
 	const Code extends number | keyof StatusMap,
-	const P extends Record<string, unknown> = {}
+	const P extends Record<string, unknown> & { status?: never } = {}
 >(
 	status: Code,
 	detail?: P & Omit<Problem<Code>, 'status'>

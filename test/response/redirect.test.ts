@@ -1,13 +1,12 @@
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('Response Redirect', () => {
 	it('handle redirect', async () => {
 		const app = new Elysia().get('/', ({ redirect }) => redirect('/skadi'))
 
-		const { headers, status } = await app.handle(req('/'))
+		const { headers, status } = await app.handle('/')
 
 		expect(status).toBe(302)
 		expect(headers.toJSON()).toEqual({
@@ -20,7 +19,7 @@ describe('Response Redirect', () => {
 			redirect('/skadi', 301)
 		)
 
-		const { headers, status } = await app.handle(req('/'))
+		const { headers, status } = await app.handle('/')
 
 		expect(status).toBe(301)
 		expect(headers.toJSON()).toEqual({
@@ -35,7 +34,7 @@ describe('Response Redirect', () => {
 			return redirect('/skadi')
 		})
 
-		const { headers, status } = await app.handle(req('/'))
+		const { headers, status } = await app.handle('/')
 
 		expect(status).toBe(302)
 		expect(headers.toJSON()).toEqual({
@@ -55,7 +54,7 @@ describe('Response Redirect', () => {
 			}
 		)
 
-		const { headers, status } = await app.handle(req('/'))
+		const { headers, status } = await app.handle('/')
 
 		expect(status).toBe(302)
 		// @ts-expect-error
@@ -71,7 +70,7 @@ describe('Response Redirect', () => {
 				redirect('/login', status)
 			)
 
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 
 			expect(response.status).toBe(status)
 			expect(response.headers.get('location')).toBe('/login')
@@ -83,7 +82,7 @@ describe('Response Redirect', () => {
 			redirect('https://example.com/dashboard')
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(302)
 		expect(response.headers.get('location')).toBe(
@@ -94,7 +93,7 @@ describe('Response Redirect', () => {
 	it('percent-encodes relative unicode location', async () => {
 		const app = new Elysia().get('/', ({ redirect }) => redirect('/путь'))
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(302)
 		expect(response.headers.get('location')).toBe(encodeURI('/путь'))
@@ -105,7 +104,7 @@ describe('Response Redirect', () => {
 			redirect('https://例え.jp/x')
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(302)
 		expect(response.headers.get('location')).toBe(
@@ -118,7 +117,7 @@ describe('Response Redirect', () => {
 			redirect('/путь?q=a%20b')
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(302)
 		expect(response.headers.get('location')).toBe(
@@ -129,7 +128,7 @@ describe('Response Redirect', () => {
 	it('leaves plain ASCII url byte-identical', async () => {
 		const app = new Elysia().get('/', ({ redirect }) => redirect('/a%20b'))
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(302)
 		expect(response.headers.get('location')).toBe('/a%20b')

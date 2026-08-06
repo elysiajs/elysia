@@ -4,7 +4,7 @@ import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
 import { compileToSource, autoGroupSize } from '../../src/plugin/aot/source'
 import { claimManifest, registerManifest } from './_manifest'
-import { post, req } from '../utils'
+import { post, json } from '../utils'
 
 /** Lazy manifests build each validator group only when one of its routes is used. */
 
@@ -130,7 +130,7 @@ describe('lazy AOT validators', () => {
 			handlers
 		})
 		const app = make()
-		const ok = await app.handle(post('/b', { hello: 'world' }))
+		const ok = await app.handle('/b', json({ hello: 'world' }))
 		expect(ok.status).toBe(200)
 		await expect(ok.json()).resolves.toEqual({ hello: 'world' })
 	})
@@ -202,14 +202,14 @@ describe('lazy AOT validators', () => {
 		})
 
 		const app = build()
-		const ok = await app.handle(post('/body', { hello: 'world' }))
+		const ok = await app.handle('/body', json({ hello: 'world' }))
 		expect(ok.status).toBe(200)
 		await expect(ok.json()).resolves.toEqual({ hello: 'world' })
 
-		const bad = await app.handle(post('/body', { hello: 123 }))
+		const bad = await app.handle('/body', json({ hello: 123 }))
 		expect(bad.status).toBe(422)
 
-		const q = await app.handle(req('/q?id=5'))
+		const q = await app.handle('/q?id=5')
 		await expect(q.json()).resolves.toEqual({ id: 5 })
 	})
 })
@@ -308,7 +308,7 @@ describe('lazy AOT cross-group slot hoist', () => {
 			handlers
 		})
 		const app = make()
-		const ok = await app.handle(post('/r42', { k2: 'hi' }))
+		const ok = await app.handle('/r42', json({ k2: 'hi' }))
 		expect(ok.status).toBe(200)
 		await expect(ok.json()).resolves.toEqual({ k2: 'hi' })
 	})
@@ -366,7 +366,7 @@ describe('lazy AOT cross-group slot hoist', () => {
 			handlers
 		})
 		const app = make()
-		const ok = await app.handle(post('/r13', { k6: 'v' }))
+		const ok = await app.handle('/r13', json({ k6: 'v' }))
 		expect(ok.status).toBe(200)
 		await expect(ok.json()).resolves.toEqual({ k6: 'v' })
 	})

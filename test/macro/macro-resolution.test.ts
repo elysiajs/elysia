@@ -2,7 +2,6 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { websocket } from '../../src/plugin/websocket'
-import { req } from '../utils'
 import { newWebsocket, wsOpen, wsMessage, wsClosed } from '../ws/utils'
 
 describe('Macro resolution isolation', () => {
@@ -18,9 +17,9 @@ describe('Macro resolution isolation', () => {
 			.get('/both', { one: true, two: true } as any, () => 'ok')
 			.get('/only-one', { one: true } as any, () => 'ok')
 
-		await app.handle(req('/both'))
+		await app.handle('/both')
 		one = two = 0
-		await app.handle(req('/only-one'))
+		await app.handle('/only-one')
 
 		expect(one).toBe(1)
 		expect(two).toBe(0)
@@ -34,8 +33,8 @@ describe('Macro resolution isolation', () => {
 		const app1 = new Elysia().use(plugin)
 		const app2 = new Elysia().use(plugin)
 
-		const r1 = await app1.handle(req('/me')).then((r) => r.text())
-		const r2 = await app2.handle(req('/me')).then((r) => r.text())
+		const r1 = await app1.handle('/me').then((r) => r.text())
+		const r2 = await app2.handle('/me').then((r) => r.text())
 
 		expect(r1).toBe('alice')
 		expect(r2).toBe('alice')
@@ -49,8 +48,8 @@ describe('Macro resolution isolation', () => {
 		const app1 = new Elysia().use(plugin)
 		const app2 = new Elysia().use(plugin)
 
-		const r2 = await app2.handle(req('/me')).then((r) => r.text())
-		const r1 = await app1.handle(req('/me')).then((r) => r.text())
+		const r2 = await app2.handle('/me').then((r) => r.text())
+		const r1 = await app1.handle('/me').then((r) => r.text())
 
 		expect(r1).toBe('mei')
 		expect(r2).toBe('mei')
@@ -92,7 +91,7 @@ describe('Macro resolution isolation', () => {
 
 		void app.routes
 
-		const r = await app.handle(req('/secret'))
+		const r = await app.handle('/secret')
 		expect(r.status).toBe(401)
 	})
 
@@ -102,7 +101,7 @@ describe('Macro resolution isolation', () => {
 			.macro({ flag: { beforeHandle: () => {} } })
 			.get('/z', hook, () => 'ok')
 
-		await app.handle(req('/z'))
+		await app.handle('/z')
 
 		expect(Object.keys(hook)).toEqual(['flag'])
 	})
@@ -121,9 +120,9 @@ describe('Macro resolution isolation', () => {
 		appA.get('/z', sharedHook, () => 'ok')
 		appB.get('/z', sharedHook, () => 'ok')
 
-		await appA.handle(req('/z'))
+		await appA.handle('/z')
 		a = b = 0
-		await appB.handle(req('/z'))
+		await appB.handle('/z')
 
 		expect(b).toBe(1)
 		expect(a).toBe(0)
@@ -142,9 +141,9 @@ describe('Macro resolution isolation', () => {
 			.macro({ mark: { beforeHandle: () => void b++ } })
 			.use(plugin)
 
-		await appA.handle(req('/g'))
+		await appA.handle('/g')
 		a = b = 0
-		await appB.handle(req('/g'))
+		await appB.handle('/g')
 
 		expect(b).toBe(1)
 		expect(a).toBe(0)
@@ -170,7 +169,7 @@ describe('Macro resolution isolation', () => {
 				() => 'ok'
 			)
 
-		const r = await app.handle(req('/a'))
+		const r = await app.handle('/a')
 
 		expect(r.status).toBe(200)
 		expect(order).toEqual(['m1', 'm2', 'route'])
@@ -183,8 +182,8 @@ describe('Macro resolution isolation', () => {
 			.get('/a', { m: true } as any, () => 'ok')
 			.get('/b', { m: true } as any, () => 'ok')
 
-		await app.handle(req('/a'))
-		await app.handle(req('/b'))
+		await app.handle('/a')
+		await app.handle('/b')
 
 		expect(def.beforeHandle.length).toBe(1)
 	})
@@ -205,11 +204,13 @@ describe('Macro resolution isolation', () => {
 				b: b ?? null
 			}))
 
-		expect(await app.handle(req('/both')).then((r) => r.json())).toEqual({
+		await expect(
+			app.handle('/both').then((r) => r.json())
+		).resolves.toEqual({
 			a: 'A',
 			b: 'B'
 		})
-		const onlyA = await app.handle(req('/only-a')).then((r) => r.json())
+		const onlyA = await app.handle('/only-a').then((r) => r.json())
 
 		expect(defA.derive.length).toBe(1)
 		expect(onlyA).toEqual({ a: 'A', b: null })
@@ -229,7 +230,8 @@ describe('Macro resolution isolation', () => {
 					}
 				}
 			})
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				user: true,
 				auth: true,
 				message(ws: any) {
@@ -275,10 +277,10 @@ describe('Macro resolution isolation', () => {
 			.get('/fixed-only', () => 'fixed')
 		app.use(fixed)
 
-		expect((await app.handle(req('/b-only'))).status).toBe(404)
-		expect(await app.handle(req('/fixed-only')).then((r) => r.text())).toBe(
-			'fixed'
-		)
+		expect((await app.handle('/b-only')).status).toBe(404)
+		await expect(
+			app.handle('/fixed-only').then((r) => r.text())
+		).resolves.toBe('fixed')
 	})
 
 	it('does not mutate user detail while merging macro detail', async () => {
@@ -290,7 +292,7 @@ describe('Macro resolution isolation', () => {
 			.macro({ auth: { detail: { tags: ['auth'] } } as any })
 			.get('/z', hook, () => 'ok')
 
-		await app.handle(req('/z'))
+		await app.handle('/z')
 		expect(hook.detail.tags).toEqual(['mine'])
 
 		void app.routes
@@ -315,7 +317,7 @@ describe('Macro resolution isolation', () => {
 					.get('/x', { auth: true } as any, () => 'ok')
 			)
 
-		expect((await app.handle(req('/admin/x'))).status).toBe(200)
+		expect((await app.handle('/admin/x')).status).toBe(200)
 		expect(inner).toBe(1)
 		expect(outer).toBe(0)
 	})
@@ -346,18 +348,18 @@ describe('Macro derive behavior', () => {
 			() => 'SECRET'
 		)
 
-		expect(await app.handle(req('/s')).then((r) => r.text())).toBe(
+		await expect(app.handle('/s').then((r) => r.text())).resolves.toBe(
 			'blocked'
 		)
-		expect(
-			await app
+		await expect(
+			app
 				.handle(
 					new Request('http://localhost/s', {
 						headers: { authorization: 'ok' }
 					})
 				)
 				.then((r) => r.text())
-		).toBe('SECRET')
+		).resolves.toBe('SECRET')
 	})
 
 	it('reusing a function as derive does not change its WebSocket beforeHandle semantics', async () => {
@@ -366,13 +368,15 @@ describe('Macro derive behavior', () => {
 		new Elysia().derive(gate as any)
 
 		const app = new Elysia()
-			.use(websocket()).ws('/gated', {
+			.use(websocket())
+			.ws('/gated', {
 				beforeHandle: gate,
 				message(ws: any) {
 					ws.send('pong')
 				}
 			} as any)
-			.use(websocket()).ws('/open', {
+			.use(websocket())
+			.ws('/open', {
 				message(ws: any) {
 					ws.send('pong')
 				}
@@ -414,7 +418,7 @@ describe('Macro derive behavior', () => {
 			.derive(() => ({ user: 'alice' }))
 			.get('/me', ({ user }: any) => `hi ${user}`)
 
-		expect(await app.handle(req('/me')).then((r) => r.text())).toBe(
+		await expect(app.handle('/me').then((r) => r.text())).resolves.toBe(
 			'hi alice'
 		)
 	})
@@ -424,20 +428,22 @@ describe('Macro derive behavior', () => {
 			.derive([() => ({ a: 1 }), () => ({ b: 2 })] as any)
 			.get('/d', ({ a, b }: any) => `a=${a},b=${b}`)
 
-		expect(await app.handle(req('/d')).then((r) => r.text())).toBe(
+		await expect(app.handle('/d').then((r) => r.text())).resolves.toBe(
 			'a=1,b=2'
 		)
 	})
 
 	it('rejects a WebSocket upgrade when derive returns a status', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/gated', {
+			.use(websocket())
+			.ws('/gated', {
 				derive: ({ status }: any) => status(401, 'no'),
 				message(ws: any) {
 					ws.send('pong')
 				}
 			} as any)
-			.use(websocket()).ws('/open', {
+			.use(websocket())
+			.ws('/open', {
 				message(ws: any) {
 					ws.send('pong')
 				}
@@ -487,9 +493,9 @@ describe('Macro derive behavior', () => {
 				({ token, uid, rid }: any) => `${token}-${uid}-${rid}`
 			)
 
-		const r = await app.handle(req('/x'))
+		const r = await app.handle('/x')
 		expect(r.status).toBe(200)
-		expect(await r.text()).toBe('T-7-R')
+		await expect(r.text()).resolves.toBe('T-7-R')
 	})
 
 	it('runs both a guard macro derive and the guard own derive', async () => {
@@ -513,9 +519,9 @@ describe('Macro derive behavior', () => {
 					)
 			)
 
-		const r = await app.handle(req('/g'))
+		const r = await app.handle('/g')
 		expect(r.status).toBe(200)
-		expect(await r.text()).toBe('alice-admin-r1')
+		await expect(r.text()).resolves.toBe('alice-admin-r1')
 		expect(macroRan).toBe(true)
 	})
 
@@ -535,7 +541,7 @@ describe('Macro derive behavior', () => {
 				({ base, doubled, tag }: any) => `${base}-${doubled}-${tag}`
 			)
 
-		expect(await app.handle(req('/x')).then((r) => r.text())).toBe(
+		await expect(app.handle('/x').then((r) => r.text())).resolves.toBe(
 			'10-20-r'
 		)
 	})
@@ -576,7 +582,7 @@ describe('Macro derive behavior', () => {
 				({ allowed, allowed2 }) => allowed && allowed2
 			)
 
-		expect(await app.handle(req('/')).then((r) => r.json())).toBe(true)
+		await expect(app.handle('/').then((r) => r.json())).resolves.toBe(true)
 		expect(order).toEqual(['auth', 'rbac', 'rbac2'])
 	})
 
@@ -589,7 +595,7 @@ describe('Macro derive behavior', () => {
 			.macro({ m: { beforeHandle: () => {} } as any })
 			.get('/x', { m: true, beforeHandle: [f, f] } as any, () => 'ok')
 
-		await app.handle(req('/x'))
+		await app.handle('/x')
 		expect(n).toBe(2)
 	})
 })
@@ -743,7 +749,7 @@ describe('Macro derives across hook chains', () => {
 			})
 
 		const r = await app.handle(new Request('http://localhost/'))
-		expect(await r.text()).toBe('bob')
+		await expect(r.text()).resolves.toBe('bob')
 		expect(handlerRan).toBe(true)
 	})
 
@@ -758,7 +764,7 @@ describe('Macro derives across hook chains', () => {
 			)
 
 		const r = await app.handle(new Request('http://localhost/'))
-		expect(await r.text()).toBe('1-2')
+		await expect(r.text()).resolves.toBe('1-2')
 	})
 })
 
@@ -974,8 +980,8 @@ describe('Scoped macro resolution after composition', () => {
 				}
 			} as any)
 
-		expect((await app.handle(req('/g/x'))).status).toBe(401)
-		expect((await guardForm.handle(req('/y'))).status).toBe(401)
+		expect((await app.handle('/g/x')).status).toBe(401)
+		expect((await guardForm.handle('/y')).status).toBe(401)
 	})
 
 	it('applies a consumer app macro to a plugin-internal group route', async () => {
@@ -999,7 +1005,7 @@ describe('Scoped macro resolution after composition', () => {
 			} as any)
 			.use(plugin)
 
-		const r = await app.handle(req('/p/data'))
+		const r = await app.handle('/p/data')
 		expect(r.status).toBe(401)
 		expect(ran).toEqual(['root'])
 	})
@@ -1021,8 +1027,8 @@ describe('Scoped macro resolution after composition', () => {
 
 		const app = new Elysia().use(userRoutes).use(postRoutes)
 
-		expect((await app.handle(req('/me'))).status).toBe(401)
-		expect((await app.handle(req('/posts'))).status).toBe(401)
+		expect((await app.handle('/me')).status).toBe(401)
+		expect((await app.handle('/posts')).status).toBe(401)
 
 		const unnamed = () =>
 			new Elysia().macro({ auth: { beforeHandle() {} } } as any)
@@ -1048,7 +1054,7 @@ describe('Scoped macro resolution after composition', () => {
 			}
 		} as any)
 
-		const r = await app.handle(req('/g/x'))
+		const r = await app.handle('/g/x')
 		expect(r.status).toBe(401)
 		expect(ran).toEqual(['late'])
 	})
@@ -1111,7 +1117,7 @@ describe('Scoped macro resolution after composition', () => {
 			}
 		})
 
-		const r = await app.handle(req('/secret'))
+		const r = await app.handle('/secret')
 		expect(r.status).toBe(401)
 	})
 
@@ -1128,11 +1134,12 @@ describe('Scoped macro resolution after composition', () => {
 						}
 					})
 					.get('/h', { auth: true } as any, () => 'HTTP')
-					.use(websocket()).ws('/ws', { auth: true, message() {} } as any)
+					.use(websocket())
+					.ws('/ws', { auth: true, message() {} } as any)
 			)
 			.listen(0)
 
-		expect((await app.handle(req('/g/h'))).status).toBe(403)
+		expect((await app.handle('/g/h')).status).toBe(403)
 
 		const ws = newWebsocket(app.server!, '/g/ws')
 		const opened = await new Promise<boolean>((resolve) => {

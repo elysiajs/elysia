@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../../src'
-import { req } from '../../utils'
 import type { MaybeArray } from '../../../src/types'
 
 const length = (a: MaybeArray<Function> | undefined) =>
@@ -141,7 +140,7 @@ describe('named plugin deduplication and hook inheritance', () => {
 			.use(group)
 			.get('/cookie', () => 'Hi')
 
-		await Promise.all(['/a', '/cookie'].map((x) => app.handle(req(x))))
+		await Promise.all(['/a', '/cookie'].map((x) => app.handle(x)))
 
 		expect(count).toBe(2)
 	})
@@ -157,10 +156,10 @@ describe('named plugin deduplication and hook inheritance', () => {
 
 		const app = new Elysia().use(group)
 
-		await app.handle(req('/a'))
+		await app.handle('/a')
 		expect(count).toBe(1)
 
-		await app.handle(req('/a'))
+		await app.handle('/a')
 		expect(count).toBe(2)
 	})
 
@@ -189,13 +188,13 @@ describe('named plugin deduplication and hook inheritance', () => {
 			.use(plugin2)
 			.get('/root', ({ cookie }) => cookie)
 
-		const res1 = await app.handle(req('/v1/plugin')).then((x) => x.text())
+		const res1 = await app.handle('/v1/plugin').then((x) => x.text())
 		expect(res1).toBe('mock')
 
-		const res2 = await app.handle(req('/v1/plugin')).then((x) => x.text())
+		const res2 = await app.handle('/v1/plugin').then((x) => x.text())
 		expect(res2).toBe('mock')
 
-		const root = await app.handle(req('/root')).then((x) => x.text())
+		const root = await app.handle('/root').then((x) => x.text())
 		expect(root).toBe('mock')
 	})
 
@@ -264,7 +263,7 @@ describe('named plugin deduplication and hook inheritance', () => {
 		const app = new Elysia().use(plugin)
 
 		await Promise.all(
-			['/not-call', '/call'].map((path) => app.handle(req(path)))
+			['/not-call', '/call'].map((path) => app.handle(path))
 		)
 
 		expect(i).toBe(1)
@@ -287,7 +286,7 @@ describe('named plugin deduplication and hook inheritance', () => {
 		const app = new Elysia().use(plugin1).use(plugin2)
 
 		await Promise.all(
-			['/not-call', '/call'].map((path) => app.handle(req(path)))
+			['/not-call', '/call'].map((path) => app.handle(path))
 		)
 
 		expect(i).toBe(1)
@@ -317,7 +316,7 @@ describe('named plugin deduplication and hook inheritance', () => {
 			})
 			.use(child)
 
-		await grandparent.handle(req('/r'))
+		await grandparent.handle('/r')
 
 		expect(order).toEqual(['gp', 'c', 'gc'])
 	})
@@ -341,7 +340,7 @@ describe('named plugin deduplication and hook inheritance', () => {
 
 		const app = new Elysia().use(mid)
 
-		await app.handle(req('/r'))
+		await app.handle('/r')
 
 		expect(order).toEqual(['mid', 'sub'])
 	})
@@ -382,7 +381,7 @@ describe('named plugin deduplication and hook inheritance', () => {
 			})
 			.use(child)
 
-		await grandparent.handle(req('/r'))
+		await grandparent.handle('/r')
 
 		expect(order).toEqual(['gp1', 'gp2', 'c1', 'c2', 'gc1', 'gc2'])
 	})
@@ -403,7 +402,7 @@ describe('named plugin deduplication and hook inheritance', () => {
 			.use(child)
 			.get('/', ({ hi }) => hi())
 
-		const response = await app.handle(req('/')).then((res) => res.text())
+		const response = await app.handle('/').then((res) => res.text())
 
 		expect(response).toBe('hi + bye')
 	})

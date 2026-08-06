@@ -586,14 +586,12 @@ export const mapAfterResponse = /*#__PURE__*/ map<
 	[report?: TraceReporter]
 >((i, fn, [report]) => {
 	const t = trace(report, fn)
+	const call = isAsyncFunction(fn)
+		? `await ar${at(i)}(c)\n`
+		: `let _ar=ar${at(i)}(c)\nif(_ar instanceof Promise)await _ar\n`
+
 	return (
-		`try{` +
-		t.begin +
-		`${Await(fn)}ar${at(i)}(c)\n` +
-		t.end() +
-		`}catch(_e){` +
-		t.end('_e') +
-		`}\n`
+		`try{` + t.begin + call + t.end() + `}catch(_e){` + t.end('_e') + `}\n`
 	)
 })
 

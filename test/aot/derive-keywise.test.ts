@@ -4,7 +4,6 @@ import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
 import { compileHandler } from '../../src/compile/handler'
 import { extractDeriveKeys } from '../../src/compile/handler/utils'
-import { req } from '../utils'
 
 /** Derive keys must be recovered exactly or fall back to Object.assign. */
 
@@ -209,7 +208,7 @@ describe('end-to-end derived keys reach the handler', () => {
 			.derive(() => ({ user: 'bob', role: 'admin' }))
 			.get('/', (c: any) => `${c.user}:${c.role}`)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		await expect(res.text()).resolves.toBe('bob:admin')
 	})
 
@@ -218,7 +217,7 @@ describe('end-to-end derived keys reach the handler', () => {
 			.derive(() => ({ 'x-user': 'bob' }))
 			.get('/', (c: any) => c['x-user'])
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		await expect(res.text()).resolves.toBe('bob')
 	})
 
@@ -227,7 +226,7 @@ describe('end-to-end derived keys reach the handler', () => {
 			.derive((c: any) => ({ ...{ user: 'bob', role: 'admin' } }))
 			.get('/', (c: any) => `${c.user}:${c.role}`)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		await expect(res.text()).resolves.toBe('bob:admin')
 	})
 
@@ -237,7 +236,7 @@ describe('end-to-end derived keys reach the handler', () => {
 			.derive((c: any) => ({ b: (c as any).a + 1 }))
 			.get('/', (c: any) => `${c.a},${c.b}`)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		await expect(res.text()).resolves.toBe('1,2')
 	})
 
@@ -248,7 +247,7 @@ describe('end-to-end derived keys reach the handler', () => {
 			})
 			.get('/', () => 'unreached')
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(418)
 		await expect(res.text()).resolves.toBe('teapot')
 	})

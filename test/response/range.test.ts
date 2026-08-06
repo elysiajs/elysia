@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
 import { Elysia } from '../../src'
-import { req } from '../utils'
 
 // Regression test for https://github.com/elysiajs/elysia/issues/1790
 // Range header was ignored; always returned bytes 0-N/N instead of the requested slice.
@@ -10,15 +9,15 @@ describe('Range header', () => {
 	const app = new Elysia().get('/file', () => new Blob([content]))
 
 	it('returns full file without Range header', async () => {
-		const res = await app.handle(req('/file'))
+		const res = await app.handle('/file')
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe(content)
 	})
 
 	it('handles bytes=start- (open-ended range)', async () => {
-		const res = await app.handle(
-			req('/file', { headers: { range: 'bytes=3-' } })
-		)
+		const res = await app.handle('/file', {
+			headers: { range: 'bytes=3-' }
+		})
 		expect(res.status).toBe(206)
 		expect(res.headers.get('content-range')).toBe('bytes 3-4/5')
 		expect(res.headers.get('content-length')).toBe('2')
@@ -26,9 +25,9 @@ describe('Range header', () => {
 	})
 
 	it('handles bytes=start-end (bounded range)', async () => {
-		const res = await app.handle(
-			req('/file', { headers: { range: 'bytes=1-3' } })
-		)
+		const res = await app.handle('/file', {
+			headers: { range: 'bytes=1-3' }
+		})
 		expect(res.status).toBe(206)
 		expect(res.headers.get('content-range')).toBe('bytes 1-3/5')
 		expect(res.headers.get('content-length')).toBe('3')
@@ -36,9 +35,9 @@ describe('Range header', () => {
 	})
 
 	it('handles bytes=-suffix (last N bytes)', async () => {
-		const res = await app.handle(
-			req('/file', { headers: { range: 'bytes=-2' } })
-		)
+		const res = await app.handle('/file', {
+			headers: { range: 'bytes=-2' }
+		})
 		expect(res.status).toBe(206)
 		expect(res.headers.get('content-range')).toBe('bytes 3-4/5')
 		expect(res.headers.get('content-length')).toBe('2')
@@ -46,35 +45,33 @@ describe('Range header', () => {
 	})
 
 	it('clamps end beyond file size to last byte', async () => {
-		const res = await app.handle(
-			req('/file', { headers: { range: 'bytes=2-999' } })
-		)
+		const res = await app.handle('/file', {
+			headers: { range: 'bytes=2-999' }
+		})
 		expect(res.status).toBe(206)
 		expect(res.headers.get('content-range')).toBe('bytes 2-4/5')
 		await expect(res.text()).resolves.toBe('345')
 	})
 
 	it('returns 416 when start is out of range', async () => {
-		const res = await app.handle(
-			req('/file', { headers: { range: 'bytes=99-' } })
-		)
+		const res = await app.handle('/file', {
+			headers: { range: 'bytes=99-' }
+		})
 		expect(res.status).toBe(416)
 		expect(res.headers.get('content-range')).toBe('bytes */5')
 	})
 
 	it('returns 416 for invalid "bytes=-" (both positions empty)', async () => {
-		const res = await app.handle(
-			req('/file', { headers: { range: 'bytes=-' } })
-		)
+		const res = await app.handle('/file', { headers: { range: 'bytes=-' } })
 		expect(res.status).toBe(416)
 		expect(res.headers.get('content-range')).toBe('bytes */5')
 	})
 
 	it('ignores subsequent ranges in multi-range requests, uses first range only', async () => {
 		// Multi-range (e.g. bytes=0-1,3-4) is not supported; only the first range is applied.
-		const res = await app.handle(
-			req('/file', { headers: { range: 'bytes=0-1,3-4' } })
-		)
+		const res = await app.handle('/file', {
+			headers: { range: 'bytes=0-1,3-4' }
+		})
 		expect(res.status).toBe(206)
 		expect(res.headers.get('content-range')).toBe('bytes 0-1/5')
 		await expect(res.text()).resolves.toBe('12')

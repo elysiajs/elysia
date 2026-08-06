@@ -1,7 +1,6 @@
 import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('ElysiaType.NoValidate', () => {
 	it('should bypass validation with t.NoValidate(t.String())', async () => {
@@ -13,7 +12,7 @@ describe('ElysiaType.NoValidate', () => {
 			() => 123 as unknown as string
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('123')
@@ -28,7 +27,7 @@ describe('ElysiaType.NoValidate', () => {
 			() => 'not-a-number' as unknown as number
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('not-a-number')
@@ -43,7 +42,7 @@ describe('ElysiaType.NoValidate', () => {
 			() => 'not-a-boolean' as unknown as boolean
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('not-a-boolean')
@@ -58,7 +57,7 @@ describe('ElysiaType.NoValidate', () => {
 			() => 'invalid-object' as unknown as { name: string }
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('{}')
@@ -73,7 +72,7 @@ describe('ElysiaType.NoValidate', () => {
 			() => 'not-an-array' as unknown as string[]
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('not-an-array')
@@ -93,7 +92,7 @@ describe('ElysiaType.NoValidate', () => {
 			() => 'invalid' as unknown as string | number
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('invalid')
@@ -108,7 +107,7 @@ describe('ElysiaType.NoValidate', () => {
 			() => 'Hello Elysia' as unknown as Date
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('Hello Elysia')
@@ -124,7 +123,7 @@ describe('ElysiaType.NoValidate', () => {
 			() => 'string instead of number!'
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('string instead of number!')
@@ -140,7 +139,7 @@ describe('ElysiaType.NoValidate', () => {
 			() => testDate
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe(testDate.toISOString())
@@ -155,7 +154,7 @@ describe('ElysiaType.NoValidate', () => {
 			() => 'not-a-number' as unknown as number
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('not-a-number')
@@ -170,7 +169,7 @@ describe('ElysiaType.NoValidate', () => {
 			() => true
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('true')
@@ -191,7 +190,7 @@ describe('ElysiaType.NoValidate', () => {
 			}
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(201)
 		await expect(res.text()).resolves.toBe('Hello')
@@ -212,7 +211,7 @@ describe('ElysiaType.NoValidate', () => {
 			}
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(422)
 	})
@@ -238,7 +237,7 @@ describe('ElysiaType.NoValidate', () => {
 			})
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({
@@ -256,7 +255,7 @@ describe('ElysiaType.NoValidate', () => {
 			() => 'Hello Elysia' as unknown as Date
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(422)
 	})
@@ -274,7 +273,7 @@ describe('ElysiaType.NoValidate', () => {
 			() => ({ name: 'John' })
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(422)
 	})
@@ -289,7 +288,7 @@ describe('ElysiaType.NoValidate', () => {
 			() => null
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('')
@@ -305,7 +304,7 @@ describe('ElysiaType.NoValidate', () => {
 			() => undefined
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('')
@@ -322,7 +321,7 @@ describe('ElysiaType.NoValidate', () => {
 			() => 'test' as unknown as string | number | boolean
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('test')
@@ -334,7 +333,7 @@ describe('ElysiaType.NoValidate', () => {
 			{ response: t.NoValidate(t.Date()) },
 			() => 'Hello Elysia' as any
 		)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('Hello Elysia')
 	})
@@ -347,7 +346,7 @@ describe('ElysiaType.NoValidate', () => {
 			},
 			() => 'Hello' as any
 		)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('Hello')
 	})

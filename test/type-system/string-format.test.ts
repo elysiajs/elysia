@@ -1,6 +1,5 @@
 import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('TypeSystem - String format', () => {
 	it('accepts a valid email query value', async () => {
@@ -17,7 +16,7 @@ describe('TypeSystem - String format', () => {
 			({ query }) => query
 		)
 
-		const res1 = await app.handle(req(`/?email=${testString}`))
+		const res1 = await app.handle(`/?email=${testString}`)
 		expect(res1.status).toBe(200)
 
 		await expect(res1.json()).resolves.toEqual({ email: testString })
@@ -36,7 +35,7 @@ describe('TypeSystem - String format', () => {
 			({ query }) => query
 		)
 
-		const res1 = await app.handle(req(`/?host=${testString}`))
+		const res1 = await app.handle(`/?host=${testString}`)
 		expect(res1.status).toBe(200)
 
 		await expect(res1.json()).resolves.toEqual({ host: testString })
@@ -55,7 +54,7 @@ describe('TypeSystem - String format', () => {
 			({ query }) => query
 		)
 
-		const res1 = await app.handle(req(`/?date=${testString}`))
+		const res1 = await app.handle(`/?date=${testString}`)
 		expect(res1.status).toBe(200)
 
 		await expect(res1.json()).resolves.toEqual({ date: testString })

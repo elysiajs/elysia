@@ -1,13 +1,12 @@
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('fetch handler', () => {
 	it('returns 404 for an unmatched static-only app with a request hook', async () => {
 		const app = new Elysia().request(() => {}).get('/exists', () => 'hi')
 
-		const res = await app.handle(req('/nope'))
+		const res = await app.handle('/nope')
 
 		expect(res.status).toBe(404)
 		await expect(res.json()).resolves.toEqual({
@@ -24,7 +23,7 @@ describe('fetch handler', () => {
 				throw new Error('boom')
 			})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(500)
 		await expect(res.json()).resolves.toEqual({
@@ -40,7 +39,7 @@ describe('fetch handler', () => {
 				throw new Error('boom')
 			})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(418)
 		await expect(res.text()).resolves.toBe('teapot')
@@ -59,7 +58,7 @@ describe('fetch handler', () => {
 			})
 			.get('/x', () => 'real')
 
-		const res = await app.handle(req('/x'))
+		const res = await app.handle('/x')
 		expect(res.status).toBe(418)
 
 		await Bun.sleep(1)
@@ -79,7 +78,7 @@ describe('fetch handler', () => {
 			})
 			.get('/x', () => 'real')
 
-		const res = await app.handle(req('/x'))
+		const res = await app.handle('/x')
 		expect(res.status).toBe(418)
 
 		await Bun.sleep(1)
@@ -91,10 +90,10 @@ describe('fetch handler', () => {
 			.headers({ 'x-powered-by': 'elysia' })
 			.get('/exists', () => 'hi')
 
-		const hit = await app.handle(req('/exists'))
+		const hit = await app.handle('/exists')
 		expect(hit.headers.get('x-powered-by')).toBe('elysia')
 
-		const miss = await app.handle(req('/missing'))
+		const miss = await app.handle('/missing')
 		expect(miss.status).toBe(404)
 		expect(miss.headers.get('x-powered-by')).toBe('elysia')
 	})
@@ -106,7 +105,7 @@ describe('fetch handler', () => {
 			})
 			.get('/exists', () => 'hi')
 
-		const miss = await app.handle(req('/missing'))
+		const miss = await app.handle('/missing')
 		expect(miss.status).toBe(404)
 		expect(miss.headers.get('x-from-hook')).toBe('yes')
 	})
@@ -124,7 +123,7 @@ describe('fetch handler', () => {
 			})
 			.get('/x', () => 'real')
 
-		const res = await app.handle(req('/missing'))
+		const res = await app.handle('/missing')
 		expect(res.status).toBe(418)
 		await expect(res.text()).resolves.toBe('teapot')
 

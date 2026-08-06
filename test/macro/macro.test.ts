@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t, status } from '../../src'
-import { post, req } from '../utils'
+import { post, json } from '../utils'
 
 describe('Macro', () => {
 	it('trace back', async () => {
@@ -21,7 +21,7 @@ describe('Macro', () => {
 				() => 'Hello World'
 			)
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(answer).toBe('Hello World')
 	})
@@ -43,7 +43,7 @@ describe('Macro', () => {
 				() => 'Hello World'
 			)
 
-		const response = await app.handle(req('/')).then((x) => x.text())
+		const response = await app.handle('/').then((x) => x.text())
 
 		expect(response).toBe('Hello World')
 	})
@@ -314,7 +314,7 @@ describe('Macro', () => {
 				() => 'Hello World'
 			)
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(call).toBe(1)
 	})
@@ -347,7 +347,7 @@ describe('Macro', () => {
 			.get('/hello', { auth: 'teacher' }, () => 'hello')
 
 		await Promise.all(
-			['/test1', '/test2', '/test3'].map((x) => app.handle(req(x)))
+			['/test1', '/test2', '/test3'].map((x) => app.handle(x))
 		)
 
 		expect(call).toBe(3)
@@ -374,7 +374,7 @@ describe('Macro', () => {
 				() => 'Hello World'
 			)
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(called).toBe(1)
 	})
@@ -406,8 +406,8 @@ describe('Macro', () => {
 
 		const app = new Elysia().use(testRoute).get('/', () => 'Ely')
 
-		const ok = await app.handle(req('/')).then((t) => t.text())
-		const err = await app.handle(req('/test')).then((t) => t.text())
+		const ok = await app.handle('/').then((t) => t.text())
+		const err = await app.handle('/test').then((t) => t.text())
 
 		expect(ok).toBe('Ely')
 		expect(err).not.toBe('Ely')
@@ -443,7 +443,7 @@ describe('Macro', () => {
 			() => 'foo'
 		)
 
-		await app.handle(req('/'))
+		await app.handle('/')
 	})
 
 	it('inherits macro in group', async () => {
@@ -468,7 +468,7 @@ describe('Macro', () => {
 			)
 		)
 
-		const status = await app.handle(req('/posts')).then((x) => x.status)
+		const status = await app.handle('/posts').then((x) => x.status)
 
 		expect(status).toBe(418)
 	})
@@ -495,7 +495,7 @@ describe('Macro', () => {
 			)
 		)
 
-		const status = await app.handle(req('/posts')).then((x) => x.status)
+		const status = await app.handle('/posts').then((x) => x.status)
 
 		expect(status).toBe(418)
 	})
@@ -522,7 +522,7 @@ describe('Macro', () => {
 			)
 		)
 
-		const status = await app.handle(req('/posts')).then((x) => x.status)
+		const status = await app.handle('/posts').then((x) => x.status)
 
 		expect(status).toBe(418)
 	})
@@ -587,7 +587,7 @@ describe('Macro', () => {
 
 		const app = new Elysia().use(c)
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(registered).toBe(1)
 		expect(called).toBe(1)
@@ -613,8 +613,8 @@ describe('Macro', () => {
 			)
 
 		const [a, b] = await Promise.all([
-			app.handle(req('/')).then((x) => x.json()),
-			app.handle(req('/?name=hoshino')).then((x) => x.json())
+			app.handle('/').then((x) => x.json()),
+			app.handle('/?name=hoshino').then((x) => x.json())
 		])
 
 		expect(a).toEqual({ name: 'anon' })
@@ -641,8 +641,8 @@ describe('Macro', () => {
 			)
 
 		const [a, b] = await Promise.all([
-			app.handle(req('/')).then((x) => x.json()),
-			app.handle(req('/?name=hoshino')).then((x) => x.json())
+			app.handle('/').then((x) => x.json()),
+			app.handle('/?name=hoshino').then((x) => x.json())
 		])
 
 		expect(a).toEqual({ name: 'anon' })
@@ -675,7 +675,7 @@ describe('Macro', () => {
 			Promise.all(
 				['/local', '/plugin', '/global'].map((path) =>
 					app
-						.handle(req(path))
+						.handle(path)
 						.then((x) => x.text())
 						.then((x) => x === 'true')
 				)
@@ -709,7 +709,7 @@ describe('Macro', () => {
 			Promise.all(
 				['/local', '/plugin', '/global'].map((path) =>
 					app
-						.handle(req(path))
+						.handle(path)
 						.then((x) => x.text())
 						.then((x) => x === 'true')
 				)
@@ -743,7 +743,7 @@ describe('Macro', () => {
 			Promise.all(
 				['/local', '/plugin', '/global'].map((path) =>
 					app
-						.handle(req(path))
+						.handle(path)
 						.then((x) => x.text())
 						.then((x) => x === 'true')
 				)
@@ -777,7 +777,7 @@ describe('Macro', () => {
 			Promise.all(
 				['/local', '/plugin', '/global'].map((path) =>
 					app
-						.handle(req(path))
+						.handle(path)
 						.then((x) => x.text())
 						.then((x) => x === 'true')
 				)
@@ -815,7 +815,7 @@ describe('Macro', () => {
 			Promise.all(
 				['/local', '/plugin', '/global'].map((path) =>
 					app
-						.handle(req(path))
+						.handle(path)
 						.then((x) => x.text())
 						.then((x) => x === 'true')
 				)
@@ -853,7 +853,7 @@ describe('Macro', () => {
 			Promise.all(
 				['/local', '/plugin', '/global'].map((path) =>
 					app
-						.handle(req(path))
+						.handle(path)
 						.then((x) => x.text())
 						.then((x) => x === 'true')
 				)
@@ -887,7 +887,7 @@ describe('Macro', () => {
 				}
 			)
 
-		const response = await app.handle(req('/')).then((x) => x.json())
+		const response = await app.handle('/').then((x) => x.json())
 
 		expect(response).toEqual({
 			hello: 'hanabi'
@@ -922,10 +922,10 @@ describe('Macro', () => {
 			)
 
 		const [a, b, c, d] = await Promise.all([
-			app.handle(req('/')).then((x) => x.json()),
-			app.handle(req('/?name=hoshino')).then((x) => x.json()),
-			app.handle(req('/no-macro')).then((x) => x.json()),
-			app.handle(req('/no-macro?name=hoshino')).then((x) => x.json())
+			app.handle('/').then((x) => x.json()),
+			app.handle('/?name=hoshino').then((x) => x.json()),
+			app.handle('/no-macro').then((x) => x.json()),
+			app.handle('/no-macro?name=hoshino').then((x) => x.json())
 		])
 
 		expect(a).toEqual({ name: 'anon' })
@@ -1005,11 +1005,11 @@ describe('Macro', () => {
 			)
 
 		const [a, b, c, d, e] = await Promise.all([
-			app.handle(req('/a')).then((x) => x.json()),
-			app.handle(req('/b')).then((x) => x.json()),
-			app.handle(req('/c')).then((x) => x.json()),
-			app.handle(req('/d')).then((x) => x.json()),
-			app.handle(req('/e')).then((x) => x.json())
+			app.handle('/a').then((x) => x.json()),
+			app.handle('/b').then((x) => x.json()),
+			app.handle('/c').then((x) => x.json()),
+			app.handle('/d').then((x) => x.json()),
+			app.handle('/e').then((x) => x.json())
 		])
 
 		expect(a).toEqual({ a: 'a' })
@@ -1045,7 +1045,8 @@ describe('Macro', () => {
 		expect(app['~routes']![0][4]!.schemas!.length).toBe(1)
 
 		const valid = await app.handle(
-			post('/Sartre?focou=Focou', {
+			'/Sartre?focou=Focou',
+			json({
 				lilith: 'Lilith'
 			})
 		)
@@ -1056,7 +1057,8 @@ describe('Macro', () => {
 		})
 
 		const invalid1 = await app.handle(
-			post('/Sartre?focou=Focou', {
+			'/Sartre?focou=Focou',
+			json({
 				lilith: 'Not Lilith'
 			})
 		)
@@ -1064,7 +1066,8 @@ describe('Macro', () => {
 		expect(invalid1.status).toBe(422)
 
 		const invalid2 = await app.handle(
-			post('/Not Sartre?focou=Focou', {
+			'/Not Sartre?focou=Focou',
+			json({
 				lilith: 'Lilith'
 			})
 		)
@@ -1072,7 +1075,8 @@ describe('Macro', () => {
 		expect(invalid2.status).toBe(422)
 
 		const invalid3 = await app.handle(
-			post('/Sartre?focou=Not Focou', {
+			'/Sartre?focou=Not Focou',
+			json({
 				lilith: 'Lilith'
 			})
 		)
@@ -1106,7 +1110,8 @@ describe('Macro', () => {
 		expect(app['~routes']![0][4]!.schemas!.length).toBe(3)
 
 		const response = await app.handle(
-			post('/', {
+			'/',
+			json({
 				sartre: 'Sartre',
 				focou: 'Focou',
 				lilith: 'Lilith'
@@ -1121,7 +1126,8 @@ describe('Macro', () => {
 		})
 
 		const invalid1 = await app.handle(
-			post('/', {
+			'/',
+			json({
 				sartre: 'Not Sartre',
 				focou: 'Focou',
 				lilith: 'Lilith'
@@ -1131,7 +1137,8 @@ describe('Macro', () => {
 		expect(invalid1.status).toBe(422)
 
 		const invalid2 = await app.handle(
-			post('/', {
+			'/',
+			json({
 				sartre: 'Sartre',
 				focou: 'Not Focou',
 				lilith: 'Lilith'
@@ -1141,7 +1148,8 @@ describe('Macro', () => {
 		expect(invalid2.status).toBe(422)
 
 		const invalid3 = await app.handle(
-			post('/', {
+			'/',
+			json({
 				sartre: 'Sartre',
 				focou: 'Focou',
 				lilith: 'Not Lilith'
@@ -1177,7 +1185,8 @@ describe('Macro', () => {
 		expect(app['~routes']![0][4]!.schemas!.length).toBe(3)
 
 		const response = await app.handle(
-			post('/', {
+			'/',
+			json({
 				sartre: 'Sartre',
 				focou: 'Focou',
 				lilith: 'Lilith'
@@ -1192,7 +1201,8 @@ describe('Macro', () => {
 		})
 
 		const invalid1 = await app.handle(
-			post('/', {
+			'/',
+			json({
 				sartre: 'Not Sartre',
 				focou: 'Focou',
 				lilith: 'Lilith'
@@ -1202,7 +1212,8 @@ describe('Macro', () => {
 		expect(invalid1.status).toBe(422)
 
 		const invalid2 = await app.handle(
-			post('/', {
+			'/',
+			json({
 				sartre: 'Sartre',
 				focou: 'Not Focou',
 				lilith: 'Lilith'
@@ -1212,7 +1223,8 @@ describe('Macro', () => {
 		expect(invalid2.status).toBe(422)
 
 		const invalid3 = await app.handle(
-			post('/', {
+			'/',
+			json({
 				sartre: 'Sartre',
 				focou: 'Focou',
 				lilith: 'Not Lilith'
@@ -1260,27 +1272,29 @@ describe('Macro', () => {
 		expect(app['~routes']![1][4]!.body).not.toBeUndefined()
 		expect(app['~routes']![1][4]!.schemas).toBeUndefined()
 
-		const second = await app.handle(post('/second', { id: 1 }))
-		const first = await app.handle(post('/first', { id: 1 }))
+		const second = await app.handle('/second', json({ id: 1 }))
+		const first = await app.handle('/first', json({ id: 1 }))
 
 		expect(second.status).toBe(200)
 		expect(first.status).toBe(200)
 		await expect(second.json()).resolves.toEqual({ id: 1 })
 		await expect(first.json()).resolves.toEqual({ id: 1 })
 
-		const invalidFirst = await app.handle(post('/first', { name: 'a' }))
-		const invalidSecond = await app.handle(post('/second', { name: 'a' }))
+		const invalidFirst = await app.handle('/first', json({ name: 'a' }))
+		const invalidSecond = await app.handle('/second', json({ name: 'a' }))
 
 		expect(invalidFirst.status).toBe(422)
 		expect(invalidSecond.status).toBe(422)
 
 		const validMacro = await app.handle(
-			post('/macro?user=Lilith', { id: 1 })
+			'/macro?user=Lilith',
+			json({ id: 1 })
 		)
 		expect(validMacro.status).toBe(200)
 
 		const invalidMacro = await app.handle(
-			post('/macro?user=Eve', { id: 1 })
+			'/macro?user=Eve',
+			json({ id: 1 })
 		)
 		expect(invalidMacro.status).toBe(422)
 	})
@@ -1301,14 +1315,14 @@ describe('Macro', () => {
 				({ body }) => body
 			)
 
-		const merged = await app.handle(post('/', { a: 'a', b: 'test' }))
+		const merged = await app.handle('/', json({ a: 'a', b: 'test' }))
 		expect(merged.status).toBe(200)
 		await expect(merged.json()).resolves.toEqual({ a: 'a', b: 'test' })
 
-		const missingMacroField = await app.handle(post('/', { b: 'test' }))
+		const missingMacroField = await app.handle('/', json({ b: 'test' }))
 		expect(missingMacroField.status).toBe(422)
 
-		const missingRouteField = await app.handle(post('/', { a: 'a' }))
+		const missingRouteField = await app.handle('/', json({ a: 'a' }))
 		expect(missingRouteField.status).toBe(422)
 	})
 
@@ -1329,7 +1343,7 @@ describe('Macro', () => {
 		}
 
 		for (const [label, app] of Object.entries(cases)) {
-			const merged = await app.handle(post('/', { a: 'a', b: 'test' }))
+			const merged = await app.handle('/', json({ a: 'a', b: 'test' }))
 			expect(merged.status, label).toBe(200)
 			await expect(merged.json(), label).resolves.toEqual({
 				a: 'a',
@@ -1337,11 +1351,11 @@ describe('Macro', () => {
 			})
 
 			expect(
-				(await app.handle(post('/', { b: 'test' }))).status,
+				(await app.handle('/', json({ b: 'test' }))).status,
 				label
 			).toBe(422)
 			expect(
-				(await app.handle(post('/', { a: 'a' }))).status,
+				(await app.handle('/', json({ a: 'a' }))).status,
 				label
 			).toBe(422)
 		}
@@ -1569,7 +1583,8 @@ describe('Macro', () => {
 		expect(app['~routes']![0][4]!.schemas!.length).toBe(1)
 
 		const valid = await app.handle(
-			post('/Sartre?focou=Focou', {
+			'/Sartre?focou=Focou',
+			json({
 				lilith: 'Lilith'
 			})
 		)
@@ -1580,7 +1595,8 @@ describe('Macro', () => {
 		})
 
 		const invalid1 = await app.handle(
-			post('/Sartre?focou=Focou', {
+			'/Sartre?focou=Focou',
+			json({
 				lilith: 'Not Lilith'
 			})
 		)
@@ -1588,7 +1604,8 @@ describe('Macro', () => {
 		expect(invalid1.status).toBe(422)
 
 		const invalid2 = await app.handle(
-			post('/Not Sartre?focou=Focou', {
+			'/Not Sartre?focou=Focou',
+			json({
 				lilith: 'Lilith'
 			})
 		)
@@ -1596,7 +1613,8 @@ describe('Macro', () => {
 		expect(invalid2.status).toBe(422)
 
 		const invalid3 = await app.handle(
-			post('/Sartre?focou=Not Focou', {
+			'/Sartre?focou=Not Focou',
+			json({
 				lilith: 'Lilith'
 			})
 		)
@@ -1632,7 +1650,8 @@ describe('Macro', () => {
 		expect(app['~routes']![0][4]!.schemas!.length).toBe(1)
 
 		const valid = await app.handle(
-			post('/Sartre?focou=Focou', {
+			'/Sartre?focou=Focou',
+			json({
 				lilith: 'Lilith'
 			})
 		)
@@ -1643,7 +1662,8 @@ describe('Macro', () => {
 		})
 
 		const invalid1 = await app.handle(
-			post('/Sartre?focou=Focou', {
+			'/Sartre?focou=Focou',
+			json({
 				lilith: 'Not Lilith'
 			})
 		)
@@ -1651,7 +1671,8 @@ describe('Macro', () => {
 		expect(invalid1.status).toBe(422)
 
 		const invalid2 = await app.handle(
-			post('/Not Sartre?focou=Focou', {
+			'/Not Sartre?focou=Focou',
+			json({
 				lilith: 'Lilith'
 			})
 		)
@@ -1659,7 +1680,8 @@ describe('Macro', () => {
 		expect(invalid2.status).toBe(422)
 
 		const invalid3 = await app.handle(
-			post('/Sartre?focou=Not Focou', {
+			'/Sartre?focou=Not Focou',
+			json({
 				lilith: 'Lilith'
 			})
 		)
@@ -1695,7 +1717,8 @@ describe('Macro', () => {
 		expect(app['~routes']![0][4]!.schemas!.length).toBe(3)
 
 		const response = await app.handle(
-			post('/', {
+			'/',
+			json({
 				sartre: 'Sartre',
 				focou: 'Focou',
 				lilith: 'Lilith'
@@ -1710,7 +1733,8 @@ describe('Macro', () => {
 		})
 
 		const invalid1 = await app.handle(
-			post('/', {
+			'/',
+			json({
 				sartre: 'Not Sartre',
 				focou: 'Focou',
 				lilith: 'Lilith'
@@ -1720,7 +1744,8 @@ describe('Macro', () => {
 		expect(invalid1.status).toBe(422)
 
 		const invalid2 = await app.handle(
-			post('/', {
+			'/',
+			json({
 				sartre: 'Sartre',
 				focou: 'Not Focou',
 				lilith: 'Lilith'
@@ -1730,7 +1755,8 @@ describe('Macro', () => {
 		expect(invalid2.status).toBe(422)
 
 		const invalid3 = await app.handle(
-			post('/', {
+			'/',
+			json({
 				sartre: 'Sartre',
 				focou: 'Focou',
 				lilith: 'Not Lilith'

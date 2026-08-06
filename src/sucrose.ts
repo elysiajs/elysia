@@ -212,6 +212,11 @@ export function retrieveRootparameters(parameter: string) {
 	// Remove () from parameter
 	if (parameter.charCodeAt(0) === 40) parameter = parameter.slice(1, -1)
 
+	parameter = parameter.trim()
+
+	if (parameter.indexOf('=') !== -1)
+		parameter = removeDefaultParameter(parameter)
+
 	// Remove {} from parameter
 	if (parameter.charCodeAt(0) === 123) {
 		hasParenthesis = true
@@ -219,8 +224,8 @@ export function retrieveRootparameters(parameter: string) {
 		parameter = parameter.slice(1, end - 1)
 	}
 
-	parameter = parameter.replace(/[ \t\n]/g, '')
-	let parameters = <string[]>[]
+	parameter = parameter.replace(/\s+/g, '')
+	const parameters = <string[]>[]
 
 	// Object destructuring
 	while (true) {
@@ -228,23 +233,24 @@ export function retrieveRootparameters(parameter: string) {
 		if (start === -1) break
 
 		// Remove colon from object structuring cast
-		parameters.push(parameter.slice(0, start - 1))
+		parameters.push(removeColonAlias(parameter.slice(0, start - 1)))
 		if (parameter.charCodeAt(end) === 44) end++
 		parameter = parameter.slice(end)
 	}
 
 	parameter = removeColonAlias(parameter)
-	if (parameter) parameters = parameters.concat(parameter.split(','))
+	if (parameter) parameters.push(parameter)
 
+	// Defaults are gone and every whitespace character has been stripped, so
+	// what is left is a plain comma-separated list of names
 	const parameterMap: Record<string, true> = Object.create(null)
 	for (const p of parameters) {
 		if (p.indexOf(',') === -1) {
-			parameterMap[removeDefaultParameter(p)] = true
+			parameterMap[p] = true
 			continue
 		}
 
-		for (const q of p.split(','))
-			parameterMap[removeDefaultParameter(q.trim())] = true
+		for (const q of p.split(',')) parameterMap[q] = true
 	}
 
 	return {
@@ -387,28 +393,211 @@ export function findAlias(
 	return aliases
 }
 
-export function removeDefaultParameter(parameter: string) {
-	while (true) {
-		const index = parameter.indexOf('=')
-		if (index === -1) break
+/**
+ * Whitespace as JavaScript defines it, which is what `\s` matches: everything
+ * `String.prototype.trim` removes, not just the three characters that happen to
+ * appear in LF-formatted source.
+ */
+const isWhitespace = (char: number) =>
+	char === 32 ||
+	// \t \n \v \f \r
+	(char >= 9 && char <= 13) ||
+	// Zs, plus <ZWNBSP> and the two line separators
+	char === 160 ||
+	char === 5760 ||
+	(char >= 8192 && char <= 8202) ||
+	char === 8232 ||
+	char === 8233 ||
+	char === 8239 ||
+	char === 8287 ||
+	char === 12288 ||
+	char === 65279
 
-		const commaIndex = parameter.indexOf(',', index)
-		const bracketIndex = parameter.indexOf('}', index)
+/**
+ * Words that lex as an identifier but are operators, so a `/` after one opens a
+ * regex instead of dividing. Padded so a lookup cannot match a substring.
+ */
+const operatorKeyword =
+	' typeof void delete in of instanceof new return case do else yield await throw '
 
-		const end =
-			commaIndex === -1
-				? bracketIndex
-				: bracketIndex === -1
-					? commaIndex
-					: Math.min(commaIndex, bracketIndex)
+/**
+ * Skip a regular expression literal, so a `,`, `}` or quote inside it is not
+ * mistaken for structure.
+ */
+function skipRegexLiteral(parameter: string, start: number, regexEnd: number) {
+	let previous = start - 1
+	while (previous >= 0 && isWhitespace(parameter.charCodeAt(previous)))
+		previous--
 
-		if (end === -1) {
-			parameter = parameter.slice(0, index)
+	if (previous >= 0) {
+		const char = parameter.charCodeAt(previous)
 
-			break
+		if (isIdentifierPart(char)) {
+			let identifier = previous
+			while (
+				identifier >= 0 &&
+				isIdentifierPart(parameter.charCodeAt(identifier))
+			)
+				identifier--
+
+			// A member name is never the operator: `x.in / 2` is division.
+			// A number ends at its `.` too, and a number is a value
+			if (
+				parameter.charCodeAt(identifier) === 46 ||
+				!operatorKeyword.includes(
+					' ' + parameter.slice(identifier + 1, previous + 1) + ' '
+				)
+			)
+				return start
+		}
+		// ) ] } ' " `
+		else if (
+			char === 41 ||
+			char === 93 ||
+			char === 125 ||
+			char === 39 ||
+			char === 34 ||
+			char === 96 ||
+			(char === 47 && previous === regexEnd)
+		)
+			return start
+	}
+
+	let inCharacterClass = false
+	for (let index = start + 1; index < parameter.length; index++) {
+		const char = parameter.charCodeAt(index)
+
+		// Escape
+		if (char === 92) index++
+		// [
+		else if (char === 91) inCharacterClass = true
+		// ]
+		else if (char === 93) inCharacterClass = false
+		// /
+		else if (char === 47 && !inCharacterClass) return index
+	}
+
+	return start
+}
+
+/**
+ * Find where a default parameter value ends: the first `,` or `}` that is
+ * outside a string or regex literal and not nested inside `()`, `[]`, or `{}`
+ *
+ * Returns -1 when the value runs until the end of the string
+ */
+function findDefaultValueEnd(parameter: string, start: number) {
+	let deep = 0
+	let quote = 0
+	// Index of the `/` that closed the last regex literal, see `skipRegexLiteral`
+	let regexEnd = -1
+	// `deep` of each open `${`, so the `}` that closes an interpolation resumes
+	// the template literal instead of being read as structure
+	let template: number[] | undefined
+
+	for (let index = start; index < parameter.length; index++) {
+		const char = parameter.charCodeAt(index)
+
+		if (quote !== 0) {
+			// Escape
+			if (char === 92) index++
+			else if (char === quote) quote = 0
+			// `${` opens an expression inside a template literal
+			else if (
+				quote === 96 &&
+				char === 36 &&
+				parameter.charCodeAt(index + 1) === 123
+			) {
+				;(template ??= []).push(deep)
+				quote = 0
+				deep++
+				index++
+			}
+
+			continue
 		}
 
-		parameter = parameter.slice(0, index) + parameter.slice(end)
+		switch (char) {
+			// ' " `
+			case 39:
+			case 34:
+			case 96:
+				quote = char
+				break
+
+			// /
+			case 47: {
+				const closing = skipRegexLiteral(parameter, index, regexEnd)
+				if (closing !== index) regexEnd = closing
+				// eslint-disable-next-line sonarjs/updated-loop-counter
+				index = closing
+				break
+			}
+
+			// ( [ {
+			case 40:
+			case 91:
+			case 123:
+				deep++
+				break
+
+			// ) ]
+			case 41:
+			case 93:
+				if (deep !== 0) deep--
+				break
+
+			// }
+			case 125:
+				if (deep === 0) return index
+				deep--
+				// Closes a `${`, so the template literal resumes
+				if (
+					template !== undefined &&
+					template[template.length - 1] === deep
+				) {
+					template.pop()
+					quote = 96
+				}
+				break
+
+			// ,
+			case 44:
+				if (deep === 0) return index
+				break
+		}
+	}
+
+	return -1
+}
+
+export function removeDefaultParameter(parameter: string) {
+	let index = parameter.indexOf('=')
+
+	if (index !== -1) {
+		let kept = ''
+		let copyFrom = 0
+
+		for (; index < parameter.length; index++) {
+			if (parameter.charCodeAt(index) !== 61) continue
+
+			kept += parameter.slice(copyFrom, index)
+
+			const end = findDefaultValueEnd(parameter, index + 1)
+
+			// The value runs to the end of the string, nothing follows it
+			if (end === -1) {
+				copyFrom = parameter.length
+
+				break
+			}
+
+			// `end` is the `,` or `}` that terminates the value, it is structure
+			// and has to survive. It is never `=`, so resuming from it is safe
+			copyFrom = index = end
+		}
+
+		parameter = kept + parameter.slice(copyFrom)
 	}
 
 	return parameter

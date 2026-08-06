@@ -88,7 +88,9 @@ describe('request validation with Promise-like results', () => {
 		const fail = await validateRequest('native', failing)
 
 		expect(pass.response.status).toBe(200)
-		expect(await pass.response.json()).toEqual({ accepted: 'request' })
+		await expect(pass.response.json()).resolves.toEqual({
+			accepted: 'request'
+		})
 		expect(fail.response.status).toBe(422)
 		expect(pass.calls).toBe(1)
 		expect(fail.calls).toBe(1)
@@ -99,7 +101,9 @@ describe('request validation with Promise-like results', () => {
 		const custom = await validateRequest('custom', failing)
 
 		expect(custom.response.status).toBe(422)
-		expect(await custom.response.text()).toBe(await native.response.text())
+		await expect(custom.response.text()).resolves.toBe(
+			await native.response.text()
+		)
 		expect(custom.calls).toBe(1)
 	})
 
@@ -110,7 +114,7 @@ describe('request validation with Promise-like results', () => {
 		)
 
 		expect(response.status).toBe(200)
-		expect(await response.json()).toEqual({ accepted: 'request' })
+		await expect(response.json()).resolves.toEqual({ accepted: 'request' })
 		expect(calls).toBe(1)
 	})
 
@@ -119,7 +123,9 @@ describe('request validation with Promise-like results', () => {
 		const custom = await validateRequest('custom-reject')
 
 		expect(custom.response.status).toBe(native.response.status)
-		expect(await custom.response.text()).toBe(await native.response.text())
+		await expect(custom.response.text()).resolves.toBe(
+			await native.response.text()
+		)
 		expect(custom.calls).toBe(1)
 	})
 
@@ -127,7 +133,7 @@ describe('request validation with Promise-like results', () => {
 		const { response, calls } = await validateRequest('throwing-getter')
 
 		expect(response.status).toBe(500)
-		expect(await response.json()).toMatchObject({
+		await expect(response.json()).resolves.toMatchObject({
 			detail: 'then getter failed'
 		})
 		expect(calls).toBe(1)
@@ -140,7 +146,9 @@ describe('response validation with Promise-like results', () => {
 		const fail = await validateResponse('native', failing)
 
 		expect(pass.response.status).toBe(200)
-		expect(await pass.response.json()).toEqual({ accepted: 'response' })
+		await expect(pass.response.json()).resolves.toEqual({
+			accepted: 'response'
+		})
 		expect(fail.response.status).toBe(422)
 		expect(pass.calls).toBe(1)
 		expect(fail.calls).toBe(1)
@@ -151,7 +159,9 @@ describe('response validation with Promise-like results', () => {
 		const custom = await validateResponse('custom', failing)
 
 		expect(custom.response.status).toBe(422)
-		expect(await custom.response.text()).toBe(await native.response.text())
+		await expect(custom.response.text()).resolves.toBe(
+			await native.response.text()
+		)
 		expect(custom.calls).toBe(1)
 	})
 
@@ -162,7 +172,7 @@ describe('response validation with Promise-like results', () => {
 		)
 
 		expect(response.status).toBe(200)
-		expect(await response.json()).toEqual({ accepted: 'response' })
+		await expect(response.json()).resolves.toEqual({ accepted: 'response' })
 		expect(calls).toBe(1)
 	})
 
@@ -171,7 +181,9 @@ describe('response validation with Promise-like results', () => {
 		const custom = await validateResponse('custom-reject')
 
 		expect(custom.response.status).toBe(native.response.status)
-		expect(await custom.response.text()).toBe(await native.response.text())
+		await expect(custom.response.text()).resolves.toBe(
+			await native.response.text()
+		)
 		expect(custom.calls).toBe(1)
 	})
 
@@ -179,7 +191,7 @@ describe('response validation with Promise-like results', () => {
 		const { response, calls } = await validateResponse('throwing-getter')
 
 		expect(response.status).toBe(500)
-		expect(await response.json()).toMatchObject({
+		await expect(response.json()).resolves.toMatchObject({
 			detail: 'then getter failed'
 		})
 		expect(calls).toBe(1)

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Elysia, HTTPError, problem, status, tag } from '../../src'
+import type { TaggedHTTPError } from '../../src'
 import type { ElysiaStatus } from '../../src/error'
 import type { StatusMap } from '../../src/constants'
 
@@ -751,4 +752,57 @@ class Deferred extends HTTPError<'DEFERRED'> {
 			? 'absorbed'
 			: 'present'
 	>().toEqualTypeOf<'absorbed'>()
+}
+
+// `HTTPError` states the contract, it never serves as an error itself — the
+// `type` that discriminates one class from another is the subclass's to name.
+{
+	// @ts-expect-error HTTPError is abstract, subclass it or use `tag`
+	new HTTPError()
+}
+
+// What `tag` hands back is concrete, and keeps `Error`'s own constructor, so
+// a message and a cause pass through.
+{
+	class Denied extends tag('DENIED', 402) {}
+
+	expectTypeOf(new Denied()).toMatchTypeOf<Error>()
+	expectTypeOf(new Denied('no funds')).toMatchTypeOf<Error>()
+	expectTypeOf(
+		new Denied('no funds', { cause: new Error('upstream') })
+	).toMatchTypeOf<Error>()
+	expectTypeOf(new Denied().type).toEqualTypeOf<'DENIED'>()
+}
+
+// `TaggedHTTPError` names that class, so one can be held in an annotated
+// binding and still construct to its tagged instance.
+{
+	const Denied: TaggedHTTPError<'DENIED'> = tag('DENIED')
+
+	expectTypeOf(new Denied().type).toEqualTypeOf<'DENIED'>()
+	expectTypeOf(new Denied('no funds')).toMatchTypeOf<Error>()
+}
+
+// `headers` annotates the wire, not the document — it rides along on the
+// response without joining the body the error describes.
+{
+	class Denied extends tag('DENIED', 402) {
+		override readonly headers = { 'x-reason': 'no-funds' }
+
+		detail() {
+			return 'no funds'
+		}
+	}
+
+	const app = new Elysia().get('/', () => new Denied())
+
+	type Response = (typeof app)['~Routes']['get']['response']
+
+	expectTypeOf<keyof Response>().toEqualTypeOf<402>()
+	expectTypeOf<Response[402]>().toMatchTypeOf<{
+		type: 'DENIED'
+		detail: string
+		status: 402
+	}>()
+	expectTypeOf<Response[402]>().not.toHaveProperty('headers')
 }

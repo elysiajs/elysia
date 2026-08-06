@@ -1,7 +1,6 @@
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('Response Headers', () => {
 	it('add response headers', async () => {
@@ -10,7 +9,7 @@ describe('Response Headers', () => {
 
 			return 'Hi'
 		})
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.headers.get('x-powered-by')).toBe('Elysia')
 	})
@@ -21,7 +20,7 @@ describe('Response Headers', () => {
 				set.headers['x-powered-by'] = 'Elysia'
 			})
 			.get('/', () => 'Hi')
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.headers.get('x-powered-by')).toBe('Elysia')
 	})
@@ -33,7 +32,7 @@ describe('Response Headers', () => {
 			})
 
 		const app = new Elysia().use(plugin).get('/', () => 'Hi')
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.headers.get('x-powered-by')).toBe('Elysia')
 	})
@@ -44,7 +43,7 @@ describe('Response Headers', () => {
 				set.headers['x-powered-by'] = 'Elysia'
 			})
 			.get('/', () => new Response('Hi'))
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.headers.get('x-powered-by')).toBe('Elysia')
 	})
@@ -60,7 +59,7 @@ describe('Response Headers', () => {
 			}))
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res).not.toBe(original!)
 		expect(res.headers.get('x-powered-by')).toBe('Elysia')
@@ -83,8 +82,8 @@ describe('Response Headers', () => {
 				return shared
 			})
 
-		const a = await app.handle(req('/a'))
-		const b = await app.handle(req('/b'))
+		const a = await app.handle('/a')
+		const b = await app.handle('/b')
 
 		expect(a.headers.get('x-req')).toBe('A')
 		expect(b.headers.get('x-req')).toBe('B')
@@ -103,7 +102,7 @@ describe('Response Headers', () => {
 			})
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(201)
 		expect(res.statusText).toBe('Created Custom')
@@ -118,7 +117,7 @@ describe('Response Headers', () => {
 			return 'Hi'
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		await expect(res.text()).resolves.toBe('Hi')
 		expect(res.status).toBe(401)
@@ -131,7 +130,7 @@ describe('Response Headers', () => {
 			})
 			.get('/', () => 'hi')
 
-		const headers = await app.handle(req('/')).then((x) => x.headers)
+		const headers = await app.handle('/').then((x) => x.headers)
 
 		expect(headers.get('x-powered-by')).toBe('Elysia')
 	})
@@ -148,20 +147,20 @@ describe('Response Headers', () => {
 				return 'hi'
 			})
 
-		const first = await app.handle(req('/')).then((x) => x.headers)
+		const first = await app.handle('/').then((x) => x.headers)
 		expect(first.get('x-powered-by')).toBe('Custom')
 		expect(first.get('x-frame-options')).toBe('DENY')
 		expect(first.get('x-request-id')).toBe('abc')
 
-		const repeated = await app.handle(req('/')).then((x) => x.headers)
+		const repeated = await app.handle('/').then((x) => x.headers)
 		expect(repeated.get('x-powered-by')).toBe('Custom')
 		expect(repeated.get('x-frame-options')).toBe('DENY')
 
 		const plainApp = new Elysia()
 			.headers({ 'x-powered-by': 'Elysia' })
 			.get('/', () => 'hi')
-		await plainApp.handle(req('/'))
-		const pristine = await plainApp.handle(req('/')).then((x) => x.headers)
+		await plainApp.handle('/')
+		const pristine = await plainApp.handle('/').then((x) => x.headers)
 		expect(pristine.get('x-powered-by')).toBe('Elysia')
 	})
 
@@ -172,7 +171,7 @@ describe('Response Headers', () => {
 
 		const app = new Elysia().use(plugin).get('/', () => 'hi')
 
-		const headers = await app.handle(req('/')).then((x) => x.headers)
+		const headers = await app.handle('/').then((x) => x.headers)
 
 		expect(headers.get('x-powered-by')).toBe('Elysia')
 	})

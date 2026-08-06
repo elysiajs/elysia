@@ -8,7 +8,6 @@ import {
 	endValidatorCapture
 } from '../../src/compile/aot-capture'
 import { claimManifest, materialise, registerManifest } from './_manifest'
-import { req } from '../utils'
 import { Value } from 'typebox/value'
 import { compileToSource } from '../../src/plugin/aot/source'
 import { CheckContext } from 'typebox/schema'
@@ -58,11 +57,11 @@ describe('frozen request coercion', () => {
 		const app = build()
 		app.compile()
 
-		const ok = await app.handle(req('/q?page=3&limit=10'))
+		const ok = await app.handle('/q?page=3&limit=10')
 		expect(ok.status).toBe(200)
 		await expect(ok.json()).resolves.toEqual({ page: 3, limit: 10 })
 
-		const bad = await app.handle(req('/q?page=abc&limit=10'))
+		const bad = await app.handle('/q?page=abc&limit=10')
 		expect(bad.status).toBe(422)
 	})
 

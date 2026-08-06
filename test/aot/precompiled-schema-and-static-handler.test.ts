@@ -8,12 +8,7 @@ import {
 	endValidatorCapture
 } from '../../src/compile/aot-capture'
 import { Compile } from 'typebox/compile'
-import {
-	materialise,
-	materialiseHandlers,
-	registerManifest
-} from './_manifest'
-import { req } from '../utils'
+import { materialise, materialiseHandlers, registerManifest } from './_manifest'
 
 afterEach(() => {
 	Compiled.clear()
@@ -121,7 +116,7 @@ describe('static-resource handlers are captured and replayed', () => {
 		const frozenApp = build()
 		;(frozenApp as any).compile()
 
-		const res = await frozenApp.handle(req('/'))
+		const res = await frozenApp.handle('/')
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('thing')
 	})

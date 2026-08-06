@@ -123,7 +123,7 @@ describe('compile: bare-route fast path parity', () => {
 			const fast = await handleProbed(appOf(c, false), requestOf(c))
 			const reference = await appOf(c, true).handle(requestOf(c))
 
-			expect(await snapshot(fast.response)).toEqual(
+			await expect(snapshot(fast.response)).resolves.toEqual(
 				await snapshot(reference)
 			)
 

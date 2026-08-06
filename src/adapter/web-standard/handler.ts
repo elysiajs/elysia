@@ -8,7 +8,12 @@ import {
 
 import { isBun } from '../../universal/constants'
 import { ElysiaFile, mime } from '../../universal/file'
-import { formToFormData, isNotEmpty, nullObject } from '../../utils'
+import {
+	formToFormData,
+	isElysiaForm,
+	isNotEmpty,
+	nullObject
+} from '../../utils'
 import {
 	ElysiaStatus,
 	internalServerErrorBody,
@@ -62,6 +67,12 @@ function handleElysiaFile(
 	return handleFile(file.value as any, set, request)
 }
 
+function responseTag(response: unknown) {
+	if (response == null) return
+
+	return Object.getPrototypeOf(response)?.constructor?.name
+}
+
 function mapResponseWithSet(
 	response: unknown,
 	set: Context['set'],
@@ -71,7 +82,7 @@ function mapResponseWithSet(
 	handleSet(set)
 	const headers = set.headers
 
-	switch (response?.constructor?.name) {
+	switch (responseTag(response)) {
 		case 'String':
 			if (!isBun && !headers['content-type'])
 				materializeSetHeaders(set)['content-type'] = 'text/plain'
@@ -81,13 +92,13 @@ function mapResponseWithSet(
 		case 'Array':
 			return Response.json(response, set as ResponseInit)
 
-		case 'Object':
-			if ((response as Record<string, unknown>)['~ely-form'])
-				return new Response(
-					formToFormData(response as Record<string, unknown>),
-					set as ResponseInit
-				)
+		case 'ElysiaForm':
+			return new Response(
+				formToFormData(response as Record<string, unknown>),
+				set as ResponseInit
+			)
 
+		case 'Object':
 			// @ts-expect-error
 			if (typeof response?.next === 'function')
 				return handleStream(
@@ -227,19 +238,19 @@ export function mapCompactResponse(
 	request?: Request,
 	owned?: boolean
 ): Response {
-	switch (response?.constructor?.name) {
+	switch (responseTag(response)) {
 		case 'String':
 			return new Response(response as string, textHeaders)
 
 		case 'Array':
 			return Response.json(response)
 
-		case 'Object':
-			if ((response as Record<string, unknown>)['~ely-form'])
-				return new Response(
-					formToFormData(response as Record<string, unknown>)
-				)
+		case 'ElysiaForm':
+			return new Response(
+				formToFormData(response as Record<string, unknown>)
+			)
 
+		case 'Object':
 			return Response.json(response)
 
 		case 'Number':
@@ -379,6 +390,15 @@ function mapFallback(
 	if (response instanceof ElysiaFile)
 		return handleElysiaFile(response as ElysiaFile, undefined, request)
 
+	// A downstream minifier mangles class names, so the name switch above misses
+	// every prototype-dispatched type in a minified bundle. This is the same
+	// `instanceof` recheck that catches Response/ElysiaStatus/ElysiaFile there.
+	if (isElysiaForm(response))
+		return new Response(
+			formToFormData(response as Record<string, unknown>),
+			set as ResponseInit
+		)
+
 	if (
 		// @ts-expect-error
 		typeof response?.next === 'function' ||
@@ -409,10 +429,15 @@ function mapFallback(
 			? mapResponse((response as any).toResponse(), set, request, owned)
 			: mapCompactResponse((response as any).toResponse(), request, owned)
 
-	// @ts-expect-error
-	if (response?.constructor?.name === 'Cookie' && response.jar)
-		// @ts-expect-error
-		return new Response(response.value, set as ResponseInit)
+	// A returned `Cookie` serves its value. The jar lives in a private field, so
+	// there is nothing public to gate on — the tag is the whole check. Route the
+	// value back through the mapper rather than emitting it directly, so an
+	// object becomes JSON and a string gets a text content-type instead of the
+	// bare `new Response(cookie)` below, which stringifies with no content-type
+	if (responseTag(response) === 'Cookie')
+		return set
+			? mapResponse((response as any).value, set, request, owned)
+			: mapCompactResponse((response as any).value, request, owned)
 
 	return new Response(response as any, set as ResponseInit)
 }

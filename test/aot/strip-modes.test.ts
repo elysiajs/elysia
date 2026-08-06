@@ -7,7 +7,7 @@ import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
 import { generateCompiledArtifacts } from '../../src/plugin/aot/core'
 import { aot as bunAot } from '../../src/plugin/aot/bun'
-import { post, req } from '../utils'
+import { json } from '../utils'
 
 /**
  * `strip:false` keeps runtime compiler modules, `strip:true` removes them from
@@ -90,11 +90,11 @@ describe('AOT strip disabled', () => {
 		)
 		const app = await load(text)
 
-		const ok = await app.handle(post('/u', { name: 'a', age: 1 }))
+		const ok = await app.handle('/u', json({ name: 'a', age: 1 }))
 		expect(ok.status).toBe(200)
 		await expect(ok.json()).resolves.toEqual({ name: 'a', age: 1 })
 
-		const bad = await app.handle(post('/u', { name: 'a' }))
+		const bad = await app.handle('/u', json({ name: 'a' }))
 		expect(bad.status).toBe(422)
 	})
 })
@@ -118,11 +118,11 @@ describe('forced AOT stripping', () => {
 		expect(text).not.toContain('[Sucrose] warning')
 
 		const app = await load(text)
-		const ok = await app.handle(post('/u', { name: 'a', age: 1 }))
+		const ok = await app.handle('/u', json({ name: 'a', age: 1 }))
 		expect(ok.status).toBe(200)
 		await expect(ok.json()).resolves.toEqual({ name: 'a', age: 1 })
 
-		const bad = await app.handle(post('/u', { name: 'a' }))
+		const bad = await app.handle('/u', json({ name: 'a' }))
 		expect(bad.status).toBe(422)
 	})
 })
@@ -156,7 +156,7 @@ describe('automatic AOT stripping', () => {
 		expect(text).not.toContain('WebSocket route builder was stripped')
 
 		const app = await load(text)
-		const ok = await app.handle(req('/'))
+		const ok = await app.handle('/')
 		expect(ok.status).toBe(200)
 		await expect(ok.text()).resolves.toBe('ok')
 	})
@@ -177,9 +177,9 @@ describe('automatic AOT stripping', () => {
 		expect(text).not.toContain('cookie support was stripped')
 
 		const app = await load(text)
-		const res = await app.handle(
-			req('/change', { headers: { cookie: 'session=old' } })
-		)
+		const res = await app.handle('/change', {
+			headers: { cookie: 'session=old' }
+		})
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('ok')
 		expect(res.headers.getAll('set-cookie').length).toBeGreaterThan(0)
@@ -197,7 +197,7 @@ describe('automatic AOT stripping', () => {
 		expect(text).not.toContain('mapError')
 
 		const app = await load(text)
-		const res = await app.handle(post('/u', { name: 'a' }))
+		const res = await app.handle('/u', json({ name: 'a' }))
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({ name: 'a' })
 	})
@@ -212,7 +212,7 @@ describe('automatic AOT stripping', () => {
 		expect(text).not.toContain('crypto.subtle.importKey')
 
 		const app = await load(text)
-		const res = await app.handle(post('/echo', { name: 'a' }))
+		const res = await app.handle('/echo', json({ name: 'a' }))
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({ name: 'a' })
 	})
@@ -225,7 +225,7 @@ describe('automatic AOT stripping', () => {
 		expect(text).toContain('cookie support was stripped')
 
 		const app = await load(text)
-		const res = await app.handle(req('/manual'))
+		const res = await app.handle('/manual')
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('ok')
 		expect(res.headers.getAll('set-cookie')).toEqual(['token=abc'])
@@ -239,7 +239,7 @@ describe('automatic AOT stripping', () => {
 		expect(text).toContain('handler compiler JIT was stripped')
 
 		const app = await load(text)
-		const res = await app.handle(req('/range'))
+		const res = await app.handle('/range')
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('0,7')
 	})
@@ -270,11 +270,11 @@ describe('automatic AOT stripping', () => {
 
 		const app = await load(text)
 
-		const outer = await app.handle(req('/'))
+		const outer = await app.handle('/')
 		expect(outer.status).toBe(200)
 		await expect(outer.text()).resolves.toBe('outer')
 
-		const sub = await app.handle(req('/sub/hello'))
+		const sub = await app.handle('/sub/hello')
 		expect(sub.status).toBe(500)
 	})
 })

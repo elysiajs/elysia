@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia, t } from '../../src'
-import { req } from '../utils'
 
 describe('Cookie Validation', () => {
 	it('validate required cookie', async () => {
@@ -15,8 +14,8 @@ describe('Cookie Validation', () => {
 		)
 
 		const [valid, invalid] = await Promise.all([
-			app.handle(req('/', { headers: { Cookie: 'session=value' } })),
-			app.handle(req('/'))
+			app.handle('/', { headers: { Cookie: 'session=value' } }),
+			app.handle('/')
 		])
 
 		expect(valid.status).toBe(200)
@@ -36,8 +35,8 @@ describe('Cookie Validation', () => {
 		)
 
 		const [withCookie, withoutCookie] = await Promise.all([
-			app.handle(req('/', { headers: { Cookie: 'session=value' } })),
-			app.handle(req('/'))
+			app.handle('/', { headers: { Cookie: 'session=value' } }),
+			app.handle('/')
 		])
 
 		expect(withCookie.status).toBe(200)
@@ -58,8 +57,8 @@ describe('Cookie Validation', () => {
 		)
 
 		const [valid, invalid] = await Promise.all([
-			app.handle(req('/', { headers: { Cookie: 'count=42' } })),
-			app.handle(req('/', { headers: { Cookie: 'count=invalid' } }))
+			app.handle('/', { headers: { Cookie: 'count=42' } }),
+			app.handle('/', { headers: { Cookie: 'count=invalid' } })
 		])
 
 		expect(valid.status).toBe(200)
@@ -79,9 +78,9 @@ describe('Cookie Validation', () => {
 		)
 
 		const [validTrue, validFalse, invalid] = await Promise.all([
-			app.handle(req('/', { headers: { Cookie: 'active=true' } })),
-			app.handle(req('/', { headers: { Cookie: 'active=false' } })),
-			app.handle(req('/', { headers: { Cookie: 'active=maybe' } }))
+			app.handle('/', { headers: { Cookie: 'active=true' } }),
+			app.handle('/', { headers: { Cookie: 'active=false' } }),
+			app.handle('/', { headers: { Cookie: 'active=maybe' } })
 		])
 
 		expect(validTrue.status).toBe(200)
@@ -105,27 +104,23 @@ describe('Cookie Validation', () => {
 			({ cookie: { profile } }) => profile.value.name
 		)
 
-		const valid = await app.handle(
-			req('/', {
-				headers: {
-					Cookie:
-						'profile=' +
-						encodeURIComponent(
-							JSON.stringify({ name: 'Himari', age: 16 })
-						)
-				}
-			})
-		)
+		const valid = await app.handle('/', {
+			headers: {
+				Cookie:
+					'profile=' +
+					encodeURIComponent(
+						JSON.stringify({ name: 'Himari', age: 16 })
+					)
+			}
+		})
 
-		const invalid = await app.handle(
-			req('/', {
-				headers: {
-					Cookie:
-						'profile=' +
-						encodeURIComponent(JSON.stringify({ name: 'Himari' }))
-				}
-			})
-		)
+		const invalid = await app.handle('/', {
+			headers: {
+				Cookie:
+					'profile=' +
+					encodeURIComponent(JSON.stringify({ name: 'Himari' }))
+			}
+		})
 
 		expect(valid.status).toBe(200)
 		await expect(valid.text()).resolves.toBe('Himari')
@@ -147,26 +142,18 @@ describe('Cookie Validation', () => {
 
 		const [valid, missingSession, missingUserId, invalidUserId] =
 			await Promise.all([
-				app.handle(
-					req('/', {
-						headers: { Cookie: 'session=abc123; userId=42' }
-					})
-				),
-				app.handle(
-					req('/', {
-						headers: { Cookie: 'userId=42' }
-					})
-				),
-				app.handle(
-					req('/', {
-						headers: { Cookie: 'session=abc123' }
-					})
-				),
-				app.handle(
-					req('/', {
-						headers: { Cookie: 'session=abc123; userId=invalid' }
-					})
-				)
+				app.handle('/', {
+					headers: { Cookie: 'session=abc123; userId=42' }
+				}),
+				app.handle('/', {
+					headers: { Cookie: 'userId=42' }
+				}),
+				app.handle('/', {
+					headers: { Cookie: 'session=abc123' }
+				}),
+				app.handle('/', {
+					headers: { Cookie: 'session=abc123; userId=invalid' }
+				})
 			])
 
 		expect(valid.status).toBe(200)
@@ -188,21 +175,15 @@ describe('Cookie Validation', () => {
 		)
 
 		const [valid, tooShort, tooLong] = await Promise.all([
-			app.handle(
-				req('/', {
-					headers: { Cookie: 'token=validtoken123' }
-				})
-			),
-			app.handle(
-				req('/', {
-					headers: { Cookie: 'token=short' }
-				})
-			),
-			app.handle(
-				req('/', {
-					headers: { Cookie: 'token=' + 'a'.repeat(51) }
-				})
-			)
+			app.handle('/', {
+				headers: { Cookie: 'token=validtoken123' }
+			}),
+			app.handle('/', {
+				headers: { Cookie: 'token=short' }
+			}),
+			app.handle('/', {
+				headers: { Cookie: 'token=' + 'a'.repeat(51) }
+			})
 		])
 
 		expect(valid.status).toBe(200)
@@ -222,21 +203,15 @@ describe('Cookie Validation', () => {
 		)
 
 		const [valid, tooLow, tooHigh] = await Promise.all([
-			app.handle(
-				req('/', {
-					headers: { Cookie: 'age=25' }
-				})
-			),
-			app.handle(
-				req('/', {
-					headers: { Cookie: 'age=-1' }
-				})
-			),
-			app.handle(
-				req('/', {
-					headers: { Cookie: 'age=150' }
-				})
-			)
+			app.handle('/', {
+				headers: { Cookie: 'age=25' }
+			}),
+			app.handle('/', {
+				headers: { Cookie: 'age=-1' }
+			}),
+			app.handle('/', {
+				headers: { Cookie: 'age=150' }
+			})
 		])
 
 		expect(valid.status).toBe(200)
@@ -257,16 +232,12 @@ describe('Cookie Validation', () => {
 		)
 
 		const [valid, invalid] = await Promise.all([
-			app.handle(
-				req('/', {
-					headers: { Cookie: 'email=user@example.com' }
-				})
-			),
-			app.handle(
-				req('/', {
-					headers: { Cookie: 'email=notanemail' }
-				})
-			)
+			app.handle('/', {
+				headers: { Cookie: 'email=user@example.com' }
+			}),
+			app.handle('/', {
+				headers: { Cookie: 'email=notanemail' }
+			})
 		])
 
 		expect(valid.status).toBe(200)
@@ -289,11 +260,9 @@ describe('Cookie Validation', () => {
 		)
 
 		const date = new Date('2024-01-01T00:00:00.000Z')
-		const response = await app.handle(
-			req('/', {
-				headers: { Cookie: `timestamp=${date.toISOString()}` }
-			})
-		)
+		const response = await app.handle('/', {
+			headers: { Cookie: `timestamp=${date.toISOString()}` }
+		})
 
 		expect(response.status).toBe(200)
 	})
@@ -315,12 +284,10 @@ describe('Cookie Validation', () => {
 		)
 
 		const [withCookie, withoutCookie] = await Promise.all([
-			app.handle(
-				req('/', {
-					headers: { Cookie: 'session=value' }
-				})
-			),
-			app.handle(req('/'))
+			app.handle('/', {
+				headers: { Cookie: 'session=value' }
+			}),
+			app.handle('/')
 		])
 
 		expect(withCookie.status).toBe(200)
@@ -338,17 +305,13 @@ describe('Cookie Validation', () => {
 			({ cookie: { tags } }) => tags.value.join(',')
 		)
 
-		const response = await app.handle(
-			req('/', {
-				headers: {
-					Cookie:
-						'tags=' +
-						encodeURIComponent(
-							JSON.stringify(['tag1', 'tag2', 'tag3'])
-						)
-				}
-			})
-		)
+		const response = await app.handle('/', {
+			headers: {
+				Cookie:
+					'tags=' +
+					encodeURIComponent(JSON.stringify(['tag1', 'tag2', 'tag3']))
+			}
+		})
 
 		expect(response.status).toBe(200)
 		await expect(response.text()).resolves.toBe('tag1,tag2,tag3')
@@ -366,25 +329,19 @@ describe('Cookie Validation', () => {
 		)
 
 		const [stringValue, numericValue, invalid] = await Promise.all([
-			app.handle(
-				req('/', {
-					headers: { Cookie: 'value=text' }
-				})
-			),
-			app.handle(
-				req('/', {
-					headers: { Cookie: 'value=123' }
-				})
-			),
-			app.handle(
-				req('/', {
-					headers: {
-						Cookie:
-							'value=' +
-							encodeURIComponent(JSON.stringify({ obj: true }))
-					}
-				})
-			)
+			app.handle('/', {
+				headers: { Cookie: 'value=text' }
+			}),
+			app.handle('/', {
+				headers: { Cookie: 'value=123' }
+			}),
+			app.handle('/', {
+				headers: {
+					Cookie:
+						'value=' +
+						encodeURIComponent(JSON.stringify({ obj: true }))
+				}
+			})
 		])
 
 		expect(stringValue.status).toBe(200)
@@ -404,17 +361,13 @@ describe('Cookie Validation', () => {
 			)
 
 		const [validRoot, validProfile, invalid] = await Promise.all([
-			app.handle(
-				req('/', {
-					headers: { Cookie: 'session=abc123' }
-				})
-			),
-			app.handle(
-				req('/profile', {
-					headers: { Cookie: 'session=abc123' }
-				})
-			),
-			app.handle(req('/'))
+			app.handle('/', {
+				headers: { Cookie: 'session=abc123' }
+			}),
+			app.handle('/profile', {
+				headers: { Cookie: 'session=abc123' }
+			}),
+			app.handle('/')
 		])
 
 		expect(validRoot.status).toBe(200)
@@ -440,11 +393,9 @@ describe('Cookie Validation', () => {
 			({ cookie: { session } }) => session.value ?? 'empty'
 		)
 
-		const response = await app.handle(
-			req('/', {
-				headers: { Cookie: 'session=test' }
-			})
-		)
+		const response = await app.handle('/', {
+			headers: { Cookie: 'session=test' }
+		})
 
 		expect(response.status).toBe(200)
 		await expect(response.text()).resolves.toBe('test')
@@ -464,7 +415,7 @@ describe('Cookie Validation', () => {
 				Object.keys(cookie).length === 0 ? 'empty' : 'not empty'
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(200)
 		await expect(response.text()).resolves.toBe('empty')
@@ -503,7 +454,7 @@ describe('Cookie Validation', () => {
 			return 'ok'
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		expect(response.status).toBe(200)
 		await expect(response.text()).resolves.toBe('ok')
 	})
@@ -554,19 +505,17 @@ describe('Cookie Validation', () => {
 			)
 
 		const cookie = await app
-			.handle(req('/set'))
+			.handle('/set')
 			.then((x) => x.headers.get('set-cookie'))
 
 		const challenge = cookie!.match(/challenge=([^;]*)/)![1]
 
 		const response = await app
-			.handle(
-				req('/get', {
-					headers: {
-						cookie: `challenge=${challenge}`
-					}
-				})
-			)
+			.handle('/get', {
+				headers: {
+					cookie: `challenge=${challenge}`
+				}
+			})
 			.then((x) => x.json())
 
 		expect(response).toEqual({
@@ -611,17 +560,15 @@ describe('Cookie Validation', () => {
 			}
 		)
 
-		const first = await app.handle(
-			req('/', {
-				headers: {
-					cookie: `challenge=${JSON.stringify({
-						nonce: 'hello',
-						bits: 19,
-						issued: 1770750432990
-					})}`
-				}
-			})
-		)
+		const first = await app.handle('/', {
+			headers: {
+				cookie: `challenge=${JSON.stringify({
+					nonce: 'hello',
+					bits: 19,
+					issued: 1770750432990
+				})}`
+			}
+		})
 
 		expect(first.status).toBe(200)
 		await expect(first.json()).resolves.toEqual({
@@ -636,13 +583,11 @@ describe('Cookie Validation', () => {
 		// contains signature
 		expect(challenge).toInclude('.')
 
-		const second = await app.handle(
-			req('/', {
-				headers: {
-					cookie: `challenge=${challenge}`
-				}
-			})
-		)
+		const second = await app.handle('/', {
+			headers: {
+				cookie: `challenge=${challenge}`
+			}
+		})
 
 		expect(second.status).toBe(200)
 	})

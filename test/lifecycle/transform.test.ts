@@ -1,7 +1,6 @@
 import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('transform', () => {
 	it('converts path params in an app hook', async () => {
@@ -12,7 +11,7 @@ describe('transform', () => {
 			})
 			.get('/id/:id', ({ params: { id } }) => typeof id)
 
-		const res = await app.handle(req('/id/1'))
+		const res = await app.handle('/id/1')
 
 		await expect(res.text()).resolves.toBe('number')
 	})
@@ -31,7 +30,7 @@ describe('transform', () => {
 			},
 			({ params: { id } }) => typeof id
 		)
-		const res = await app.handle(req('/id/1'))
+		const res = await app.handle('/id/1')
 
 		await expect(res.text()).resolves.toBe('number')
 	})
@@ -48,8 +47,8 @@ describe('transform', () => {
 			)
 			.get('/id/:id', ({ params: { id } }) => typeof id)
 
-		const base = await app.handle(req('/id/1'))
-		const scoped = await app.handle(req('/scoped/id/1'))
+		const base = await app.handle('/id/1')
+		const scoped = await app.handle('/scoped/id/1')
 
 		await expect(base.text()).resolves.toBe('string')
 		await expect(scoped.text()).resolves.toBe('number')
@@ -65,7 +64,7 @@ describe('transform', () => {
 			.use(transformId)
 			.get('/id/:id', ({ params: { id } }) => typeof id)
 
-		const res = await app.handle(req('/id/1'))
+		const res = await app.handle('/id/1')
 
 		await expect(res.text()).resolves.toBe('number')
 	})
@@ -82,7 +81,7 @@ describe('transform', () => {
 			})
 			.get('/', () => '')
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(order).toEqual(['A', 'B'])
 	})
@@ -110,7 +109,7 @@ describe('transform', () => {
 				({ params: { id } }) => id
 			)
 
-		const res = await app.handle(req('/id/1'))
+		const res = await app.handle('/id/1')
 
 		await expect(res.text()).resolves.toBe('2')
 	})
@@ -127,7 +126,7 @@ describe('transform', () => {
 			})
 			.get('/id/:id', ({ params: { id } }) => id)
 
-		const res = await app.handle(req('/id/1'))
+		const res = await app.handle('/id/1')
 
 		await expect(res.text()).resolves.toBe('2')
 	})
@@ -152,7 +151,7 @@ describe('transform', () => {
 			({ params: { id } }) => typeof id
 		)
 
-		const res = await app.handle(req('/id/1'))
+		const res = await app.handle('/id/1')
 
 		await expect(res.text()).resolves.toBe('number')
 	})
@@ -168,10 +167,10 @@ describe('transform', () => {
 			({ params: { id } }) => id
 		)
 
-		const correct = await app.handle(req('/id/1')).then((x) => x.status)
+		const correct = await app.handle('/id/1').then((x) => x.status)
 		expect(correct).toBe(200)
 
-		const invalid = await app.handle(req('/id/-1')).then((x) => x.status)
+		const invalid = await app.handle('/id/-1').then((x) => x.status)
 		expect(invalid).toBe(422)
 	})
 
@@ -231,7 +230,7 @@ describe('transform', () => {
 			.use(transformId)
 			.get('/name/:name', ({ params: { name } }) => name)
 
-		const res = await app.handle(req('/name/Fubuki'))
+		const res = await app.handle('/name/Fubuki')
 
 		await expect(res.text()).resolves.toBe('Cat')
 	})
@@ -246,7 +245,7 @@ describe('transform', () => {
 			.use(transformId)
 			.get('/name/:name', ({ params: { name } }) => name)
 
-		const res = await app.handle(req('/name/Fubuki'))
+		const res = await app.handle('/name/Fubuki')
 
 		await expect(res.text()).resolves.toBe('Fubuki')
 	})
@@ -262,10 +261,7 @@ describe('transform', () => {
 
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
-		await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
+		await Promise.all([app.handle('/inner'), app.handle('/outer')])
 
 		expect(called).toEqual(['/inner', '/outer'])
 	})
@@ -281,10 +277,7 @@ describe('transform', () => {
 
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
-		await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
+		await Promise.all([app.handle('/inner'), app.handle('/outer')])
 
 		expect(called).toEqual(['/inner'])
 	})
@@ -303,7 +296,7 @@ describe('transform', () => {
 			])
 			.get('/', () => 'NOOP')
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(total).toEqual(2)
 	})

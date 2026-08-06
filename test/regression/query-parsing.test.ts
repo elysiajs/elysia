@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
 import { Elysia, t } from '../../src'
-import { req } from '../utils'
 
 describe('array query parameters', () => {
 	const app = new Elysia().get(
@@ -10,7 +9,7 @@ describe('array query parameters', () => {
 		({ query }) => query.ids
 	)
 	const run = (query: string) =>
-		app.handle(req(`/x?${query}`)).then((response) => response.json())
+		app.handle(`/x?${query}`).then((response) => response.json())
 
 	it('keeps an encoded comma inside one array element', async () => {
 		await expect(run('ids=a%2Cb')).resolves.toEqual(['a,b'])

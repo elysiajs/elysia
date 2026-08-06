@@ -1,7 +1,6 @@
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('afterResponse after thrown errors', () => {
 	it('runs when a synchronous request hook throws', async () => {
@@ -18,7 +17,7 @@ describe('afterResponse after thrown errors', () => {
 			})
 			.get('/x', () => 'x')
 
-		const res = await app.handle(req('/x'))
+		const res = await app.handle('/x')
 		expect(res.status).toBe(500)
 		await expect(completed).resolves.toBe(true)
 	})
@@ -40,7 +39,7 @@ describe('afterResponse after thrown errors', () => {
 			})
 			.get('/y', () => 'y')
 
-		const res = await app.handle(req('/y'))
+		const res = await app.handle('/y')
 		expect(res.status).toBe(418)
 		await expect(completed).resolves.toBe(418)
 	})
@@ -60,7 +59,7 @@ describe('afterResponse after thrown errors', () => {
 				throw new Error('boom')
 			})
 
-		const res = await app.handle(req('/z'))
+		const res = await app.handle('/z')
 		expect(res.status).toBe(418)
 		await expect(completed).resolves.toBe(418)
 	})

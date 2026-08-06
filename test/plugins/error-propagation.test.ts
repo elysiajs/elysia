@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../src'
-import { req } from '../utils'
 
 describe('Error correctly passed to outer elysia instance', () => {
 	it('Global error handler is run', async () => {
@@ -17,7 +16,7 @@ describe('Error correctly passed to outer elysia instance', () => {
 
 		mainApp.use(plugin)
 
-		const res = await (await mainApp.handle(req('/foo'))).text()
+		const res = await (await mainApp.handle('/foo')).text()
 
 		expect(res).toBe('Fail')
 		expect(globalHandlerRun).toBeTrue()
@@ -47,7 +46,7 @@ describe('Error correctly passed to outer elysia instance', () => {
 			})
 			.use(plugin)
 
-		const res = await mainApp.handle(req('/a/foo')).then((x) => x.text())
+		const res = await mainApp.handle('/a/foo').then((x) => x.text())
 
 		expect(res).toBe('Fail')
 		expect(localHandlerRun).toBeFalse()

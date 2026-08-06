@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
 import { Elysia } from '../../src'
-import { req } from '../utils'
 
 describe('server shutdown', () => {
 	it('waits for cleanup handlers sequentially after stopping the server', async () => {
@@ -53,15 +52,15 @@ describe('server shutdown', () => {
 describe('application sealing', () => {
 	it('rejects route registration after the first request without affecting existing routes', async () => {
 		const app = new Elysia().get('/first', () => 'first')
-		await app.handle(req('/first'))
+		await app.handle('/first')
 
 		expect(() => app.get('/late', () => 'late')).toThrow(
 			'after the app was sealed'
 		)
 
-		const response = await app.handle(req('/first'))
+		const response = await app.handle('/first')
 		expect(response.status).toBe(200)
-		expect(await response.text()).toBe('first')
+		await expect(response.text()).resolves.toBe('first')
 	})
 
 	it('allows async plugins to register routes before the first request without warning', async () => {
@@ -91,8 +90,8 @@ describe('application sealing', () => {
 			resolvePlugin(undefined)
 			await app.modules
 
-			expect((await app.handle(req('/first'))).status).toBe(200)
-			expect((await app.handle(req('/async-added'))).status).toBe(200)
+			expect((await app.handle('/first')).status).toBe(200)
+			expect((await app.handle('/async-added')).status).toBe(200)
 		} finally {
 			console.warn = originalWarn
 		}
@@ -106,7 +105,7 @@ describe('application sealing', () => {
 
 		try {
 			const app = new Elysia().get('/first', () => 'first')
-			await app.handle(req('/first'))
+			await app.handle('/first')
 
 			expect(() => app.get('/late', () => 'late')).toThrow(
 				'after the app was sealed'

@@ -3,7 +3,7 @@ import { fileTypeFromBlob } from 'file-type'
 import { Elysia, t, ValidationError, setFileTypeDetector } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { post, upload } from '../utils'
+import { post, upload, json } from '../utils'
 
 setFileTypeDetector(fileTypeFromBlob)
 
@@ -34,7 +34,8 @@ describe('Body Validator', () => {
 			({ body: { name } }) => name
 		)
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose'
 			})
 		)
@@ -56,7 +57,8 @@ describe('Body Validator', () => {
 			({ body }) => body
 		)
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose',
 				job: 'alchemist',
 				trait: 'dog'
@@ -84,7 +86,8 @@ describe('Body Validator', () => {
 			() => ''
 		)
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose',
 				job: 'alchemist',
 				trait: 'dog'
@@ -107,7 +110,8 @@ describe('Body Validator', () => {
 			({ body }) => body
 		)
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose',
 				job: 'alchemist'
 			})
@@ -135,7 +139,8 @@ describe('Body Validator', () => {
 		)
 
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose',
 				job: 'alchemist',
 				age: '16'
@@ -166,7 +171,8 @@ describe('Body Validator', () => {
 			({ body }) => body
 		)
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose',
 				job: 'alchemist',
 				age: '16',
@@ -197,7 +203,8 @@ describe('Body Validator', () => {
 			({ body }) => body
 		)
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose',
 				job: 'alchemist',
 				age: '16'
@@ -228,7 +235,8 @@ describe('Body Validator', () => {
 			({ body }) => body
 		)
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose',
 				job: 'alchemist',
 				age: '16',
@@ -262,7 +270,8 @@ describe('Body Validator', () => {
 			({ body }) => body
 		)
 		const res = await app.handle(
-			post('/', [
+			'/',
+			json([
 				{
 					name: 'sucrose',
 					job: 'alchemist',
@@ -283,7 +292,7 @@ describe('Body Validator', () => {
 			},
 			({ body }) => body
 		)
-		const res = await app.handle(post('/', [1, 2, 3, 4.2]))
+		const res = await app.handle('/', json([1, 2, 3, 4.2]))
 
 		expect(res.status).toBe(422)
 	})
@@ -352,7 +361,8 @@ describe('Body Validator', () => {
 
 		const res = await app
 			.handle(
-				post('/', {
+				'/',
+				json({
 					name: 'sucrose',
 					job: 'alchemist'
 				})
@@ -376,7 +386,8 @@ describe('Body Validator', () => {
 		)
 
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose',
 				job: 'alchemist'
 			})
@@ -418,7 +429,8 @@ describe('Body Validator', () => {
 			({ body: { name } }) => name
 		)
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose'
 			})
 		)
@@ -440,7 +452,8 @@ describe('Body Validator', () => {
 				`${name} ~ ${Object.keys(friends).join(' + ')}`
 		)
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose',
 				friends: {
 					amber: 'wizard',
@@ -501,7 +514,8 @@ describe('Body Validator', () => {
 
 		const [valid, invalid] = await Promise.all([
 			app.handle(
-				post('/', {
+				'/',
+				json({
 					name: 'sucrose'
 				})
 			),
@@ -535,7 +549,8 @@ describe('Body Validator', () => {
 
 		const value = await app
 			.handle(
-				post('/', {
+				'/',
+				json({
 					username: 'nagisa',
 					password: 'hifumi_daisuki',
 					email: 'kirifuji_nagisa@trinity.school'
@@ -641,7 +656,8 @@ describe('Body Validator', () => {
 		)
 
 		const response = await app.handle(
-			post('/', {
+			'/',
+			json({
 				id: '1'
 			})
 		)
@@ -683,7 +699,8 @@ describe('Body Validator', () => {
 		)
 
 		const response = await app.handle(
-			post('/', {
+			'/',
+			json({
 				id: 'true'
 			})
 		)
@@ -708,7 +725,8 @@ describe('Body Validator', () => {
 			app.handle(post('/')).then((x) => x.json()),
 			app
 				.handle(
-					post('/', {
+					'/',
+					json({
 						id: 1
 					})
 				)
@@ -759,7 +777,8 @@ describe('Body Validator', () => {
 		)
 
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose',
 				job: { name: 'alchemist' }
 			})
@@ -1281,7 +1300,8 @@ describe('Body Validator', () => {
 			({ body }) => body
 		)
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose'
 			})
 		)
@@ -1308,7 +1328,8 @@ describe('Body Validator', () => {
 			.listen(0)
 
 		await app.handle(
-			post('/', {
+			'/',
+			json({
 				year: '3000'
 			})
 		)

@@ -59,7 +59,7 @@ describe('response metadata mapping', () => {
 		expect(res.statusText).toBe('Created')
 		expect(res.headers.get('x-original')).toBe('yes')
 		expect(res.headers.get('x-added')).toBe('also')
-		expect(await res.text()).toBe('body')
+		await expect(res.text()).resolves.toBe('body')
 	})
 
 	it('preserves a string body when adding headers', async () => {
@@ -74,7 +74,7 @@ describe('response metadata mapping', () => {
 		)
 
 		const res = await app.handle(new Request('http://localhost/text'))
-		expect(await res.text()).toBe('hello world')
+		await expect(res.text()).resolves.toBe('hello world')
 		expect(res.headers.get('x-extra')).toBe('1')
 	})
 
@@ -103,6 +103,6 @@ describe('response metadata mapping', () => {
 			new Request('http://localhost/stream-body')
 		)
 		expect(res.headers.get('x-piped')).toBe('yes')
-		expect(await res.text()).toBe('foobarbaz')
+		await expect(res.text()).resolves.toBe('foobarbaz')
 	})
 })

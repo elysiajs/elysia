@@ -5,7 +5,6 @@ import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { TypeBoxValidator } from '../../src/type/validator'
 import { Compiled } from '../../src/compile/aot'
-import { req } from '../utils'
 
 const encodeSpy = spyOn(TBValue, 'Encode')
 
@@ -35,9 +34,9 @@ describe('response encode mirror selection', () => {
 		)
 
 		encodeSpy.mockClear()
-		const res = await app.handle(req('/codec'))
+		const res = await app.handle('/codec')
 
-		expect(await res.json()).toEqual(encoded)
+		await expect(res.json()).resolves.toEqual(encoded)
 		expect(encodeSpy).not.toHaveBeenCalled()
 	})
 
@@ -48,10 +47,10 @@ describe('response encode mirror selection', () => {
 			() => value()
 		)
 
-		await app.handle(req('/codec'))
+		await app.handle('/codec')
 		encodeSpy.mockClear()
-		await app.handle(req('/codec'))
-		await app.handle(req('/codec'))
+		await app.handle('/codec')
+		await app.handle('/codec')
 
 		expect(encodeSpy).not.toHaveBeenCalled()
 	})

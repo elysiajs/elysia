@@ -20,7 +20,7 @@ const expectShortCircuit = async (
 
 	expect(handlerCalled()).toBe(false)
 	expect(res.status).toBe(200)
-	expect(await res.text()).toBe('')
+	await expect(res.text()).resolves.toBe('')
 }
 
 describe('abort short-circuit', () => {
@@ -62,7 +62,8 @@ describe('abort short-circuit', () => {
 		let handlerCalled = false
 
 		const app = new Elysia()
-			.use(trace()).trace(() => {})
+			.use(trace())
+			.trace(() => {})
 			.get('/', () => {
 				handlerCalled = true
 
@@ -141,7 +142,7 @@ describe('abort signal arming', () => {
 
 		await serve(app, async (port) => {
 			const res = await fetch(`http://localhost:${port}/`)
-			expect(await res.text()).toBe('ok')
+			await expect(res.text()).resolves.toBe('ok')
 		})
 
 		expect(armedInHook).toBeUndefined()
@@ -162,16 +163,14 @@ describe('abort signal arming', () => {
 			}
 		}
 
-		const app = new Elysia()
-			.beforeHandle(() => {})
-			.get('/', () => 'ok')
+		const app = new Elysia().beforeHandle(() => {}).get('/', () => 'ok')
 
 		void app.fetch
 
 		const deferred = new SpyRequest('http://localhost/')
 		origin.request = deferred
 		try {
-			expect(await (await app.fetch(deferred)).text()).toBe('ok')
+			await expect((await app.fetch(deferred)).text()).resolves.toBe('ok')
 		} finally {
 			origin.request = undefined
 		}
@@ -180,7 +179,7 @@ describe('abort signal arming', () => {
 
 		// same request, no provenance → eager arming → exactly one read
 		const eager = new SpyRequest('http://localhost/')
-		expect(await (await app.fetch(eager)).text()).toBe('ok')
+		await expect((await app.fetch(eager)).text()).resolves.toBe('ok')
 		expect(reads).toBe(1)
 	})
 
@@ -198,7 +197,7 @@ describe('abort signal arming', () => {
 
 		await serve(app, async (port) => {
 			const res = await fetch(`http://localhost:${port}/`)
-			expect(await res.text()).toBe('ok')
+			await expect(res.text()).resolves.toBe('ok')
 		})
 
 		expect(armedAfterAwait).toBeInstanceOf(AbortSignal)
@@ -223,7 +222,7 @@ describe('abort signal arming', () => {
 
 		expect(secondHookCalled).toBe(false)
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('')
+		await expect(res.text()).resolves.toBe('')
 	})
 
 	it('falls back to eager arming when a wrap HOC substitutes the request', async () => {
@@ -253,7 +252,7 @@ describe('abort signal arming', () => {
 		await serve(app, async (port) => {
 			const res = await fetch(`http://localhost:${port}/`)
 			expect(res.status).toBe(200)
-			expect(await res.text()).toBe('')
+			await expect(res.text()).resolves.toBe('')
 		})
 
 		expect(secondHookCalled).toBe(false)
@@ -293,7 +292,7 @@ describe('hook-less routes never observe abort', () => {
 		const res = await app.handle(new SpyRequest('http://localhost/?name=a'))
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('a')
+		await expect(res.text()).resolves.toBe('a')
 		expect(SpyRequest.reads).toBe(0)
 	})
 
@@ -314,7 +313,7 @@ describe('hook-less routes never observe abort', () => {
 		// observed at a lifecycle stage, and this route has none
 		expect(handlerCalled).toBe(true)
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('ran')
+		await expect(res.text()).resolves.toBe('ran')
 	})
 
 	it('still short-circuits the same route once it has a beforeHandle', async () => {
@@ -323,11 +322,13 @@ describe('hook-less routes never observe abort', () => {
 		// the same in-process lane, with no `.request()` hook to arm ahead of it
 		let handlerCalled = false
 
-		const app = new Elysia().beforeHandle(() => {}).get('/', () => {
-			handlerCalled = true
+		const app = new Elysia()
+			.beforeHandle(() => {})
+			.get('/', () => {
+				handlerCalled = true
 
-			return 'ran'
-		})
+				return 'ran'
+			})
 
 		const res = await app.handle(
 			new Request('http://localhost/', { signal: preAborted().signal })
@@ -335,7 +336,7 @@ describe('hook-less routes never observe abort', () => {
 
 		expect(handlerCalled).toBe(false)
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('')
+		await expect(res.text()).resolves.toBe('')
 	})
 })
 
@@ -358,6 +359,6 @@ describe('abortSignal: false', () => {
 		)
 
 		expect(handlerCalled).toBe(true)
-		expect(await res.text()).toBe('ran')
+		await expect(res.text()).resolves.toBe('ran')
 	})
 })

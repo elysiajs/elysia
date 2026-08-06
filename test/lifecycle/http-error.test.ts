@@ -1,14 +1,5 @@
-import {
-	Elysia,
-	HTTPError,
-	NotFound,
-	problem,
-	status,
-	t,
-	tag
-} from '../../src'
+import { Elysia, HTTPError, NotFound, problem, status, t, tag } from '../../src'
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 class OutOfCredit extends HTTPError<'OUT_OF_CREDIT'> {
 	type = 'OUT_OF_CREDIT' as const
@@ -28,14 +19,14 @@ describe('HTTPError', () => {
 			throw new OutOfCredit()
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(402)
 		expect(response.headers.get('x-credit')).toBe('0')
 		expect(response.headers.get('content-type')).toStartWith(
 			'application/problem+json'
 		)
-		expect(await response.json()).toEqual({
+		await expect(response.json()).resolves.toEqual({
 			type: 'OUT_OF_CREDIT',
 			title: 'Payment Required',
 			detail: 'Out of credit',
@@ -46,11 +37,11 @@ describe('HTTPError', () => {
 	it('map a returned self-describing error', async () => {
 		const app = new Elysia().get('/', () => new OutOfCredit())
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(402)
 		expect(response.headers.get('x-credit')).toBe('0')
-		expect(await response.json()).toEqual({
+		await expect(response.json()).resolves.toEqual({
 			type: 'OUT_OF_CREDIT',
 			title: 'Payment Required',
 			detail: 'Out of credit',
@@ -74,7 +65,7 @@ describe('HTTPError', () => {
 			throw new Denied()
 		})
 
-		expect(await (await app.handle(req('/'))).json()).toMatchObject({
+		await expect((await app.handle('/')).json()).resolves.toMatchObject({
 			type: 'https://example.com/errors/denied'
 		})
 	})
@@ -95,7 +86,7 @@ describe('HTTPError', () => {
 			throw new Legacy()
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(409)
 		// mapResponse infers the content type, exactly as for a handler return
@@ -103,7 +94,10 @@ describe('HTTPError', () => {
 			'application/json'
 		)
 		// no `type`, no `title`, no `status` — nothing but what was returned
-		expect(await response.json()).toEqual({ code: 'LEGACY', ok: false })
+		await expect(response.json()).resolves.toEqual({
+			code: 'LEGACY',
+			ok: false
+		})
 	})
 
 	// A body that isn't a plain object can't merge into the envelope, it
@@ -136,14 +130,16 @@ describe('HTTPError', () => {
 				throw new ArrayBody()
 			})
 
-		expect(await (await app.handle(req('/string'))).json()).toEqual({
+		await expect((await app.handle('/string')).json()).resolves.toEqual({
 			type: 'STRING_BODY',
 			title: 'Conflict',
 			detail: 'conflicting write',
 			status: 409
 		})
 
-		expect(await (await app.handle(req('/array'))).json()).toMatchObject({
+		await expect(
+			(await app.handle('/array')).json()
+		).resolves.toMatchObject({
 			detail: ['name', 'email']
 		})
 	})
@@ -162,10 +158,10 @@ describe('HTTPError', () => {
 			throw new Deferred()
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(409)
-		expect(await response.json()).toEqual({
+		await expect(response.json()).resolves.toEqual({
 			type: 'DEFERRED',
 			title: 'Conflict',
 			detail: { deferred: true },
@@ -194,10 +190,10 @@ describe('HTTPError', () => {
 		process.on('unhandledRejection', trap)
 
 		try {
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 
 			expect(response.status).toBe(500)
-			expect(await response.json()).toMatchObject({
+			await expect(response.json()).resolves.toMatchObject({
 				status: 500,
 				title: 'Internal Server Error'
 			})
@@ -226,7 +222,7 @@ describe('HTTPError', () => {
 			throw new Leaky()
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(500)
 		expect(response.headers.get('set-cookie')).toBeNull()
@@ -248,10 +244,10 @@ describe('HTTPError', () => {
 			throw new Empty('nothing here')
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(410)
-		expect(await response.json()).toEqual({
+		await expect(response.json()).resolves.toEqual({
 			type: 'EMPTY',
 			title: 'Gone',
 			detail: 'nothing here',
@@ -279,16 +275,16 @@ describe('HTTPError', () => {
 			.get('/present', () => new Maybe(true))
 			.get('/absent', () => new Maybe(false))
 
-		const present = await app.handle(req('/present'))
+		const present = await app.handle('/present')
 		expect(present.status).toBe(404)
-		expect(await present.json()).toMatchObject({
+		await expect(present.json()).resolves.toMatchObject({
 			type: 'MAYBE',
 			detail: 'present'
 		})
 
-		const absent = await app.handle(req('/absent'))
+		const absent = await app.handle('/absent')
 		expect(absent.status).toBe(404)
-		expect(await absent.json()).toMatchObject({
+		await expect(absent.json()).resolves.toMatchObject({
 			type: 'MAYBE',
 			detail: 'absent'
 		})
@@ -311,11 +307,11 @@ describe('HTTPError', () => {
 			throw new Exploding()
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(500)
 		expect(response.headers.get('x-credit')).toBeNull()
-		expect(await response.json()).toMatchObject({
+		await expect(response.json()).resolves.toMatchObject({
 			status: 500,
 			title: 'Internal Server Error'
 		})
@@ -340,10 +336,10 @@ describe('HTTPError', () => {
 			.get('/returned', () => new Denied())
 
 		for (const path of ['/thrown', '/returned']) {
-			const response = await app.handle(req(path))
+			const response = await app.handle(path)
 
 			expect(response.status).toBe(402)
-			expect(await response.json()).toEqual({
+			await expect(response.json()).resolves.toEqual({
 				type: 'DENIED',
 				title: 'Payment Required',
 				detail: 'Out of credit',
@@ -364,13 +360,13 @@ describe('HTTPError', () => {
 			throw new Implemented()
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(403)
 		expect(response.headers.get('content-type')).not.toStartWith(
 			'application/problem+json'
 		)
-		expect(await response.json()).toEqual({ detail: 'forbidden' })
+		await expect(response.json()).resolves.toEqual({ detail: 'forbidden' })
 	})
 
 	// `NaN >= 500` is false, so a malformed status would otherwise duck past
@@ -385,10 +381,10 @@ describe('HTTPError', () => {
 			throw new Foreign()
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(500)
-		expect(await response.text()).not.toContain('upstream-secret')
+		await expect(response.text()).resolves.not.toContain('upstream-secret')
 	})
 
 	// SAFETY PIN: `ValidationError` (the runtime's own validation failure)
@@ -463,10 +459,10 @@ describe('HTTPError', () => {
 					.get('/returned', () => new Unmatched('short and stout'))
 
 				for (const path of ['/thrown', '/returned']) {
-					const response = await app.handle(req(path))
+					const response = await app.handle(path)
 
 					expect(response.status).toBe(418)
-					expect(await response.json()).toEqual({
+					await expect(response.json()).resolves.toEqual({
 						type: 'UNMATCHED',
 						title: "I'm a teapot",
 						detail: 'short and stout',
@@ -483,13 +479,13 @@ describe('HTTPError', () => {
 					.get('/returned', () => new Bodied())
 
 				for (const path of ['/thrown', '/returned']) {
-					const response = await app.handle(req(path))
+					const response = await app.handle(path)
 
 					expect(response.status).toBe(409)
 					expect(response.headers.get('content-type')).toStartWith(
 						'application/problem+json'
 					)
-					expect(await response.json()).toMatchObject({
+					await expect(response.json()).resolves.toMatchObject({
 						type: 'BODIED',
 						detail: 'annotated'
 					})
@@ -510,12 +506,12 @@ describe('HTTPError', () => {
 					.get('/first', () => new First())
 					.get('/second', () => new Second())
 
-				expect(
-					await (await app.handle(req('/first'))).json()
-				).toMatchObject({ type: 'first', detail: 'q' })
-				expect(
-					await (await app.handle(req('/second'))).json()
-				).toMatchObject({ type: 'second', detail: 'q' })
+				await expect(
+					(await app.handle('/first')).json()
+				).resolves.toMatchObject({ type: 'first', detail: 'q' })
+				await expect(
+					(await app.handle('/second')).json()
+				).resolves.toMatchObject({ type: 'second', detail: 'q' })
 			})
 
 			it('leaves an explicit type the handler set alone', async () => {
@@ -528,9 +524,9 @@ describe('HTTPError', () => {
 					)
 					.get('/', () => new First())
 
-				expect(await (await app.handle(req('/'))).json()).toMatchObject(
-					{ type: 'https://example.com/mine' }
-				)
+				await expect(
+					(await app.handle('/')).json()
+				).resolves.toMatchObject({ type: 'https://example.com/mine' })
 			})
 
 			// `.error(Class, value)` wraps a non-function into `() => value`,
@@ -547,17 +543,17 @@ describe('HTTPError', () => {
 					.get('/first', () => new First())
 					.get('/second', () => new Second())
 
-				expect(
-					await (await app.handle(req('/first'))).json()
-				).toMatchObject({ type: 'first' })
-				expect(
-					await (await app.handle(req('/second'))).json()
-				).toMatchObject({ type: 'second' })
+				await expect(
+					(await app.handle('/first')).json()
+				).resolves.toMatchObject({ type: 'first' })
+				await expect(
+					(await app.handle('/second')).json()
+				).resolves.toMatchObject({ type: 'second' })
 				// the first request must not have poisoned the second, nor the
 				// registered object itself
-				expect(
-					await (await app.handle(req('/first'))).json()
-				).toMatchObject({ type: 'first' })
+				await expect(
+					(await app.handle('/first')).json()
+				).resolves.toMatchObject({ type: 'first' })
 				expect((shared.response as { type: string }).type).toBe(
 					'about:blank'
 				)
@@ -569,7 +565,7 @@ describe('HTTPError', () => {
 					.error(First, () => status(400, { type: 'about:blank' }))
 					.get('/', () => new First())
 
-				expect(await (await app.handle(req('/'))).json()).toEqual({
+				await expect((await app.handle('/')).json()).resolves.toEqual({
 					type: 'about:blank'
 				})
 			})
@@ -594,11 +590,11 @@ describe('HTTPError', () => {
 				.get('/bare', () => new Error('boom'))
 				.get('/ok', () => 'ok')
 
-			expect((await app.handle(req('/first'))).status).toBe(400)
+			expect((await app.handle('/first')).status).toBe(400)
 			// the handler intercepts before `value()` runs, so never 418
-			expect((await app.handle(req('/second'))).status).toBe(401)
-			expect((await app.handle(req('/bare'))).status).toBe(500)
-			expect((await app.handle(req('/ok'))).status).toBe(200)
+			expect((await app.handle('/second')).status).toBe(401)
+			expect((await app.handle('/bare')).status).toBe(500)
+			expect((await app.handle('/ok')).status).toBe(200)
 		})
 
 		// The hook chain still wins when it does match
@@ -607,10 +603,10 @@ describe('HTTPError', () => {
 				.error(Registered, () => status(400, 'handled'))
 				.get('/', () => new Registered())
 
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 
 			expect(response.status).toBe(400)
-			expect(await response.text()).toBe('handled')
+			await expect(response.text()).resolves.toBe('handled')
 		})
 
 		// `toResponse` is handled by the shared fallback, the hook lane used
@@ -622,10 +618,10 @@ describe('HTTPError', () => {
 					throw new NotFound('missing')
 				})
 
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 
 			expect(response.status).toBe(404)
-			expect(await response.json()).toMatchObject({
+			await expect(response.json()).resolves.toMatchObject({
 				type: 'not-found',
 				status: 404
 			})
@@ -637,10 +633,10 @@ describe('HTTPError', () => {
 			.get('/', () => new OutOfCredit())
 			.error(OutOfCredit, () => status(409, 'handled'))
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(409)
-		expect(await response.text()).toBe('handled')
+		await expect(response.text()).resolves.toBe('handled')
 		expect(response.headers.get('x-credit')).toBeNull()
 	})
 
@@ -650,11 +646,11 @@ describe('HTTPError', () => {
 			.get('/', () => new OutOfCredit())
 			.error(OutOfCredit, () => undefined)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(402)
 		expect(response.headers.get('x-credit')).toBe('0')
-		expect(await response.json()).toEqual({
+		await expect(response.json()).resolves.toEqual({
 			type: 'OUT_OF_CREDIT',
 			title: 'Payment Required',
 			detail: 'Out of credit',
@@ -680,10 +676,15 @@ describe('HTTPError', () => {
 				throw new Owed(params.who)
 			})
 
-			expect(
-				await (await app.handle(req('/alice'))).json()
-			).toMatchObject({ type: 'OWED', detail: 'alice is out of credit' })
-			expect(await (await app.handle(req('/bob'))).json()).toMatchObject({
+			await expect(
+				(await app.handle('/alice')).json()
+			).resolves.toMatchObject({
+				type: 'OWED',
+				detail: 'alice is out of credit'
+			})
+			await expect(
+				(await app.handle('/bob')).json()
+			).resolves.toMatchObject({
 				detail: 'bob is out of credit'
 			})
 		})
@@ -700,10 +701,10 @@ describe('HTTPError', () => {
 				throw new Deferred()
 			})
 
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 
 			expect(response.status).toBe(409)
-			expect(await response.json()).toMatchObject({
+			await expect(response.json()).resolves.toMatchObject({
 				type: 'DEFERRED',
 				detail: { deferred: true }
 			})
@@ -719,7 +720,7 @@ describe('HTTPError', () => {
 				throw new Eager()
 			})
 
-			expect(await (await app.handle(req('/'))).json()).toEqual({
+			await expect((await app.handle('/')).json()).resolves.toEqual({
 				type: 'EAGER',
 				title: 'Gone',
 				detail: 'known upfront',
@@ -747,11 +748,11 @@ describe('HTTPError', () => {
 				throw new ForeignFn('plain message')
 			})
 
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 
 			expect(invoked).toBe(false)
 			expect(response.status).toBe(403)
-			expect(await response.text()).toBe('plain message')
+			await expect(response.text()).resolves.toBe('plain message')
 		})
 
 		// Naming a `type` is the claim, so an implementer's method does run
@@ -769,10 +770,12 @@ describe('HTTPError', () => {
 				throw new ImplFn('m')
 			})
 
-			expect(await (await app.handle(req('/'))).json()).toMatchObject({
-				type: 'IMPL_FN',
-				detail: 'forbidden'
-			})
+			await expect((await app.handle('/')).json()).resolves.toMatchObject(
+				{
+					type: 'IMPL_FN',
+					detail: 'forbidden'
+				}
+			)
 		})
 
 		it('serves 500 when the method throws', async () => {
@@ -786,10 +789,10 @@ describe('HTTPError', () => {
 				throw new Exploding()
 			})
 
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 
 			expect(response.status).toBe(500)
-			expect(await response.json()).toMatchObject({
+			await expect(response.json()).resolves.toMatchObject({
 				status: 500,
 				title: 'Internal Server Error'
 			})
@@ -806,10 +809,10 @@ describe('HTTPError', () => {
 				throw new Plain()
 			})
 
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 
 			expect(response.status).toBe(409)
-			expect(await response.text()).toBe('just text')
+			await expect(response.text()).resolves.toBe('just text')
 			expect(response.headers.get('content-type')).not.toStartWith(
 				'application/problem+json'
 			)
@@ -824,7 +827,7 @@ describe('HTTPError', () => {
 				throw new Eager()
 			})
 
-			expect(await (await app.handle(req('/'))).json()).toEqual({
+			await expect((await app.handle('/')).json()).resolves.toEqual({
 				eager: true
 			})
 		})
@@ -844,7 +847,7 @@ describe('HTTPError', () => {
 				throw new Both()
 			})
 
-			expect(await (await app.handle(req('/'))).json()).toEqual({
+			await expect((await app.handle('/')).json()).resolves.toEqual({
 				winner: 'value'
 			})
 		})
@@ -881,10 +884,10 @@ describe('HTTPError', () => {
 				})
 
 			for (const path of ['/sync', '/async']) {
-				const response = await app.handle(req(path))
+				const response = await app.handle(path)
 
 				expect(response.status).toBe(402)
-				expect(await response.json()).toMatchObject({
+				await expect(response.json()).resolves.toMatchObject({
 					detail: 'fell through'
 				})
 			}
@@ -907,11 +910,11 @@ describe('HTTPError', () => {
 				throw new ForeignFn('plain message')
 			})
 
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 
 			expect(invoked).toBe(false)
 			expect(response.status).toBe(403)
-			expect(await response.text()).toBe('plain message')
+			await expect(response.text()).resolves.toBe('plain message')
 		})
 
 		// A value annotation is inert data, so it participates even unclaimed
@@ -925,7 +928,7 @@ describe('HTTPError', () => {
 				throw new ForeignValue('m')
 			})
 
-			expect(await (await app.handle(req('/'))).json()).toEqual({
+			await expect((await app.handle('/')).json()).resolves.toEqual({
 				type: 'about:blank',
 				title: 'Forbidden',
 				detail: { why: 'inert data' },
@@ -944,10 +947,10 @@ describe('HTTPError', () => {
 				throw new Exploding()
 			})
 
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 
 			expect(response.status).toBe(500)
-			expect(await response.json()).toMatchObject({
+			await expect(response.json()).resolves.toMatchObject({
 				status: 500,
 				title: 'Internal Server Error'
 			})
@@ -967,13 +970,13 @@ describe('HTTPError', () => {
 				throw new Flaky()
 			})
 
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 
 			expect(response.status).toBe(503)
 			expect(response.headers.get('content-type')).toStartWith(
 				'application/problem+json'
 			)
-			expect(await response.json()).toEqual({
+			await expect(response.json()).resolves.toEqual({
 				type: 'about:blank',
 				title: 'Service Unavailable',
 				detail: 'downstream dead',
@@ -992,13 +995,13 @@ describe('HTTPError', () => {
 				throw new Made()
 			})
 
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 
 			expect(response.status).toBe(201)
 			expect(response.headers.get('content-type')).toStartWith(
 				'application/json'
 			)
-			expect(await response.json()).toEqual({ made: 'it' })
+			await expect(response.json()).resolves.toEqual({ made: 'it' })
 		})
 
 		it('escapes to the returned status through the error-hook lane', async () => {
@@ -1014,10 +1017,10 @@ describe('HTTPError', () => {
 					throw new Flaky()
 				})
 
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 
 			expect(response.status).toBe(503)
-			expect(await response.json()).toMatchObject({
+			await expect(response.json()).resolves.toMatchObject({
 				status: 503,
 				detail: 'downstream dead'
 			})
@@ -1037,7 +1040,7 @@ describe('HTTPError', () => {
 					throw new Async()
 				})
 
-			expect(await (await app.handle(req('/'))).json()).toEqual({
+			await expect((await app.handle('/')).json()).resolves.toEqual({
 				type: 'ASYNC',
 				title: 'Conflict',
 				detail: 'via hooks',
@@ -1056,10 +1059,10 @@ describe('HTTPError', () => {
 				throw new OutOfCredit('no funds')
 			})
 
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 
 			expect(response.status).toBe(402)
-			expect(await response.json()).toMatchObject({
+			await expect(response.json()).resolves.toMatchObject({
 				type: 'OUT_OF_CREDIT',
 				detail: 'no funds'
 			})
@@ -1087,10 +1090,10 @@ describe('HTTPError', () => {
 				throw new OutOfCredit('no funds')
 			})
 
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 
 			expect(response.status).toBe(402)
-			expect(await response.json()).toEqual({
+			await expect(response.json()).resolves.toEqual({
 				type: 'OUT_OF_CREDIT',
 				title: 'Payment Required',
 				detail: 'no funds',
@@ -1106,10 +1109,10 @@ describe('HTTPError', () => {
 
 			const app = new Elysia().get('/', () => new Denied())
 
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 
 			expect(response.status).toBe(402)
-			expect(await response.json()).toMatchObject({
+			await expect(response.json()).resolves.toMatchObject({
 				type: 'DENIED',
 				status: 402
 			})
@@ -1132,10 +1135,10 @@ describe('HTTPError', () => {
 				})
 				.error(Teapot, () => status(400, 'handled'))
 
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 
 			expect(response.status).toBe(400)
-			expect(await response.text()).toBe('handled')
+			await expect(response.text()).resolves.toBe('handled')
 		})
 
 		it('register a class annotated through the second argument via .error', async () => {
@@ -1147,10 +1150,10 @@ describe('HTTPError', () => {
 				})
 				.error(Teapot, () => status(400, 'handled'))
 
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 
 			expect(response.status).toBe(400)
-			expect(await response.text()).toBe('handled')
+			await expect(response.text()).resolves.toBe('handled')
 		})
 
 		// The tag lives on the prototype, an own property would shadow a
@@ -1174,11 +1177,11 @@ describe('HTTPError', () => {
 				throw new Dynamic()
 			})
 
-			const response = await app.handle(req('/'))
+			const response = await app.handle('/')
 
 			expect(response.status).toBe(418)
 			// `value` overrides the whole response, so no envelope here
-			expect(await response.json()).toEqual({ dynamic: true })
+			await expect(response.json()).resolves.toEqual({ dynamic: true })
 		})
 	})
 
@@ -1194,13 +1197,13 @@ describe('HTTPError', () => {
 			throw new Implemented()
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(403)
 		expect(response.headers.get('content-type')).not.toStartWith(
 			'application/problem+json'
 		)
-		expect(await response.json()).toEqual({ detail: 'forbidden' })
+		await expect(response.json()).resolves.toEqual({ detail: 'forbidden' })
 	})
 
 	it('merge annotated headers into existing headers', async () => {
@@ -1210,7 +1213,7 @@ describe('HTTPError', () => {
 			throw new OutOfCredit()
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(402)
 		expect(response.headers.get('x-base')).toBe('kept')
@@ -1227,10 +1230,10 @@ describe('HTTPError', () => {
 			throw new Silent('gone for good')
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(410)
-		expect(await response.json()).toEqual({
+		await expect(response.json()).resolves.toEqual({
 			type: 'SILENT',
 			title: 'Gone',
 			detail: 'gone for good',
@@ -1251,10 +1254,10 @@ describe('HTTPError', () => {
 			throw new ImplNoValue('forbidden by policy')
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(403)
-		expect(await response.json()).toEqual({
+		await expect(response.json()).resolves.toEqual({
 			type: 'IMPL_NO_VALUE',
 			title: 'Forbidden',
 			detail: 'forbidden by policy',
@@ -1273,10 +1276,10 @@ describe('HTTPError', () => {
 			throw new ForeignBare('plain message')
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(403)
-		expect(await response.text()).toBe('plain message')
+		await expect(response.text()).resolves.toBe('plain message')
 		expect(response.headers.get('content-type')).not.toStartWith(
 			'application/problem+json'
 		)
@@ -1293,10 +1296,10 @@ describe('HTTPError', () => {
 			throw new ExtNoBody('unannotated')
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(500)
-		expect(await response.json()).toEqual({
+		await expect(response.json()).resolves.toEqual({
 			type: 'EXT_NO_BODY',
 			title: 'Internal Server Error',
 			detail: 'unannotated',

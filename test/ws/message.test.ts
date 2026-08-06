@@ -507,7 +507,7 @@ describe('WebSocket message', () => {
 		app.stop()
 	})
 
-	it('should send & receive', async () => {
+	it('should send & receive a whitespace-only message verbatim', async () => {
 		const app = new Elysia()
 			.use(websocket()).ws('/ws', {
 				message(ws, message) {

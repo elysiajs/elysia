@@ -5,7 +5,7 @@ import { describe, it, expect } from 'bun:test'
 import { z } from 'zod'
 import * as v from 'valibot'
 import { type } from 'arktype'
-import { post, req } from '../utils'
+import { post, json } from '../utils'
 
 const counted = <T extends { '~standard': any }>(schema: T) => {
 	let calls = 0
@@ -46,7 +46,8 @@ describe('Standard Schema Merge', () => {
 
 		const value = await app
 			.handle(
-				post('/', {
+				'/',
+				json({
 					id: 1,
 					name: 'lilith',
 					extra: false
@@ -57,7 +58,8 @@ describe('Standard Schema Merge', () => {
 		expect(value).toEqual({ id: 1, name: 'lilith' })
 
 		const invalid = await app.handle(
-			post('/', {
+			'/',
+			json({
 				id: '1',
 				name: 'fouco',
 				extra: false
@@ -86,12 +88,12 @@ describe('Standard Schema Merge', () => {
 			)
 
 		const value = await app
-			.handle(req('/?id=1&name=lilith&extra=true'))
+			.handle('/?id=1&name=lilith&extra=true')
 			.then((x) => x.json())
 
 		expect(value).toEqual({ id: 1, name: 'lilith' })
 
-		const invalid = await app.handle(req('/?id=a&name=fouco'))
+		const invalid = await app.handle('/?id=a&name=fouco')
 
 		expect(invalid.status).toBe(422)
 	})
@@ -114,11 +116,11 @@ describe('Standard Schema Merge', () => {
 				({ params }) => params
 			)
 
-		const value = await app.handle(req('/lilith/1')).then((x) => x.json())
+		const value = await app.handle('/lilith/1').then((x) => x.json())
 
 		expect(value).toEqual({ id: 1, name: 'lilith' })
 
-		const invalid = await app.handle(req('/user/a?name=fouco'))
+		const invalid = await app.handle('/user/a?name=fouco')
 		expect(invalid.status).toBe(422)
 	})
 
@@ -141,27 +143,23 @@ describe('Standard Schema Merge', () => {
 			)
 
 		const value = await app
-			.handle(
-				req('/', {
-					headers: {
-						id: '1',
-						name: 'lilith',
-						extra: 'false'
-					}
-				})
-			)
+			.handle('/', {
+				headers: {
+					id: '1',
+					name: 'lilith',
+					extra: 'false'
+				}
+			})
 			.then((x) => x.json())
 
 		expect(value).toEqual({ id: 1, name: 'lilith' })
 
-		const invalid = await app.handle(
-			req('/', {
-				headers: {
-					id: 'a',
-					name: 'fouco'
-				}
-			})
-		)
+		const invalid = await app.handle('/', {
+			headers: {
+				id: 'a',
+				name: 'fouco'
+			}
+		})
 
 		expect(invalid.status).toBe(422)
 	})
@@ -189,11 +187,11 @@ describe('Standard Schema Merge', () => {
 				})
 			)
 
-		const valid = await app.handle(req('/lilith')).then((x) => x.json())
+		const valid = await app.handle('/lilith').then((x) => x.json())
 
 		expect(valid).toEqual({ id: 1, name: 'lilith' })
 
-		const invalid = await app.handle(req('/focou'))
+		const invalid = await app.handle('/focou')
 		expect(invalid.status).toBe(422)
 	})
 
@@ -238,13 +236,13 @@ describe('Standard Schema Merge', () => {
 							})
 			)
 
-		const lilith = await app.handle(req('/lilith')).then((x) => x.json())
-		const fouco = await app.handle(req('/fouco')).then((x) => x.json())
+		const lilith = await app.handle('/lilith').then((x) => x.json())
+		const fouco = await app.handle('/fouco').then((x) => x.json())
 
 		expect(lilith).toEqual({ id: 1, name: 'lilith' })
 		expect(fouco).toEqual({ id: 2, name: 'fouco' })
 
-		const invalid = await app.handle(req('/unknown'))
+		const invalid = await app.handle('/unknown')
 		expect(invalid.status).toBe(422)
 	})
 
@@ -386,13 +384,13 @@ describe('Standard Schema Merge', () => {
 						})
 		)
 
-		const lilith = await app.handle(req('/lilith')).then((x) => x.json())
-		const fouco = await app.handle(req('/fouco')).then((x) => x.json())
+		const lilith = await app.handle('/lilith').then((x) => x.json())
+		const fouco = await app.handle('/fouco').then((x) => x.json())
 
 		expect(lilith).toEqual({ id: 1, name: 'lilith' })
 		expect(fouco).toEqual({ id: 2, name: 'fouco' })
 
-		const invalid = await app.handle(req('/unknown'))
+		const invalid = await app.handle('/unknown')
 		expect(invalid.status).toBe(422)
 	})
 
@@ -738,13 +736,13 @@ describe('Standard Schema single-pass validation', () => {
 			)
 
 		const value = await app
-			.handle(post('/', { id: 1, name: 'lilith', extra: false }))
+			.handle('/', json({ id: 1, name: 'lilith', extra: false }))
 			.then((x) => x.json())
 
 		expect(value).toEqual({ id: 1, name: 'lilith' })
 		expect(id.count()).toBe(1)
 
-		const invalid = await app.handle(post('/', { id: 'a', name: 'lilith' }))
+		const invalid = await app.handle('/', json({ id: 'a', name: 'lilith' }))
 
 		expect(invalid.status).toBe(422)
 		expect(id.count()).toBe(2)
@@ -768,7 +766,7 @@ describe('Standard Schema single-pass validation', () => {
 				({ query }) => query
 			)
 
-		const value = await app.handle(req('/?id=1')).then((x) => x.json())
+		const value = await app.handle('/?id=1').then((x) => x.json())
 
 		expect(value).toEqual({ id: 1, page: 1 })
 	})
@@ -796,7 +794,8 @@ describe('asynchronous Standard Schema merge guards', () => {
 			)
 
 		const invalid = await app.handle(
-			post('/', { id: 'not-a-number', name: 'lilith' })
+			'/',
+			json({ id: 'not-a-number', name: 'lilith' })
 		)
 		expect(invalid.status).toBe(422)
 	})
@@ -810,9 +809,9 @@ describe('asynchronous Standard Schema merge guards', () => {
 				({ body }) => body
 			)
 
-		const res = await app.handle(post('/', { id: 7, name: 'lilith' }))
+		const res = await app.handle('/', json({ id: 7, name: 'lilith' }))
 		expect(res.status).toBe(200)
-		expect(await res.json()).toEqual({ id: 7, name: 'lilith' })
+		await expect(res.json()).resolves.toEqual({ id: 7, name: 'lilith' })
 	})
 
 	it('marks the validator async so the compiled route awaits it', () => {

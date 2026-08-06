@@ -8,12 +8,8 @@ import {
 	endValidatorCapture
 } from '../../src/compile/aot-capture'
 import { compileHandler } from '../../src/compile/handler'
-import {
-	materialise,
-	materialiseHandlers,
-	registerManifest
-} from './_manifest'
-import { req, post } from '../utils'
+import { materialise, materialiseHandlers, registerManifest } from './_manifest'
+import { post, json } from '../utils'
 import { hasSyncHmac } from '../../src/cookie/utils'
 
 /** Synchronous routes stay synchronous unless their work may return a Promise. */
@@ -37,7 +33,7 @@ describe('synchronous route emission', () => {
 		const app = new Elysia().get('/', () => 'hi')
 
 		expect(isAsync(app)).toBe(false)
-		await expect((await app.handle(req('/'))).text()).resolves.toBe('hi')
+		await expect((await app.handle('/')).text()).resolves.toBe('hi')
 	})
 
 	it('async handler stays AsyncFunction', async () => {
@@ -50,16 +46,14 @@ describe('synchronous route emission', () => {
 		)
 
 		expect(isAsync(app)).toBe(true)
-		await expect((await app.handle(req('/?q=1'))).text()).resolves.toBe(
-			'hi'
-		)
+		await expect((await app.handle('/?q=1')).text()).resolves.toBe('hi')
 	})
 
 	it('sync GET + sync error hook is a plain Function', async () => {
 		const app = new Elysia().error(() => {}).get('/', () => 'hi')
 
 		expect(isAsync(app)).toBe(false)
-		await expect((await app.handle(req('/'))).text()).resolves.toBe('hi')
+		await expect((await app.handle('/')).text()).resolves.toBe('hi')
 	})
 
 	it('sync GET + async error hook stays AsyncFunction', () => {
@@ -72,7 +66,7 @@ describe('synchronous route emission', () => {
 		const app = new Elysia().afterResponse(() => {}).get('/', () => 'hi')
 
 		expect(isAsync(app)).toBe(false)
-		await expect((await app.handle(req('/'))).text()).resolves.toBe('hi')
+		await expect((await app.handle('/')).text()).resolves.toBe('hi')
 	})
 
 	it('sync GET + async afterResponse stays AsyncFunction', () => {
@@ -94,7 +88,7 @@ describe('synchronous route emission', () => {
 
 		expect(isAsync(app)).toBe(true)
 
-		const ok = await app.handle(req('/'))
+		const ok = await app.handle('/')
 		expect(ok.status).toBe(200)
 		await expect(ok.text()).resolves.toBe('hi')
 
@@ -110,7 +104,7 @@ describe('synchronous route emission', () => {
 				throw new Error('boom')
 			})
 
-		const r = await app.handle(req('/'))
+		const r = await app.handle('/')
 		expect(r.status).toBe(500)
 		await expect(r.text()).resolves.toBe('mapped-err')
 	})
@@ -123,9 +117,7 @@ describe('synchronous route emission', () => {
 
 		expect(isAsync(app)).toBe(false)
 		await expect(
-			(
-				await app.handle(req('/', { headers: { cookie: 'id=abc' } }))
-			).text()
+			(await app.handle('/', { headers: { cookie: 'id=abc' } })).text()
 		).resolves.toBe('hi')
 	})
 
@@ -145,14 +137,14 @@ describe('synchronous route emission', () => {
 		const app = new Elysia().parse(() => {}).get('/', () => 'hi')
 
 		expect(isAsync(app)).toBe(false)
-		await expect((await app.handle(req('/'))).text()).resolves.toBe('hi')
+		await expect((await app.handle('/')).text()).resolves.toBe('hi')
 	})
 
 	it('app-level async .parse + bodyless GET is a plain Function (parse skipped)', async () => {
 		const app = new Elysia().parse(async () => {}).get('/', () => 'hi')
 
 		expect(isAsync(app)).toBe(false)
-		await expect((await app.handle(req('/'))).text()).resolves.toBe('hi')
+		await expect((await app.handle('/')).text()).resolves.toBe('hi')
 	})
 
 	it('async .parse on a POST stays AsyncFunction and runs', async () => {
@@ -165,7 +157,7 @@ describe('synchronous route emission', () => {
 			.post('/', ({ body }) => body)
 
 		expect(isAsync(app)).toBe(true)
-		const res = await app.handle(post('/', { a: 1 }))
+		const res = await app.handle('/', json({ a: 1 }))
 		expect(ran).toBe(true)
 		await expect(res.json()).resolves.toEqual({ ok: 1 })
 	})
@@ -193,7 +185,7 @@ describe('synchronous route emission', () => {
 
 		expect(isAsync(app)).toBe(true)
 		await expect(
-			(await app.handle(post('/', { n: 5 }))).json()
+			(await app.handle('/', json({ n: 5 }))).json()
 		).resolves.toEqual({
 			n: 5
 		})
@@ -217,7 +209,7 @@ describe('synchronous route emission', () => {
 		)
 
 		expect(isAsync(app)).toBe(false)
-		const res = await app.handle(req('/?q=hi'))
+		const res = await app.handle('/?q=hi')
 		expect(res.status).toBe(200)
 	})
 
@@ -239,7 +231,7 @@ describe('synchronous route emission', () => {
 		)
 
 		expect(isAsync(app)).toBe(true)
-		const res = await app.handle(req('/?q=hi'))
+		const res = await app.handle('/?q=hi')
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({ q: 'hi' })
 	})
@@ -261,7 +253,7 @@ describe('synchronous route emission', () => {
 		)
 
 		expect(isAsync(app)).toBe(true)
-		const res = await app.handle(req('/?q=hi'))
+		const res = await app.handle('/?q=hi')
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({ q: 'hi' })
 	})
@@ -291,7 +283,7 @@ describe('Promise rejection from synchronous handlers', () => {
 			})
 			.get('/', () => Promise.reject(new Error('boom')))
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(418)
 		await expect(res.text()).resolves.toBe('handled')
 		expect((seen as Error)?.message).toBe('boom')
@@ -302,7 +294,7 @@ describe('Promise rejection from synchronous handlers', () => {
 			.error(() => {})
 			.get('/', () => Promise.resolve('ok') as any)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		await expect(res.text()).resolves.toBe('ok')
 	})
 
@@ -319,7 +311,7 @@ describe('Promise rejection from synchronous handlers', () => {
 			})
 
 		expect(isAsync(app)).toBe(false)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(400)
 		await expect(res.text()).resolves.toBe('nope')
 	})
@@ -351,7 +343,7 @@ describe('synchronous afterResponse behavior', () => {
 			.get('/', () => 'hi')
 
 		expect(isAsync(app)).toBe(false)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		await expect(res.text()).resolves.toBe('hi')
 		await new Promise((r) => setTimeout(r, 10))
 		expect(calls).toBe(1)
@@ -370,7 +362,7 @@ describe('synchronous afterResponse behavior', () => {
 
 		expect(isAsync(app)).toBe(false)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		await expect(res.text()).resolves.toBe('ab')
 		await new Promise((r) => setTimeout(r, 20))
 		expect(calls).toBe(1)
@@ -391,7 +383,7 @@ describe('synchronous afterResponse behavior', () => {
 			)
 
 		expect(isAsync(app)).toBe(false)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		await expect(res.text()).resolves.toBe('short')
 		await new Promise((r) => setTimeout(r, 10))
 		expect(calls).toBe(1)
@@ -415,7 +407,7 @@ describe('synchronous afterResponse behavior', () => {
 			)
 
 		expect(isAsync(app)).toBe(false)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		await expect(res.text()).resolves.toBe('xy')
 		await new Promise((r) => setTimeout(r, 20))
 		expect(calls).toBe(1)
@@ -436,7 +428,7 @@ describe('Promise-returning synchronous functions', () => {
 
 		expect(isAsync(app)).toBe(true)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		await expect(res.text()).resolves.toBe('short')
 		expect(handlerRan).toBe(false)
 	})
@@ -456,7 +448,7 @@ describe('Promise-returning synchronous functions', () => {
 
 		expect(isAsync(app)).toBe(true)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		await expect(res.text()).resolves.toBe('wrapped:value')
 		expect(seen).toBe('value')
 	})
@@ -472,7 +464,7 @@ describe('Promise-returning synchronous functions', () => {
 		)
 
 		expect(isAsync(app)).toBe(true)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		await expect(res.text()).resolves.toBe('mapped:value')
 	})
 
@@ -491,7 +483,7 @@ describe('Promise-returning synchronous functions', () => {
 			minified
 		)
 
-		const ok = await app.handle(req('/?n=hi'))
+		const ok = await app.handle('/?n=hi')
 		expect(ok.status).toBe(200)
 		await expect(ok.text()).resolves.toBe('hi')
 	})
@@ -506,7 +498,7 @@ describe('Promise-returning synchronous functions', () => {
 			.get('/', { response: t.String() }, minified as any)
 
 		expect(isAsync(app)).toBe(true)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('deferred')
 	})
@@ -535,7 +527,7 @@ describe('Promise-returning synchronous functions', () => {
 
 		expect(isAsync(app)).toBe(true)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('ok')
 		expect(handlerRan).toBe(true)
@@ -550,7 +542,7 @@ describe('Promise-returning synchronous functions', () => {
 		})
 
 		expect(isAsync(app)).toBe(true)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		await expect(res.text()).resolves.toBe('short')
 		expect(handlerRan).toBe(false)
 	})
@@ -564,7 +556,7 @@ describe('Promise-returning synchronous functions', () => {
 		)
 
 		expect(isAsync(app)).toBe(true)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		await expect(res.text()).resolves.toBe('wrapped')
 	})
 
@@ -577,7 +569,7 @@ describe('Promise-returning synchronous functions', () => {
 		)
 
 		expect(isAsync(app)).toBe(true)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		await expect(res.text()).resolves.toBe('mapped')
 	})
 
@@ -589,7 +581,7 @@ describe('Promise-returning synchronous functions', () => {
 		)
 
 		expect(isAsync(app)).toBe(true)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('passthru')
 	})
@@ -603,7 +595,7 @@ describe('Promise-returning synchronous functions', () => {
 		})
 
 		expect(isAsync(app)).toBe(false)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		await expect(res.text()).resolves.toBe('ok')
 		expect(handlerRan).toBe(true)
 	})
@@ -661,10 +653,8 @@ describe('frozen handler reconstruction', () => {
 				}) as any
 
 		await freeze(build, async (frozen) => {
-			await expect((await frozen.handle(req('/'))).text()).resolves.toBe(
-				'ok'
-			)
-			const err = await frozen.handle(req('/?boom=1'))
+			await expect((await frozen.handle('/')).text()).resolves.toBe('ok')
+			const err = await frozen.handle('/?boom=1')
 			expect(err.status).toBe(400)
 			await expect(err.text()).resolves.toBe('boom')
 		})
@@ -681,9 +671,9 @@ describe('frozen handler reconstruction', () => {
 
 		await freeze(build, async (frozen) => {
 			counter.n = 0
-			await expect(
-				(await frozen.handle(req('/?q=hi'))).text()
-			).resolves.toBe('hi')
+			await expect((await frozen.handle('/?q=hi')).text()).resolves.toBe(
+				'hi'
+			)
 			await new Promise((r) => setTimeout(r, 10))
 			expect(counter.n).toBe(1)
 		})
@@ -697,9 +687,9 @@ describe('frozen handler reconstruction', () => {
 			) as any
 
 		await freeze(build, async (frozen) => {
-			const res = await frozen.handle(
-				req('/', { headers: { cookie: 'id=abc' } })
-			)
+			const res = await frozen.handle('/', {
+				headers: { cookie: 'id=abc' }
+			})
 			await expect(res.text()).resolves.toBe('abc')
 		})
 	})

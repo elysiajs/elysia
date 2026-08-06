@@ -5,7 +5,7 @@ import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { applyCoercions } from '../../src/type/coerce'
 import { Compile } from '../../src/type/bridge'
-import { post } from '../utils'
+import { post, json } from '../utils'
 
 describe('MultiValidator decoding matches TypeBox decoding', () => {
 	const passthrough = {
@@ -137,7 +137,7 @@ describe('MultiValidator decoding matches TypeBox decoding', () => {
 			)
 
 		const value = await app
-			.handle(post('/', { name: 'lilith', extra: false }))
+			.handle('/', json({ name: 'lilith', extra: false }))
 			.then((x) => x.json())
 
 		expect(value).toEqual({ name: 'lilith' })

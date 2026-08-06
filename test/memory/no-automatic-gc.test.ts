@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 
 import { Elysia, t } from '../../src'
 import { compileToSource } from '../../src/plugin/aot/source'
-import { post } from '../utils'
+import { post, json } from '../utils'
 
 const originalBunGc = Bun.gc
 const originalBunServe = Bun.serve
@@ -28,7 +28,7 @@ describe('no automatic GC', () => {
 			({ body }) => body
 		)
 		void app.fetch
-		expect((await app.handle(post('/x', { value: 'ok' }))).status).toBe(200)
+		expect((await app.handle('/x', json({ value: 'ok' }))).status).toBe(200)
 		app.compile()
 		void app.fetch
 

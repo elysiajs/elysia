@@ -47,7 +47,7 @@ for (const compiled of [true, false]) {
 
 			const res = await app.handle(req('/', many))
 			expect(res.status).toBe(200)
-			expect(await res.text()).toBe('abc123')
+			await expect(res.text()).resolves.toBe('abc123')
 		})
 
 		it('JSON-decodes a read cookie value out of many', async () => {
@@ -57,7 +57,7 @@ for (const compiled of [true, false]) {
 
 			const res = await app.handle(req('/', many))
 			expect(res.status).toBe(200)
-			expect(await res.json()).toEqual({ lang: 'en' })
+			await expect(res.json()).resolves.toEqual({ lang: 'en' })
 		})
 
 		it('enumerates every sent cookie name from the jar', async () => {
@@ -68,7 +68,7 @@ for (const compiled of [true, false]) {
 			)
 
 			const res = await app.handle(req('/', many))
-			expect(await res.text()).toBe(
+			await expect(res.text()).resolves.toBe(
 				'a,b,c,d,e,f,list,prefs,session,theme'
 			)
 		})
@@ -98,7 +98,7 @@ for (const compiled of [true, false]) {
 			)
 
 			const res = await app.handle(req('/', many))
-			expect(await res.text()).toBe('en')
+			await expect(res.text()).resolves.toBe('en')
 			// dirty-tracking: a pure read must not emit Set-Cookie
 			expect(res.headers.getAll('set-cookie').length).toBe(0)
 		})
@@ -113,13 +113,14 @@ for (const compiled of [true, false]) {
 							a: t.Numeric()
 						})
 					},
-					({ cookie }: any) => `${cookie.prefs.value.lang}:${cookie.a.value}`
+					({ cookie }: any) =>
+						`${cookie.prefs.value.lang}:${cookie.a.value}`
 				)
 			)
 
 			const ok = await app.handle(req('/', many))
 			expect(ok.status).toBe(200)
-			expect(await ok.text()).toBe('en:1')
+			await expect(ok.text()).resolves.toBe('en:1')
 
 			// `prefs` present but wrong shape -> validation rejects
 			const bad = await app.handle(
@@ -154,7 +155,7 @@ if (!hasSyncHmac) {
 				const header = `sid=${signed('hello')}; other=garbage.nothmac`
 				const res = await app.handle(req('/', header))
 				expect(res.status).toBe(200)
-				expect(await res.text()).toBe('hello')
+				await expect(res.text()).resolves.toBe('hello')
 			})
 
 			it('verifies pending signatures when the jar is enumerated', async () => {
