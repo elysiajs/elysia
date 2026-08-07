@@ -35,6 +35,10 @@ export class Cookie<T = any> implements BaseCookie {
 		this.#initial = initial
 	}
 
+	static isCookie(v: unknown): v is Cookie {
+		return typeof v === 'object' && v !== null && #name in v
+	}
+
 	get #jar(): Record<string, BaseCookie> {
 		return (this.#setRef.cookie ??= Object.create(null))
 	}

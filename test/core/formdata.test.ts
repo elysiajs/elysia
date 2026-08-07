@@ -411,4 +411,21 @@ describe('Form Data resource bounds', () => {
 			c: [['deep']]
 		})
 	})
+
+	it('serves a spread form copy as JSON, the form itself as multipart', async () => {
+		const app = new Elysia()
+			.get('/form', () => form({ name: 'maddelena' }))
+			.get('/copy', () => ({ ...form({ name: 'maddelena' }) }))
+
+		const asForm = await app.handle('/form')
+		expect(asForm.headers.get('content-type')).toStartWith(
+			'multipart/form-data'
+		)
+
+		const asCopy = await app.handle('/copy')
+		expect(asCopy.headers.get('content-type')).toStartWith(
+			'application/json'
+		)
+		expect(await asCopy.json()).toEqual({ name: 'maddelena' })
+	})
 })

@@ -23,7 +23,6 @@ export function ObjectString<T extends TProperties>(
 	const object = ObjectType(property, constraints)
 	let check: ((value: unknown) => boolean) | undefined
 
-	// one-slot memo so `Decode` reuses the parse the refine already paid for
 	let raw: string | undefined
 	let parsed: unknown
 
@@ -54,7 +53,10 @@ export function ObjectString<T extends TProperties>(
 							check = (v) => Check(object, v)
 						}
 
-					if (!check(next)) return false
+					if (!check(next)) {
+						raw = parsed = undefined
+						return false
+					}
 
 					// a request rejected after this point never reaches decode,
 					// so the memo outlives it; cap what that can pin
@@ -65,6 +67,9 @@ export function ObjectString<T extends TProperties>(
 
 					return true
 				} catch {
+					// JSON.parse (or check) threw past the charCode fast-reject —
+					// same reasoning as the `!check(next)` branch above
+					raw = parsed = undefined
 					return false
 				}
 			},

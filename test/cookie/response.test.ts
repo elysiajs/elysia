@@ -445,4 +445,24 @@ describe('Cookie Response', () => {
 		const string = await app.handle('/string')
 		await expect(string.text()).resolves.toBe('v')
 	})
+
+	it('does not treat a foreign class named Cookie as a real Cookie', async () => {
+		class Cookie {
+			name = 'Lilith'
+		}
+
+		class Kookie {
+			name = 'Satre'
+		}
+
+		const app = new Elysia()
+			.get('/fake-cookie', () => new Cookie())
+			.get('/other-class', () => new Kookie())
+
+		const fake = await app.handle('/fake-cookie')
+		const other = await app.handle('/other-class')
+
+		await expect(fake.text()).resolves.toBe('[object Object]')
+		await expect(other.text()).resolves.toBe('[object Object]')
+	})
 })

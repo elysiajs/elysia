@@ -43,7 +43,6 @@ export function ArrayString<T extends TSchema>(
 		return check(value)
 	}
 
-	// one-slot memo so `Decode` reuses the parse the refine already paid for
 	let raw: string | undefined
 	let parsed: unknown
 
@@ -58,7 +57,10 @@ export function ArrayString<T extends TSchema>(
 
 				try {
 					const next = JSON.parse(value)
-					if (!checkInner(next)) return false
+					if (!checkInner(next)) {
+						raw = parsed = undefined
+						return false
+					}
 
 					if (value.length <= MEMO_LIMIT) {
 						raw = value
@@ -67,6 +69,7 @@ export function ArrayString<T extends TSchema>(
 
 					return true
 				} catch {
+					raw = parsed = undefined
 					return false
 				}
 			},

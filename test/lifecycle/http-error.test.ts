@@ -1,5 +1,5 @@
 import { Elysia, HTTPError, NotFound, problem, status, t } from '../../src'
-import { describe, expect, it } from 'bun:test'
+import { afterEach, describe, expect, it } from 'bun:test'
 
 class OutOfCredit extends HTTPError<'OUT_OF_CREDIT'> {
 	type = 'OUT_OF_CREDIT' as const
@@ -1270,6 +1270,127 @@ describe('HTTPError', () => {
 			title: 'Internal Server Error',
 			detail: 'unannotated',
 			status: 500
+		})
+	})
+})
+
+describe('error fallback lanes', () => {
+	afterEach(() => {
+		delete process.env.NODE_ENV
+	})
+
+	it('never serve the request body when a custom schema error throws', async () => {
+		process.env.NODE_ENV = 'production'
+
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					name: t.String({
+						error: () => {
+							throw new Error('boom')
+						}
+					})
+				})
+			},
+			({ body }) => body
+		)
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name: 1, secret: 'hunter2' })
+			})
+		)
+
+		expect(response.status).toBe(422)
+		expect(response.headers.get('content-type')).toStartWith(
+			'application/problem+json'
+		)
+
+		const text = await response.text()
+		expect(text).not.toInclude('hunter2')
+		expect(JSON.parse(text)).toEqual({
+			type: 'validation',
+			title: 'Validation Error',
+			status: 422
+		})
+	})
+
+	it('keep set-cookie and headers when a bodyless error falls through', async () => {
+		const app = new Elysia()
+			.error(() => {})
+			.get('/', ({ cookie, set }) => {
+				cookie.session.value = 'kept'
+				set.headers['x-kept'] = 'yes'
+
+				throw 'boom'
+			})
+
+		const response = await app.handle('/')
+
+		expect(response.status).toBe(500)
+		expect(response.headers.get('set-cookie')).toInclude('session=kept')
+		expect(response.headers.get('x-kept')).toBe('yes')
+	})
+
+	it('serve 500 over a handler-set status for a bodyless throw', async () => {
+		const app = new Elysia().get('/', ({ set }) => {
+			set.status = 201
+
+			throw {}
+		})
+
+		const response = await app.handle('/')
+
+		expect(response.status).toBe(500)
+	})
+
+	it('merge annotated headers on the message tier', async () => {
+		class Teapot extends HTTPError.id('TEAPOT', 418) {
+			override readonly headers = { 'x-brew': 'tea' }
+		}
+
+		const app = new Elysia().get('/', () => {
+			throw new Teapot('short and stout')
+		})
+
+		const response = await app.handle('/')
+
+		expect(response.status).toBe(418)
+		expect(response.headers.get('x-brew')).toBe('tea')
+		await expect(response.json()).resolves.toEqual({
+			type: 'TEAPOT',
+			title: "I'm a teapot",
+			detail: 'short and stout',
+			status: 418
+		})
+	})
+
+	it('never adopt a validation section as a problem type', async () => {
+		const app = new Elysia()
+			.error(() => problem(422, { detail: 'invalid' }))
+			.post(
+				'/',
+				{ body: t.Object({ name: t.String() }) },
+				({ body }) => body
+			)
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name: 1 })
+			})
+		)
+
+		expect(response.status).toBe(422)
+		await expect(response.json()).resolves.toEqual({
+			type: 'about:blank',
+			title: 'Unprocessable Content',
+			detail: 'invalid',
+			status: 422
 		})
 	})
 })

@@ -9,7 +9,7 @@ import type { Context } from '../context'
 const isPreallocateResponseUnsafe =
 	isCloudflareWorker ||
 	isFastly ||
-	env.ELYSIA_PREALLOCATE_RESPONSE !== 'false'
+	env.ELYSIA_PREALLOCATE_RESPONSE === 'false'
 
 export const emptyResponse = isPreallocateResponseUnsafe
 	? { clone: () => new Response(null) }

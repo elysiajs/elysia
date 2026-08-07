@@ -8,6 +8,7 @@ import {
 
 import { isBun } from '../../universal/constants'
 import { ElysiaFile, mime } from '../../universal/file'
+import { Cookie } from '../../cookie/cookie'
 import {
 	formToFormData,
 	isElysiaForm,
@@ -429,12 +430,7 @@ function mapFallback(
 			? mapResponse((response as any).toResponse(), set, request, owned)
 			: mapCompactResponse((response as any).toResponse(), request, owned)
 
-	// A returned `Cookie` serves its value. The jar lives in a private field, so
-	// there is nothing public to gate on — the tag is the whole check. Route the
-	// value back through the mapper rather than emitting it directly, so an
-	// object becomes JSON and a string gets a text content-type instead of the
-	// bare `new Response(cookie)` below, which stringifies with no content-type
-	if (responseTag(response) === 'Cookie')
+	if (responseTag(response) === 'Cookie' && Cookie.isCookie(response))
 		return set
 			? mapResponse((response as any).value, set, request, owned)
 			: mapCompactResponse((response as any).value, request, owned)

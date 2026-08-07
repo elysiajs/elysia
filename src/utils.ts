@@ -1151,12 +1151,18 @@ export function pushField<K extends keyof any>(
 	} else target[key] = defaultArray ? [item] : item
 }
 
+let fallbackRequestIdCounter = 0
+export const fallbackRequestId = () =>
+	Date.now().toString(36) + '-' + (++fallbackRequestIdCounter).toString(36)
+
 export const requestId = isBun
 	? Bun.randomUUIDv7
 	: typeof crypto !== 'undefined'
 		? // @ts-ignore
-			(crypto.randomUUIDv7?.bind(crypto) ?? crypto.randomUUID?.bind(crypto))
-		: undefined
+			(crypto.randomUUIDv7?.bind(crypto) ??
+				crypto.randomUUID?.bind(crypto) ??
+				fallbackRequestId)
+		: fallbackRequestId
 
 export function replaceUrlPath(url: string, path: string) {
 	const i = url.indexOf('/', 11)

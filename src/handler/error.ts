@@ -52,22 +52,18 @@ const isPristineNotFound = (context: Context, error: any) =>
 	!context.set.cookie &&
 	!isNotEmpty(context.set.headers)
 
-/**
- * Adopt the intercepted error's `type` into a problem the hook produced
- * without one.
- *
- * `'about:blank'` is RFC 9457's "unspecified" default, so it's the only value
- * worth replacing — an explicit type the handler set always wins.
- *
- * The result is copied rather than mutated: `.error(Class, value)` wraps a
- * non-function into `() => value`, so the very same `ElysiaStatus` is replayed
- * on every request and an in-place write would leak across requests
- */
+export const claimsProblemType = (error: any) =>
+	typeof error?.type === 'string'
+		? !(error instanceof ValidationError) &&
+			error.constructor?.name !== 'ValidationError'
+		: error instanceof HTTPError
+
 export function adoptErrorType(result: any, error: any) {
 	const body = result?.response
 
 	if (
 		typeof error?.type !== 'string' ||
+		!claimsProblemType(error) ||
 		body?.type !== 'about:blank' ||
 		result.headers?.['content-type'] !== PROBLEM_JSON
 	)
@@ -132,7 +128,7 @@ export function fallbackResponse(
  * A numeric string keeps coercing so the production mask below can't be
  * slipped past with `'502'`
  */
-const resolveStatus = (status: unknown) =>
+export const resolveStatus = (status: unknown) =>
 	typeof status === 'string'
 		? (StatusMap[status as keyof StatusMap] ?? +status)
 		: status
@@ -141,7 +137,7 @@ const resolveStatus = (status: unknown) =>
  * Body served by an error that carries a status but no usable body:
  * its declared `response`, otherwise its message
  */
-const statusFallbackBody = (error: any, status: unknown) =>
+export const statusFallbackBody = (error: any, status: unknown) =>
 	error.response !== undefined
 		? error.response
 		: // safe guard unintentional error
@@ -176,7 +172,7 @@ const problemOf = (self: any, detail: unknown, status: number) =>
  * does — an unclaimed duck error never invokes one. A *value* annotation stays
  * inert data and keeps duck-participating as it always has
  */
-const readAnnotation = (
+export const readAnnotation = (
 	self: any,
 	key: 'value' | 'detail',
 	claimsProblem: boolean
@@ -217,7 +213,7 @@ function fallbackErrorResponse(
 	const owned = error instanceof HTTPError
 	// Naming a problem `type` is the claim, which an `implements HTTPError`
 	// class can make without extending it
-	const claimsProblem = owned || typeof self.type === 'string'
+	const claimsProblem = claimsProblemType(error)
 	// `status` is what the error annotated, `served` is what actually goes out
 	// once `applyErrorStatus` has had its say
 	const served = (
@@ -262,21 +258,31 @@ function fallbackErrorResponse(
 			)
 		}
 
-		return defaultError
-			? defaultError.clone()
-			: internalServerErrorResponse(error)
+		// Through the mapper, not bare: an error with neither a status nor a
+		// message still has to serve what the handler wrote onto `set`
+		// (headers, cookies) — `mapResponse`'s Response lane merges them
+		return mapResponse(
+			defaultError
+				? defaultError.clone()
+				: internalServerErrorResponse(error),
+			context.set,
+			context
+		)
 	}
 
 	// Tier 3: nothing annotated, the message is the problem `detail`.
 	// A duck error that claimed nothing falls back to the legacy lane
-	const serveMessage = () =>
-		claimsProblem
-			? mapResponse(
-					problemOf(self, statusFallbackBody(error, served), served),
-					context.set,
-					context
-				)
-			: legacy()
+	const serveMessage = () => {
+		if (!claimsProblem) return legacy()
+
+		mergeHeaders()
+
+		return mapResponse(
+			problemOf(self, statusFallbackBody(error, served), served),
+			context.set,
+			context
+		)
+	}
 
 	// Tier 2: `detail` fills the `detail` member of a problem document
 	const serveDetail = (): unknown => {
@@ -312,6 +318,21 @@ function fallbackErrorResponse(
 			context
 		)
 	}
+
+	if (error instanceof ValidationError)
+		return mapResponse(
+			new ElysiaStatus(
+				422,
+				problemBody({
+					type: 'validation',
+					title: 'Validation Error',
+					status: 422
+				}),
+				{ 'content-type': PROBLEM_JSON }
+			),
+			context.set,
+			context
+		)
 
 	if (
 		owned ||

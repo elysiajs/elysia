@@ -36,7 +36,14 @@ import {
 	problemResponse
 } from '../error'
 
-import { createErrorHandler } from '../handler/error'
+import {
+	adoptErrorType,
+	claimsProblemType,
+	createErrorHandler,
+	readAnnotation,
+	resolveStatus,
+	statusFallbackBody
+} from '../handler/error'
 
 import { isBun } from '../universal/constants'
 import { mapResponse } from '../adapter/web-standard/handler'
@@ -304,7 +311,74 @@ function wsErrorFrame(error: any): string | Promise<string> {
 	return wsErrorFrameFallback(error)
 }
 
-function wsErrorFrameFallback(error: any): string {
+/**
+ * Frame served by an error that claims an RFC 9457 problem document, mirroring
+ * the HTTP tiers in `handler/error.ts`: `value` replaces the whole frame,
+ * `detail` fills the `detail` member, the message is the last resort.
+ *
+ * A frame carries no headers, so a `headers` annotation is ignored outright
+ * rather than half-applied
+ */
+function wsProblemFrame(error: any): string | Promise<string> {
+	const status = resolveStatus(error.status)
+	const served = typeof status === 'number' && status >= 100 ? status : 500
+
+	const stringify = (value: unknown) =>
+		typeof value === 'object' && value !== null
+			? JSON.stringify(value)
+			: String(value)
+
+	const problemFrame = (detail: unknown) =>
+		JSON.stringify(
+			problemBody({
+				type: error.type ?? 'about:blank',
+				detail: detail as string,
+				status: served
+			})
+		)
+
+	const serveMessage = () => problemFrame(statusFallbackBody(error, served))
+	const serveDetail = () => {
+		const detail = readAnnotation(error, 'detail', true)
+
+		if (detail === undefined) return serveMessage()
+
+		if (detail instanceof Promise)
+			return detail
+				.then((resolved: unknown) =>
+					resolved === undefined
+						? serveMessage()
+						: problemFrame(resolved)
+				)
+				.catch(() => wsLegacyFrame(error))
+
+		return problemFrame(detail)
+	}
+
+	const value = readAnnotation(error, 'value', true)
+	if (value === undefined) return serveDetail()
+
+	if (value instanceof Promise)
+		return value
+			.then((resolved: unknown) =>
+				resolved === undefined ? serveDetail() : stringify(resolved)
+			)
+			.catch(() => wsLegacyFrame(error))
+
+	return stringify(value)
+}
+
+function wsErrorFrameFallback(error: any): string | Promise<string> {
+	if (claimsProblemType(error))
+		try {
+			return wsProblemFrame(error)
+		} catch {}
+
+	return wsLegacyFrame(error)
+}
+
+/** Frame an error that never self-described has always served */
+function wsLegacyFrame(error: any): string {
 	if (error?.status) {
 		const body =
 			error.response !== undefined
@@ -532,6 +606,10 @@ export function buildWSRoute(
 			}
 
 			if (r !== undefined) {
+				// A hook that produced an untyped problem inherits the
+				// intercepted error's `type`, same as the HTTP handler
+				r = adoptErrorType(r, error)
+
 				try {
 					await handleWSResponse(ws, r, mapResponses)
 				} catch {}

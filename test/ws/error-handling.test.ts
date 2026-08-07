@@ -1,5 +1,12 @@
 import { describe, it, expect, afterEach } from 'bun:test'
-import { Elysia, t, status, ValidationError } from '../../src'
+import {
+	Elysia,
+	HTTPError,
+	problem,
+	t,
+	status,
+	ValidationError
+} from '../../src'
 import { websocket } from '../../src/plugin/websocket'
 import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
 
@@ -234,6 +241,139 @@ describe('WebSocket upgrade validation error responses', () => {
 			msg: 'forbidden'
 		})
 
+		app.stop()
+	})
+})
+
+describe('WebSocket self-describing errors', () => {
+	class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {
+		detail() {
+			return 'Out of credit'
+		}
+	}
+
+	// A frame is the only thing a socket can serve, so an error that
+	// self-describes has to describe itself here too — the pre-parity frame
+	// was the empty message of an error that never carried one
+	it('serves a problem frame for a thrown HTTPError', async () => {
+		const app = new Elysia()
+			.use(websocket()).ws('/ws', {
+				message() {
+					throw new OutOfCredit()
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		const msg = wsMessage(ws)
+		ws.send('trigger')
+
+		const { data } = await msg
+
+		expect(JSON.parse(String(data))).toEqual({
+			type: 'OUT_OF_CREDIT',
+			title: 'Payment Required',
+			detail: 'Out of credit',
+			status: 402
+		})
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	// `value` is the escape hatch on both transports: no envelope, the
+	// annotation is the whole frame
+	it('serves an annotated value as the whole frame', async () => {
+		class Legacy extends HTTPError.id('LEGACY', 402) {
+			value() {
+				return { code: 'LEGACY', ok: false }
+			}
+		}
+
+		const app = new Elysia()
+			.use(websocket()).ws('/ws', {
+				message() {
+					throw new Legacy()
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		const msg = wsMessage(ws)
+		ws.send('trigger')
+
+		const { data } = await msg
+
+		expect(JSON.parse(String(data))).toEqual({
+			code: 'LEGACY',
+			ok: false
+		})
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	// The hook produced an untyped problem while intercepting a typed error;
+	// ElysiaWS wraps an ElysiaStatus as `{ status, error }` on the wire
+	it('adopts the error type into a problem returned by an error hook', async () => {
+		const app = new Elysia()
+			.error(() => problem(402, { detail: 'from hook' }))
+			.use(websocket()).ws('/ws', {
+				message() {
+					throw new OutOfCredit()
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		const msg = wsMessage(ws)
+		ws.send('trigger')
+
+		const { data } = await msg
+		const parsed = JSON.parse(String(data))
+
+		expect(parsed.status).toBe(402)
+		expect(parsed.error.type).toBe('OUT_OF_CREDIT')
+		expect(parsed.error.detail).toBe('from hook')
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	// The point of the parity work: one error class, one document, whichever
+	// transport it is thrown on
+	it('serves the same problem document on HTTP and WebSocket', async () => {
+		const app = new Elysia()
+			.get('/http', () => {
+				throw new OutOfCredit()
+			})
+			.use(websocket()).ws('/ws', {
+				message() {
+					throw new OutOfCredit()
+				}
+			})
+			.listen(0)
+
+		const response = await app.handle('/http')
+		const body = await response.text()
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		const msg = wsMessage(ws)
+		ws.send('trigger')
+
+		const { data } = await msg
+
+		expect(String(data)).toBe(body)
+
+		await wsClosed(ws)
 		app.stop()
 	})
 })
