@@ -467,7 +467,7 @@ function appendFormField(formData: FormData, key: string, value: unknown) {
 	else formData.append(key, '' + value)
 }
 
-export function formToFormData(value: Record<keyof any, unknown>): FormData {
+export function formToFormData(value: Record<keyof any, unknown>) {
 	const formData = new FormData()
 
 	for (const key in value) {
@@ -1153,8 +1153,10 @@ export function pushField<K extends keyof any>(
 
 export const requestId = isBun
 	? Bun.randomUUIDv7
-	: // @ts-ignore
-		(crypto.randomUUIDv7?.bind(crypto) ?? crypto.randomUUID?.bind(crypto))
+	: typeof crypto !== 'undefined'
+		? // @ts-ignore
+			(crypto.randomUUIDv7?.bind(crypto) ?? crypto.randomUUID?.bind(crypto))
+		: undefined
 
 export function replaceUrlPath(url: string, path: string) {
 	const i = url.indexOf('/', 11)

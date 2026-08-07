@@ -370,7 +370,7 @@ function resolveChainNode(
 	return resolved
 }
 
-const chainResolver = (root: AnyElysia) => {
+function chainResolver(root: AnyElysia) {
 	const frozenRoot = frozenRootOf(root)
 	return frozenRoot['~ext']?.macro || frozenRoot['~scopeChildren']
 		? (node: ChainNode) => resolveChainNode(root, node)
@@ -410,7 +410,10 @@ function composeRootHook(
 }
 
 export function buildNativeStaticResponse(
-	[
+	route: InternalRoute,
+	root: AnyElysia
+) {
+	const [
 		,
 		,
 		handler,
@@ -419,9 +422,8 @@ export function buildNativeStaticResponse(
 		appHook,
 		inheritedChain,
 		macroScope
-	]: InternalRoute,
-	root: AnyElysia
-) {
+	] = route
+
 	if (
 		typeof handler === 'function' ||
 		handler instanceof Error ||
@@ -604,7 +606,11 @@ function isContextFreeHandler(handler: Function) {
 }
 
 export function compileHandler(
-	[
+	route: InternalRoute,
+	root: AnyElysia,
+	precomputedStatic?: Response
+): CompiledHandler {
+	let [
 		_method,
 		path,
 		handler,
@@ -613,10 +619,8 @@ export function compileHandler(
 		appHook,
 		inheritedChain,
 		macroScope
-	]: InternalRoute,
-	root: AnyElysia,
-	precomputedStatic?: Response
-): CompiledHandler {
+	] = route
+
 	const frozenRoot = frozenRootOf(root)
 	const adapter = frozenRoot['~config']?.adapter ?? defaultAdapter
 	const method = _method

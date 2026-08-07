@@ -6709,7 +6709,7 @@ export class Elysia<
 
 	handler(
 		index: number,
-		immediate: boolean | undefined = this['~config']?.precompile,
+		immediate?: boolean,
 		route?: InternalRoute,
 		precomputedStatic?: Response,
 		aliases?: StaticMapAliases,
@@ -6721,7 +6721,7 @@ export class Elysia<
 			table?.length ?? this['~routes'].length
 		))
 
-		if (immediate) {
+		if (immediate ?? this['~config']?.precompile) {
 			const row =
 				route ??
 				(table ? routeRow(table, index) : this['~routes'][index])
