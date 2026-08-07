@@ -70,8 +70,6 @@ export function clearContextCache() {
 	sharedEmptyContext = null
 }
 
-const pathValue = Symbol('path')
-
 function buildEmptyContext(
 	Base: any,
 	headers: object | null = null,
@@ -84,17 +82,17 @@ function buildEmptyContext(
 				enumerable: true,
 				configurable: true,
 				get(this: any) {
-					return this[pathValue]
+					return this['~path']
 				},
 				set(this: any, value: string) {
-					if (pathValue in this && !warnedPathMutation) {
+					if ('~path' in this && !warnedPathMutation) {
 						warnedPathMutation = true
 						console.warn(
 							'[elysia] context.path is readonly; request-hook rerouting will stop working in a future release.'
 						)
 					}
 
-					this[pathValue] = value
+					this['~path'] = value
 				}
 			}
 		: undefined
