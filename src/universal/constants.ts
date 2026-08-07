@@ -1,6 +1,8 @@
 // @ts-ignore
 export const isBun = typeof Bun !== 'undefined'
 
+// @ts-expect-error
+export const isFastly = typeof fastly !== 'undefined'
 export const isCloudflareWorker = (() => {
 	try {
 		// Check for the presence of caches.default, which is a global in Workers

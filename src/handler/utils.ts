@@ -1,13 +1,17 @@
 import { isAsyncFunction, mayReturnPromise } from '../compile/utils'
-import { isCloudflareWorker } from '../universal/constants'
+import { isCloudflareWorker, isFastly } from '../universal/constants'
 import { PROBLEM_JSON } from '../error'
+import { env } from '../universal'
 
 import type { AnyElysia } from '../base'
 import type { Context } from '../context'
 
-export const emptyResponse = isCloudflareWorker
-	? { clone: () => new Response(null) }
-	: new Response(null)
+export const emptyResponse =
+	isCloudflareWorker ||
+	isFastly ||
+	env.ELYSIA_PREALLOCATE_RESPONSE !== 'false'
+		? { clone: () => new Response(null) }
+		: new Response(null)
 
 function cachedResponse(
 	body: string,
