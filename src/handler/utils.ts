@@ -6,12 +6,14 @@ import { env } from '../universal'
 import type { AnyElysia } from '../base'
 import type { Context } from '../context'
 
-export const emptyResponse =
+const isPreallocateResponseUnsafe =
 	isCloudflareWorker ||
 	isFastly ||
 	env.ELYSIA_PREALLOCATE_RESPONSE !== 'false'
-		? { clone: () => new Response(null) }
-		: new Response(null)
+
+export const emptyResponse = isPreallocateResponseUnsafe
+	? { clone: () => new Response(null) }
+	: new Response(null)
 
 function cachedResponse(
 	body: string,
@@ -21,7 +23,7 @@ function cachedResponse(
 	let cached: Response | undefined
 
 	return (): Response =>
-		isCloudflareWorker
+		isPreallocateResponseUnsafe
 			? new Response(body, { status, headers })
 			: ((cached ??= new Response(body, {
 					status,
