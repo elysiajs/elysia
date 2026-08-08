@@ -39,6 +39,10 @@ export type DynamicHandler = {
 const ARRAY_INDEX_REGEX = /^(.+)\[(\d+)\]$/
 const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 
+// Standard schema Check returns { value } | { issues }, TypeBox returns boolean
+const isCheckInvalid = (result: any): boolean =>
+	result === false || !!(result && result.issues)
+
 const isDangerousKey = (key: string): boolean => {
 	if (DANGEROUS_KEYS.has(key)) return true
 
@@ -701,37 +705,54 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				const responseValidator =
 					validator?.createResponse?.()?.[status]
 
-				if (responseValidator?.Check(response) === false) {
-					if (responseValidator?.Clean) {
-						try {
-							const temp = responseValidator.Clean(response)
-							if (responseValidator?.Check(temp) === false)
+				if (responseValidator?.schema?.noValidate !== true) {
+					let checkResult = responseValidator?.Check(response)
+					if (checkResult instanceof Promise)
+						checkResult = await checkResult
+
+					if (isCheckInvalid(checkResult)) {
+						if (responseValidator?.Clean) {
+							try {
+								const temp = responseValidator.Clean(response)
+								let tempCheck =
+									responseValidator?.Check(temp)
+								if (tempCheck instanceof Promise)
+									tempCheck = await tempCheck
+
+								if (isCheckInvalid(tempCheck))
+									throw new ValidationError(
+										'response',
+										responseValidator,
+										response
+									)
+
+								response = temp
+							} catch (error) {
+								if (error instanceof ValidationError)
+									throw error
+
 								throw new ValidationError(
 									'response',
 									responseValidator,
 									response
 								)
-
-							response = temp
-						} catch (error) {
-							if (error instanceof ValidationError) throw error
-
+							}
+						} else
 							throw new ValidationError(
 								'response',
 								responseValidator,
 								response
 							)
-						}
-					} else
-						throw new ValidationError(
-							'response',
-							responseValidator,
-							response
-						)
-				}
+					} else if (
+						checkResult &&
+						checkResult.value !== undefined
+					) {
+						response = checkResult.value
+					}
 
-				if (responseValidator?.Encode)
-					response = responseValidator.Encode(response)
+					if (responseValidator?.Encode)
+						response = responseValidator.Encode(response)
+				}
 
 				if (responseValidator?.Clean)
 					try {
@@ -772,38 +793,56 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					const responseValidator =
 						validator?.createResponse?.()?.[status]
 
-					if (responseValidator?.Check(response) === false) {
-						if (responseValidator?.Clean) {
-							try {
-								const temp = responseValidator.Clean(response)
-								if (responseValidator?.Check(temp) === false)
+					if (responseValidator?.schema?.noValidate !== true) {
+						let checkResult = responseValidator?.Check(response)
+						if (checkResult instanceof Promise)
+							checkResult = await checkResult
+
+						if (isCheckInvalid(checkResult)) {
+							if (responseValidator?.Clean) {
+								try {
+									const temp =
+										responseValidator.Clean(response)
+									let tempCheck =
+										responseValidator?.Check(temp)
+									if (tempCheck instanceof Promise)
+										tempCheck = await tempCheck
+
+									if (isCheckInvalid(tempCheck))
+										throw new ValidationError(
+											'response',
+											responseValidator,
+											response
+										)
+
+									response = temp
+								} catch (error) {
+									if (error instanceof ValidationError)
+										throw error
+
 									throw new ValidationError(
 										'response',
 										responseValidator,
 										response
 									)
-
-								response = temp
-							} catch (error) {
-								if (error instanceof ValidationError) throw error
-
+								}
+							} else
 								throw new ValidationError(
 									'response',
 									responseValidator,
 									response
 								)
-							}
-						} else
-							throw new ValidationError(
-								'response',
-								responseValidator,
-								response
-							)
-					}
+						} else if (
+							checkResult &&
+							checkResult.value !== undefined
+						) {
+							response = checkResult.value
+						}
 
-					if (responseValidator?.Encode)
-						context.response = response =
-							responseValidator.Encode(response)
+						if (responseValidator?.Encode)
+							context.response = response =
+								responseValidator.Encode(response)
+					}
 
 					if (responseValidator?.Clean)
 						try {

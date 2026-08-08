@@ -276,14 +276,16 @@ const composeValidationFactory = ({
 			code += `\ncase ${status}:\n`
 
 			if (value.provider === 'standard') {
-				code +=
-					`let vare${status}=validator.response[${status}].Check(${name})\n` +
-					`if(vare${status} instanceof Promise)vare${status}=await vare${status}\n` +
-					`if(vare${status}.issues)` +
-					`throw new ValidationError('response',validator.response[${status}],${name},${allowUnsafeValidationDetails},vare${status}.issues)\n` +
-					`${name}=vare${status}.value\n` +
-					`c.set.status=${status}\n` +
-					'break\n'
+				if (value.schema?.noValidate !== true) {
+					code +=
+						`let vare${status}=validator.response[${status}].Check(${name})\n` +
+						`if(vare${status} instanceof Promise)vare${status}=await vare${status}\n` +
+						`if(vare${status}.issues)` +
+						`throw new ValidationError('response',validator.response[${status}],${name},${allowUnsafeValidationDetails},vare${status}.issues)\n` +
+						`${name}=vare${status}.value\n`
+				}
+
+				code += `c.set.status=${status}\n` + 'break\n'
 
 				continue
 			}

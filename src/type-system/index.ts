@@ -573,8 +573,11 @@ export const ElysiaType = {
 		} as any as TUnionEnum<T>
 	},
 
-	NoValidate: <T extends TAnySchema>(v: T, enabled = true) => {
-		v.noValidate = enabled
+	NoValidate: <T extends TAnySchema | { '~standard': unknown }>(
+		v: T,
+		enabled = true
+	) => {
+		;(v as any).noValidate = enabled
 
 		return v
 	},
