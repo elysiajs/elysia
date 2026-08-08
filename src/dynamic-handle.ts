@@ -14,6 +14,7 @@ import { getSchemaProperties, type ElysiaTypeCheck } from './schema'
 import type { TypeCheck } from './type-system'
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
 import { hasSetImmediate, redirect, StatusMap, signCookie } from './utils'
+import { createCaseInsensitiveHeaders } from './adapter/utils'
 
 // JIT Handler
 export type DynamicHandler = {
@@ -201,7 +202,9 @@ export const createDynamicHandler = (app: AnyElysia) => {
 		const set: Context['set'] = {
 			cookie: {},
 			status: 200,
-			headers: defaultHeader ? { ...defaultHeader } : {}
+			headers: createCaseInsensitiveHeaders(
+				defaultHeader ? { ...defaultHeader } : undefined
+			)
 		}
 
 		const context = Object.assign(
@@ -458,7 +461,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			// @ts-expect-error
 			context.query = qi === -1 ? {} : parseQuery(url.substring(qi + 1))
 
-			context.headers = {}
+			context.headers = createCaseInsensitiveHeaders()
 			for (const [key, value] of request.headers.entries())
 				context.headers[key] = value
 
@@ -547,19 +550,28 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 			if (validator) {
 				if (headerValidator) {
-					const _header = structuredClone(context.headers)
+					const _header = createCaseInsensitiveHeaders({
+						...context.headers
+					})
 					for (const [key, value] of request.headers)
 						_header[key] = value
 
-					if (validator.headers!.Check(_header) === false)
+					if (headerValidator.Check(_header) === false)
 						throw new ValidationError(
 							'header',
-							validator.headers!,
+							headerValidator,
 							_header
 						)
-				} else if (validator.headers?.Decode)
+
 					// @ts-ignore
-					context.headers = validator.headers.Decode(context.headers)
+					if (headerValidator.Decode)
+						// @ts-ignore
+						context.headers = createCaseInsensitiveHeaders(
+							headerValidator.Decode(_header)
+						)
+					// @ts-ignore
+					else context.headers = _header
+				}
 
 				if (paramsValidator?.Check(context.params) === false) {
 					throw new ValidationError(
