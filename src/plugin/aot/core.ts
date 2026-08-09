@@ -201,6 +201,23 @@ export interface StubPlan {
 	bridge: boolean
 
 	/**
+	 * Re-route `type/typebox-value` -> its statically-imported `-live` mirror
+	 * (bundlers can't follow the runtime `require`)
+	 * Every mode except sealed, there the unresolvable `require` is what lets TypeBox collapse
+	 */
+	typeboxValue: boolean
+
+	/**
+	 * Re-route `type/typebox-type` -> its `-live` mirror
+	 * Every mode, sealed included (unlike `typeboxValue`), sealed still executes
+	 * user `t.*()` at route definition and `typebox/type` is already in the bundle
+	 * via the virtual `elysia/type` module
+	 *
+	 * skipping the rewrite collapses nothing and only buys a startup crash on loader-less runtimes
+	 */
+	typeboxType: boolean
+
+	/**
 	 * Replace `adapter/constants` with a target-specific stub that hard-selects
 	 * either `BunAdapter` or `WebStandardAdapter`, letting the bundler DCE the
 	 * other adapter. Only set when `target` unambiguously implies a runtime
@@ -240,6 +257,8 @@ export const NO_STUB: StubPlan = {
 	sucrose: false,
 	compat: false,
 	bridge: false,
+	typeboxValue: false,
+	typeboxType: false,
 	adapter: false,
 	isProduction: false
 } as const
@@ -305,6 +324,8 @@ export function planFromReport(
 			sucrose: jit,
 			compat: mode !== 'off',
 			bridge: mode === 'wired',
+			typeboxValue: mode !== 'sealed',
+			typeboxType: true,
 			adapter: adapterStub,
 			isProduction: productionStub
 		},
@@ -540,6 +561,18 @@ export const STUB_SOURCES: Record<
 		{
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]type[\\/]bridge\.(m?js|ts)$/,
 			source: `export * from './bridge-live'\n`
+		}
+	],
+	typeboxValue: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]type[\\/]typebox-value\.(m?js|ts)$/,
+			source: `export * from './typebox-value-live'\n`
+		}
+	],
+	typeboxType: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]type[\\/]typebox-type\.(m?js|ts)$/,
+			source: `export * from './typebox-type-live'\n`
 		}
 	]
 }
@@ -783,8 +816,7 @@ export async function generateCompiledArtifacts(
 	const previousAotVerbose = process.env.ELYSIA_AOT_VERBOSE
 	if (options?.verbose) process.env.ELYSIA_AOT_VERBOSE = '1'
 	// unset option: leave ELYSIA_AOT_VERBOSE as the user set it
-	else if (options?.verbose === false)
-		delete process.env.ELYSIA_AOT_VERBOSE
+	else if (options?.verbose === false) delete process.env.ELYSIA_AOT_VERBOSE
 
 	try {
 		const entry = resolveEntry(file)
@@ -832,6 +864,10 @@ export async function generateCompiledArtifacts(
 				source: await compileToSource(typedApp, sourceOptions),
 				stub: {
 					...NO_STUB,
+					// TypeBox stays fully wired here, so keep the ops statically
+					// importable for the bundler
+					typeboxValue: true,
+					typeboxType: true,
 					adapter: adapterStub,
 					isProduction: productionStub
 				},

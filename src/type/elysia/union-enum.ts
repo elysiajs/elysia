@@ -1,4 +1,4 @@
-import { Unsafe } from 'typebox/type'
+import { Unsafe } from '../typebox-type'
 import type { TSchemaOptions } from 'typebox'
 
 import { ELYSIA_TYPES } from '../constants'

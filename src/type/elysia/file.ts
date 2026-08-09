@@ -1,4 +1,4 @@
-import { Refine, Unsafe } from 'typebox/type'
+import { Refine, Unsafe } from '../typebox-type'
 import type { Type } from 'typebox'
 
 import { isBlob, isEmpty } from '../../utils'

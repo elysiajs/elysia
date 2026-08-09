@@ -192,6 +192,8 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			sucrose: true,
 			compat: true,
 			bridge: false,
+			typeboxValue: false,
+			typeboxType: true,
 			adapter: false,
 			isProduction: true
 		})
@@ -208,6 +210,8 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			sucrose: true,
 			compat: true,
 			bridge: false,
+			typeboxValue: false,
+			typeboxType: true,
 			adapter: false,
 			isProduction: true
 		})
@@ -225,6 +229,8 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			// A schema-less WS app needs neither sealed nor wired TypeBox setup.
 			compat: false,
 			bridge: false,
+			typeboxValue: true,
+			typeboxType: true,
 			adapter: false,
 			isProduction: true
 		})

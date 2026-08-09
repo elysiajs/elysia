@@ -1,12 +1,21 @@
 import { afterEach, describe, expect, it, spyOn } from 'bun:test'
 import * as TBValue from 'typebox/value'
+import * as TBSchema from 'typebox/schema'
+import * as TBCompile from 'typebox/compile'
 
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { TypeBoxValidator } from '../../src/type/validator'
 import { Compiled } from '../../src/compile/aot'
+import { injectTypebox } from '../../src/type/typebox-value'
 
 const encodeSpy = spyOn(TBValue, 'Encode')
+
+// TypeBox's ops are snapshotted into `type/typebox-value` on first use, so
+// patching the namespace afterwards is invisible to the runtime. Re-inject the
+// spied namespace so the spy is the `Encode` Elysia actually calls, whether or
+// not an earlier test file already triggered the lazy load
+injectTypebox({ value: TBValue, schema: TBSchema, compile: TBCompile })
 
 afterEach(() => {
 	Compiled.clear()

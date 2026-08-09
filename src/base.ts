@@ -330,7 +330,7 @@ export class Elysia<
 		/**
 		 * ! Don't tune
 		 *
-		 * Interesting JSC internal: These `= undefined` are load-bearing
+		 * Interesting JSC internal: These `= undefined` shouldn't be removed
 		 *
 		 * Inline slots live inside the object cell, so JSC must pick their
 		 * count at allocation before any initializer runs
@@ -5062,13 +5062,6 @@ export class Elysia<
 
 		if (source) (this.#routeSources ??= [])[sequence] = source
 
-		// Everything below is derived state, populated only by a router build,
-		// an explicit `.handler()` call, or the `history` / `routes` getters.
-		// `#routerBuilt` covers `#fetchFn` and `#jitColdRemaining` (both are only
-		// ever set with a built router), and `#compiled` covers the four `#jit*`
-		// staging arrays (`#jitHandler` is only reachable through `handler()`,
-		// which allocates `#compiled` first). On the `.use()` fan-in path none of
-		// them is populated, so the clear storm is pure per-route overhead.
 		if (this.#routerBuilt || this.#compiled !== undefined) {
 			this.#compiled = undefined
 			this.#jitColdRemaining = undefined

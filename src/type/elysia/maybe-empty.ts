@@ -1,4 +1,4 @@
-import { Null, Undefined } from 'typebox/type'
+import { Null, Undefined } from '../typebox-type'
 import type { TSchema, TSchemaOptions } from 'typebox'
 
 import { ELYSIA_TYPES } from '../constants'

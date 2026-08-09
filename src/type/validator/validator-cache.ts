@@ -1,5 +1,5 @@
 /* eslint-disable sonarjs/public-static-readonly */
-import { HasCodec } from 'typebox/value'
+import { HasCodec } from '../typebox-value'
 import type { TSchema } from 'typebox/type'
 import type { Validator as BaseTypeBoxValidator } from 'typebox/schema'
 

@@ -1,4 +1,4 @@
-import { Compile, Build } from 'typebox/schema'
+import { SchemaCompile as Compile, Build } from '../typebox-value'
 
 import {
 	reconstruct,

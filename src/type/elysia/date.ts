@@ -1,4 +1,6 @@
-import { Codec, Number, Refine, Unsafe } from 'typebox/type'
+import { Codec, Refine, Unsafe } from '../typebox-type'
+
+import { NumberType } from './number'
 import type { Type } from 'typebox'
 
 import { isEmpty } from '../../utils'
@@ -63,7 +65,7 @@ export function DateType(
 				},
 				() => 'must be Date'
 			),
-			Number()
+			NumberType()
 		])
 	)
 		.Decode((value) => {

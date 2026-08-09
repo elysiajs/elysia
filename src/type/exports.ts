@@ -1,4 +1,13 @@
+import * as type from 'typebox/type'
+import * as system from 'typebox/system'
+
 import { setupTypebox } from './compat'
+import { injectTypeboxType } from './typebox-type'
+
+// This subpath statically imports TypeBox anyway, so close the lazy latch with
+// the very same namespaces instead of letting a later `t.*` call `require` them
+// a second time. Also restores this subpath's Settings-at-import guarantee
+injectTypeboxType({ type, system })
 
 setupTypebox()
 

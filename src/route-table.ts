@@ -86,8 +86,8 @@ export function buildRouteTable(
 	}
 }
 
-export const routeRow = (table: RouteTable, id: number) =>
-	[
+export const routeRow = (table: RouteTable, id: number) => {
+	return [
 		table.method[id],
 		table.path[id],
 		table.handler[id],
@@ -97,3 +97,4 @@ export const routeRow = (table: RouteTable, id: number) =>
 		table.inheritedChain[id],
 		table.macroScope?.get(id)
 	] as unknown as InternalRoute
+}

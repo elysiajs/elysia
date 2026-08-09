@@ -143,6 +143,8 @@ describe('automatic AOT stripping', () => {
 			sucrose: true,
 			compat: true,
 			bridge: false,
+			typeboxValue: false,
+			typeboxType: true,
 			adapter: false,
 			isProduction: true
 		})
@@ -259,6 +261,8 @@ describe('automatic AOT stripping', () => {
 			sucrose: true,
 			compat: true,
 			bridge: false,
+			typeboxValue: false,
+			typeboxType: true,
 			adapter: false,
 			isProduction: true
 		})

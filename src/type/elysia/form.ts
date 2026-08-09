@@ -1,4 +1,4 @@
-import { Decode, Refine, Unsafe } from 'typebox/type'
+import { Decode, Refine, Unsafe } from '../typebox-type'
 import type {
 	StaticDecode,
 	TObjectOptions,

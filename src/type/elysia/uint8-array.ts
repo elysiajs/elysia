@@ -1,4 +1,4 @@
-import { Codec, Refine, Unsafe } from 'typebox/type'
+import { Codec, Refine, Unsafe } from '../typebox-type'
 import type { Type } from 'typebox'
 
 import { isEmpty } from '../../utils'

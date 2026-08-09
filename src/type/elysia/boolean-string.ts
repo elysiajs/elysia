@@ -1,4 +1,4 @@
-import { Decode, Refine } from 'typebox/type'
+import { Decode, Refine } from '../typebox-type'
 import type { Type } from 'typebox'
 import type { TSchemaOptions } from 'typebox'
 

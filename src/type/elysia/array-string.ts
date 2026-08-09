@@ -1,4 +1,4 @@
-import { Decode, Refine } from 'typebox/type'
+import { Decode, Refine } from '../typebox-type'
 import { Check, Compile, Decode as decodeValue } from '../bridge'
 import type { TObjectOptions, TSchema } from 'typebox'
 

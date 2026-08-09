@@ -1,11 +1,16 @@
-import { String } from 'typebox/type'
 import type { TString, TStringOptions } from 'typebox'
 
 import { noEnumerable } from '../constants'
 import { evictOldestHalf } from '../../utils'
 import { referenceCache, SHARED_REFERENCE_CACHE_LIMIT } from '../shared'
 
-const emptyString = Object.freeze(String())
+const emptyString = Object.freeze(
+	Object.defineProperty(
+		{ type: 'string', '~kind': 'String' },
+		'~kind',
+		noEnumerable
+	) as any as TString
+)
 const stringFormatCache = new Map<string, TString>()
 referenceCache(stringFormatCache)
 

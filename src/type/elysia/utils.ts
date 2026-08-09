@@ -1,4 +1,4 @@
-import { Refine } from 'typebox/type'
+import { Refine } from '../typebox-type'
 import type { Static, TSchema } from 'typebox'
 
 import { fnv1a, evictOldestHalf } from '../../utils'

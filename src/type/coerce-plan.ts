@@ -1,4 +1,4 @@
-import { Decode, Refine } from 'typebox/type'
+import { Decode, Refine } from './typebox-type'
 
 import { ELYSIA_TYPES } from './constants'
 import { nullObject, evictOldestHalf } from '../utils'

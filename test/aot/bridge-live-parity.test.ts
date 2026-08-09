@@ -3,8 +3,6 @@ import { describe, it, expect } from 'bun:test'
 /** The statically wired bridge must match a bridge initialized at runtime. */
 describe('statically wired TypeBox bridge', () => {
 	const MEMBERS = [
-		'Compile',
-		'Decode',
 		'applyCoercions',
 		'TypeBoxValidator',
 		'TypeBoxValidatorCache',
@@ -14,12 +12,18 @@ describe('statically wired TypeBox bridge', () => {
 		'coerceStringToStructure',
 		'coerceBody',
 		'hasTypes',
-		'HasCodec',
-		'Intersect',
-		'Default',
-		'Ref',
-		'Clone'
+		'Intersect'
 	] as const
+
+	// Deferred through `type/typebox-value`: the runtime bridge is wired at import
+	// time, so it holds the pre-load stubs and cannot be identity-compared.
+	// `typebox-value` is the seam the stubs resolve to, so the mirror must match
+	// THAT, otherwise a statically wired build calls a different function
+	const DEFERRED = ['Compile', 'Decode', 'HasCodec', 'Default', 'Clone'] as const
+
+	// Same, one seam over: `Ref` is a `typebox/type` builder, deferred behind
+	// the separate `typebox-type` latch
+	const DEFERRED_TYPE = ['Ref'] as const
 
 	it('matches every runtime export from an initialized bridge', async () => {
 		const { setupTypebox } = await import('../../src/type/compat')
@@ -37,6 +41,31 @@ describe('statically wired TypeBox bridge', () => {
 		for (const member of MEMBERS) {
 			expect(live[member]).toBe(bridge[member])
 			expect(live[member]).toBeDefined()
+		}
+
+		const ops = (await import('../../src/type/typebox-value')) as Record<
+			string,
+			any
+		>
+
+		// force the lazy load so the seam holds the real ops
+		ops.HasCodec({ type: 'string' })
+
+		for (const member of DEFERRED) {
+			expect(live[member]).toBe(ops[member])
+			expect(typeof bridge[member]).toBe('function')
+		}
+
+		const typeOps = (await import(
+			'../../src/type/typebox-type'
+		)) as Record<string, any>
+
+		// force the lazy load so the seam holds the real builders
+		typeOps.Ref('#/x')
+
+		for (const member of DEFERRED_TYPE) {
+			expect(live[member]).toBe(typeOps[member])
+			expect(typeof bridge[member]).toBe('function')
 		}
 	})
 

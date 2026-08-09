@@ -1,4 +1,4 @@
-import { Default } from 'typebox/value'
+import { Default } from '../typebox-value'
 import type { TSchema } from 'typebox/type'
 
 import { nullObject } from '../../utils'

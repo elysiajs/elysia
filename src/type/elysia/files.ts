@@ -1,4 +1,4 @@
-import { Decode } from 'typebox/type'
+import { Decode } from '../typebox-type'
 import type { Type } from 'typebox'
 
 import { isBlob, isEmpty } from '../../utils'

@@ -1,5 +1,5 @@
-import { Evaluate, Intersect, Module } from 'typebox/type'
-import { Compile, type Validator as BaseTypeBoxValidator } from 'typebox/schema'
+import { Evaluate, Intersect, Module } from '../typebox-type'
+import type { Validator as BaseTypeBoxValidator } from 'typebox/schema'
 import type {
 	Static,
 	StaticDecode,
@@ -16,8 +16,9 @@ import {
 	Encode,
 	EncodeUnsafe,
 	Errors,
-	HasCodec
-} from 'typebox/value'
+	HasCodec,
+	SchemaCompile as Compile
+} from '../typebox-value'
 import type { TLocalizedValidationError } from 'typebox/error'
 
 import {
