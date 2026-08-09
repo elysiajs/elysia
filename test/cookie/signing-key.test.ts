@@ -19,8 +19,13 @@ describe('cookie signing key selection', () => {
 
 		const signed = cookies.session.value as string
 
-		await expect(unsignCookie(signed, activeSecret)).resolves.toBe('hello')
-		await expect(unsignCookie(signed, previousSecret)).resolves.toBe(false)
+		// signatures are bound to the cookie name they were minted for
+		await expect(
+			unsignCookie(signed, activeSecret, 'session')
+		).resolves.toBe('hello')
+		await expect(
+			unsignCookie(signed, previousSecret, 'session')
+		).resolves.toBe(false)
 	})
 
 	it('does not fall back when the first rotation secret is null', async () => {

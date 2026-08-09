@@ -510,6 +510,14 @@ export const form = <const T extends Record<keyof any, unknown>>(
 		ELYSIA_FORM_PROTOTYPE
 	) as unknown as ElysiaFormData<T>
 
+export const assignOwn = <T extends object>(target: T, source: any): T =>
+	source != null && Object.hasOwn(source, '__proto__')
+		? Object.defineProperties(
+				target,
+				Object.getOwnPropertyDescriptors(source)
+			)
+		: Object.assign(target, source)
+
 export const getLoosePath = (path: string) =>
 	path.charCodeAt(path.length - 1) === 47 ? path.slice(0, -1) : path + '/'
 
@@ -544,7 +552,7 @@ const sseLineBreak = /\r\n|\r|\n/g
 const sseField = (name: 'id' | 'event', value: string | number) =>
 	`${name}: ${(value + '').replace(sseLineBreak, '')}\n`
 
-const sseData = (value: string) => {
+export const sseData = (value: string) => {
 	if (value.indexOf('\n') === -1 && value.indexOf('\r') === -1)
 		return 'data: ' + value + '\n'
 
@@ -1160,12 +1168,25 @@ export const requestId = isBun
 	: typeof crypto !== 'undefined'
 		? // @ts-ignore
 			(crypto.randomUUIDv7?.bind(crypto) ??
-				crypto.randomUUID?.bind(crypto) ??
-				fallbackRequestId)
+			crypto.randomUUID?.bind(crypto) ??
+			fallbackRequestId)
 		: fallbackRequestId
 
+/**
+ * Offset of the first byte after `://`, so the authority is never scanned as
+ * path. A fixed offset would let the client-supplied `Host` decide how many
+ * leading path bytes are dropped
+ */
+export function authorityEnd(url: string) {
+	return url.charCodeAt(4) === 58
+		? 7
+		: url.charCodeAt(5) === 58
+			? 8
+			: url.indexOf('://') + 3
+}
+
 export function replaceUrlPath(url: string, path: string) {
-	const i = url.indexOf('/', 11)
+	const i = url.indexOf('/', authorityEnd(url))
 	const qs = url.indexOf('?', i)
 
 	return `${url.slice(0, i)}${path.charCodeAt(0) === 47 ? '' : '/'}${path}${qs === -1 ? '' : url.slice(qs)}`

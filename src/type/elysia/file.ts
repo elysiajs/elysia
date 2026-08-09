@@ -15,9 +15,11 @@ import {
 
 import {
 	ASYNC_REFINE,
+	MAX_QUEUED_FILE_TYPE_CHECKS,
 	matchesAnyFileType,
 	maybeQueueFileTypeCheck,
-	parseFileUnit
+	parseFileUnit,
+	type FileTypeBudget
 } from './file-type'
 
 export {
@@ -87,10 +89,17 @@ function FileWithProperty(options: FilesOptions) {
 				? `Expect file type to be ${types[0]}`
 				: `Expect file type to be one of ${types.join(', ')}`
 
+		// `t.Files` forwards `maxItems` as the detector budget
+		const budget: FileTypeBudget = {
+			epoch: -1,
+			count: 0,
+			limit: options.maxItems ?? MAX_QUEUED_FILE_TYPE_CHECKS
+		}
+
 		const checkType = (value: File) => {
 			if (!matchesAnyFileType(value.type, types)) return false
 
-			maybeQueueFileTypeCheck(value, types, message)
+			maybeQueueFileTypeCheck(value, types, message, budget)
 
 			return true
 		}

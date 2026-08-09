@@ -2,7 +2,10 @@ import { describe, expect, it, afterAll, spyOn } from 'bun:test'
 import { fileTypeFromBlob } from 'file-type'
 
 import { Elysia, t, fileType, setFileTypeDetector } from '../../src'
-import { isAsyncPredicate } from '../../src/type/elysia/file-type'
+import {
+	isAsyncPredicate,
+	MAX_QUEUED_FILE_TYPE_CHECKS
+} from '../../src/type/elysia/file-type'
 import { upload } from '../utils'
 
 // Leave the shared detector ready for later suites.
@@ -179,6 +182,13 @@ const freshFileTypeModule = () =>
 		typeof import('../../src/type/elysia/file-type')
 	>
 
+/** what `t.File({ type })` hands the queue for a slot without `maxItems` */
+const freshBudget = () => ({
+	epoch: -1,
+	count: 0,
+	limit: MAX_QUEUED_FILE_TYPE_CHECKS
+})
+
 describe('missing file type detector', () => {
 	const jpg = Bun.file('test/images/millenium.jpg') as unknown as File
 	const message = 'Expect file type to be image'
@@ -220,7 +230,7 @@ describe('missing file type detector', () => {
 		let pending: ReturnType<typeof takeFileTypeChecks>
 		try {
 			collectFileTypeChecks()
-			maybeQueueFileTypeCheck(jpg, ['image'], message)
+			maybeQueueFileTypeCheck(jpg, ['image'], message, freshBudget())
 			pending = takeFileTypeChecks()
 			warned = warn.mock.calls.map((call) => call.join(' '))
 		} finally {
@@ -245,7 +255,12 @@ describe('missing file type detector', () => {
 			await expect(module.fileType(jpg, 'image')).resolves.toBe(true)
 
 			module.collectFileTypeChecks()
-			module.maybeQueueFileTypeCheck(jpg, ['image'], message)
+			module.maybeQueueFileTypeCheck(
+				jpg,
+				['image'],
+				message,
+				freshBudget()
+			)
 			await Promise.all(
 				(module.takeFileTypeChecks() ?? []).map((x) => x.check)
 			)
@@ -268,7 +283,12 @@ describe('missing file type detector', () => {
 			await module.fileType(jpg, 'image')
 
 			module.collectFileTypeChecks()
-			module.maybeQueueFileTypeCheck(jpg, ['image'], message)
+			module.maybeQueueFileTypeCheck(
+				jpg,
+				['image'],
+				message,
+				freshBudget()
+			)
 			module.takeFileTypeChecks()
 
 			warned = warn.mock.calls.map((call) => call.join(' '))

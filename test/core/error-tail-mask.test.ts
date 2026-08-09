@@ -46,8 +46,18 @@ describe('compiled error tail', () => {
 		expect(r.fiveOhThree.status).toBe(503)
 		expect(r.fiveOhThree.body).toBe('Internal Server Error')
 
+		// `.response` opting out of the mask is what makes an *authored* body
+		// publishable — a developer writing a string is saying "serve this"
 		expect(r.explicitResponse.status).toBe(500)
 		expect(r.explicitResponse.body).toBe('explicit body')
+
+		// ...but the same property name is owned by the HTTP clients, so a
+		// rethrown `AxiosError`/`got` failure must not turn the mask off and
+		// publish the upstream's credentials and DSN. An authored body is a
+		// string; a leaked client-library `.response` is an object
+		expect(r.foreignClientResponse.status).toBe(502)
+		expect(r.foreignClientResponse.body).toBe('Internal Server Error')
+		expect(r.foreignClientResponse.body).not.toContain('hunter2')
 
 		expect(r.fourHundred.status).toBe(400)
 		expect(r.fourHundred.body).toContain('hunter2')
@@ -58,6 +68,10 @@ describe('compiled error tail', () => {
 
 		expect(r.fiveHundred.status).toBe(500)
 		expect(r.fiveHundred.body).toContain('hunter2')
+
+		// the narrowing is bound to production, not to the property shape —
+		// locally the whole client error stays visible for debugging
+		expect(r.foreignClientResponse.body).toContain('hunter2')
 	})
 
 	it('matches the interpreted path when toResponse throws synchronously', async () => {

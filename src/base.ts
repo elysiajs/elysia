@@ -161,6 +161,41 @@ const emptyHistory = Object.freeze([]) as readonly HistoryEntry[]
 const canRegisterLoose = (path: string, isDynamic: boolean) =>
 	!isDynamic && (path.length === 0 || path.charCodeAt(path.length - 1) === 47)
 
+/**
+ * Every key a single route must answer to, in registration order.
+ *
+ * `registerLoose` is the caller's call, not this helper's: HTTP gates it on
+ * `canRegisterLoose` because its lookup retries the trailing slash, while WS
+ * has no such retry and must own both directions outright
+ */
+const expandPaths = (
+	path: string,
+	needsEncode: boolean,
+	registerLoose: boolean,
+	explicit: Set<string> | undefined
+) => {
+	// Bun always percent-encodes the request target, so a path that
+	// needs encoding is only ever reachable by its encoded twin
+	const variants = [path]
+	if (needsEncode) {
+		const encoded = encodeURI(path)
+		if (encoded !== path) variants.push(encoded)
+	}
+
+	if (!registerLoose) return variants
+
+	const paths: string[] = []
+	for (let v = 0; v < variants.length; v++) {
+		const p = variants[v]
+		paths.push(p)
+
+		const loose = getLoosePath(p)
+		if (loose !== p && !explicit?.has(loose)) paths.push(loose)
+	}
+
+	return paths
+}
+
 export class Elysia<
 	const in out BasePath extends string = '',
 	const in out Scope extends EventScope = 'local',
@@ -7124,11 +7159,17 @@ export class Elysia<
 				if (this.#routeMayHaveModelRef(table, i))
 					this.#assertRouteModelRefs(routeRow(table, i), method[i])
 
-		if (length)
-			Compiled.claim(
-				this['~programId'],
-				(this['~aotFingerprint'] = createAotFingerprint())
+		if (length) {
+			const programId = this['~programId']
+
+			if (
+				!Compiled.claim(
+					programId,
+					(this['~aotFingerprint'] = createAotFingerprint())
+				)
 			)
+				Compiled.assertUncontested(programId)
+		}
 
 		const isLoose = this['~config']?.strictPath !== true
 
@@ -7167,26 +7208,38 @@ export class Elysia<
 				if (wsConfig === undefined && wsCap!.options)
 					wsConfig = wsCap!.options
 
+				const wsNeedsEncode = (routeFlags & RouteFlag.Encode) !== 0
+
 				if ((routeFlags & RouteFlag.Dynamic) !== 0) {
-					;(this['~router'] ??= new Memoirist<CompiledHandler>({
-						loosePath: isLoose
-					})).add('WS', routePath, handler)
+					const wsRouter = (this['~router'] ??=
+						new Memoirist<CompiledHandler>({
+							loosePath: isLoose
+						}))
+
+					// Memoirist owns the loose lane for dynamic paths
+					const wsPaths = expandPaths(
+						routePath,
+						wsNeedsEncode,
+						false,
+						undefined
+					)
+
+					for (let v = 0; v < wsPaths.length; v++)
+						wsRouter.add('WS', wsPaths[v], handler)
 
 					this['~hasDynamicWS'] = true
 				} else {
 					this.#initMap()
 					const wsMap = (this['~map']!['WS'] ??= nullObject() as any)
-					wsMap[routePath] = handler
+					const wsPaths = expandPaths(
+						routePath,
+						wsNeedsEncode,
+						isLoose,
+						isLoose ? explicitPaths?.get('WS') : undefined
+					)
 
-					if (isLoose) {
-						const loose = getLoosePath(routePath)
-
-						if (
-							loose !== routePath &&
-							!explicitPaths?.get('WS')?.has(loose)
-						)
-							wsMap[loose] = handler
-					}
+					for (let v = 0; v < wsPaths.length; v++)
+						wsMap[wsPaths[v]] = handler
 				}
 
 				if (options && isNotEmpty(options)) {
@@ -7206,10 +7259,6 @@ export class Elysia<
 			const registerLoose =
 				isLoose && canRegisterLoose(routePath, isDynamic)
 
-			const explicitMain = registerLoose
-				? explicitPaths?.get(routeMethod)
-				: undefined
-
 			if (!isDynamic && !needsEncode && !registerLoose) {
 				const map = (methods[routeMethod] ??= nullObject() as any)
 
@@ -7227,22 +7276,12 @@ export class Elysia<
 				continue
 			}
 
-			const variants = [routePath]
-			if (needsEncode) {
-				const encoded = encodeURI(routePath)
-				if (encoded !== routePath) variants.push(encoded)
-			}
-
-			const paths: string[] = []
-			for (let v = 0; v < variants.length; v++) {
-				const p = variants[v]
-				paths.push(p)
-				if (registerLoose) {
-					const loose = getLoosePath(p)
-					if (loose !== p && !explicitMain?.has(loose))
-						paths.push(loose)
-				}
-			}
+			const paths = expandPaths(
+				routePath,
+				needsEncode,
+				registerLoose,
+				registerLoose ? explicitPaths?.get(routeMethod) : undefined
+			)
 
 			if (isDynamic) {
 				const router = (this['~router'] ??=

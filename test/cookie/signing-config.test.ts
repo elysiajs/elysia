@@ -18,6 +18,42 @@ describe('cookie signing configuration', () => {
 		).toThrow()
 	})
 
+	it('rejects an empty or whitespace-only secret at configuration', () => {
+		// An empty secret does not disable signing — it produces a real
+		// HMAC-SHA256 under a zero-length key, which is a public function, so
+		// anyone can mint a valid cookie for any value. The realistic trigger is
+		// a deployment slip (`COOKIE_SECRET=` present-but-empty in a `.env`, an
+		// empty Kubernetes secret), which must fail loudly at boot exactly like
+		// an unset variable already does.
+		for (const secrets of ['', '   ', [''], [null, '']])
+			expect(() =>
+				compileCookieConfig(undefined, {
+					sign: true,
+					secrets: secrets as any
+				})
+			).toThrow(/`cookie.secrets`/)
+
+		expect(() =>
+			compileCookieConfig(undefined, {
+				sign: true,
+				secrets: 'real-secret'
+			})
+		).not.toThrow()
+	})
+
+	it('never signs with an empty secret inside a rotation list', () => {
+		// `['', 'real']` has a usable secret so it boots, but the write side
+		// always uses secrets[0] — which would be the zero-length key.
+		const config = compileCookieConfig(undefined, {
+			secrets: ['', 'real-secret'],
+			sign: ['session']
+		})
+
+		expect(() =>
+			signCookieValues({ session: { value: 'hello' } } as any, config)
+		).toThrow('is signed but no `secrets` is provided')
+	})
+
 	it('rejects a signed field whose secret resolves to null', () => {
 		const schema = {
 			config: { sign: ['token'] },

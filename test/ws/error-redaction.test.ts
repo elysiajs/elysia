@@ -24,17 +24,29 @@ const throws4xx = () => {
 	throw Object.assign(new Error('secret internal detail'), { status: 403 })
 }
 
+const throws5xx = () => {
+	throw Object.assign(new Error('secret internal detail'), { status: 500 })
+}
+
 describe('WebSocket error redaction', () => {
 	afterEach(() => {
 		delete process.env.NODE_ENV
 	})
 
-	it('redacts unexpected 4xx messages in production', async () => {
+	// A 4xx status is developer-authored intent, so its message is visible
+	// in production just like the HTTP transport (`statusFallbackBody`).
+	it('includes unexpected 4xx messages in production', async () => {
 		process.env.NODE_ENV = 'production'
 
-		await expect(frameFor(throws4xx)).resolves.not.toContain(
+		await expect(frameFor(throws4xx)).resolves.toContain(
 			'secret internal detail'
 		)
+	})
+
+	it('redacts unexpected 5xx messages in production', async () => {
+		process.env.NODE_ENV = 'production'
+
+		await expect(frameFor(throws5xx)).resolves.toBe('Internal Server Error')
 	})
 
 	it('includes unexpected 4xx messages during development', async () => {

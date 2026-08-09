@@ -148,7 +148,7 @@ describe('Cookie Response', () => {
 		const response = await app.handle('/update')
 
 		expect(getCookies(response)).toEqual([
-			`name=${await signCookie('seminar: Himari', secrets)}; Path=/`
+			`name=${await signCookie('seminar: Himari', secrets, 'name')}; Path=/`
 		])
 	})
 
@@ -413,7 +413,7 @@ describe('Cookie Response', () => {
 
 		await expect(response.text()).resolves.toBe('handled')
 		expect(getCookies(response)).toEqual([
-			`name=${await signCookie('seminar: Himari', secrets)}; Path=/`
+			`name=${await signCookie('seminar: Himari', secrets, 'name')}; Path=/`
 		])
 	})
 

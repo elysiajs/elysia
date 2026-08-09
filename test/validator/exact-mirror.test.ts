@@ -77,6 +77,72 @@ describe('without exact-mirror', () => {
 	})
 })
 
+describe('mirror failure diagnostics', () => {
+	// `t.Cookie` parks its HMAC `secrets` on the schema itself, and this warning
+	// goes to stderr — into the log pipeline, where it is durable and widely
+	// readable. A leaked signing key forges every session cookie it protects, so
+	// the report must carry the schema shape and never the key.
+	const warningsFor = (schema: any) => {
+		setExactMirror(() => {
+			throw new Error('mirror generation failed')
+		})
+
+		const warn = console.warn
+		const logged: unknown[] = []
+		console.warn = (...args: unknown[]) => {
+			logged.push(...args)
+		}
+
+		try {
+			new TypeBoxValidator(schema)
+		} finally {
+			console.warn = warn
+		}
+
+		expect(logged[0]).toContain('Failed to create exactMirror')
+
+		return JSON.stringify(logged)
+	}
+
+	it('never logs a cookie signing secret', () => {
+		const logged = warningsFor(
+			t.Cookie(
+				{ session: t.String() },
+				{ secrets: 'single-signing-key', sign: ['session'] }
+			)
+		)
+
+		expect(logged).not.toContain('single-signing-key')
+		// the diagnostic is still worth reporting
+		expect(logged).toContain('session')
+	})
+
+	it('never logs a rotating signing secret', () => {
+		const logged = warningsFor(
+			t.Cookie(
+				{ rotated: t.String() },
+				{
+					secrets: ['rotating-key-old', 'rotating-key-new'],
+					sign: ['rotated']
+				}
+			)
+		)
+
+		expect(logged).not.toContain('rotating-key-old')
+		expect(logged).not.toContain('rotating-key-new')
+	})
+
+	it('never logs a per-field signing secret', () => {
+		const logged = warningsFor(
+			t.Cookie({
+				scoped: t.Cookie(t.String(), { secrets: 'per-field-key' })
+			})
+		)
+
+		expect(logged).not.toContain('per-field-key')
+	})
+})
+
 describe('Exact Mirror', () => {
 	it('normalize when t.Codec is provided', async () => {
 		const app = new Elysia({

@@ -9,7 +9,7 @@ defaults:
     shell: bash
 
 permissions:
-  id-token: write
+  contents: read
 
 env:
   # Enable debug logging for actions
@@ -19,6 +19,11 @@ jobs:
   publish-npm:
     name: 'Publish: npm Registry'
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
     steps:
       - name: 'Checkout'
         uses: actions/checkout@v4
@@ -50,6 +55,9 @@ jobs:
   benchmark:
     name: Benchmark
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
 
     steps:
       - name: 'Checkout'

@@ -557,13 +557,23 @@ describe('Web Standard - Map Response with untouched set', () => {
 		expect(set.headers['transfer-encoding']).toBe('chunked')
 	})
 
-	it('keep the slow path for prototype-chained default headers', async () => {
+	it('takes the slow path for a prototype-chained set.headers, own keys only', async () => {
+		// The slow path exists to strip a prototype off `set.headers`, so it
+		// must not publish what it strips. `Object.assign(set.headers, body)`
+		// in a handler reparents through the inherited `__proto__` setter, and
+		// promoting inherited keys would turn a request body into real headers
+		// — the platform itself reads own properties only
+		// (`new Response(x, { headers })`), so a chain walk is Elysia being
+		// more permissive than the runtime it wraps.
 		const set = {
-			headers: Object.create({ 'x-default': '1' })
+			headers: Object.assign(Object.create({ 'x-default': '1' }), {
+				'x-own': '2'
+			})
 		} as any
 		const response = mapResponse('Shiroko', set)
 
-		expect(response.headers.get('x-default')).toBe('1')
+		expect(response.headers.get('x-own')).toBe('2')
+		expect(response.headers.get('x-default')).toBeNull()
 		await expect(response.text()).resolves.toBe('Shiroko')
 	})
 

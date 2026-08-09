@@ -289,7 +289,13 @@ export function planFromReport(
 	allBridgeFree: boolean,
 	zeroCapture: boolean,
 	adapterStub: 'bun' | 'web-standard' | false = false,
-	productionStub: boolean = true
+	productionStub: boolean = true,
+	/**
+	 * A WS route declares a `cookie` schema. Its upgrade path handles cookies
+	 * outside the handler JIT, so it emits no `cc` alias — stubbing on that
+	 * alias alone would hand `src/ws/route.ts` a throwing `parseCookieRaw`
+	 */
+	wsCookie: boolean = false
 ): { plan: StubPlan; mode: BridgeMode } {
 	const jit = report.jit
 
@@ -319,7 +325,7 @@ export function planFromReport(
 				!aliases.has('va') &&
 				!aliases.has('cc') &&
 				!aliases.has('tr'),
-			cookie: jit && !aliases.has('cc'),
+			cookie: jit && !aliases.has('cc') && !wsCookie,
 			trace: !aliases.has('tr') && (jit || !mayTrace),
 			sucrose: jit,
 			compat: mode !== 'off',
@@ -806,6 +812,35 @@ function isStandardResponse(response: unknown) {
 	return entries.every((v) => isStandardSchema(v))
 }
 
+/**
+ * The manifest is one flat `method -> path` table with no per-app namespace,
+ * bound to whichever app builds a router first, so a mounted sub-app (a second
+ * Elysia building on its own schedule) is not representable
+ *
+ * refuse at build time rather than ship a coin flip
+ */
+const assertNoMount = (
+	app: Parameters<typeof captureArtifacts>[0],
+	entry: string
+) => {
+	const routes = app['~routes']
+	if (!routes) return
+
+	const mounted: string[] = []
+	for (const route of routes) {
+		const handler = route[2] as { ['~mount']?: unknown } | undefined
+
+		if (handler?.['~mount'] && !mounted.includes(route[1]))
+			mounted.push(route[1])
+	}
+
+	if (!mounted.length) return
+
+	throw new Error(
+		`[elysia-aot] "${entry}" mounts a sub-app (${mounted.join(', ')}). AOT cannot compile a mounted sub-app. Compose with .use() instead of .mount(), or disable AOT plugin`
+	)
+}
+
 export async function generateCompiledArtifacts(
 	file: string,
 	options?: ElysiaAotOptions
@@ -840,6 +875,8 @@ export async function generateCompiledArtifacts(
 			throw new Error(`[elysia-aot] "${entry}" must export an Elysia app`)
 
 		const typedApp = app as Parameters<typeof captureArtifacts>[0]
+		assertNoMount(typedApp, entry)
+
 		const sourceOptions = {
 			register: true,
 			registerFrom: options?.registerFrom,
@@ -899,6 +936,8 @@ export async function generateCompiledArtifacts(
 		let expectedSlots = 0
 
 		let routesForbidSeal = false
+		// WS cookies emit no `cc` alias, see `planFromReport`
+		let wsCookie = false
 		for (const route of history) {
 			const [, , , instance, hook, appHook, inheritedChain, macroScope] =
 				route as [
@@ -919,6 +958,15 @@ export async function generateCompiledArtifacts(
 				typedApp as any,
 				macroScope as any
 			) as Record<string, unknown> | undefined
+
+			if (
+				(route as { [0]?: unknown })[0] === 'WS' &&
+				((hook as { cookie?: unknown } | undefined)?.cookie !==
+					undefined ||
+					hooks?.cookie !== undefined)
+			)
+				wsCookie = true
+
 			if (!hooks) continue
 
 			let routeHasTypeBoxDirectSlot = false
@@ -982,7 +1030,8 @@ export async function generateCompiledArtifacts(
 			artifacts.handlers.length === 0 &&
 				artifacts.validators.length === 0,
 			adapterStub,
-			productionStub
+			productionStub,
+			wsCookie
 		)
 
 		if (options?.target === 'workerd') {

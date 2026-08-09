@@ -6,6 +6,7 @@ import {
 } from '../compile/handler/frozen-validator'
 import { isBridgeLive } from '../type/bridge'
 import {
+	assignOwn,
 	deriveEntryFn,
 	isNotEmpty,
 	nullObject,
@@ -13,6 +14,8 @@ import {
 } from '../utils'
 import { frozenRootOf } from '../generation'
 import { parseQueryFromURL } from '../parse-query'
+import { compileCookieConfig } from '../cookie/config'
+import { buildCookieJar, parseCookieRaw } from '../cookie/utils'
 import {
 	deriveModes,
 	getQueryParseChannels,
@@ -31,7 +34,6 @@ import {
 	ElysiaStatus,
 	ValidationError,
 	internalServerErrorBodyString,
-	isProduction,
 	problemBody,
 	problemResponse
 } from '../error'
@@ -380,14 +382,7 @@ function wsErrorFrameFallback(error: any): string | Promise<string> {
 /** Frame an error that never self-described has always served */
 function wsLegacyFrame(error: any): string {
 	if (error?.status) {
-		const body =
-			error.response !== undefined
-				? error.response
-				: isProduction()
-					? error.status >= 500
-						? 'Internal Server Error'
-						: ''
-					: (error.message ?? '')
+		const body = statusFallbackBody(error, error.status)
 
 		return typeof body === 'object' ? JSON.stringify(body) : String(body)
 	}
@@ -416,7 +411,7 @@ function sendErrorFrame(ws: ElysiaWS<any>, error: unknown) {
 function validateUpgradeChannel(
 	validator: any,
 	value: unknown,
-	type: 'params' | 'query' | 'headers'
+	type: 'params' | 'query' | 'headers' | 'cookie'
 ): unknown | Promise<unknown> {
 	if (validator instanceof StandardValidator)
 		return validator.From(value, type)
@@ -454,20 +449,43 @@ export function buildWSRoute(
 		app
 	) ?? nullObject()) as AnyWSLocalHook
 
+	const instance = (route[3] as AnyElysia | undefined) ?? app
+	const appHookChain = route[5] as Parameters<typeof composeRouteHook>[2]
+	const inheritedChain = route[6] as Parameters<typeof composeRouteHook>[3]
+
+	const composed = (composeRouteHook(
+		instance,
+		route[4] as AnyWSLocalHook | undefined,
+		appHookChain,
+		inheritedChain,
+		app,
+		route[7] as AnyElysia | undefined
+	) ?? hook) as AnyWSLocalHook
+
 	let validators: RouteValidator<any>
 
 	// fall through to RouteValidator when no frozen validator exists
 	// so the error surfaces as today
 	const frozenEager = isBridgeLive()
 		? undefined
-		: buildFrozenRouteValidator(hook as any, app, 'WS', route[1] as string)
+		: buildFrozenRouteValidator(
+				composed as any,
+				app,
+				'WS',
+				route[1] as string
+			)
 
 	if (frozenEager) validators = frozenEager as any
 	else
 		try {
-			validators = new RouteValidator(hook as any, {
+			validators = new RouteValidator(composed as any, {
 				models: frozenRootOf(app)['~ext']?.models,
 				app,
+				// same app-level resolution HTTP uses: both are enforcement
+				// controls, and binding on one transport only is a gap
+				normalize: frozenRootOf(app)['~config']?.normalize,
+				sanitize: frozenRootOf(app)['~config']?.sanitize,
+				schemas: (composed as { schemas?: any }).schemas,
 				aot: { method: 'WS', path: route[1] },
 				eager: frozenRootOf(app)['~config']?.precompile
 			})
@@ -475,7 +493,7 @@ export function buildWSRoute(
 			if (!isBridgeNotInitialized(error)) throw error
 
 			const frozen = buildFrozenRouteValidator(
-				hook as any,
+				composed as any,
 				app,
 				'WS',
 				route[1] as string
@@ -494,15 +512,19 @@ export function buildWSRoute(
 			responseValidator[Object.keys(responseValidator)[0] as any])
 		: undefined
 
+	const cookieConfig = validators.cookie
+		? compileCookieConfig(
+				composed.cookie as any,
+				frozenRootOf(app)['~config']?.cookie as any
+			)
+		: undefined
+	const cookieIsOptional = !!(composed.cookie as any)?.['~optional']
+
 	const queryChannels = getQueryParseChannels(
 		(validators.query as any)?.schema
 	)
 	const queryArray = queryChannels?.array
 	const queryObject = queryChannels?.object
-
-	const instance = (route[3] as AnyElysia | undefined) ?? app
-	const appHookChain = route[5] as Parameters<typeof composeRouteHook>[2]
-	const inheritedChain = route[6] as Parameters<typeof composeRouteHook>[3]
 
 	const flatAppHook =
 		(composeRouteHook(
@@ -859,6 +881,31 @@ export function buildWSRoute(
 				;(context as any).headers = r
 			}
 
+			if (cookieConfig) {
+				const raw = await parseCookieRaw(
+					request.headers.get('cookie'),
+					cookieConfig
+				)
+
+				let r: unknown = raw
+				if (!cookieIsOptional || Object.keys(raw).length) {
+					r = validateUpgradeChannel(
+						validators.cookie as any,
+						raw,
+						'cookie'
+					)
+					if (r instanceof Promise) r = await r
+				}
+
+				// read/verify surface only: an accepted upgrade carries no
+				// response for `set.cookie` writes to ride on
+				;(context as any).cookie = buildCookieJar(
+					(context as any).set,
+					r as any,
+					cookieConfig
+				)
+			}
+
 			for (let i = 0; i < transforms.length; i++) {
 				const r = transforms[i](context as any)
 				if (r instanceof Promise) await r
@@ -875,7 +922,7 @@ export function buildWSRoute(
 					if (r && typeof r === 'object') {
 						if (deriveMode)
 							context = replaceDeriveContext(context, r)
-						else Object.assign(context as any, r)
+						else assignOwn(context as any, r)
 					}
 				} else if (r !== undefined) {
 					if (r instanceof Response) return r
@@ -966,7 +1013,7 @@ export function resolveWSOptions(
 			) {
 				;(warned ??= new Set()).add(key)
 				console.warn(
-					`[Elysia] Conflicting WebSocket option '${key}' across .use(websocket()) registrations; the shallowest (nearest-root) registration wins.`
+					`[Elysia] Conflicting WebSocket option '${key}' across .use(websocket()). Using nearest-root registration.`
 				)
 			}
 
@@ -976,6 +1023,9 @@ export function resolveWSOptions(
 	return result
 }
 
+const wsLimits = ['maxPayloadLength', 'backpressureLimit', 'idleTimeout']
+const routeOwnedKeys = new WeakMap<WSOptions, Set<string>>()
+
 export function accumulateWSOptions(
 	target: WSOptions,
 	routeOptions: WSOptions,
@@ -983,20 +1033,39 @@ export function accumulateWSOptions(
 ) {
 	if (!isNotEmpty(routeOptions)) return
 
-	if (isBun)
-		for (const key in routeOptions)
-			if (
-				key in target &&
-				(target as any)[key] !== (routeOptions as any)[key]
-			) {
+	let owned = routeOwnedKeys.get(target)
+	if (!owned) routeOwnedKeys.set(target, (owned = new Set()))
+
+	for (const key in routeOptions) {
+		const incoming = (routeOptions as any)[key]
+		const current = (target as any)[key]
+
+		if (key in target && current !== incoming) {
+			if (isBun) {
 				console.warn(
-					`[Elysia] Conflicting per-route WebSocket option '${key}'\nBun uses one global WebSocket config per server, per-route values are not enforced (the last-registered route wins).`
+					`[Elysia] Conflicting per-route WebSocket option '${key}'\nBun uses one global WebSocket config per server, per-route values are not enforced (for limits the strictest route wins, otherwise the last-registered route).`
 				)
 				console.warn(new Error().stack)
 			}
 
-	Object.assign(target, routeOptions)
+			// deliberately not gated on `isBun`: the merge, not the warning,
+			// is where the safety lives
+			if (
+				owned.has(key) &&
+				typeof current === 'number' &&
+				typeof incoming === 'number' &&
+				current < incoming &&
+				wsLimits.includes(key)
+			)
+				continue
+		}
+
+		owned.add(key)
+		;(target as any)[key] = incoming
+	}
 }
+
+const MAX_INFLIGHT_MESSAGES = 256
 
 export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 	function getElysia(ws: ServerWebSocket<WSConnectionData>): ElysiaWS<any> {
@@ -1019,21 +1088,67 @@ export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 		} catch {}
 	}
 
+	const release = (ws: ServerWebSocket<WSConnectionData>) => {
+		const inflight = ws.data.inflight
+		if (inflight) ws.data.inflight = inflight - 1
+	}
+
+	function dispatch(
+		ws: ServerWebSocket<WSConnectionData>,
+		message: string | Buffer
+	) {
+		let result
+		try {
+			result = ws.data.message!(getElysia(ws), message)
+		} catch (error) {
+			// Sync throw from dispatch: send a last-resort frame and bail.
+			release(ws)
+			sendErrMsg(ws, error)
+			return
+		}
+
+		if (result instanceof Promise)
+			result.then(
+				() => release(ws),
+				(error) => {
+					release(ws)
+					sendErrMsg(ws, error)
+				}
+			)
+		else release(ws)
+	}
+
 	return {
 		message(ws, message) {
-			let result
-			try {
-				result = ws.data.message?.(getElysia(ws), message)
-			} catch (error) {
-				// Sync throw from dispatch: send a last-resort frame and bail.
-				sendErrMsg(ws, error)
+			const data = ws.data
+			if (!data.message) return
+
+			const inflight = (data.inflight ?? 0) + 1
+			if (inflight > MAX_INFLIGHT_MESSAGES) {
+				try {
+					ws.close(1013, 'Too many in-flight messages')
+				} catch {}
 				return
 			}
-			if (result instanceof Promise)
-				result.catch((error) => sendErrMsg(ws, error))
+			data.inflight = inflight
+
+			const opening = data.opening
+			if (opening)
+				return void opening.then(() => {
+					if (ws.readyState > 1) return release(ws)
+					dispatch(ws, message)
+				})
+
+			dispatch(ws, message)
 		},
 		open(ws) {
-			ws.data.open?.(getElysia(ws))
+			const result = ws.data.open?.(getElysia(ws))
+			if (result instanceof Promise) {
+				const clear = () => {
+					ws.data.opening = undefined
+				}
+				ws.data.opening = result.then(clear, clear)
+			}
 		},
 		drain(ws) {
 			const elyWs = getElysia(ws)
@@ -1044,10 +1159,13 @@ export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 		close(ws, code, reason) {
 			const elyWs = getElysia(ws)
 			drainWaiters(elyWs)
+			ws.data.opening = undefined
 
 			if (ws.data.closeHandlerInvoked) return
 			ws.data.closeHandlerInvoked = true
-			ws.data.close?.(elyWs, code, reason)
+
+			const result = ws.data.close?.(elyWs, code, reason)
+			if (result instanceof Promise) result.catch(() => {})
 		},
 		ping(ws, data) {
 			ws.data.ping?.(getElysia(ws), data)

@@ -1,7 +1,7 @@
 import { Elysia } from '../../../src'
 
-// Mounted routes compile lazily outside the captured root. Automatic stripping
-// serves the captured route, while the uncaptured mounted route cannot compile.
+// A mounted sub-app is a second Elysia the manifest cannot name, so the AOT
+// plugin refuses this entry at build time regardless of strip mode.
 const inner = new Elysia().get('/hello', () => 'from-inner')
 
 export const app = new Elysia()

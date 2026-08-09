@@ -13,7 +13,13 @@ import {
 import { createContext, type Context } from '../context'
 import { origin } from '../adapter/origin'
 import { createErrorHandler } from './error'
-import { requestId, flattenChain, nullObject, isNotEmpty } from '../utils'
+import {
+	requestId,
+	flattenChain,
+	nullObject,
+	isNotEmpty,
+	authorityEnd
+} from '../utils'
 import { handleSet, materializeSetHeaders } from '../adapter/utils'
 import {
 	NotFound,
@@ -24,8 +30,8 @@ import {
 
 import type { CompiledHandler, MaybePromise } from '../types'
 
-function extractPath(url: string, context: any, pathStart: number) {
-	const s = url.indexOf('/', pathStart)
+function extractPath(url: string, context: any) {
+	const s = url.indexOf('/', authorityEnd(url))
 	const q = (context.qi = url.indexOf('?', s))
 
 	return (context.path = q === -1 ? url.slice(s) : url.substring(s, q))
@@ -236,10 +242,8 @@ export function createFetchHandler(
 	const hasDynamicWS = hasWS && !!app['~hasDynamicWS']
 	const strictPath = !!app['~config']?.strictPath
 
-	// standard internet hostname is at minimum 11 characters (http://a.bc)
-	const pathStart =
-		app['~config']?.handler?.standardHostname === false ? 7 : 11
-
+	// `handler.standardHostname` is accepted but ignored: `extractPath`
+	// derives the authority end from the scheme, correct for any hostname
 	const hook = flattenChain(app['~hookChain'])
 	const hasError = !!hook?.error
 
@@ -451,7 +455,7 @@ export function createFetchHandler(
 			if (armEager(request, context))
 				return emptyResponse.clone() as Response
 
-			extractPath(request.url, context, pathStart)
+			extractPath(request.url, context)
 			// @ts-expect-error
 			context.server = server ?? null
 
@@ -561,7 +565,7 @@ export function createFetchHandler(
 				if (armEager(request, context))
 					return emptyResponse.clone() as Response
 
-				extractPath(request.url, context, pathStart)
+				extractPath(request.url, context)
 				// @ts-expect-error
 				context.server = server ?? null
 
@@ -616,15 +620,13 @@ export function createFetchHandler(
 			if (armEager(request, context))
 				return emptyResponse.clone() as Response
 
-			extractPath(request.url, context, pathStart)
+			extractPath(request.url, context)
 			// @ts-expect-error
 			context.server = server ?? null
 
 			try {
 				for (let i = 0; i < onRequests.length; i++) {
 					const result = onRequests[i](context)
-					// sync lane: nothing suspended, so only an already-armed
-					// slot can have flipped
 					if (abortSignal && (context as any)['~sig']?.aborted)
 						return emptyResponse.clone() as Response
 
@@ -675,7 +677,7 @@ export function createFetchHandler(
 	return (request: Request, server?: unknown): MaybePromise<Response> => {
 		const context = new Context(request)
 
-		const path = extractPath(request.url, context, pathStart)
+		const path = extractPath(request.url, context)
 		// @ts-expect-error
 		context.server = server ?? null
 
@@ -795,6 +797,7 @@ export function createFetchHandler(
 				notFoundBody as unknown as Error
 			)
 
+		// eslint-disable-next-line sonarjs/no-use-of-empty-return-value
 		afterResponse?.(context, 404)
 		return notFound(context)
 	}

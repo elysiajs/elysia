@@ -26,7 +26,7 @@ describe('Cookie Per-field Configuration', () => {
 
 		expect(response.status).toBe(200)
 		expect(setCookie).toInclude(
-			`token=${await signCookie('session-id', secret)}`
+			`token=${await signCookie('session-id', secret, 'token')}`
 		)
 	})
 
@@ -156,7 +156,7 @@ describe('Cookie Per-field Configuration', () => {
 
 		expect(response.status).toBe(200)
 		expect(setCookie).toInclude(
-			`token=${await signCookie('data', fieldSecret)}`
+			`token=${await signCookie('data', fieldSecret, 'token')}`
 		)
 	})
 })

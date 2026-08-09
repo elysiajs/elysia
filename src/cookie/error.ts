@@ -24,16 +24,9 @@ export class InvalidCookie extends ElysiaError {
 	static secret(
 		key?: string
 	): Omit<InvalidCookie, 'status'> & { status: 500 } {
-		if (key)
-			return new InvalidCookie(
-				key,
-				`"${key}" is signed but no secret is provided`,
-				500
-			) as any
-
 		return new InvalidCookie(
-			undefined,
-			`Cookie is signed but no secret is provided`,
+			key,
+			`${key ? `Cookie "${key}"` : 'A cookie'} is signed but \`cookie.secrets\` is missing or empty. Set it to a non-empty string: an empty secret signs with a zero-length key, which anyone can forge.`,
 			500
 		) as any
 	}

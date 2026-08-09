@@ -42,12 +42,6 @@ function nodeCrypto() {
 	return _nodeCrypto
 }
 
-// Known-answer test for `Bun.CryptoHasher`: base64 HMAC-SHA256 of 'probe'
-// keyed with 'elysia'. This is the exact value `node:crypto` produces for the
-// same input, so the probe still asserts byte parity with the node provider
-// it just does so against a pinned reference instead of instantiating one
-const HMAC_PROBE_DIGEST = 'bzs6y9cVmkYub8fplSKaOuuqMqJlDwhMypFT/jSdCEk='
-
 const bunCryptoHasher = (() => {
 	const hasher = (globalThis as any).Bun?.CryptoHasher as
 		| BunCryptoHasher
@@ -56,11 +50,15 @@ const bunCryptoHasher = (() => {
 	if (typeof hasher !== 'function') return undefined
 
 	try {
-		return new hasher('sha256', 'elysia')
-			.update('probe')
-			.digest('base64') === HMAC_PROBE_DIGEST
-			? hasher
-			: undefined
+		return (
+			new hasher('sha256', 'elysia')
+				.update('probe')
+				// make sure the hasher work as expected
+				.digest('base64') ===
+				'bzs6y9cVmkYub8fplSKaOuuqMqJlDwhMypFT/jSdCEk='
+				? hasher
+				: undefined
+		)
 	} catch {
 		return undefined
 	}
@@ -144,30 +142,47 @@ export async function signCookieSubtle(val: string, secret: string) {
 	return `${val}.${b64.replace(removeTrailingEquals, '')}`
 }
 
-export async function signCookie(val: string, secret: string | null) {
+export const deriveSignKey = (secret: string, name: string) =>
+	`${name.length}\0${name}${secret}`
+
+export async function signCookie(
+	val: string,
+	secret: string | null,
+	// legacy doesn't use name
+	name?: string
+) {
 	val = coerceValue(val)
+	if (!secret?.trim()) throw new TypeError('Secret key must be provided')
 
-	if (secret === null || secret === undefined)
-		throw new TypeError('Secret key must be provided')
-
+	if (name !== undefined) secret = deriveSignKey(secret, name)
 	if (hasSyncHmac) return signCookieSyncImpl(val, secret)
 
 	return signCookieSubtle(val, secret)
 }
 
-export function signCookieSync(val: string, secret: string | null) {
+export function signCookieSync(
+	val: string,
+	secret: string | null,
+	name?: string
+) {
 	val = coerceValue(val)
 
-	if (secret === null || secret === undefined)
-		throw new TypeError('Secret key must be provided')
+	if (!secret?.trim()) throw new TypeError('Secret key must be provided')
 
 	if (!hasSyncHmac)
 		throw new Error('signCookieSync called without a sync HMAC available')
 
+	if (name !== undefined) secret = deriveSignKey(secret, name)
+
 	return signCookieSyncImpl(val, secret)
 }
 
-export async function unsignCookie(input: string, secret: string | null) {
+export async function unsignCookie(
+	input: string,
+	secret: string | null,
+	// legacy doesn't use name
+	name?: string
+) {
 	if (typeof input !== 'string')
 		throw new TypeError('Signed cookie string must be provided.')
 
@@ -180,14 +195,18 @@ export async function unsignCookie(input: string, secret: string | null) {
 
 	const tentativeValue = input.slice(0, dot)
 
-	if (secret === null) return false
+	if (!secret?.trim()) return false
 
-	const expectedInput = await signCookie(tentativeValue, secret)
+	const expectedInput = await signCookie(tentativeValue, secret, name)
 
 	return constantTimeEqual(expectedInput, input) ? tentativeValue : false
 }
 
-export function unsignCookieSync(input: string, secret: string | null) {
+export function unsignCookieSync(
+	input: string,
+	secret: string | null,
+	name?: string
+) {
 	if (typeof input !== 'string')
 		throw new TypeError('Signed cookie string must be provided.')
 
@@ -200,9 +219,9 @@ export function unsignCookieSync(input: string, secret: string | null) {
 
 	const tentativeValue = input.slice(0, dot)
 
-	if (secret === null) return false
+	if (!secret?.trim()) return false
 
-	const expectedInput = signCookieSync(tentativeValue, secret)
+	const expectedInput = signCookieSync(tentativeValue, secret, name)
 
 	return constantTimeEqual(expectedInput, input) ? tentativeValue : false
 }
@@ -210,22 +229,25 @@ export function unsignCookieSync(input: string, secret: string | null) {
 export function unsignWithSecretsSync(
 	name: string,
 	value: unknown,
-	secrets: string | null | (string | null)[] | undefined
+	secrets: string | null | (string | null)[] | undefined,
+	legacy?: boolean
 ) {
 	if (typeof value !== 'string') throw InvalidCookie.signature(name)
 
-	if (typeof secrets === 'string') {
-		const temp = unsignCookieSync(value, secrets)
-		if (temp === false) throw InvalidCookie.signature(name)
+	for (let pass = 0; pass < 2; pass++) {
+		const bound = pass === 0 ? name : undefined
 
-		return temp
-	}
-
-	if (Array.isArray(secrets))
-		for (let i = 0; i < secrets.length; i++) {
-			const temp = unsignCookieSync(value, secrets[i]!)
+		if (typeof secrets === 'string') {
+			const temp = unsignCookieSync(value, secrets, bound)
 			if (temp !== false) return temp
-		}
+		} else if (Array.isArray(secrets))
+			for (let i = 0; i < secrets.length; i++) {
+				const temp = unsignCookieSync(value, secrets[i]!, bound)
+				if (temp !== false) return temp
+			}
+
+		if (!legacy) break
+	}
 
 	throw InvalidCookie.signature(name)
 }
@@ -233,22 +255,25 @@ export function unsignWithSecretsSync(
 export async function unsignWithSecrets(
 	name: string,
 	value: unknown,
-	secrets: string | null | (string | null)[] | undefined
+	secrets: string | null | (string | null)[] | undefined,
+	legacy?: boolean
 ) {
 	if (typeof value !== 'string') throw InvalidCookie.signature(name)
 
-	if (typeof secrets === 'string') {
-		const temp = await unsignCookie(value, secrets)
-		if (temp === false) throw InvalidCookie.signature(name)
+	for (let pass = 0; pass < 2; pass++) {
+		const bound = pass === 0 ? name : undefined
 
-		return temp
-	}
-
-	if (Array.isArray(secrets))
-		for (let i = 0; i < secrets.length; i++) {
-			const temp = await unsignCookie(value, secrets[i]!)
+		if (typeof secrets === 'string') {
+			const temp = await unsignCookie(value, secrets, bound)
 			if (temp !== false) return temp
-		}
+		} else if (Array.isArray(secrets))
+			for (let i = 0; i < secrets.length; i++) {
+				const temp = await unsignCookie(value, secrets[i]!, bound)
+				if (temp !== false) return temp
+			}
+
+		if (!legacy) break
+	}
 
 	throw InvalidCookie.signature(name)
 }
@@ -285,7 +310,9 @@ export function resolvePendingCookie(entry: Record<string, any>, name: string) {
 	const decoded = unsignWithSecretsSync(
 		name,
 		value,
-		entry['~unsign'] as string | (string | null)[]
+		entry['~unsign'] as string | (string | null)[],
+		// the jar marks the entry when the app opted out of the legacy fallback
+		!entry['~strict']
 	)
 
 	// Success: update entry in-place, then remove the pending marker.

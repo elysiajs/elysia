@@ -101,8 +101,9 @@ describe('cookie HMAC provider selection', () => {
 		const newSecret = 'new-secret-rotation'
 		const rotation = [newSecret, oldSecret]
 
-		const signedOld = signCookieSync('session', oldSecret)
-		const signedNew = signCookieSync('session', newSecret)
+		// bound to the cookie name the rotation is read under
+		const signedOld = signCookieSync('session', oldSecret, 'sid')
+		const signedNew = signCookieSync('session', newSecret, 'sid')
 
 		expect(unsignWithSecretsSync('sid', signedOld, rotation)).toBe(
 			'session'

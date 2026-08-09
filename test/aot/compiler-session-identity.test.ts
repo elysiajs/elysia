@@ -71,7 +71,12 @@ describe('AOT manifest ownership and compiler sessions', () => {
 		expect(Compiled.getHandler(appB as any, 'GET', path)).toBe(handlerB)
 	})
 
-	it('only the first compatible app consumes a registered manifest', async () => {
+	// A manifest is consumed exactly once. The second app used to fall back to
+	// JIT in silence — and that silence is the whole hazard, because the app
+	// that *did* claim may be the wrong one and is then running foreign frozen
+	// validators. Binding is ABI-only by design, so nothing downstream can
+	// notice; the only place to fail is the denied build.
+	it('refuses a second app once the manifest is consumed', async () => {
 		const { handlers } = await register()
 		const original = handlers.POST!['/x']!.f
 		let frozenFactoryCalls = 0
@@ -90,14 +95,48 @@ describe('AOT manifest ownership and compiler sessions', () => {
 			{ body: t.Object({ b: t.Number() }) },
 			({ body }) => body
 		)
-		expect((await appB.handle('/x', json({ b: 1 }))).status).toBe(200)
-		expect((await appB.handle('/x', json({ a: 'wrong' }))).status).toBe(422)
+		expect(() => void appB.fetch).toThrow('one app per process')
 
-		const appC = buildA()
-		const c = await appC.handle('/x', json({ a: 'ok' }))
-		expect(c.status).toBe(a.status)
-		await expect(c.text()).resolves.toBe(await a.text())
+		// an app with the *same* routes is still a second app: there is no
+		// content comparison to fall back on
+		expect(() => void buildA().fetch).toThrow('one app per process')
+
+		// neither reached the frozen factory, so the program stayed appA's
 		expect(frozenFactoryCalls).toBe(1)
+	})
+
+	// The reachable bypass: whichever app builds first claims, whoever it is.
+	// A foreign claimant then rejects its own valid body and accepts the
+	// manifest owner's — a silent request-validation bypass in exactly the
+	// configuration AOT exists for. The owner always builds at boot, so that
+	// is where the process is made to die.
+	it('fails the displaced owner when a foreign app claimed first', async () => {
+		await register()
+
+		const foreign = new Elysia({ precompile: true }).post(
+			'/x',
+			{ body: t.Object({ b: t.Number() }) },
+			({ body }) => body
+		)
+		void foreign.fetch
+
+		// the symptom being guarded: `foreign` runs appA's frozen validator
+		expect((await foreign.handle('/x', json({ b: 1 }))).status).toBe(422)
+		expect((await foreign.handle('/x', json({ a: 'x' }))).status).toBe(200)
+
+		expect(() => void buildA().fetch).toThrow('one app per process')
+	})
+
+	// A routeless app never attempts a claim, so it can never contest one.
+	// Elysia instances with no routes are ordinary (plugin shells, test
+	// scaffolding) and must not be turned into a boot failure.
+	it('leaves a routeless second app alone after a claim', async () => {
+		await register()
+		expect((await buildA().handle('/x', json({ a: 'ok' }))).status).toBe(
+			200
+		)
+
+		expect(() => void new Elysia({ precompile: true }).fetch).not.toThrow()
 	})
 
 	it('rejects a manifest built by an incompatible framework ABI', async () => {

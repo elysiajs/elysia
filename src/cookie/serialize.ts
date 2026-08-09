@@ -9,7 +9,7 @@ export function serializeCookie(cookies: Context['set']['cookie']) {
 	let set: string | string[] | undefined
 	let isArray = false
 
-	for (const key in cookies) {
+	for (const key of Object.keys(cookies)) {
 		if (!key) continue
 
 		const property = cookies[key]

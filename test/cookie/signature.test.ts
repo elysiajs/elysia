@@ -157,6 +157,20 @@ describe('Parse Cookie', () => {
 		)
 	})
 
+	it('signCookie refuses a blank secret and never accepts its MAC', async () => {
+		// HMAC-SHA256 keyed with '' is keyless: the signature below was minted
+		// offline with no knowledge of the deployment. Signing must refuse to
+		// produce it and verification must refuse to accept it.
+		const forged = 'admin.jV+K7rZOPOILU30ExIZAfq9IlkZhfPz0k+dvW3lPoIA'
+
+		for (const blank of ['', '   ']) {
+			await expect(signCookie('admin', blank)).rejects.toThrow(
+				'Secret key must be provided'
+			)
+			await expect(unsignCookie(forged, blank)).resolves.toBe(false)
+		}
+	})
+
 	it('signCookieSubtle retries after a transient importKey failure', async () => {
 		const subtle = crypto.subtle as {
 			importKey: (...args: any[]) => Promise<CryptoKey>

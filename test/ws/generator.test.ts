@@ -323,6 +323,44 @@ describe('WebSocket generator handlers', () => {
 		app.stop()
 	})
 
+	// `ElysiaStatus` deliberately leaves `response` undefined for the codes
+	// HTTP sends with no body, so the frame is the code alone. Testing the
+	// unwrapped body before the wrapper turns all of them into `send(null)`,
+	// which the runtime refuses — the socket then gets a 500 error frame
+	// instead of the status the handler asked for.
+	it.each([101, 204, 205, 304, 307, 308])(
+		'frames a body-less status(%s) as { status } on both send and return',
+		async (code) => {
+			const app = new Elysia()
+				.use(websocket())
+				.ws('/send', {
+					message({ ws }: any) {
+						ws.send(status(code))
+					}
+				})
+				.ws('/return', {
+					message: () => status(code)
+				})
+				.listen(0)
+
+			for (const path of ['/send', '/return']) {
+				const ws = newWebsocket(app.server!, path)
+				await wsOpen(ws)
+
+				const got = wsMessage(ws)
+				ws.send('go')
+
+				expect(JSON.parse((await got).data as string)).toEqual({
+					status: code
+				})
+
+				await wsClosed(ws)
+			}
+
+			app.stop()
+		}
+	)
+
 	it('status-keyed response schema: 200 vs 400 validate the right shape', async () => {
 		const app = new Elysia()
 			.use(websocket()).ws('/ws', {

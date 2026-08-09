@@ -111,6 +111,56 @@ describe('t.Numeric decimal input', () => {
 		expect(Value.Check(n, '0x10')).toBe(false)
 		expect(Value.Check(n, '42')).toBe(true)
 	})
+
+	// A decimal string is syntactically valid all the way up to Infinity, and
+	// `Infinity` satisfies every lower bound: `t.Numeric({ minimum: 1 })` is
+	// the canonical `limit`/`amount` shape, so admitting it hands the handler
+	// an unbounded value that no declared constraint ever rejected
+	it('rejects decimal strings that overflow to Infinity', () => {
+		const overflow = '1' + '0'.repeat(400)
+
+		expect(Value.Check(t.Numeric(), overflow)).toBe(false)
+		expect(Value.Check(t.Numeric(), '-' + overflow)).toBe(false)
+		expect(Value.Check(t.Numeric(), overflow + '.5')).toBe(false)
+		expect(Value.Check(t.Numeric({ minimum: 1 }), overflow)).toBe(false)
+		expect(Value.Check(t.Numeric({ exclusiveMinimum: 0 }), overflow)).toBe(
+			false
+		)
+	})
+
+	it('still accepts finite values near Number.MAX_VALUE', () => {
+		const n = t.Numeric()
+
+		// 309 digits and finite: the cheap digit-count guard must not reject
+		// on length alone
+		expect(Value.Check(n, '1' + '0'.repeat(308))).toBe(true)
+		// long, but leading zeros / fraction digits never overflow
+		expect(Value.Check(n, '0'.repeat(400) + '1')).toBe(true)
+		expect(Value.Check(n, '0.' + '0'.repeat(400) + '1')).toBe(true)
+	})
+
+	// query/params/form slots rewrite `t.Number` to `t.Numeric` (coerceRoot),
+	// so an uncoerced `t.Number` rejecting Infinity is not enough
+	it('rejects the overflow in a coerced t.Number query slot', async () => {
+		const app = new Elysia().get(
+			'/',
+			{ query: t.Object({ limit: t.Number({ minimum: 1 }) }) },
+			({ query }) => String(query.limit)
+		)
+
+		const overflow = '1' + '0'.repeat(400)
+
+		expect(
+			(await app.handle(new Request(`http://localhost/?limit=1`))).status
+		).toBe(200)
+		expect(
+			(
+				await app.handle(
+					new Request(`http://localhost/?limit=${overflow}`)
+				)
+			).status
+		).toBe(422)
+	})
 })
 
 describe('zero-valued constraints', () => {

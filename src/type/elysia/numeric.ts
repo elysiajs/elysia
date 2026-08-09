@@ -50,7 +50,10 @@ function isDecimalString(value: string): boolean {
 	} else if (!digits) return false
 
 	// anything left over is garbage: '1e5', '0x10', '1 ', '1.2.3'
-	return index === length
+	if (index !== length) return false
+
+	// only 309+ digits can exceed MAX_VALUE
+	return digits < 309 || Number.isFinite(+value)
 }
 
 let StringifiedNumber: Type.TCodec<Type.TRefine<Type.TString>, number>

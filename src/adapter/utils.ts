@@ -1,4 +1,4 @@
-import { isByteStream, isNotEmpty, nullObject } from '../utils'
+import { isByteStream, isNotEmpty, nullObject, sseData } from '../utils'
 import { StatusMap } from '../constants'
 
 import { serializeCookie } from '../cookie/serialize'
@@ -19,7 +19,7 @@ export function materializeSetHeaders(set: Context['set']) {
 	return (set.headers = Object.assign(nullObject(), headers))
 }
 
-const sseFormat = (data: string) => `data: ${data}\n\n`
+const sseFormat = (data: string) => sseData(data) + '\n'
 const identityFormat = (data: string) => data
 
 const textEncoder = new TextEncoder()
@@ -532,7 +532,7 @@ export function handleSet(set: Context['set']) {
 	if (proto !== null && proto !== Object.prototype) {
 		const flat: Record<string, unknown> = Object.create(null)
 
-		for (const key in set.headers) flat[key] = set.headers[key]
+		for (const key of Object.keys(set.headers)) flat[key] = set.headers[key]
 		set.headers = flat as Context['set']['headers']
 	}
 
@@ -576,7 +576,7 @@ function applySetHeaders(
 				target.set(key, setHeaders.get(key) ?? '')
 	} else {
 		let cookies: string[] | undefined
-		for (const key in setHeaders)
+		for (const key of Object.keys(setHeaders))
 			if (key === setCookie) {
 				const cookie = setHeaders[key] as string
 				cookies ??= target.getSetCookie()

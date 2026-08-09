@@ -487,3 +487,134 @@ describe('HTTP and WebSocket lifecycle', () => {
 		})
 	})
 })
+
+// Bun normalizes the request target, so a route path containing a character
+// outside the URL-safe set only ever arrives percent-encoded. HTTP registers
+// both the raw and the `encodeURI` twin; WS registered only the raw key, so the
+// one form that can actually arrive was the one form not in the map. That is a
+// route-level authorization boundary when an overlapping dynamic route exists:
+// the upgrade silently lands on the more permissive catch-all handler, skipping
+// the specific socket's own hooks.
+describe('path encoding parity', () => {
+	const encoded = encodeURI('/ws/กข')
+
+	// This is the actual "parity" claim of the describe block: HTTP already
+	// resolved the encoded twin to the static route before this fix (that
+	// half is a control, not a regression check — see
+	// test/regression/routing.test.ts:40 for that behavior pinned on its
+	// own). WS did not, and silently fell through to the more permissive
+	// dynamic handler instead. Asserting both transports land on the same
+	// handler for the identical encoded request is what gives this test
+	// teeth against the WS-side fix — reverting it changes `frames[0]` from
+	// 'static' to 'dynamic' while the HTTP half stays green.
+	it('HTTP and WS resolve the encoded form to the same route', async () => {
+		const app = new Elysia()
+			.use(websocket())
+			.get('/ws/กข', () => 'static')
+			.get('/ws/:id', () => 'dynamic')
+			.ws('/ws/กข', {
+				open: (ws: any) => ws.send('static'),
+				message() {}
+			})
+			.ws('/ws/:id', {
+				open: (ws: any) => ws.send('dynamic'),
+				message() {}
+			})
+			.listen(0)
+
+		try {
+			await expect((await app.handle('/ws/กข')).text()).resolves.toBe(
+				'static'
+			)
+			await expect((await app.handle(encoded)).text()).resolves.toBe(
+				'static'
+			)
+			await expect((await app.handle('/ws/zz')).text()).resolves.toBe(
+				'dynamic'
+			)
+
+			const { opened, frames } = await wsProbe(app.server!, encoded, '')
+			expect(opened).toBe(true)
+			expect(frames[0]).toBe('static')
+		} finally {
+			app.stop()
+		}
+	})
+
+	it('WS resolves the encoded form instead of falling through to /ws/:id', async () => {
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws/กข', {
+				open: (ws: any) => ws.send('static'),
+				message() {}
+			})
+			.ws('/ws/:id', {
+				open: (ws: any) => ws.send('dynamic'),
+				message() {}
+			})
+			.listen(0)
+
+		try {
+			for (const path of [encoded, encoded + '/', '/ws/กข']) {
+				const { opened, frames } = await wsProbe(
+					app.server!,
+					path,
+					''
+				)
+
+				expect(opened).toBe(true)
+				expect(frames[0]).toBe('static')
+			}
+
+			// The dynamic route must still win for anything it alone matches
+			const dynamic = await wsProbe(app.server!, '/ws/zz', '')
+			expect(dynamic.frames[0]).toBe('dynamic')
+		} finally {
+			app.stop()
+		}
+	})
+
+	it('WS reaches an encoded route with no dynamic sibling to fall through to', async () => {
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws/กข', {
+				open: (ws: any) => ws.send('static'),
+				message() {}
+			})
+			.listen(0)
+
+		try {
+			const { opened, frames } = await wsProbe(app.server!, encoded, '')
+
+			expect(opened).toBe(true)
+			expect(frames[0]).toBe('static')
+		} finally {
+			app.stop()
+		}
+	})
+
+	// The dynamic WS branch had the identical hole: it added only the raw path
+	// to the router, so an encoded literal segment never matched.
+	it('WS resolves an encoded literal segment of a dynamic route', async () => {
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws/ก/:id', {
+				open: (ws: any) => ws.send('dynamic-encoded'),
+				message() {}
+			})
+			.listen(0)
+
+		try {
+			const { opened, frames } = await wsProbe(
+				app.server!,
+				encodeURI('/ws/ก/7'),
+				''
+			)
+
+			expect(opened).toBe(true)
+			expect(frames[0]).toBe('dynamic-encoded')
+		} finally {
+			app.stop()
+		}
+	})
+})

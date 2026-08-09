@@ -167,9 +167,12 @@ describe('nested object query coercion', () => {
 		const { validators } = capture(build)
 		expect(slot(validators, 'GET', '/n', 'query')?.coercePlan).toBeDefined()
 
-		const { app } = freeze(build)
+		// live control arm first: `freeze` claims the process manifest, and an
+		// app building after a claim is now a hard error
 		const url = '/n?page=2&filter=' + encodeURIComponent('{"since":9}')
 		expect((await build().handle(url)).status).toBe(200)
+
+		const { app } = freeze(build)
 		const res = await app.handle(url)
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({
@@ -253,8 +256,10 @@ describe('non-JSON-safe constraint fallback', () => {
 			slot(validators, 'GET', '/inf', 'query')?.coercePlan
 		).toBeUndefined()
 
-		const { app } = freeze(build)
+		// live control arm first: `freeze` claims the process manifest
 		expect((await build().handle('/inf?n=5')).status).toBe(422)
+
+		const { app } = freeze(build)
 		expect((await app.handle('/inf?n=5')).status).toBe(422)
 	})
 

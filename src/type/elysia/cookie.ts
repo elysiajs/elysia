@@ -17,7 +17,8 @@ const COOKIE_OPTION_KEYS = [
 	'secure',
 	'partitioned',
 	'secrets',
-	'sign'
+	'sign',
+	'legacySignature'
 ] as const
 
 function extractConfig(options: Record<string, unknown> | undefined): {

@@ -1,5 +1,6 @@
 import type { BaseCookie } from './types'
 import { resolvePendingCookie } from './crypto'
+import { nullObject } from '../utils'
 
 const FORWARDED_KEYS = [
 	'expires',
@@ -89,7 +90,8 @@ export class Cookie<T = any> implements BaseCookie {
 			return
 
 		const j = this.#jar
-		if (!(this.#name in j)) j[this.#name] = { ...this.#initial }
+		if (!(this.#name in j))
+			j[this.#name] = Object.assign(nullObject(), this.#initial)
 
 		j[this.#name].value = value
 	}
@@ -109,10 +111,9 @@ export class Cookie<T = any> implements BaseCookie {
 
 	set(config: Updater<Partial<BaseCookie>>) {
 		const cookie = Object.assign(
-			{
-				...this.#initial,
-				value: this.value
-			},
+			nullObject(),
+			this.#initial,
+			{ value: this.value },
 			typeof config === 'function' ? config(this.cookie) : config
 		)
 

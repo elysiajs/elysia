@@ -420,6 +420,24 @@ function findInstancePath(
 	}
 }
 
+function reportSchema(schema: unknown) {
+	try {
+		return JSON.stringify(schema, (key, value) =>
+			key === 'secrets' ? '[redacted]' : value
+		)
+	} catch {
+		return '[unserializable schema]'
+	}
+}
+
+function warnMirrorFailure(schema: unknown, error: unknown) {
+	console.warn(
+		'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
+	)
+	console.warn(reportSchema(schema))
+	console.warn(error)
+}
+
 interface DefaultFastPath {
 	/** `Default(schema, undefined)`; cloned when object-like. */
 	value: unknown
@@ -712,11 +730,7 @@ export class TypeBoxValidator<
 							? (value) => Clean(this.schema, value)
 							: this.#setupMirror(schema, options, frozen)
 			} catch (error) {
-				console.warn(
-					'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
-				)
-				console.warn(schema)
-				console.warn(error)
+				warnMirrorFailure(schema, error)
 
 				if (options?.normalize !== false)
 					this.Clean = (value) => Clean(this.schema, value)
@@ -838,11 +852,7 @@ export class TypeBoxValidator<
 					try {
 						clean = reconstruct().instantiateFrozenMirror(m, schema)
 					} catch (error) {
-						console.warn(
-							'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
-						)
-						console.warn(schema)
-						console.warn(error)
+						warnMirrorFailure(schema, error)
 						clean = (v) => v
 					}
 

@@ -110,4 +110,15 @@ export interface CookieOptions {
 	 * `null` in the array makes Elysia accept an unsigned cookie (intended only for a one-way unsigned→signed migration)
 	 */
 	secrets?: string | null | (string | null)[]
+
+	/**
+	 * Only use secret for signing cookie instead of secret + seperator + name
+	 *
+	 * Set to `false` once every signed cookie in circulation has been re-issued
+	 *
+	 * Applies to the app and route level
+	 *
+	 * @default true
+	 */
+	legacySignature?: boolean
 }

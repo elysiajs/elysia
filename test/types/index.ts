@@ -3084,6 +3084,40 @@ type a = keyof {}
 	})
 }
 
+// Inherited (guard) schemas reach the WebSocket handler types. The `ws()`
+// `Schema` generic has always merged the ambient schema in; until the upgrade
+// and message validators were built from the composed hook that was a promise
+// the runtime did not keep. These pin the type half of that contract so the
+// generic and the pipeline cannot silently diverge again.
+{
+	new Elysia()
+		.guard({
+			query: t.Object({ token: t.String() }),
+			body: t.Object({ n: t.Number() })
+		})
+		.ws('/ws-guard', {
+			message(ws) {
+				expectTypeOf<typeof ws.query>().toEqualTypeOf<{
+					token: string
+				}>()
+				expectTypeOf<typeof ws.body>().toEqualTypeOf<{ n: number }>()
+			}
+		})
+
+	// a local slot replaces the inherited one, in the types exactly as the
+	// composed hook does at runtime
+	new Elysia()
+		.guard({ query: t.Object({ token: t.String() }) })
+		.ws('/ws-guard-local', {
+			query: t.Object({ page: t.Number() }),
+			message(ws) {
+				expectTypeOf<typeof ws.query>().toEqualTypeOf<{
+					page: number
+				}>()
+			}
+		})
+}
+
 // Message status returns must match the schema for that status.
 {
 	new Elysia().ws('/ws-status', {

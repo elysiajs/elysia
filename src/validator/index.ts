@@ -25,6 +25,7 @@ import {
 	HasCodec,
 	Default
 } from '../type/bridge'
+import { assignOwn } from '../utils'
 import { isAsyncFunction } from '../compile/utils'
 import { isAsyncPredicate } from '../type/elysia/file-type'
 import { hasProperty } from '../type/utils'
@@ -489,7 +490,9 @@ export class MultiValidator extends Validator {
 		}
 
 		if (typeof snapshot === 'object' && typeof result === 'object')
-			return Object.assign(snapshot, result)
+			// an own `__proto__` would reparent the snapshot — `assignOwn`
+			// defines it as inert data instead
+			return assignOwn(snapshot, result)
 
 		throw new Error('Unable to merged value with different type')
 	}

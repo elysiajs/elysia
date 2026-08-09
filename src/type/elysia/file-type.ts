@@ -62,6 +62,7 @@ export async function fileType(
 }
 
 let collecting = false
+let collectEpoch = 0
 let pendingFileTypeChecks: PendingFileTypeCheck[] | undefined
 
 export interface PendingFileTypeCheck {
@@ -69,6 +70,15 @@ export interface PendingFileTypeCheck {
 	/** kept so a failed detection can be located in the validated value
 	 *  (identity walk on failure only) for a path-aware error */
 	file: File
+}
+
+export const MAX_QUEUED_FILE_TYPE_CHECKS = 64
+
+/** per-slot detector budget, reset on each validation pass via `epoch` */
+export interface FileTypeBudget {
+	epoch: number
+	count: number
+	limit: number
 }
 
 export const ASYNC_REFINE = '~elyAsyncRefine'
@@ -84,6 +94,7 @@ export const isAsyncPredicate = (v: unknown) =>
 
 export function collectFileTypeChecks() {
 	collecting = true
+	collectEpoch++
 }
 
 export function takeFileTypeChecks() {
@@ -98,9 +109,25 @@ export function takeFileTypeChecks() {
 export function maybeQueueFileTypeCheck(
 	value: File,
 	types: FileType[],
-	message: string
+	message: string,
+	budget: FileTypeBudget
 ) {
 	if (!collecting) return
+
+	if (budget.epoch !== collectEpoch) {
+		budget.epoch = collectEpoch
+		budget.count = 0
+	}
+
+	if (budget.count++ >= budget.limit) {
+		if (budget.count === budget.limit + 1)
+			(pendingFileTypeChecks ??= []).push({
+				file: value,
+				check: Promise.resolve(`Expect at most ${budget.limit} files`)
+			})
+
+		return
+	}
 
 	if (!fileTypeDetectors) {
 		if (!isProduction() && !warnedMissingDetector)

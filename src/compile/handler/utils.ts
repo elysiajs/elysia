@@ -1,5 +1,6 @@
 import { isAsyncFunction } from '../utils'
 import {
+	assignOwn,
 	deriveEntryFn,
 	isMapDeriveEntry,
 	type CompactBeforeHandleChunk,
@@ -97,7 +98,9 @@ export function extractDeriveKeys(fn: Function) {
 
 export function replaceDeriveContext(context: any, derivative: any) {
 	const next = Object.create(Object.getPrototypeOf(context))
-	Object.assign(next, derivative)
+	// an own `__proto__` would reach the inherited setter and reparent the
+	// context — `assignOwn` defines it as inert data instead
+	assignOwn(next, derivative)
 
 	next.request = context.request
 	next['~sig'] = context['~sig']
@@ -461,14 +464,14 @@ export function mapBeforeHandle(
 			} else {
 				const keys = extractDeriveKeys(fn)
 				const merge =
-					keys && keys.length
+					keys && keys.length && !keys.includes('__proto__')
 						? keys
 								.map(
 									(k) =>
 										`c[${JSON.stringify(k)}]=tmp[${JSON.stringify(k)}]`
 								)
 								.join(';')
-						: 'Object.assign(c,tmp)'
+						: "Object.hasOwn(tmp,'__proto__')?Object.defineProperties(c,Object.getOwnPropertyDescriptors(tmp)):Object.assign(c,tmp)"
 				code +=
 					'if(tmp instanceof es)_r=tmp\n' +
 					`else if(tmp){${merge};tmp=undefined}\n`

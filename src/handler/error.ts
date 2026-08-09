@@ -137,20 +137,19 @@ export const resolveStatus = (status: unknown) =>
  * Body served by an error that carries a status but no usable body:
  * its declared `response`, otherwise its message
  */
-export const statusFallbackBody = (error: any, status: unknown) =>
-	error.response !== undefined
-		? error.response
-		: // safe guard unintentional error
-			isProduction() && (status as number) >= 500
+export function statusFallbackBody(error: any, status: unknown) {
+	const masked = isProduction() && (status as number) >= 500
+	const declared = error.response
+
+	return declared !== undefined && !(masked && typeof declared === 'object')
+		? declared
+		: masked
 			? 'Internal Server Error'
 			: (error.message ?? '')
+}
 
 /**
  * RFC 9457 problem document carrying `detail` verbatim, mirroring `problem()`.
- *
- * `detail` is served exactly as annotated — objects included — it is never
- * spread into the envelope. `problemBody` only defaults `type` when the key is
- * *absent*, so an error without one has to supply `'about:blank'` itself
  */
 const problemOf = (self: any, detail: unknown, status: number) =>
 	new ElysiaStatus(

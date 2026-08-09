@@ -47,6 +47,10 @@ export interface WSConnectionData {
 	pong?: (elysia: ElysiaWS<any>, data: Buffer) => void | Promise<void>
 
 	closeHandlerInvoked?: boolean
+	/** in-flight `message` handlers, bounded by `MAX_INFLIGHT_MESSAGES` */
+	inflight?: number
+	/** settles when an async `open` hook finished; dispatch chains onto it */
+	opening?: Promise<void>
 	elysia?: ElysiaWS<any>
 	context?: Record<string, unknown>
 
@@ -82,6 +86,17 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		if (context)
 			for (const key in context) {
 				if (key === 'ws' || key === 'body') continue
+
+				if (key === '__proto__') {
+					Object.defineProperty(this, key, {
+						value: context[key],
+						writable: true,
+						enumerable: true,
+						configurable: true
+					})
+					continue
+				}
+
 				;(this as any)[key] = context[key]
 			}
 	}
@@ -160,21 +175,11 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		return this.raw.data
 	}
 
-	#prepare(data: unknown): string | null {
-		if (data === undefined) return null
-
-		if (data instanceof ElysiaStatus)
-			return JSON.stringify({
-				status: data.status,
-				error: data.response
-			})
-
-		if (typeof data === 'object') return JSON.stringify(data)
-
-		return data as string
-	}
-
-	#validatedOrError(data: unknown): string | undefined {
+	/**
+	 * Validate, redact and serialize an outbound value, or return the
+	 * `ValidationError` the payload was refused with.
+	 */
+	#frame(data: unknown) {
 		const connectionData = this.raw.data
 		const v = pickValidator(
 			connectionData?.validator as any,
@@ -182,11 +187,37 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 			data
 		)
 
-		if (!v) return
-		const value = data instanceof ElysiaStatus ? data.response : data
+		const status = data instanceof ElysiaStatus ? data : undefined
+		let value = status ? status.response : data
 
-		if (v.Check(value)) return
-		return new ValidationError('message', value, v.Errors(value)).message
+		if (v) {
+			const encode = (v as any).EncodeFrom
+			let redacted: unknown
+
+			if (
+				typeof encode === 'function' &&
+				!(v as any).hasCodec &&
+				!(v as any).mayReturnPromise
+			)
+				try {
+					redacted = encode.call(v, value, 'message')
+				} catch {}
+
+			if (redacted !== undefined) value = redacted
+			else if (!v.Check(value))
+				return new ValidationError('message', value, v.Errors(value))
+		}
+
+		if (status)
+			return JSON.stringify({
+				status: status.status,
+				error: value
+			})
+
+		if (value === undefined) return null
+		if (typeof value === 'object') return JSON.stringify(value)
+
+		return value as string
 	}
 
 	#send(
@@ -197,12 +228,11 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		if (data instanceof ArrayBuffer || ArrayBuffer.isView(data))
 			return this.raw.send(data as unknown as BufferSource, compress)
 
-		// validate before stringifying (matches #ping/#pong), an invalid
-		// payload must not pay the JSON.stringify
-		const err = this.#validatedOrError(data)
-		if (err !== undefined) return this.raw.send(err)
+		const frame = this.#frame(data)
+		if (frame instanceof ValidationError)
+			return this.raw.send(frame.message)
 
-		return this.raw.send(this.#prepare(data)!, compress)
+		return this.raw.send(frame!, compress)
 	}
 
 	#ping(
@@ -212,10 +242,11 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		if (data instanceof ArrayBuffer || ArrayBuffer.isView(data))
 			return this.raw.ping(data as unknown as BufferSource)
 
-		const err = this.#validatedOrError(data)
-		if (err !== undefined) return this.raw.send(err)
+		const frame = this.#frame(data)
+		if (frame instanceof ValidationError)
+			return this.raw.send(frame.message)
 
-		return this.raw.ping(this.#prepare(data)!)
+		return this.raw.ping(frame!)
 	}
 
 	#pong(
@@ -225,10 +256,11 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		if (data instanceof ArrayBuffer || ArrayBuffer.isView(data))
 			return this.raw.pong(data as unknown as BufferSource)
 
-		const err = this.#validatedOrError(data)
-		if (err !== undefined) return this.raw.send(err)
+		const frame = this.#frame(data)
+		if (frame instanceof ValidationError)
+			return this.raw.send(frame.message)
 
-		return this.raw.pong(this.#prepare(data)!)
+		return this.raw.pong(frame!)
 	}
 
 	#publish(
@@ -245,10 +277,11 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 			)
 
 		// validate before stringifying (matches #ping/#pong)
-		const err = this.#validatedOrError(data)
-		if (err !== undefined) return this.raw.send(err)
+		const frame = this.#frame(data)
+		if (frame instanceof ValidationError)
+			return this.raw.send(frame.message)
 
-		return this.raw.publish(topic, this.#prepare(data)!, compress)
+		return this.raw.publish(topic, frame!, compress)
 	}
 
 	#close(code?: number, reason?: string): void {

@@ -163,6 +163,50 @@ describe('automatic AOT stripping', () => {
 		await expect(ok.text()).resolves.toBe('ok')
 	})
 
+	// The cookie stub gate keys on the `cc` alias, which only the HTTP JIT
+	// emits. A WS route's cookie schema is enforced in the upgrade path
+	// instead, so keying on `cc` alone stubbed `parseCookieRaw` /
+	// `buildCookieJar` / `compileCookieConfig` out from under it and turned
+	// every upgrade on that route into a 500.
+	it('keeps cookie support when only a WS route declares a cookie schema', async () => {
+		const { stub } = await generateCompiledArtifacts(
+			'test/aot/fixtures/strip-auto-ws-cookie-app.ts',
+			{ strip: 'auto' }
+		)
+
+		expect(stub.jit).toBe(true)
+		expect(stub.cookie).toBe(false)
+
+		const text = await build(
+			'test/aot/fixtures/strip-auto-ws-cookie-app.ts',
+			'auto'
+		)
+		expect(text).toContain('handler compiler JIT was stripped')
+		expect(text).not.toContain('cookie support was stripped')
+
+		const app = await load(text)
+
+		// no server is listening under `handle()`, so a *passing* upgrade
+		// stops at the "requires a running server" 500 — what matters is that
+		// the cookie channel ran for real in both directions
+		const missing = await app.handle('/ws', {
+			headers: { upgrade: 'websocket' }
+		})
+		expect(missing.status).toBe(422)
+
+		const present = await app.handle('/ws', {
+			headers: { upgrade: 'websocket', cookie: 'token=abc' }
+		})
+		// asserting the *absence* of the stub marker is too weak: a 500 for
+		// any other reason would also pass. Assert the real success path
+		// instead — a valid cookie clears validation and reaches the actual
+		// "no running server" upgrade error, not the stub's throw
+		expect(present.status).toBe(500)
+		await expect(present.text()).resolves.toContain(
+			'WebSocket upgrade requires a running server'
+		)
+	})
+
 	it('keeps cookie reconstruction when a route reads the cookie jar', async () => {
 		const { stub } = await generateCompiledArtifacts(
 			'test/aot/fixtures/strip-auto-cookie-app.ts',
@@ -246,39 +290,32 @@ describe('automatic AOT stripping', () => {
 		await expect(res.text()).resolves.toBe('0,7')
 	})
 
-	it('serves captured routes but rejects an uncaptured mounted sub-app', async () => {
-		const { stub } = await generateCompiledArtifacts(
-			'test/aot/fixtures/strip-auto-mount-app.ts',
-			{ strip: 'auto' }
-		)
+	// A mounted sub-app is a second Elysia with its own router build. The
+	// manifest is one flat method+path table bound to whichever app builds
+	// first, so `.mount()` is unrepresentable rather than merely mis-ordered:
+	// `sub.fetch` makes the sub-app steal the parent's frozen validators,
+	// `sub.handle` leaves the mounted routes with no frozen entry at all.
+	// Refusing the build is the only outcome that is neither a 500 in
+	// production nor a silent validation bypass.
+	it('refuses to build an app that mounts a sub-app', async () => {
+		await expect(
+			generateCompiledArtifacts(
+				'test/aot/fixtures/strip-auto-mount-app.ts',
+				{ strip: 'auto' }
+			)
+		).rejects.toThrow('mounts a sub-app')
 
-		expect(stub).toEqual({
-			jit: true,
-			ws: true,
-			reconstruct: true,
-			cookie: true,
-			trace: true,
-			sucrose: true,
-			compat: true,
-			bridge: false,
-			typeboxValue: false,
-			typeboxType: true,
-			adapter: false,
-			isProduction: true
-		})
+		// the refusal is a property of manifest binding, not of stripping
+		await expect(
+			generateCompiledArtifacts(
+				'test/aot/fixtures/strip-auto-mount-app.ts',
+				{ strip: false }
+			)
+		).rejects.toThrow('mounts a sub-app')
 
-		const text = await build(
-			'test/aot/fixtures/strip-auto-mount-app.ts',
-			'auto'
-		)
-
-		const app = await load(text)
-
-		const outer = await app.handle('/')
-		expect(outer.status).toBe(200)
-		await expect(outer.text()).resolves.toBe('outer')
-
-		const sub = await app.handle('/sub/hello')
-		expect(sub.status).toBe(500)
+		// and it fails the bundler build, not just the low-level API
+		await expect(
+			build('test/aot/fixtures/strip-auto-mount-app.ts', 'auto')
+		).rejects.toThrow('mounts a sub-app')
 	})
 })

@@ -22,6 +22,7 @@ export interface CompiledCookieConfig {
 	globalSecrets: string | null | (string | null)[] | undefined
 	hasSign: boolean
 	verify: 'lazy' | 'eager'
+	legacySignature: boolean
 }
 
 const ATTRIBUTE_KEYS = new Set([
@@ -62,14 +63,14 @@ function normalizeSign(sign: true | string | string[] | undefined) {
 	return [sign]
 }
 
+// an empty secret is a real HMAC under a zero-length key, which anyone can
+// reproduce — treat it as absent so signing fails loudly
 const hasUsableSecret = (
 	secrets: string | null | (string | null)[] | undefined
 ) =>
-	secrets == null
-		? false
-		: Array.isArray(secrets)
-			? secrets.some((s) => s != null)
-			: true
+	Array.isArray(secrets)
+		? secrets.some((s) => !!s?.trim())
+		: !!secrets?.trim()
 
 export function compileCookieConfig(
 	routeSchema: AnySchema | undefined,
@@ -158,7 +159,10 @@ export function compileCookieConfig(
 		globalSignSet: Array.isArray(globalSign) ? new Set(globalSign) : undefined,
 		globalSecrets,
 		hasSign,
-		verify: appConfig?.verify ?? 'lazy'
+		verify: appConfig?.verify ?? 'lazy',
+		legacySignature:
+			(routeConfig?.legacySignature ?? appConfig?.legacySignature) !==
+			false
 	}
 }
 

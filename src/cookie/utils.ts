@@ -16,6 +16,7 @@ import {
 
 import {
 	hasSyncHmac,
+	deriveSignKey,
 	signCookieSyncImpl,
 	signCookie,
 	unsignWithSecrets,
@@ -139,7 +140,12 @@ export async function parseCookieRaw(
 		const signCheck = resolveSignSecrets(name, config)
 
 		if (signCheck !== undefined)
-			value = await unsignWithSecrets(name, value, signCheck)
+			value = await unsignWithSecrets(
+				name,
+				value,
+				signCheck,
+				config.legacySignature
+			)
 
 		out[name] = maybeJsonDecode(value)
 	}
@@ -170,7 +176,12 @@ export function parseCookieRawSigned(
 		const signCheck = resolveSignSecrets(name, config)
 
 		if (signCheck !== undefined)
-			value = unsignWithSecretsSync(name, value, signCheck)
+			value = unsignWithSecretsSync(
+				name,
+				value,
+				signCheck,
+				config.legacySignature
+			)
 
 		out[name] = maybeJsonDecode(value)
 	}
@@ -184,7 +195,7 @@ export function buildCookieJar(
 	config: CompiledCookieConfig,
 	lazySign?: 1,
 	// unsigned + unvalidated lane: `raw` holds still-URL-encoded strings
-	// (parseCookieRawDeferred), so decode per-name on first access too.
+	// (parseCookieRawDeferred), so decode per-name on first access too
 	deferDecode?: 1
 ) {
 	const store = raw as Record<string, BaseCookie>
@@ -216,7 +227,10 @@ export function buildCookieJar(
 
 		if (lazySign && typeof entry.value === 'string') {
 			const secrets = resolveSignSecrets(name, config)
-			if (secrets !== undefined) (entry as any)['~unsign'] = secrets
+			if (secrets !== undefined) {
+				;(entry as any)['~unsign'] = secrets
+				if (!config.legacySignature) (entry as any)['~strict'] = 1
+			}
 		} else {
 			const value = entry.value
 			if (value !== null && typeof value === 'object') {
@@ -235,6 +249,14 @@ export function buildCookieJar(
 
 	const cache: Record<string, Cookie<unknown>> = nullObject()
 
+	function settle(key: string) {
+		if (!(key in store)) return
+
+		const entry = materializeEntry(key)
+		if ('~unsign' in entry)
+			resolvePendingCookie(entry as Record<string, any>, key)
+	}
+
 	return new Proxy(store, {
 		get(_, key: string) {
 			return (cache[key] ??= new Cookie(
@@ -249,16 +271,21 @@ export function buildCookieJar(
 						)
 			))
 		},
+		has(target, key) {
+			if (typeof key === 'string') settle(key)
+
+			return Reflect.has(target, key)
+		},
+		ownKeys(target) {
+			const keys = Reflect.ownKeys(target)
+			for (let i = 0; i < keys.length; i++) settle(keys[i] as string)
+
+			return keys
+		},
 		getOwnPropertyDescriptor(target, key) {
-			if (typeof key === 'string' && key in target) materializeEntry(key)
+			if (typeof key === 'string') settle(key)
 
-			const descriptor = Reflect.getOwnPropertyDescriptor(target, key)
-			const entry = descriptor?.value
-
-			if (entry && typeof entry === 'object' && '~unsign' in entry)
-				resolvePendingCookie(entry as Record<string, any>, String(key))
-
-			return descriptor
+			return Reflect.getOwnPropertyDescriptor(target, key)
 		}
 	}) as Record<string, Cookie<unknown>>
 }
@@ -266,11 +293,11 @@ export function buildCookieJar(
 function collectSignPending(
 	cookies: Context['set']['cookie'] | undefined,
 	config: CompiledCookieConfig
-): [property: BaseCookie, value: string, secret: string][] | undefined {
+): [property: BaseCookie, value: string, key: string][] | undefined {
 	if (!cookies || !config.hasSign) return
 
 	let pending:
-		| [property: BaseCookie, value: string, secret: string][]
+		| [property: BaseCookie, value: string, key: string][]
 		| undefined
 
 	for (const key in cookies) {
@@ -292,11 +319,15 @@ function collectSignPending(
 			? (r.secrets[0] ?? null)
 			: r.secrets
 
-		if (secret === null)
+		if (!secret?.trim())
 			throw new TypeError(
 				`Cookie field "${key}" is signed but no \`secrets\` is provided.`
 			)
-		;(pending ??= []).push([property, value as string, secret])
+		;(pending ??= []).push([
+			property,
+			value as string,
+			deriveSignKey(secret, key)
+		])
 	}
 
 	return pending
@@ -305,14 +336,14 @@ function collectSignPending(
 export function signCookieValues(
 	cookies: Context['set']['cookie'] | undefined,
 	config: CompiledCookieConfig
-): Promise<void> | undefined {
+) {
 	const pending = collectSignPending(cookies, config)
 	if (!pending) return
 
 	if (hasSyncHmac) {
 		for (let i = 0; i < pending.length; i++) {
-			const [property, value, secret] = pending[i]!
-			property.value = signCookieSyncImpl(value, secret)
+			const [property, value, key] = pending[i]!
+			property.value = signCookieSyncImpl(value, key)
 		}
 
 		return
@@ -322,10 +353,10 @@ export function signCookieValues(
 }
 
 async function signPending(
-	pending: [property: BaseCookie, value: string, secret: string][]
-): Promise<void> {
+	pending: [property: BaseCookie, value: string, key: string][]
+) {
 	for (let i = 0; i < pending.length; i++) {
-		const [property, value, secret] = pending[i]!
-		property.value = await signCookie(value, secret)
+		const [property, value, key] = pending[i]!
+		property.value = await signCookie(value, key)
 	}
 }

@@ -47,6 +47,18 @@ const scenarios: Record<string, () => Promise<Response>> = {
 			e.response = 'explicit body'
 		}).handle(get()),
 
+	// `.response` is the property name every common HTTP client puts its whole
+	// upstream response on (`AxiosError.response`), so a rethrown client error
+	// is not a declared body
+	foreignClientResponse: () =>
+		throwing((e) => {
+			e.status = 502
+			e.response = {
+				config: { headers: { authorization: 'Bearer hunter2' } },
+				data: 'postgres://user:hunter2@db/app'
+			}
+		}).handle(get()),
+
 	fourHundred: () => throwing((e) => (e.status = 400)).handle(get()),
 
 	fiveOhThree: () => throwing((e) => (e.status = 503)).handle(get()),

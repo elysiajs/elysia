@@ -593,6 +593,155 @@ describe('cookie name/attributes reject injection chars', () => {
 		)
 		expect(serialize('sid', 'abc', { path: '/' })).toContain('sid=abc')
 	})
+
+	it('rejects a Max-Age that carries its own attributes', async () => {
+		const { serialize } = await import('../../src/cookie/lib')
+
+		// `maxAge` is typed `number`, so this is the same `any`-from-query class
+		// the Path/Domain guards above already defend. Concatenated verbatim it
+		// lets a request add attributes the app deliberately omitted — widening
+		// scope with `Domain=`, turning a session cookie persistent with
+		// `Expires=`, or making it CSRF-usable with `SameSite=None`.
+		for (const maxAge of [
+			'0; Domain=evil.example',
+			'0; Expires=Fri, 31 Dec 9999 23:59:59 GMT',
+			'0; SameSite=None',
+			Number.NaN,
+			Number.POSITIVE_INFINITY
+		])
+			expect(() =>
+				serialize('sid', 'abc', { maxAge: maxAge as any })
+			).toThrow(/Invalid cookie Max-Age/)
+
+		// the legitimate forms are untouched
+		expect(serialize('sid', 'abc', { maxAge: 60 })).toContain('Max-Age=60')
+		expect(serialize('sid', 'abc', { maxAge: 0 })).toContain('Max-Age=0')
+		expect(serialize('sid', 'abc', { maxAge: '60' as any })).toContain(
+			'Max-Age=60'
+		)
+	})
+})
+
+describe('a reparented object never promotes its prototype onto the wire', () => {
+	// An own `__proto__` from a request body is inert *data* — until user code
+	// reparents something with `Object.assign(target, body)`, which is the
+	// idiomatic way to do it by accident. From there it is Elysia's own
+	// normalisation that decides whether the injected members reach the client:
+	// `for..in` walks the prototype chain, `Object.keys` does not. The raw
+	// platform is safe by default (`new Response(x, { headers })` reads own
+	// properties only), so any leak here is one Elysia manufactures.
+	const HEADERS =
+		'{"x-request-id":"r1","__proto__":{' +
+		'"set-cookie":"session=attacker; Path=/; HttpOnly",' +
+		'"access-control-allow-origin":"https://evil.test",' +
+		'"location":"https://evil.test"}}'
+
+	const post = (app: Elysia<any, any, any, any, any, any>, body: string) =>
+		app.handle(
+			new Request('http://e.ly/e', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body
+			})
+		)
+
+	const expectClean = (res: Response) => {
+		// the developer's own header still ships — the guard is not a blanket drop
+		expect(res.headers.get('x-request-id')).toBe('r1')
+
+		// session fixation, CORS bypass and open redirect, from one JSON body
+		expect(res.headers.get('set-cookie')).toBeNull()
+		expect(res.headers.get('access-control-allow-origin')).toBeNull()
+		expect(res.headers.get('location')).toBeNull()
+	}
+
+	it('does not flatten a hijacked set.headers prototype into response headers', async () => {
+		const app = new Elysia().post('/e', ({ body, set }: any) => {
+			set.headers = {}
+			Object.assign(set.headers, body)
+
+			return 'ok'
+		})
+
+		expectClean(await post(app, HEADERS))
+	})
+
+	it('does not merge a hijacked set.headers prototype onto a returned Response', async () => {
+		// a returned `Response` assembles the wire headers through a second
+		// walk of `set.headers`, so the same body has to stay inert there too
+		const app = new Elysia().post('/e', ({ body, set }: any) => {
+			set.headers = {}
+			Object.assign(set.headers, body)
+
+			return new Response('ok')
+		})
+
+		expectClean(await post(app, HEADERS))
+	})
+
+	it('does not serialize a fabricated cookie off a hijacked set.cookie', async () => {
+		const app = new Elysia().post('/e', ({ body, set }: any) => {
+			set.cookie = {}
+			Object.assign(set.cookie, body)
+
+			return 'ok'
+		})
+
+		const res = await post(
+			app,
+			'{"ok":{"value":"1"},"__proto__":{"evil":' +
+				'{"value":"pwned","path":"/","httpOnly":true}}}'
+		)
+
+		expect(res.headers.getSetCookie()).toEqual(['ok=1'])
+	})
+
+	it('does not let a body widen cookie attributes through the jar', async () => {
+		// `cookie.session.set(body)` / `.update(body)` merge onto a fresh
+		// object, so a body-owned `__proto__` supplies every attribute the app
+		// deliberately omitted. `Domain=` widening and `SameSite=None` are a
+		// scope escalation on their own, even though they are only additive.
+		for (const app of [
+			new Elysia().post('/e', ({ body, cookie }: any) => {
+				cookie.session.set(body)
+
+				return 'ok'
+			}),
+			new Elysia().post('/e', ({ body, cookie }: any) => {
+				cookie.session.value = 'x'
+				cookie.session.update(body)
+
+				return 'ok'
+			})
+		]) {
+			const res = await post(
+				app,
+				'{"value":"x","__proto__":' +
+					'{"domain":"evil.test","sameSite":"none"}}'
+			)
+
+			expect(res.headers.getSetCookie()).toEqual(['session=x; Path=/'])
+		}
+	})
+
+	it('still honours attributes the handler really sets', async () => {
+		// Paired positive control: the assertions above are also satisfied by
+		// breaking cookie attributes outright.
+		const app = new Elysia().post('/e', ({ cookie }: any) => {
+			cookie.session.set({
+				value: 'x',
+				domain: 'app.test',
+				sameSite: 'none',
+				httpOnly: true
+			})
+
+			return 'ok'
+		})
+
+		expect((await post(app, '{}')).headers.getSetCookie()).toEqual([
+			'session=x; Domain=app.test; Path=/; HttpOnly; SameSite=None'
+		])
+	})
 })
 
 describe('the last-resort 500 never throws', () => {

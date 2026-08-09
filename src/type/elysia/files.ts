@@ -57,8 +57,13 @@ export function Files(options?: FilesOptions): TFiles {
 }
 
 function FilesWithProperty(options: FilesOptions) {
-	const fileOptions: FileOptions = {}
-	if (options.type !== undefined) fileOptions.type = options.type
+	const fileOptions: FilesOptions = {}
+	if (options.type !== undefined) {
+		fileOptions.type = options.type
+
+		if (options.maxItems !== undefined)
+			fileOptions.maxItems = options.maxItems
+	}
 	if (options.minSize !== undefined) fileOptions.minSize = options.minSize
 	if (options.maxSize !== undefined) fileOptions.maxSize = options.maxSize
 

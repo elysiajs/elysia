@@ -71,7 +71,13 @@ function handleElysiaFile(
 function responseTag(response: unknown) {
 	if (response == null) return
 
-	return Object.getPrototypeOf(response)?.constructor?.name
+	const constructor = Object.getPrototypeOf(response)?.constructor
+	// a generator's `constructor` is non-callable and already reaches `mapFallback`
+	if (typeof constructor !== 'function')
+		// @ts-expect-error
+		return typeof response.next === 'function' ? '' : undefined
+
+	return constructor.name
 }
 
 function mapResponseWithSet(

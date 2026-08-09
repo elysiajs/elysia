@@ -179,7 +179,7 @@ export interface HandlerManifest {
 
 export interface CompiledSnapshot {
 	registered: CompiledProgramRegistration | undefined
-	claimed: boolean
+	claimed: WeakRef<ProgramId> | undefined
 	programs: WeakMap<ProgramId, CompiledProgram>
 }
 
@@ -247,7 +247,12 @@ export function reconstruct() {
 
 // build registry
 let registered: CompiledProgramRegistration | undefined
-let claimed = false
+/**
+ * App that consumed this process's manifest, held weakly: it only has to
+ * recognise a re-claim by the *same* app, and `assertUncontested` always
+ * compares against a live id, so a cleared ref answers as a strong one would
+ */
+let claimed: WeakRef<ProgramId> | undefined
 let programs = new WeakMap<ProgramId, CompiledProgram>()
 
 const programFor = (id?: ProgramId) => (id ? programs.get(id) : undefined)
@@ -270,7 +275,7 @@ const fingerprintMismatch = (
 export abstract class Compiled {
 	static register(manifest: CompiledProgramRegistration) {
 		registered = manifest
-		claimed = false
+		claimed = undefined
 	}
 
 	static claim(id: ProgramId, fingerprint: AotFingerprint): boolean {
@@ -283,13 +288,22 @@ export abstract class Compiled {
 				`[elysia-aot] Registered manifest fingerprint mismatch: ${differences.join('; ')}.`
 			)
 
-		claimed = true
+		claimed = new WeakRef(id)
 		registered = undefined
 		programs.set(id, {
 			...manifest,
 			builtGroups: new Set()
 		})
 		return true
+	}
+
+	static assertUncontested(id: ProgramId) {
+		if (claimed === undefined || claimed.deref() === id || isAotBuildEnv())
+			return
+
+		throw new Error(
+			'[elysia-aot] A second Elysia app built a router in this process. An AOT build seals one app per process.'
+		)
 	}
 
 	static get reconstruct(): ReconstructImpl | undefined {
@@ -373,7 +387,7 @@ export abstract class Compiled {
 	/** @internal test isolation */
 	static clear() {
 		registered = undefined
-		claimed = false
+		claimed = undefined
 		programs = new WeakMap()
 	}
 }

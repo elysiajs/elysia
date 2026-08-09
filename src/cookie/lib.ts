@@ -82,7 +82,15 @@ export function serialize(
 	let str = `${name}=${value}`
 
 	const maxAge = options.maxAge
-	if (maxAge !== undefined) str += '; Max-Age=' + maxAge
+	if (maxAge !== undefined) {
+		const age = Math.floor(maxAge as number)
+		if (!Number.isFinite(age))
+			throw new InvalidCookie(
+				`Invalid cookie Max-Age ${JSON.stringify(maxAge)}.`
+			)
+
+		str += '; Max-Age=' + age
+	}
 
 	const domain = options.domain
 	if (domain) {

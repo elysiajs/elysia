@@ -335,3 +335,132 @@ describe('route compilation errors', () => {
 		expect(body.detail).toContain('Failed to compile route GET /bad')
 	})
 })
+
+// The URL authority is client-supplied (Bun copies the `Host` header verbatim
+// into `request.url`), so anchoring the path scan at a fixed byte offset lets
+// the client choose how many leading path segments Elysia discards. That turns
+// `/public/admin` into `/admin` — a *different registered route*, which is a
+// route-level authorization boundary: any upstream CDN/WAF/gateway authorizing
+// on the wire path sees `/public/admin` while Elysia runs the `/admin` handler.
+describe('URL authority is not assumed to be a fixed length', () => {
+	const boundary = (config?: ConstructorParameters<typeof Elysia>[0]) =>
+		new Elysia(config)
+			.get('/public/admin', () => 'public')
+			.get('/admin', () => 'privileged')
+
+	// Each label exercises a different fixed offset in the old, broken
+	// `extractPath` (11 for the default config, 7 for
+	// `standardHostname: false`), so the two labels are wrong for different
+	// host shapes and a shared URL list can't discriminate both at once:
+	// - `default` (old offset 11): wrong whenever the real authority ends
+	//   before byte 11, i.e. any `http` host under 4 chars or `https` host
+	//   under 3 — long hosts like `localhost` or `[::1]` land past byte 11
+	//   either way and pass under the broken offset too, proving nothing.
+	// - `standardHostname: false` (old offset 7): byte 7 is exactly correct
+	//   for every `http` host (no host length breaks it — the whole reason
+	//   this option existed pre-fix), but for `https` byte 7 lands on the
+	//   scheme's own second `/` and swallows the entire host into the path
+	//   for *every* host length, so only `https` rows discriminate here.
+	for (const [label, config, urls] of [
+		['default', undefined, [
+			'http://a/public/admin',
+			'http://ab/public/admin',
+			'http://api/public/admin',
+			'http://a:8/public/admin',
+			'https://a/public/admin',
+			'https://ab/public/admin',
+			'http://a.b/public/admin',
+			'http://x:1/public/admin',
+			'http://a1/public/admin'
+		]],
+		[
+			'standardHostname: false',
+			{ handler: { standardHostname: false } },
+			[
+				'https://a/public/admin',
+				'https://ab/public/admin',
+				'https://api/public/admin',
+				'https://a:8/public/admin',
+				'https://localhost/public/admin',
+				'https://[::1]/public/admin',
+				'https://a.b/public/admin',
+				'https://x:1/public/admin',
+				'https://a1/public/admin'
+			]
+		]
+	] as const)
+		describe(label, () => {
+			it.each(urls)('%s must not reach the /admin handler', async (url) => {
+				const response = await boundary(config).handle(
+					new Request(url)
+				)
+
+				expect(response.status).toBe(200)
+				await expect(response.text()).resolves.toBe('public')
+			})
+
+			// A missed anchor made `indexOf` return -1, so `url.slice(-1)` was
+			// the last character of the URL, and with a query string
+			// `substring(-1, q)` clamped to 0 and the path became the whole URL
+			// prefix — reflected verbatim by any wildcard handler that echoes
+			// `path`, and leaked into anything logging it.
+			it('never echoes a path derived from a missed anchor', async () => {
+				const app = new Elysia(config).get('*', ({ path }) => path)
+
+				for (const url of [
+					'http://api/x',
+					'http://api/x?q=1',
+					'https://a/x?q=1',
+					'http://a/x'
+				])
+					await expect(
+						(await app.handle(new Request(url))).text()
+					).resolves.toBe('/x')
+			})
+		})
+
+	// `replaceUrlPath` duplicated the offset as a literal `11` and never read
+	// `standardHostname`, so it could disagree with `extractPath`: the mount
+	// prefix survived into the sub-app, or the splice landed mid-path and handed
+	// the sub-app an attacker-chosen extra leading segment.
+	it.each([
+		['default', undefined],
+		['standardHostname: false', { handler: { standardHostname: false } }]
+	] as const)(
+		'mount rewrites the path against the real authority (%s)',
+		async (_label, config) => {
+			const app = new Elysia(config as any).mount(
+				'/mnt',
+				(request: Request) =>
+					new Response(
+						new URL(request.url).pathname +
+							new URL(request.url).search
+					)
+			)
+
+			for (const url of [
+				'http://a/mnt/sub',
+				'http://ab/mnt/sub',
+				'http://api/mnt/sub',
+				'https://a/mnt/sub',
+				'https://ab/mnt/sub',
+				'http://localhost/mnt/sub'
+			])
+				await expect(
+					(await app.handle(new Request(url))).text()
+				).resolves.toBe('/sub')
+
+			await expect(
+				(
+					await app.handle(new Request('http://a/mnt/sub?q=1'))
+				).text()
+			).resolves.toBe('/sub?q=1')
+
+			// A short host must not let the client inject a leading segment
+			// into the sub-app's view of the path.
+			expect(
+				(await app.handle(new Request('http://a/xy/mnt/sub'))).status
+			).toBe(404)
+		}
+	)
+})
