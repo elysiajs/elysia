@@ -118,6 +118,12 @@ export function collectStaticRoutes(app: AnyElysia) {
 		if (seen.get(method + ' ' + path) !== i) continue
 		if (!nativeStaticMethods.has(method)) continue
 
+		// Bun matches `routes` before the fallback `fetch`, and this collector
+		// only sees exact method/path duplicates, not overlapping patterns: a
+		// promoted `/user/:id` would swallow a `/user/me` that is ineligible and
+		// still on the JS router, so dynamic paths stay on the JS lane
+		if (isDynamicRegex.test(path)) continue
+
 		const h = handlers[i]
 		if (
 			typeof h === 'function' ||
@@ -131,7 +137,7 @@ export function collectStaticRoutes(app: AnyElysia) {
 
 		add(method, path, value)
 
-		if (!strictPath && !isDynamicRegex.test(path)) {
+		if (!strictPath) {
 			const loose = getLoosePath(path)
 			if (loose !== path && !explicitPaths?.get(method)?.has(loose))
 				add(method, loose, value)

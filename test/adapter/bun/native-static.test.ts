@@ -138,6 +138,35 @@ describe('Bun native static promotion', () => {
 		app.stop()
 	})
 
+	it('keeps a dynamic path static-value route on the JS lane', async () => {
+		const app = new Elysia()
+			.get('/user/:id', 'dynamic')
+			.get('/user/me', () => 'me')
+			.get('/health', 'ok')
+
+		// Bun matches `routes` before the fallback `fetch`, so promoting the
+		// dynamic literal would swallow `/user/me`, which is ineligible and
+		// stays on the JS router
+		const promoted = collectStaticRoutes(app as any)?.[0]
+		expect(promoted?.['/health']?.GET).toBeInstanceOf(Response)
+		expect(promoted?.['/user/:id']).toBeUndefined()
+
+		app.listen(0)
+		await Bun.sleep(50)
+
+		try {
+			const base = `http://localhost:${app.server!.port}`
+			await expect(
+				fetch(`${base}/user/me`).then((x) => x.text())
+			).resolves.toBe('me')
+			await expect(
+				fetch(`${base}/user/1`).then((x) => x.text())
+			).resolves.toBe('dynamic')
+		} finally {
+			await app.stop(true)
+		}
+	})
+
 	it('keeps routes with an error hook on the JS lane', async () => {
 		let fired = 0
 		const app = new Elysia()
