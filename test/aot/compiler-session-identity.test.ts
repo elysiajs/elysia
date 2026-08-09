@@ -2,7 +2,7 @@ import '../../src/compile/aot-capture'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 
 import { Elysia, t } from '../../src'
-import { Compiled } from '../../src/compile/aot'
+import { Compiled, createAotFingerprint } from '../../src/compile/aot'
 import {
 	abortCapture,
 	getCompilerSessionDiagnostics
@@ -10,7 +10,7 @@ import {
 import { captureArtifacts } from '../../src/plugin/aot/source'
 import { Validator } from '../../src/validator'
 import { post, json } from '../utils'
-import { materialise, materialiseHandlers } from './_manifest'
+import { materialise, materialiseHandlers, registerManifest } from './_manifest'
 
 const buildA = () =>
 	new Elysia({ precompile: true }).post(
@@ -48,6 +48,29 @@ afterEach(() => {
 })
 
 describe('AOT manifest ownership and compiler sessions', () => {
+	it('keeps sequentially claimed app programs isolated', () => {
+		const appA = new Elysia()
+		const appB = new Elysia()
+		const path = '/__program-identity-probe'
+		const handlerA = { a: [], f: () => () => new Response('a') }
+		const handlerB = { a: [], f: () => () => new Response('b') }
+
+		registerManifest({ handlers: { GET: { [path]: handlerA } } })
+		expect(Compiled.claim(appA['~programId'], createAotFingerprint())).toBe(
+			true
+		)
+
+		registerManifest({ handlers: { GET: { [path]: handlerB } } })
+		expect(Compiled.claim(appB['~programId'], createAotFingerprint())).toBe(
+			true
+		)
+
+		// Production claims through ~programId; raw app lookup proves that key is
+		// the app itself rather than a second per-instance token.
+		expect(Compiled.getHandler(appA as any, 'GET', path)).toBe(handlerA)
+		expect(Compiled.getHandler(appB as any, 'GET', path)).toBe(handlerB)
+	})
+
 	it('only the first compatible app consumes a registered manifest', async () => {
 		const { handlers } = await register()
 		const original = handlers.POST!['/x']!.f

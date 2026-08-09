@@ -14,13 +14,9 @@ export interface ProgramId {
 	readonly _: unique symbol
 }
 
-export const createProgramId = (): ProgramId => ({}) as ProgramId
-
 const sharedAotFingerprint: AotFingerprint = Object.freeze({ abi: AOT_ABI })
 
-export function createAotFingerprint(): AotFingerprint {
-	return sharedAotFingerprint
-}
+export const createAotFingerprint = () => sharedAotFingerprint
 
 export interface CompilerSession {
 	readonly sucroseCache: Map<number, { content: string; inference: unknown }>

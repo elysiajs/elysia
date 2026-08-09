@@ -11,7 +11,6 @@ import {
 	beginCompilerSession,
 	Compiled,
 	createAotFingerprint,
-	createProgramId,
 	endCompilerSession,
 	Capture,
 	type AotFingerprint,
@@ -315,7 +314,9 @@ export class Elysia<
 		context: Context,
 		error: Error
 	) => MaybePromise<Response>
-	'~programId': ProgramId
+	get ['~programId'](): ProgramId {
+		return this as unknown as ProgramId
+	}
 	declare '~aotFingerprint'?: AotFingerprint
 	declare '~compilerSession'?: CompilerSession
 
@@ -348,7 +349,8 @@ export class Elysia<
 		 * Don't omitted field either for monomorphic access
 		 *
 		 * @see test/memory/instance-footprint.test.ts
-		 * Est. Overflow 37 -> 21 = butterfly 64 -> 32 slots = 738B -> 450B/instance
+		 * Est. overflow 37 -> 21 = butterfly 64 -> 32 slots = 738B -> 450B;
+		 * reusing the app as its program identity brings the current cell to ~386B.
 		 **/
 		this['~config'] = config
 		this['~ext'] = undefined
@@ -368,8 +370,6 @@ export class Elysia<
 		this['~introspect'] = undefined
 		this['~scopeChild'] = undefined
 		this['~scopeChildren'] = undefined
-
-		this['~programId'] = createProgramId()
 
 		if (config) {
 			const { prefix, name, seed, adapter } = config

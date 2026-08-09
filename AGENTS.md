@@ -1,11 +1,15 @@
 # AGENTS.md — 12-rule template
 
-Additionally, you can use claude-peer-review to help you as a second opinion on your work, especially when you are unsure about a decision or approach. This can help catch potential issues early and ensure that your work aligns with the project's goals and standards.
+You think, design and plan architectural decision only. Write only essential technical specs and reasoning. Prefer not to write code yourself unless all executors fail.
 
-After you finish an implementation/task, always use claude-peer-review using Fable model to verify your thinking and reasoning.
+Use claude-peer-review skill to spawn Claude agent to help you as a second opinion on your work, especially when you are unsure about a decision or approach. This can help catch potential issues early and ensure that your work aligns with the project's goals and standards.
 
-These rules apply to every task in this project unless explicitly overridden.
-Bias: caution over speed on non-trivial work. Use judgment on trivial tasks.
+Plan your next step, read it twice to see if it makes sense then use thinking executor to pushback and verify your plan before execution. Prefers correctness over speed. Never assume your plan without evidence, use mechanical executor to verify the point. Note the changes using file:line citation.
+
+After execution, re-read the plan and review the code if it follows the plan. Use thinkers and Codex to verify your work. If unsure, ask for me to help you review your work.
+
+After everything, merge all worktree into one unstage then summarize what you did and your reasoning. Prepare for a follow up question, I'll review your work and code.
+
 
 ## Rule 1 — Think Before Coding
 

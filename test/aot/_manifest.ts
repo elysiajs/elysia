@@ -1,7 +1,6 @@
 import {
 	Compiled,
 	createAotFingerprint,
-	createProgramId,
 	type CapturedValidator,
 	type ProgramId,
 	type ValidatorManifest,
@@ -45,7 +44,7 @@ export const registerManifest = (manifest: TestManifest) =>
 export const claimManifest = (
 	manifest: TestManifest
 ): { ['~programId']: ProgramId } => {
-	const id = createProgramId()
+	const id = {} as ProgramId
 	registerManifest(manifest)
 	Compiled.claim(id, createAotFingerprint())
 	return { '~programId': id }

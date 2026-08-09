@@ -6,7 +6,7 @@ import { Elysia, t } from '../../src'
 import {
 	Compiled,
 	createAotFingerprint,
-	createProgramId
+	type ProgramId
 } from '../../src/compile/aot'
 import { Validator } from '../../src/validator'
 import { compileToSource } from '../../src/plugin/aot/source'
@@ -53,7 +53,7 @@ const manifest = (options?: { lazy?: number }) =>
 // Separate frame: keeps the claimed entry objects off the awaiting test
 // function's stack so JSC's conservative scan cannot false-retain them.
 const consumeAndRelease = (): WeakRef<object>[] => {
-	const id = createProgramId()
+	const id = {} as ProgramId
 	if (!Compiled.claim(id, createAotFingerprint()))
 		throw new Error('claim failed: the imported module did not register')
 
