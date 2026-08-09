@@ -1,5 +1,4 @@
 /* eslint-disable sonarjs/public-static-readonly */
-import { HasCodec } from '../typebox-value'
 import type { TSchema } from 'typebox/type'
 import type { Validator as BaseTypeBoxValidator } from 'typebox/schema'
 
@@ -53,6 +52,7 @@ interface WalkState {
 	isOpaque: boolean
 	hasRef: boolean
 	hasFileType: boolean
+	hasCodec: boolean
 	buildKey: boolean
 	forceKey: boolean
 	depth: number
@@ -110,6 +110,19 @@ function walk(
 			(elyTyp === ELYSIA_TYPES.File || elyTyp === ELYSIA_TYPES.Files)
 		)
 			state.hasFileType = true
+
+		if (!state.hasCodec) {
+			const codec = value['~codec']
+			if (
+				codec !== null &&
+				typeof codec === 'object' &&
+				'encode' in codec &&
+				'decode' in codec
+			) {
+				state.hasCodec = true
+				if (!state.forceKey) state.buildKey = false
+			}
+		}
 
 		const toJSON = value.toJSON
 		if (typeof toJSON === 'function')
@@ -248,19 +261,18 @@ function walkArray(value: any[], mode: number, state: WalkState): string {
 }
 
 function computeSchemaMeta(schema: TSchema, forceKey: boolean): SchemaMeta {
-	const hasCodec = HasCodec(schema)
-
 	const state: WalkState = {
 		isOpaque: false,
 		hasRef: false,
 		hasFileType: false,
+		hasCodec: false,
 		forceKey,
-		buildKey: forceKey || !hasCodec,
+		buildKey: true,
 		depth: 0
 	}
 
 	const key = walk(schema, '', NODE, state)
-	const special = hasCodec || state.isOpaque
+	const special = state.hasCodec || state.isOpaque
 
 	return {
 		special,
