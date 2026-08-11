@@ -9,6 +9,7 @@ import {
 	assignOwn,
 	deriveEntryFn,
 	isNotEmpty,
+	isSocketQuiet,
 	nullObject,
 	type DeriveEntry
 } from '../utils'
@@ -27,7 +28,12 @@ import {
 	resolveWSLocalHook
 } from '../compile/handler'
 
-import { ElysiaWS, isGeneratorObject, type WSConnectionData } from './context'
+import {
+	ElysiaWS,
+	isGeneratorObject,
+	trackWSSettling,
+	type WSConnectionData
+} from './context'
 import { createMessageParser } from './parser'
 import {
 	ElysiaError,
@@ -1068,6 +1074,20 @@ export function accumulateWSOptions(
 const MAX_INFLIGHT_MESSAGES = 256
 
 export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
+	let lifecycle:
+		| {
+				closing: boolean
+				sockets: Set<ServerWebSocket<WSConnectionData>>
+				run<T, Args extends unknown[]>(
+					callback: (...args: Args) => T,
+					...args: Args
+				): T
+		  }
+		| undefined
+	const runLifecycle = <T, Args extends unknown[]>(
+		callback: (...args: Args) => T,
+		...args: Args
+	) => (lifecycle ? lifecycle.run(callback, ...args) : callback(...args))
 	function getElysia(ws: ServerWebSocket<WSConnectionData>): ElysiaWS<any> {
 		let elysia = ws.data.elysia
 		if (!elysia) {
@@ -1087,10 +1107,22 @@ export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 			)
 		} catch {}
 	}
+	const releaseLifecycle = (ws: ServerWebSocket<WSConnectionData>) => {
+		if (!lifecycle?.closing && isSocketQuiet(ws)) {
+			delete (
+				ws.data as WSConnectionData & { '~lifecycleRun'?: unknown }
+			)['~lifecycleRun']
+			lifecycle?.sockets.delete(ws)
+		}
+	}
 
 	const release = (ws: ServerWebSocket<WSConnectionData>) => {
-		const inflight = ws.data.inflight
-		if (inflight) ws.data.inflight = inflight - 1
+		const data = ws.data
+		const inflight = data.inflight
+		if (inflight) {
+			data.inflight = inflight - 1
+			if (inflight === 1 && data.closeHandlerInvoked) releaseLifecycle(ws)
+		}
 	}
 
 	function dispatch(
@@ -1099,6 +1131,8 @@ export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 	) {
 		let result
 		try {
+			// ponytail: ALS costs ~12ns/frame here. Async message -> default stop
+			// keeps its baseline self-wait; add request provenance only by contract.
 			result = ws.data.message!(getElysia(ws), message)
 		} catch (error) {
 			// Sync throw from dispatch: send a last-resort frame and bail.
@@ -1118,8 +1152,9 @@ export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 		else release(ws)
 	}
 
-	return {
+	const handler: WebSocketHandler<WSConnectionData> = {
 		message(ws, message) {
+			if (lifecycle?.closing) return
 			const data = ws.data
 			if (!data.message) return
 
@@ -1135,43 +1170,94 @@ export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 			const opening = data.opening
 			if (opening)
 				return void opening.then(() => {
-					if (ws.readyState > 1) return release(ws)
+					if (lifecycle?.closing || ws.readyState > 1)
+						return release(ws)
 					dispatch(ws, message)
 				})
 
 			dispatch(ws, message)
 		},
 		open(ws) {
-			const result = ws.data.open?.(getElysia(ws))
+			if (lifecycle)
+				Object.defineProperty(ws.data, '~lifecycleRun', {
+					configurable: true,
+					value: lifecycle.run
+				})
+			lifecycle?.sockets.add(ws)
+			if (lifecycle?.closing) {
+				// The open handler never ran, so the close handler must not
+				// tear down state that was never acquired
+				ws.data.closeHandlerInvoked = true
+				try {
+					ws.terminate()
+				} catch {}
+				return
+			}
+
+			const open = ws.data.open
+			const result = open && runLifecycle(open, getElysia(ws))
 			if (result instanceof Promise) {
 				const clear = () => {
 					ws.data.opening = undefined
+					releaseLifecycle(ws)
 				}
 				ws.data.opening = result.then(clear, clear)
 			}
 		},
 		drain(ws) {
+			if (lifecycle?.closing) return
 			const elyWs = getElysia(ws)
 
 			drainWaiters(elyWs)
-			ws.data.drain?.(elyWs)
+			const drain = ws.data.drain
+			trackWSSettling(ws.data, drain && runLifecycle(drain, elyWs), () =>
+				releaseLifecycle(ws)
+			)
 		},
 		close(ws, code, reason) {
 			const elyWs = getElysia(ws)
 			drainWaiters(elyWs)
-			ws.data.opening = undefined
 
-			if (ws.data.closeHandlerInvoked) return
+			if (ws.data.closeHandlerInvoked) return releaseLifecycle(ws)
 			ws.data.closeHandlerInvoked = true
 
-			const result = ws.data.close?.(elyWs, code, reason)
-			if (result instanceof Promise) result.catch(() => {})
+			let result: void | Promise<void>
+			try {
+				const close = ws.data.close
+				result = close && runLifecycle(close, elyWs, code, reason)
+			} finally {
+				if (!(result! instanceof Promise)) releaseLifecycle(ws)
+			}
+			if (result instanceof Promise) {
+				const closing = result.catch(() => {})
+				trackWSSettling(ws.data, closing, () => releaseLifecycle(ws))
+			}
 		},
 		ping(ws, data) {
-			ws.data.ping?.(getElysia(ws), data)
+			if (lifecycle?.closing) return
+			const ping = ws.data.ping
+			trackWSSettling(
+				ws.data,
+				ping && runLifecycle(ping, getElysia(ws), data),
+				() => releaseLifecycle(ws)
+			)
 		},
 		pong(ws, data) {
-			ws.data.pong?.(getElysia(ws), data)
+			if (lifecycle?.closing) return
+			const pong = ws.data.pong
+			trackWSSettling(
+				ws.data,
+				pong && runLifecycle(pong, getElysia(ws), data),
+				() => releaseLifecycle(ws)
+			)
 		}
 	}
+
+	Object.defineProperty(handler, '~lifecycle', {
+		set(value) {
+			lifecycle = value
+		}
+	})
+
+	return handler
 }

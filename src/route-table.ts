@@ -7,7 +7,10 @@ import type { ChainNode } from './utils'
 export const RouteFlag = {
 	WS: 1,
 	Dynamic: 2,
-	Encode: 4
+	Encode: 4,
+	ExactDuplicate: 8,
+	JITCold: 16,
+	JITSatisfied: 32
 } as const
 
 export interface RouteTable {

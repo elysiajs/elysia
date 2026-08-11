@@ -541,7 +541,13 @@ interface FrozenRouteValidatorShape {
 	response?: Record<number, FrozenSlotValidator>
 }
 
-const REQUEST_SLOTS = ['body', 'headers', 'query', 'params', 'cookie'] as const
+export const REQUEST_SLOTS = [
+	'body',
+	'headers',
+	'query',
+	'params',
+	'cookie'
+] as const
 
 export const isStandardSchema = (schema: unknown) =>
 	schema != null && typeof schema === 'object' && '~standard' in schema
@@ -560,7 +566,7 @@ export function mergeSchemasAllStandard(
 	return true
 }
 
-function resolveModelRef(schema: unknown, root: AnyElysia): unknown {
+export function resolveModelRef(schema: unknown, root: AnyElysia): unknown {
 	if (typeof schema !== 'string') return schema
 
 	const models = frozenRootOf(root)['~ext']?.models as
@@ -624,7 +630,10 @@ export function buildFrozenRouteValidator(
 
 	const response = hook?.response
 	if (response) {
-		const statuses = isResponseMap(response) ? response : { 200: response }
+		const resolved = resolveModelRef(response, root)
+		if (!resolved) return undefined
+
+		const statuses = isResponseMap(resolved) ? resolved : { 200: resolved }
 
 		const responseOut: Record<number, FrozenSlotValidator> = {}
 
@@ -662,7 +671,11 @@ export function buildFrozenRouteValidator(
 	return out
 }
 
-const isResponseMap = (schema: any) =>
+export const isResponseMap = (
+	schema: unknown
+): schema is Record<string, unknown> =>
+	schema !== null &&
+	typeof schema === 'object' &&
 	!('~kind' in schema || '~elyAcl' in schema || '~standard' in schema)
 
 // truthy `cm` stand-in: the adapter below only feeds the acceptance gate,

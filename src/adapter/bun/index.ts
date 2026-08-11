@@ -4,11 +4,176 @@ import { WebStandardAdapter } from '../web-standard'
 import { isDynamicRegex, needEncodeRegex } from '../../constants'
 import { buildNativeStaticResponse } from '../../compile/handler'
 import { routeRow } from '../../route-table'
-import { flattenChain, getLoosePath, nullObject } from '../../utils'
+import {
+	flattenChain,
+	getLoosePath,
+	isSocketQuiet,
+	nullObject,
+	throwLifecycleErrors
+} from '../../utils'
 import { frozenRootOf, resolvedWsOf } from '../../generation'
 import { origin } from '../origin'
 
 import type { AnyElysia } from '../../base'
+import type { GracefulHandler } from '../../types'
+
+type LifecycleStop = (
+	closeActiveConnections?: boolean,
+	failure?: { error: unknown }
+) => Promise<void>
+
+interface LifecycleEpoch {
+	setup: boolean
+	/**
+	 * True for the synchronous span of a lifecycle callback - see `runLifecycle`
+	 */
+	invoking: boolean
+}
+
+interface LifecycleSocket {
+	data: {
+		inflight?: number
+		opening?: Promise<void>
+		settling?: number
+		'~lifecycleRun'?: unknown
+	}
+	readyState: number
+	terminate(): void
+}
+
+interface WSLifecycle {
+	closing: boolean
+	/**
+	 * A force request raised while a stop attempt is already in flight gives up
+	 * on user lifecycle promises that may never settle
+	 */
+	abandon?: boolean
+	sockets: Set<LifecycleSocket>
+	run<T, Args extends unknown[]>(
+		callback: (...args: Args) => T,
+		...args: Args
+	): T
+}
+
+function runLifecycle<T, Args extends unknown[]>(
+	epoch: LifecycleEpoch,
+	callback: (...args: Args) => T,
+	...args: Args
+) {
+	const invoking = epoch.invoking
+	epoch.invoking = true
+
+	try {
+		return callback(...args)
+	} finally {
+		epoch.invoking = invoking
+	}
+}
+
+const unavailableFetch = () =>
+	new Response(null, {
+		headers: { connection: 'close' },
+		status: 503
+	})
+
+function reloadServer(server: ReturnType<typeof Bun.serve>, serve: any) {
+	try {
+		server.reload(serve)
+	} catch (error) {
+		if (!serve.routes) throw error
+
+		delete serve.routes
+		console.warn('[Elysia] Native static promotion was skipped:', error)
+
+		try {
+			server.reload(serve)
+		} catch (fallbackError) {
+			console.error(
+				'[Elysia] Failed to reload Bun server:',
+				fallbackError
+			)
+			throw fallbackError
+		}
+	}
+}
+
+function releaseLifecycle(
+	app: AnyElysia,
+	ext: NonNullable<AnyElysia['~ext']>,
+	createdExt: boolean,
+	stop: LifecycleStop,
+	registerCleanup: (
+		handler: GracefulHandler<any> | GracefulHandler<any>[]
+	) => boolean
+) {
+	if (ext.stop === stop) delete ext.stop
+	if (ext.cleanupEpoch === registerCleanup) delete ext.cleanupEpoch
+	if (createdExt && app['~ext'] === ext && !Object.keys(ext).length)
+		app['~ext'] = undefined
+}
+
+function clearAppServer(app: AnyElysia, server: ReturnType<typeof Bun.serve>) {
+	if (app.server === server) app.server = undefined
+}
+
+async function waitForServerRequests(
+	server: ReturnType<typeof Bun.serve>,
+	abandoned: () => boolean
+) {
+	while (server.pendingRequests && !abandoned()) await Bun.sleep(1)
+}
+
+async function settleServerWebSockets(
+	lifecycle: WSLifecycle | undefined,
+	errors: unknown[]
+) {
+	if (!lifecycle) return true
+
+	lifecycle.closing = true
+	let failed = false
+	do {
+		for (const socket of lifecycle.sockets)
+			if (socket.readyState < 3)
+				try {
+					socket.terminate()
+				} catch (error) {
+					errors.push(error)
+					failed = true
+				}
+
+		if (failed) return false
+		await Bun.sleep(1)
+
+		const abandon = lifecycle.abandon === true
+		for (const socket of lifecycle.sockets)
+			if (abandon || isSocketQuiet(socket)) {
+				delete socket.data['~lifecycleRun']
+				lifecycle.sockets.delete(socket)
+			}
+	} while (lifecycle.sockets.size)
+
+	return true
+}
+
+const closeServerIdle = (
+	server: ReturnType<typeof Bun.serve>,
+	errors: unknown[]
+) => {
+	const close = (
+		server as typeof server & {
+			closeIdleConnections?(): void
+		}
+	).closeIdleConnections
+	if (!close) return true
+
+	try {
+		close.call(server)
+		return true
+	} catch (error) {
+		errors.push(error)
+		return false
+	}
+}
 
 /**
  * ! This may looks like it would cause race condition, but it is not
@@ -30,16 +195,6 @@ const withOrigin =
 		}
 	}
 
-const nativeStaticMethods = new Set([
-	'GET',
-	'POST',
-	'PUT',
-	'DELETE',
-	'PATCH',
-	'HEAD',
-	'OPTIONS'
-])
-
 export function collectStaticRoutes(app: AnyElysia) {
 	if (app['~config']?.nativeStaticResponse === false) return
 
@@ -58,9 +213,17 @@ export function collectStaticRoutes(app: AnyElysia) {
 	const length = table?.length ?? 0
 	if (!table || !length) return
 
-	const methods = table.method
-	const paths = table.path
-	const handlers = table.handler
+	const { method: methods, path: paths, handler: handlers } = table
+
+	const nativeStaticMethods = new Set([
+		'GET',
+		'POST',
+		'PUT',
+		'DELETE',
+		'PATCH',
+		'HEAD',
+		'OPTIONS'
+	])
 
 	let hasCandidate = false
 	for (let i = 0; i < length; i++) {
@@ -118,10 +281,9 @@ export function collectStaticRoutes(app: AnyElysia) {
 		if (seen.get(method + ' ' + path) !== i) continue
 		if (!nativeStaticMethods.has(method)) continue
 
-		// Bun matches `routes` before the fallback `fetch`, and this collector
-		// only sees exact method/path duplicates, not overlapping patterns: a
-		// promoted `/user/:id` would swallow a `/user/me` that is ineligible and
-		// still on the JS router, so dynamic paths stay on the JS lane
+		// Bun router would promoted `/user/:id` and swallow a `/user/me`
+		// that is ineligible and still on the JS router, so dynamic paths
+		// stay on the JS lane
 		if (isDynamicRegex.test(path)) continue
 
 		const h = handlers[i]
@@ -146,7 +308,7 @@ export function collectStaticRoutes(app: AnyElysia) {
 
 	if (!Object.keys(ready).length) return
 
-	return [ready, []] as const
+	return ready
 }
 
 export const BunAdapter = createAdapter({
@@ -156,19 +318,29 @@ export const BunAdapter = createAdapter({
 	parse: WebStandardAdapter.parse,
 	response: WebStandardAdapter.response,
 	listen(app, options, callback) {
+		if (app.server || app['~ext']?.stop)
+			throw new Error(
+				'[Elysia] Cannot call listen() while a server or teardown is active'
+			)
+
 		const _config = (app['~config'] as any)?.serve
 		const optionsIsObject = typeof options === 'object'
 
 		let live: ((request: Request, server: unknown) => unknown) | undefined
+		let cancelled = false
+		let startupShutdown: Promise<void> | undefined
+		let shutdownAttempt: Promise<void> | undefined
 
 		const gatedFetch = (request: Request, server: unknown) =>
 			live
 				? live(request, server)
-				: Promise.resolve(ready).then(() => {
-						if (!live)
+				: Promise.resolve(ready).then(async () => {
+						if (!live) {
+							await startupShutdown
 							throw new Error(
 								'[Elysia] Server was stopped before it was ready'
 							)
+						}
 
 						return live(request, server)
 					})
@@ -185,6 +357,8 @@ export const BunAdapter = createAdapter({
 
 		const serve = _config ? { ..._config, ..._options } : _options
 		let ready: Promise<unknown> | undefined
+		let wsLifecycle: WSLifecycle | undefined
+		let modulesReady: Promise<void> | undefined
 
 		const build = () => {
 			const fetch = app.fetch
@@ -214,106 +388,369 @@ export const BunAdapter = createAdapter({
 						'[Elysia] internal: WebSocket routes are present but no capability provider was resolved'
 					)
 
+				const handler = resolved.provider.buildGlobalWSHandler()
 				websocket = resolved.config
-					? Object.assign(
-							resolved.provider.buildGlobalWSHandler(),
-							resolved.config
-						)
-					: resolved.provider.buildGlobalWSHandler()
+					? Object.assign(handler, resolved.config)
+					: handler
+
+				const setter = Object.getOwnPropertyDescriptor(
+					handler,
+					'~lifecycle'
+				)?.set
+				if (setter) {
+					wsLifecycle = {
+						closing: false,
+						sockets: new Set(),
+						run: runLifecycle.bind(
+							null,
+							epoch
+						) as WSLifecycle['run']
+					}
+					setter.call(handler, wsLifecycle)
+				}
 			}
 
 			return { fetch, routes, websocket }
 		}
 
 		let built: ReturnType<typeof build> | undefined
+		let pendingSetups: Promise<unknown>[] | undefined
 
-		const server = (app.server = Bun.serve(serve))
-		const reload = () => {
-			try {
-				server.reload(serve)
-			} catch (error) {
-				if (!serve.routes) throw error
+		const server = (app.server = Bun.serve(
+			serve.routes || serve.error
+				? { ...serve, error: unavailableFetch, routes: {} }
+				: serve
+		))
 
-				delete serve.routes
-				console.warn(
-					'[Elysia] Native static promotion was skipped:',
-					error
+		let startupFailure: { error: unknown } | undefined
+		let forceRequested = false
+		let forceDone = false
+		let nativeStopped = false
+		let abandoned = false
+		let published = false
+		let cleanupCompleted = false
+		let idleRequired = false
+		let cleanupFailures: unknown[] | undefined
+		let observedOutcome: Promise<void> | undefined
+		let persistentCleanup: GracefulHandler<any>[] | undefined
+		let persistentCleanupLength = -1
+		const epochCleanup: GracefulHandler<any>[] = []
+		const createdExt = app['~ext'] === undefined
+		const ext = (app['~ext'] ??= nullObject())
+		const epoch: LifecycleEpoch = { setup: false, invoking: false }
+
+		const snapshotCleanup = () => {
+			if (persistentCleanupLength !== -1) return
+
+			persistentCleanup = ext.cleanup
+			persistentCleanupLength = persistentCleanup?.length ?? 0
+		}
+
+		const registerCleanup = (
+			handler: GracefulHandler<any> | GracefulHandler<any>[]
+		) => {
+			if (ext.cleanupEpoch !== registerCleanup) return false
+
+			if (!epoch.setup)
+				throw new Error(
+					'[Elysia] .cleanup() called after its setup epoch settled'
 				)
 
-				try {
-					server.reload(serve)
-				} catch (fallbackError) {
-					console.error(
-						'[Elysia] Failed to reload Bun server:',
-						fallbackError
-					)
-					throw fallbackError
-				}
+			if (Array.isArray(handler)) epochCleanup.push(...handler)
+			else epochCleanup.push(handler)
+
+			return true
+		}
+
+		const gate = () => {
+			if (!published) return
+
+			live = undefined
+			if (wsLifecycle) wsLifecycle.closing = true
+
+			try {
+				server.reload({
+					...serve,
+					fetch: unavailableFetch,
+					error: unavailableFetch,
+					routes: {}
+				} as any)
+			} catch (error) {
+				return { error }
 			}
+		}
+
+		const nativeStop = async (
+			closeActiveConnections: boolean,
+			errors: unknown[]
+		) => {
+			try {
+				await server.stop(closeActiveConnections)
+				nativeStopped = true
+				if (closeActiveConnections) {
+					forceDone = true
+					forceRequested = false
+				}
+				return true
+			} catch (error) {
+				if (closeActiveConnections) forceRequested = true
+				errors.push(error)
+				return false
+			}
+		}
+
+		const isAbandoned = () => abandoned
+
+		const quiesce = async (force: boolean) => {
+			const errors: unknown[] = []
+
+			if (!published) {
+				const stopped = await nativeStop(true, errors)
+				return { errors, releasable: stopped, safe: true }
+			}
+
+			if (force && !idleRequired && !wsLifecycle?.closing) {
+				const stopped = await nativeStop(true, errors)
+				return { errors, releasable: stopped, safe: stopped }
+			}
+
+			const gateFailure = gate()
+			if (gateFailure) errors.push(gateFailure.error)
+
+			let socketsSettled = await settleServerWebSockets(
+				wsLifecycle,
+				errors
+			)
+			// Let a publishing callback unwind and claim force rollback.
+			await Promise.resolve()
+
+			let close =
+				forceRequested || gateFailure !== undefined || !socketsSettled
+
+			if (!close && nativeStopped)
+				await waitForServerRequests(server, isAbandoned)
+
+			idleRequired = true
+			let stopped = true
+			while (!nativeStopped || (forceRequested && !forceDone)) {
+				if (nativeStopped) close = true
+
+				stopped = await nativeStop(close, errors)
+				if (stopped) {
+					if (socketsSettled)
+						socketsSettled = await settleServerWebSockets(
+							wsLifecycle,
+							errors
+						)
+
+					continue
+				}
+
+				if (close) break
+
+				await waitForServerRequests(server, isAbandoned)
+				close = true
+			}
+
+			let idleClosed = true
+			if (idleRequired) {
+				idleClosed = closeServerIdle(server, errors)
+				if (idleClosed && !gateFailure) idleRequired = false
+			}
+
+			const safe =
+				socketsSettled &&
+				stopped &&
+				idleClosed &&
+				(!gateFailure || forceDone)
+
+			return { errors, releasable: safe, safe }
 		}
 
 		const setup = () => {
-			const onSetup = app['~ext']?.setup
+			snapshotCleanup()
+
+			const onSetup = ext.setup
 			if (!onSetup) return
 
-			let pendingSetups: Promise<unknown>[] | undefined
+			epoch.setup = true
+			ext.cleanupEpoch = registerCleanup
 
 			for (let i = 0; i < onSetup.length; i++) {
-				const result = onSetup[i](app)
-				if (
-					result &&
-					typeof (result as Promise<unknown>).then === 'function'
+				if (cancelled) break
+
+				try {
+					const result = runLifecycle(epoch, onSetup[i], app)
+					if (
+						result &&
+						typeof (result as Promise<unknown>).then === 'function'
+					)
+						(pendingSetups ??= []).push(Promise.resolve(result))
+				} catch (error) {
+					if (!pendingSetups) epoch.setup = false
+					stop(true, { error }).catch(() => {})
+					throw error
+				}
+			}
+
+			if (pendingSetups)
+				return Promise.all(pendingSetups).then(
+					() => (epoch.setup = false)
 				)
-					(pendingSetups ??= []).push(result as Promise<unknown>)
-			}
 
-			if (pendingSetups) return Promise.all(pendingSetups)
+			epoch.setup = false
 		}
 
-		const rollback = (error: unknown) => {
-			if (app.server !== server) return
+		const stop: LifecycleStop = (
+			closeActiveConnections?: boolean,
+			failure?: { error: unknown }
+		) => {
+			const reentrant = epoch.invoking
 
-			try {
-				server.stop(true)
-			} catch (stopError) {
-				console.error(stopError)
-			} finally {
-				app.server = undefined
-			}
+			if (failure) startupFailure ??= failure
+			if (closeActiveConnections === true && !forceDone)
+				forceRequested = true
 
-			const cleanup = app['~ext']?.cleanup
-			if (cleanup)
-				for (let i = cleanup.length - 1; i >= 0; i--)
+			cancelled = true
+			clearAppServer(app, server)
+
+			let outcome: Promise<void>
+			if (shutdownAttempt) {
+				if (closeActiveConnections === true && !forceDone) {
+					abandoned = true
+					if (wsLifecycle) wsLifecycle.abandon = true
+				}
+
+				outcome = shutdownAttempt
+			} else {
+				const { promise, resolve, reject } =
+					Promise.withResolvers<void>()
+
+				outcome = shutdownAttempt = promise
+
+				const quiescence = quiesce(forceRequested || !published)
+				let releasable = false
+
+				;(async () => {
 					try {
-						const result = cleanup[i](app)
-						if (
-							result &&
-							typeof (result as Promise<unknown>).then ===
-								'function'
-						)
-							Promise.resolve(result).catch(console.error)
-					} catch (cleanupError) {
-						console.error(cleanupError)
-					}
+						await Promise.resolve()
+						if (modulesReady)
+							try {
+								await modulesReady
+							} catch (error) {
+								startupFailure ??= { error }
+							}
 
-			return error
+						if (pendingSetups) {
+							const setupResults =
+								await Promise.allSettled(pendingSetups)
+
+							if (!startupFailure)
+								for (let i = 0; i < setupResults.length; i++) {
+									const result = setupResults[i]
+									if (result.status === 'rejected') {
+										startupFailure = {
+											error: result.reason
+										}
+										break
+									}
+								}
+						}
+						epoch.setup = false
+
+						const errors: unknown[] = []
+						const quiesced = await quiescence
+
+						if (startupFailure) errors.push(startupFailure.error)
+						errors.push(...quiesced.errors)
+						releasable = quiesced.releasable
+
+						if (!quiesced.safe) {
+							if (cleanupFailures) errors.push(...cleanupFailures)
+							throwLifecycleErrors(errors)
+						}
+
+						if (!cleanupCompleted) {
+							snapshotCleanup()
+
+							if (ext.stop === stop) {
+								const length =
+									persistentCleanupLength +
+									epochCleanup.length
+
+								for (let n = 0; n < length; n++) {
+									if (ext.stop !== stop) break
+									const i = startupFailure
+										? length - 1 - n
+										: n
+
+									const handler =
+										i < persistentCleanupLength
+											? persistentCleanup![i]
+											: epochCleanup[
+													i - persistentCleanupLength
+												]
+									try {
+										await runLifecycle(epoch, handler, app)
+									} catch (error) {
+										;(cleanupFailures ??= []).push(error)
+									}
+								}
+							}
+
+							cleanupCompleted = true
+							epochCleanup.length = 0
+						}
+
+						if (cleanupFailures) errors.push(...cleanupFailures)
+
+						if (releasable)
+							releaseLifecycle(
+								app,
+								ext,
+								createdExt,
+								stop,
+								registerCleanup
+							)
+						throwLifecycleErrors(errors)
+					} finally {
+						epoch.setup = false
+						if (!releasable) shutdownAttempt = undefined
+					}
+				})().then(resolve, reject)
+			}
+
+			if (!published) startupShutdown ??= outcome
+			if (!reentrant) return outcome
+
+			if (observedOutcome !== outcome) {
+				observedOutcome = outcome
+				outcome.catch((error) => {
+					console.error('[Elysia] stop() failed:', error)
+				})
+			}
+
+			return Promise.resolve()
 		}
+		ext.stop = stop
 
 		const publish = () => {
-			if (app.server !== server) return
+			if (cancelled || app.server !== server) return
 			built ??= build()
 
 			live = serve.fetch = withOrigin(built!.fetch)
+			published = true
 			if (built!.websocket) serve.websocket = built!.websocket
-			if (built!.routes) serve.routes = built!.routes[0]
+			if (built!.routes) serve.routes = built!.routes
 
-			reload()
+			reloadServer(server, serve)
 
 			if (callback) callback(server)
 		}
 
 		const start = () => {
-			if (app.server !== server) return
+			modulesReady = undefined
+			if (cancelled || app.server !== server) return
 
 			const setupReady = setup()
 			if (
@@ -326,18 +763,16 @@ export const BunAdapter = createAdapter({
 		}
 
 		try {
-			if (app.pending) ready = app.modules.then(start)
 			// defer building app so it doesn't block main thread and allow other synchronous code to run first
-			else ready = Promise.resolve().then(start)
+			const modules = (modulesReady = app.modules)
+			ready = modules.then(start)
 
+			ready = ready.catch((error) => stop(true, { error }))
 			ready.catch((error) => {
-				// build is deferred, so listen() cannot throw: fail loud
 				console.error('[Elysia] listen() failed:', error)
-
-				return rollback(error)
 			})
 		} catch (error) {
-			rollback(error)
+			stop(true, { error }).catch(console.error)
 
 			throw error
 		}

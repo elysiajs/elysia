@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Elysia } from '../../src'
+import { clearContextCache, createContext } from '../../src/context'
 
 import { describe, expect, it } from 'bun:test'
 import { sleep } from 'bun'
@@ -92,6 +93,58 @@ describe('Modules', () => {
 		expect(res).toBe('hi')
 	})
 
+	it('refreshes context after an early request while an async plugin is pending', async () => {
+		let release!: () => void
+		const gate = new Promise<void>((resolve) => {
+			release = resolve
+		})
+
+		const app = new Elysia()
+			.get('/', (context: any) => ({
+				decorated: context.decorated ?? null,
+				stated: context.store?.stated ?? null
+			}))
+			.use(async (app) => {
+				await gate
+
+				return app
+					.decorate('decorated', 'decorated-value')
+					.state('stated', 'stated-value')
+					.headers({ 'x-async-default': 'ready' })
+			})
+
+		const early = await app.handle('/')
+		expect(await early.json()).toEqual({
+			decorated: null,
+			stated: null
+		})
+		expect(early.headers.get('x-async-default')).toBeNull()
+
+		release()
+		await app.modules
+
+		const ready = await app.handle('/')
+		expect(await ready.json()).toEqual({
+			decorated: 'decorated-value',
+			stated: 'stated-value'
+		})
+		expect(ready.headers.get('x-async-default')).toBe('ready')
+	})
+
+	it('keeps per-app context invalidation separate from global clearing', () => {
+		const first = new Elysia().decorate('marker', 'first')
+		const second = new Elysia().decorate('marker', 'second')
+		const FirstContext = createContext(first)
+		const SecondContext = createContext(second)
+
+		clearContextCache(first)
+		expect(createContext(first)).not.toBe(FirstContext)
+		expect(createContext(second)).toBe(SecondContext)
+
+		clearContextCache()
+		expect(createContext(second)).not.toBe(SecondContext)
+	})
+
 	it('handle deferred import', async () => {
 		const app = new Elysia().use(import('../modules'))
 
@@ -141,6 +194,109 @@ describe('Modules', () => {
 			stated: 'stated-value',
 			derived: null
 		})
+	})
+
+	it('preserves async router-build failures across modules reads', async () => {
+		let resolvePlugin!: (plugin: Elysia) => void
+		const plugin = new Promise<Elysia>((resolve) => {
+			resolvePlugin = resolve
+		})
+		const app = new Elysia().use(plugin)
+
+		const waiting = [app.modules, app.modules]
+		resolvePlugin(
+			new Elysia().get(
+				'/bad',
+				{ query: 'MissingAsyncModel' as any },
+				() => 'bad'
+			)
+		)
+
+		const firstReads = await Promise.allSettled(waiting)
+		const firstErrors = firstReads.map((result) => {
+			expect(result.status).toBe('rejected')
+			return result.status === 'rejected' ? result.reason : undefined
+		})
+
+		expect((firstErrors[0] as Error).message).toContain('MissingAsyncModel')
+		expect(firstErrors[1]).toBe(firstErrors[0])
+
+		const [laterRead] = await Promise.allSettled([app.modules])
+		expect(laterRead.status).toBe('rejected')
+		expect(
+			laterRead.status === 'rejected' ? laterRead.reason : undefined
+		).toBe(firstErrors[0])
+	})
+
+	it.each([
+		['undefined', undefined],
+		['null', null]
+	] as const)(
+		'preserves a %s async router-build failure across modules reads',
+		async (_name, failure) => {
+			let resolvePlugin!: (plugin: Elysia) => void
+			let macroCalls = 0
+			const plugin = new Promise<Elysia>((resolve) => {
+				resolvePlugin = resolve
+			})
+			const app = new Elysia()
+				.macro({
+					lateFailure: (_enabled: boolean) => {
+						macroCalls++
+						throw failure
+					}
+				})
+				.get('/bad', { lateFailure: true }, () => 'bad')
+				.use(plugin)
+			const waiting = [app.modules, app.modules]
+
+			expect(macroCalls).toBe(0)
+			resolvePlugin(new Elysia())
+
+			for (const result of await Promise.allSettled(waiting)) {
+				expect(result.status).toBe('rejected')
+				if (result.status === 'rejected')
+					expect(result.reason).toBe(failure)
+			}
+			expect(macroCalls).toBe(1)
+
+			const [later] = await Promise.allSettled([app.modules])
+			expect(later.status).toBe('rejected')
+			if (later.status === 'rejected') expect(later.reason).toBe(failure)
+		}
+	)
+
+	it('restores an already-compiled captured route when the final async rebuild fails', async () => {
+		let resolvePlugin!: (plugin: (app: Elysia) => Elysia) => void
+		const plugin = new Promise<(app: Elysia) => Elysia>((resolve) => {
+			resolvePlugin = resolve
+		})
+		const app = new Elysia()
+			.get(
+				'/stable/:id',
+				{ lateSchema: true } as any,
+				({ params }) => params.id
+			)
+			.use(plugin)
+
+		// Successful drain clears compiled slots to refresh response modes. If the
+		// rebuild fails, an already-compiled slot must remain usable through the
+		// older captured dispatch thunk.
+		const captured = app.fetch
+		const before = await captured(new Request('http://e.ly/stable/1'))
+		await expect(before.text()).resolves.toBe('1')
+
+		resolvePlugin((app) =>
+			app.macro({
+				lateSchema: () => ({ query: 'MissingLateModel' as any })
+			})
+		)
+		const [modules] = await Promise.allSettled([app.modules])
+		expect(modules.status).toBe('rejected')
+
+		const after = await captured(new Request('http://e.ly/stable/2'))
+		expect(after.status).toBe(200)
+		await expect(after.text()).resolves.toBe('2')
 	})
 
 	it('do not duplicate functional async plugin lifecycle', async () => {

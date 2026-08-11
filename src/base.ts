@@ -64,7 +64,8 @@ import {
 	schemaProperties,
 	type ChainNode,
 	invalidateMacroEpoch,
-	serializeMacroSeed
+	serializeMacroSeed,
+	throwLifecycleErrors
 } from './utils'
 
 import { Ref as tRef } from './type/bridge'
@@ -151,12 +152,45 @@ import type {
 	StaticMapAliases
 } from './types'
 import type { ElysiaStatus } from './error'
-import type { Context, LifecycleContext, ErrorContext } from './context'
+import {
+	clearContextCache,
+	type Context,
+	type LifecycleContext,
+	type ErrorContext
+} from './context'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
 const useNodesBuffer: ChainNode[] = []
 const emptyHistory = Object.freeze([]) as readonly HistoryEntry[]
+const extCallbackIndexes = new WeakMap<
+	unknown[],
+	{ indexedLength: number; seen: Set<unknown> }
+>()
+
+// ponytail: authoring is append-only; invalidate the index if a mutation API is added.
+const mergeExtCallbacks = <T>(target: T[], incoming: T[]) => {
+	let index = extCallbackIndexes.get(target)
+
+	if (!index) {
+		index = {
+			indexedLength: target.length,
+			seen: new Set(target)
+		}
+		extCallbackIndexes.set(target, index)
+	} else
+		for (let i = index.indexedLength; i < target.length; i++)
+			index.seen.add(target[i])
+
+	for (const fn of incoming) {
+		if (index.seen.has(fn)) continue
+
+		target.push(fn)
+		index.seen.add(fn)
+	}
+
+	index.indexedLength = target.length
+}
 
 const canRegisterLoose = (path: string, isDynamic: boolean) =>
 	!isDynamic && (path.length === 0 || path.charCodeAt(path.length - 1) === 47)
@@ -172,7 +206,7 @@ const expandPaths = (
 	path: string,
 	needsEncode: boolean,
 	registerLoose: boolean,
-	explicit: Set<string> | undefined
+	explicit: { has(path: string): boolean } | undefined
 ) => {
 	// Bun always percent-encodes the request target, so a path that
 	// needs encoding is only ever reachable by its encoded twin
@@ -225,7 +259,7 @@ export class Elysia<
 
 	#ready?: Promise<void>
 	#pending = 0
-	#error?: unknown
+	#error?: { error: unknown }
 
 	#hash?: number
 	#childrenHash?: Set<number>
@@ -246,6 +280,13 @@ export class Elysia<
 		hoc?: WrapFn<any>[]
 		setup?: GracefulHandler<any>[]
 		cleanup?: GracefulHandler<any>[]
+		cleanupEpoch?: (
+			handler: GracefulHandler<any> | GracefulHandler<any>[]
+		) => boolean
+		stop?: (
+			closeActiveConnections?: boolean,
+			failure?: { error: unknown }
+		) => Promise<void>
 		capability?: {
 			trace?: { provider: TraceCapability }
 			ws?: { provider: WSCapability; options?: WSOptionsEntry[] }
@@ -4612,36 +4653,18 @@ export class Elysia<
 		}
 
 		if (hoc) {
-			if (ext.hoc) {
-				const seen = new Set(ext.hoc)
-				for (const fn of hoc)
-					if (!seen.has(fn)) {
-						seen.add(fn)
-						ext.hoc.push(fn)
-					}
-			} else ext.hoc = hoc.slice()
+			if (ext.hoc) mergeExtCallbacks(ext.hoc, hoc)
+			else ext.hoc = hoc.slice()
 		}
 
 		if (setup) {
-			if (ext.setup) {
-				const seen = new Set(ext.setup)
-				for (const fn of setup)
-					if (!seen.has(fn)) {
-						seen.add(fn)
-						ext.setup.push(fn)
-					}
-			} else ext.setup = setup.slice()
+			if (ext.setup) mergeExtCallbacks(ext.setup, setup)
+			else ext.setup = setup.slice()
 		}
 
 		if (cleanup) {
-			if (ext.cleanup) {
-				const seen = new Set(ext.cleanup)
-				for (const fn of cleanup)
-					if (!seen.has(fn)) {
-						seen.add(fn)
-						ext.cleanup.push(fn)
-					}
-			} else ext.cleanup = cleanup.slice()
+			if (ext.cleanup) mergeExtCallbacks(ext.cleanup, cleanup)
+			else ext.cleanup = cleanup.slice()
 		}
 
 		if (capability) {
@@ -4958,12 +4981,13 @@ export class Elysia<
 		const ready = this.#ready
 
 		if (!ready) {
-			if (this.#error !== undefined) return Promise.reject(this.#error)
+			if (this.#error !== undefined)
+				return Promise.reject(this.#error.error)
 			return Promise.resolve()
 		}
 
 		return ready.then(() => {
-			if (this.#error !== undefined) throw this.#error
+			if (this.#error !== undefined) throw this.#error.error
 
 			// module may register another async plugin (nested async) and extends the chain
 			if (this.#ready && this.#ready !== ready) return this.modules
@@ -4996,7 +5020,7 @@ export class Elysia<
 					try {
 						this.use(plugin)
 					} catch (err) {
-						this.#error ??= err
+						this.#error ??= { error: err }
 						console.error(err)
 					}
 			})
@@ -5008,7 +5032,7 @@ export class Elysia<
 			.then(
 				() => {},
 				(err) => {
-					this.#error ??= err
+					this.#error ??= { error: err }
 					console.error(err)
 				}
 			)
@@ -5023,11 +5047,22 @@ export class Elysia<
 		if (this.#pending > 0) return
 		if (this.#ready !== sentinel) return
 
+		const previousCompiled = this.#compiled
+		const previousJitColdRemaining = this.#jitColdRemaining
+
 		this.#ready = undefined
+		this.#compiled = undefined
 		this.#fetchFn = undefined
 		this.#routerBuilt = false
+		clearContextCache(this)
 
-		this.#buildRouter(false)
+		try {
+			this.#buildRouter(false)
+		} catch (error) {
+			this.#compiled = previousCompiled
+			this.#jitColdRemaining = previousJitColdRemaining
+			this.#error ??= { error }
+		}
 	}
 
 	#add(
@@ -6745,18 +6780,29 @@ export class Elysia<
 	): CompiledHandler {
 		if (this.#compiled?.[index]) return this.#compiled![index]
 
+		const indexedTable =
+			table ?? (this.#routerBuilt ? this['~routeTable'] : undefined)
 		const compiled = (this.#compiled ??= new Array(
-			table?.length ?? this['~routes'].length
+			indexedTable?.length ?? this['~routes'].length
 		))
 
 		if (immediate ?? this['~config']?.precompile) {
 			const row =
 				route ??
-				(table ? routeRow(table, index) : this['~routes'][index])
+				(indexedTable
+					? routeRow(indexedTable, index)
+					: this['~routes'][index])
+			const routeFlags = indexedTable?.flags[index] ?? 0
+			const exactDuplicate = (routeFlags & RouteFlag.ExactDuplicate) !== 0
 
 			let handler: CompiledHandler
 			try {
-				handler = compileHandler(row, this, precomputedStatic)
+				handler = compileHandler(
+					row,
+					this,
+					precomputedStatic,
+					exactDuplicate && Compiled.hasProgram(this['~programId'])
+				)
 			} catch (error) {
 				throw new Error(
 					`[Elysia] Failed to compile route ${row[0]} ${row[1]}: ${(error as Error)?.message ?? error}`,
@@ -6765,17 +6811,23 @@ export class Elysia<
 			}
 
 			compiled![index] = handler
-			this.#saveHandler(row[0], row[1], handler)
+			// Nothing is published here. During a build the caller writes every
+			// key this row answers to, and outside one the map already holds a
+			// thunk that short-circuits through `#compiled[index]`. Publishing
+			// would only let a row compiled by index steal a key its owner
+			// still holds — a duplicate loser over the last registration, or an
+			// HTTP-compiled WS row over its own socket handler
+			if (indexedTable) this.#satisfyJit(indexedTable, index)
 
 			return handler
 		}
 
 		return this.#jitHandler(
 			index,
-			route ?? (table ? undefined : this['~routes'][index]),
+			route ?? (indexedTable ? undefined : this['~routes'][index]),
 			precomputedStatic,
 			aliases,
-			table
+			indexedTable
 		)
 	}
 
@@ -6795,18 +6847,91 @@ export class Elysia<
 		return (context) => this.#jitDispatch(index, context)
 	}
 
+	#staticAliases(
+		table: RouteTable,
+		index: number
+	): StaticMapAliases | undefined {
+		const flags = table.flags[index]
+		if ((flags & (RouteFlag.WS | RouteFlag.Dynamic)) !== 0) return
+
+		const path = table.path[index]
+		const method = table.method[index]
+		const needsEncode = (flags & RouteFlag.Encode) !== 0
+		const registerLoose =
+			this['~config']?.strictPath !== true &&
+			canRegisterLoose(path, false)
+		if (!needsEncode && !registerLoose) return
+
+		let explicit: Set<string> | undefined
+		if (registerLoose) {
+			explicit = new Set()
+			for (let i = 0; i < table.length; i++) {
+				if (table.method[i] !== method) continue
+
+				const declared = table.path[i]
+				explicit.add(declared)
+				if ((table.flags[i] & RouteFlag.Encode) !== 0)
+					explicit.add(encodeURI(declared))
+			}
+		}
+
+		return {
+			method,
+			paths: expandPaths(path, needsEncode, registerLoose, explicit)
+		}
+	}
+
+	#releaseJit() {
+		Compiled.release(this['~programId'])
+		this.#jitColdRemaining = undefined
+		this.#jitRoute = undefined
+		this.#jitStatic = undefined
+		this.#jitAliases = undefined
+		this.#jitTable = undefined
+	}
+
+	#satisfyJit(table: RouteTable, index: number) {
+		// A duplicate loser never owns dispatch, so compiling it credits
+		// nobody — #publishGeneration excludes it from the cold count for the
+		// same reason, and its winner still has to compile for itself
+		if ((table.flags[index] & RouteFlag.ExactDuplicate) !== 0) return false
+
+		if (this.#jitColdRemaining === undefined) {
+			if (
+				this['~generation'] === undefined &&
+				this['~config']?.precompile !== true &&
+				isProduction() &&
+				!Capture.isAotBuildEnv()
+			)
+				table.flags[index] |= RouteFlag.JITSatisfied
+
+			return false
+		}
+		if ((table.flags[index] & RouteFlag.JITCold) === 0) return false
+
+		table.flags[index] &= ~RouteFlag.JITCold
+		if (--this.#jitColdRemaining > 0) return false
+
+		this.#releaseJit()
+		return true
+	}
+
 	#jitDispatch(index: number, context: any) {
 		if (this.#compiled![index]) return this.#compiled![index](context)
 
 		const route = this.#jitRoute?.[index]
-		const materialized = route ?? routeRow(this.#jitTable!, index)
+		const table = this.#jitTable ?? this['~routeTable']
+		const materialized = route ?? routeRow(table!, index)
+		const routeFlags = table?.flags[index] ?? 0
+		const exactDuplicate = (routeFlags & RouteFlag.ExactDuplicate) !== 0
 
 		let handler: CompiledHandler
 		try {
 			handler = compileHandler(
 				materialized,
 				this,
-				this.#jitStatic?.[index]
+				this.#jitStatic?.[index],
+				exactDuplicate && Compiled.hasProgram(this['~programId'])
 			)
 		} catch (error) {
 			const routeError = new Error(
@@ -6821,36 +6946,27 @@ export class Elysia<
 
 		this.#compiled![index] = handler
 
-		// Last cold route just compiled: the AOT program is now fully
-		// consumed for this generation so release it
-		// Reaching this line means #compiled[index] was undefined (past the
-		// early-return at the top of the thunk), so each route decrements exactly once
-		let releasedNow = false
-		if (
-			this.#jitColdRemaining !== undefined &&
-			--this.#jitColdRemaining === 0
-		) {
-			Compiled.release(this['~programId'])
-			this.#jitColdRemaining = undefined
-			releasedNow = true
+		// An exact duplicate loser is only reachable by index: the last
+		// registration owns every key it would write, so publishing it here
+		// would break last-wins dispatch
+		if (!exactDuplicate) {
+			const aliases =
+				this.#jitAliases?.[index] ??
+				(table ? this.#staticAliases(table, index) : undefined)
+			if (aliases) {
+				this.#initMap()
+
+				const map = (this['~map']![aliases.method] ??=
+					nullObject() as any)
+
+				for (let p = 0; p < aliases.paths.length; p++)
+					map[aliases.paths[p]] = handler
+			} else this.#saveHandler(materialized[0], materialized[1], handler)
 		}
 
-		const aliases = this.#jitAliases?.[index]
-		if (aliases) {
-			this.#initMap()
+		const releasedNow = table ? this.#satisfyJit(table, index) : false
 
-			const map = (this['~map']![aliases.method] ??= nullObject() as any)
-
-			for (let p = 0; p < aliases.paths.length; p++)
-				map[aliases.paths[p]] = handler
-		} else this.#saveHandler(materialized[0], materialized[1], handler)
-
-		if (releasedNow) {
-			this.#jitRoute = undefined
-			this.#jitStatic = undefined
-			this.#jitAliases = undefined
-			this.#jitTable = undefined
-		} else {
+		if (!releasedNow) {
 			if (this.#jitRoute) this.#jitRoute[index] = undefined
 			if (this.#jitStatic) this.#jitStatic[index] = undefined
 			if (this.#jitAliases) this.#jitAliases[index] = undefined
@@ -7093,23 +7209,33 @@ export class Elysia<
 		}
 
 		if (isProduction() && !Capture.isAotBuildEnv()) {
-			if (this['~config']?.precompile)
-				Compiled.release(this['~programId'])
+			if (this['~config']?.precompile) this.#releaseJit()
 			else {
-				const table = this['~routeTable']
-				const routeCount = table?.length ?? this['~routes'].length
-
-				let cold = routeCount
+				const table = this['~routeTable']!
+				const routeCount = table.length
 				const compiled = this.#compiled
-				for (let i = 0; i < routeCount; i++)
+				let cold = 0
+
+				for (let i = 0; i < routeCount; i++) {
+					const satisfied =
+						(table.flags[i] & RouteFlag.JITSatisfied) !== 0
+					table.flags[i] &= ~(
+						RouteFlag.JITCold | RouteFlag.JITSatisfied
+					)
+					const flags = table.flags[i]
 					if (
-						(table !== undefined &&
-							(table.flags[i] & RouteFlag.WS) !== 0) ||
+						satisfied ||
+						(flags & (RouteFlag.WS | RouteFlag.ExactDuplicate)) !==
+							0 ||
 						compiled?.[i] !== undefined
 					)
-						cold--
+						continue
 
-				if (cold <= 0) Compiled.release(this['~programId'])
+					table.flags[i] |= RouteFlag.JITCold
+					cold++
+				}
+
+				if (cold === 0) this.#releaseJit()
 				else this.#jitColdRemaining = cold
 			}
 
@@ -7118,6 +7244,11 @@ export class Elysia<
 			if (!this['~ext']?.macro && !this['~scopeChildren'])
 				this.#declaredRoutes = undefined
 		}
+
+		const ext = this['~ext']
+		if (ext?.hoc) extCallbackIndexes.delete(ext.hoc)
+		if (ext?.setup) extCallbackIndexes.delete(ext.setup)
+		if (ext?.cleanup) extCallbackIndexes.delete(ext.cleanup)
 	}
 
 	['~newGeneration']() {
@@ -7159,6 +7290,8 @@ export class Elysia<
 				if (this.#routeMayHaveModelRef(table, i))
 					this.#assertRouteModelRefs(routeRow(table, i), method[i])
 
+		let markDuplicates = false
+
 		if (length) {
 			const programId = this['~programId']
 
@@ -7169,25 +7302,46 @@ export class Elysia<
 				)
 			)
 				Compiled.assertUncontested(programId)
+
+			markDuplicates =
+				Compiled.hasProgram(programId) ||
+				(precompile !== true &&
+					isProduction() &&
+					!Capture.isAotBuildEnv())
 		}
 
 		const isLoose = this['~config']?.strictPath !== true
+		const collectExplicit = isLoose && table.hasLoose
 
-		let explicitPaths: Map<string, Set<string>> | undefined
-		if (isLoose && table.hasLoose) {
-			explicitPaths = new Map()
+		// One forward pass answers both questions: which rows a later exact
+		// registration displaces (last-wins), and which keys are claimed
+		// explicitly so a loose alias must not shadow them. A `-1` entry is a
+		// key that exists but can never be displaced — a WS row, or the
+		// percent-encoded twin of a declared path
+		let explicitPaths: Map<string, Map<string, number>> | undefined
+		if (markDuplicates || collectExplicit) {
+			const seen = new Map<string, Map<string, number>>()
+			if (collectExplicit) explicitPaths = seen
 
 			for (let i = 0; i < length; i++) {
 				const m = method[i]
 				const p = path[i]
 
-				let set = explicitPaths.get(m)
-				if (!set) explicitPaths.set(m, (set = new Set()))
+				let paths = seen.get(m)
+				if (!paths) seen.set(m, (paths = new Map()))
 
-				set.add(p)
-				if ((flags[i] & RouteFlag.Encode) !== 0) {
+				if (markDuplicates && (flags[i] & RouteFlag.WS) === 0) {
+					const displaced = paths.get(p)
+					if (displaced !== undefined && displaced >= 0)
+						flags[displaced] |= RouteFlag.ExactDuplicate
+
+					paths.set(p, i)
+				} else paths.set(p, -1)
+
+				if (collectExplicit && (flags[i] & RouteFlag.Encode) !== 0) {
 					const encoded = encodeURI(p)
-					if (encoded !== p) set.add(encoded)
+					if (encoded !== p && !paths.has(encoded))
+						paths.set(encoded, -1)
 				}
 			}
 		}
@@ -7417,6 +7571,13 @@ export class Elysia<
 	 * ```
 	 */
 	cleanup(handler: MaybeArray<GracefulHandler<this>>): this {
+		if (
+			this['~ext']?.cleanupEpoch?.(
+				handler as GracefulHandler<any> | GracefulHandler<any>[]
+			)
+		)
+			return this
+
 		this.#assertMutable('cleanup')
 		const arr = (this.#ext.cleanup ??= [])
 
@@ -7428,32 +7589,60 @@ export class Elysia<
 	}
 
 	/**
-	 * Stop the underlying server (if any), running every `cleanup` handler once
-	 * it has stopped. Mirrors `Server.stop()`.
+	 * Stop the underlying server (if any), then run every `cleanup` handler.
+	 * Omitted and `false` are the same graceful stop: new requests are gated,
+	 * tracked WebSockets are settled and active HTTP is drained, then cleanup
+	 * runs and the epoch is released. `true` force-closes the transport
+	 * instead of draining it, and escalates a graceful stop already in flight.
 	 *
-	 * @param closeActiveConnections Pass `true` to terminate in-flight
-	 *   requests and WebSocket connections immediately. Defaults to
-	 *   draining gracefully.
+	 * Awaiting `stop()` from inside a `setup`, `cleanup` or WebSocket lifecycle
+	 * callback is only supported while that callback is still synchronous; the
+	 * teardown is waiting on the callback, so after an `await` it can only be
+	 * issued as `void app.stop()`.
+	 *
+	 * @param closeActiveConnections Pass `true` to terminate active
+	 *   transports. Omit (or pass `false`) to drain safely.
 	 */
 	stop(closeActiveConnections?: boolean): Promise<void> | void {
+		const stop = this['~ext']?.stop
+		if (stop) return stop(closeActiveConnections)
+
 		const server = this.server
 		if (!server) return
 
-		const r = (server as any).stop?.(closeActiveConnections)
-		this.server = undefined
+		let result: unknown
+		const errors: unknown[] = []
+		try {
+			result = (server as any).stop?.(closeActiveConnections)
+		} catch (error) {
+			errors.push(error)
+		} finally {
+			this.server = undefined
+		}
 
 		const handlers = this['~ext']?.cleanup
+		if (!errors.length && !handlers?.length)
+			return result &&
+				typeof (result as Promise<void>).then === 'function'
+				? (result as Promise<void>)
+				: undefined
 
-		const fire = handlers
-			? async () => {
-					for (let i = 0; i < handlers.length; i++)
+		return (async () => {
+			try {
+				await result
+			} catch (error) {
+				errors.push(error)
+			}
+
+			if (handlers)
+				for (let i = 0; i < handlers.length; i++)
+					try {
 						await handlers[i](this)
-				}
-			: undefined
+					} catch (error) {
+						errors.push(error)
+					}
 
-		if (r && typeof (r as Promise<void>).then === 'function')
-			return fire ? (r as Promise<void>).then(fire) : (r as Promise<void>)
-
-		return fire?.()
+			throwLifecycleErrors(errors)
+		})()
 	}
 }

@@ -4,6 +4,7 @@ import {
 	generateCompiledArtifactsIsolated,
 	realPath,
 	resolveEntry,
+	resolveEntryModuleKind,
 	resolveElysiaRoot,
 	makeIsElysiaModule,
 	SOURCE_REGEX,
@@ -19,6 +20,7 @@ import {
 	type StubPlan,
 	type ElysiaAotOptions
 } from './core'
+import type { AotModuleCondition } from './source'
 import { rewriteTypeImport } from './treeshake'
 
 const toPosix = (path: string): string => path.replace(/\\/g, '/')
@@ -40,7 +42,8 @@ export interface AotPluginHooks {
 
 export const createAotPluginHooks = (
 	entry: string,
-	options?: ElysiaAotOptions
+	options?: ElysiaAotOptions,
+	moduleCondition: AotModuleCondition = resolveEntryModuleKind(entry)
 ): AotPluginHooks => {
 	const entryPath = resolveEntry(entry)
 	const entryPosix = toPosix(entryPath)
@@ -64,8 +67,16 @@ export const createAotPluginHooks = (
 	return {
 		async buildStart() {
 			const generated = initial
-				? await generateCompiledArtifacts(entry, options)
-				: await generateCompiledArtifactsIsolated(entry, options)
+				? await generateCompiledArtifacts(
+						entry,
+						options,
+						moduleCondition
+					)
+				: await generateCompiledArtifactsIsolated(
+						entry,
+						options,
+						moduleCondition
+					)
 
 			initial = false
 			source = generated.source
@@ -141,7 +152,10 @@ export const createAotPluginHooks = (
 
 			if (isEntry(cleanId)) {
 				entryMatched = true
-				out = `import 'elysia/compiled'\n${out}`
+				out =
+					(moduleCondition === 'cjs'
+						? `require('elysia/compiled')\n`
+						: `import 'elysia/compiled'\n`) + out
 			}
 
 			return out === code ? undefined : out

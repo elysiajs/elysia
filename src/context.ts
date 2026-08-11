@@ -64,7 +64,12 @@ export function createBaseContext(app: AnyElysia) {
 	return Decorator
 }
 
-export function clearContextCache() {
+export function clearContextCache(app?: AnyElysia) {
+	if (app !== undefined) {
+		contextCache.delete(app)
+		return
+	}
+
 	contextCache = new WeakMap()
 	sharedEmptyDecorator = null
 	sharedEmptyContext = null

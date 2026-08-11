@@ -51,7 +51,7 @@ function isClonableProto(proto: object | null): boolean {
 	return clonable
 }
 
-function isImmutableNode(value: object): boolean {
+function isImmutableNode(value: object) {
 	const memo = immutableNodes.get(value)
 	if (memo !== undefined) return memo
 
@@ -79,13 +79,11 @@ function isImmutableNode(value: object): boolean {
 	return immutable
 }
 
-// set during a hook-path clone: owned nodes freeze on the way out (what makes
-// cross-route/cross-app sharing safe)
-// Borrowed nodes stay unfrozen, freezing a `Date` the user still holds would be a write to their object
-let freezeClones = false
-
 function deepCloneSchema(
 	value: any,
+	// hook-owned clones freeze on the way out; model-owned clones stay mutable.
+	// Borrowed objects return before this applies and remain untouched
+	freeze: boolean,
 	// plain Map on purpose: call-scoped, WeakMap is ~40% slower per entry on JSC
 	seen?: Map<object, object>,
 	// callers write to the returned root (`.model()` stamps `$id`), so a root
@@ -104,9 +102,9 @@ function deepCloneSchema(
 		seen.set(value, out)
 
 		for (let i = 0; i < value.length; i++)
-			out[i] = deepCloneSchema(value[i], seen)
+			out[i] = deepCloneSchema(value[i], freeze, seen)
 
-		return freezeClones ? Object.freeze(out) : out
+		return freeze ? Object.freeze(out) : out
 	}
 
 	if (canShare && isImmutableNode(value)) return value
@@ -141,7 +139,7 @@ function deepCloneSchema(
 			continue
 		}
 
-		const cloned = deepCloneSchema(property, seen)
+		const cloned = deepCloneSchema(property, freeze, seen)
 
 		// `out.__proto__ = x` reaches the `Object.prototype` setter and
 		// re-parents `out` instead of creating an own property
@@ -161,7 +159,7 @@ function deepCloneSchema(
 		const property = value[key]
 
 		if (isEnumerable.call(value, key))
-			out[key] = deepCloneSchema(property, seen)
+			out[key] = deepCloneSchema(property, freeze, seen)
 		else
 			Object.defineProperty(out, key, {
 				value: property,
@@ -171,7 +169,7 @@ function deepCloneSchema(
 			})
 	}
 
-	return freezeClones ? Object.freeze(out) : out
+	return freeze ? Object.freeze(out) : out
 }
 
 const refIds = new WeakMap<object | Function, number>()
@@ -184,17 +182,20 @@ function refKey(value: object | Function): string {
 	return 'r' + id + ';'
 }
 
-// symbol-keyed members can't be keyed structurally, a node holding one opts out of sharing
-let fingerprintBail = false
+interface FingerprintState {
+	bail: boolean
+}
 
-const byRefKey = (value: any): string =>
+// symbol-keyed members can't be keyed structurally, a node holding one opts out of sharing
+const byRefKey = (value: any, state: FingerprintState): string =>
 	value !== null && (typeof value === 'object' || typeof value === 'function')
 		? refKey(value)
-		: fingerprint(value, undefined)
+		: fingerprint(value, undefined, state)
 
 function fingerprint(
 	value: any,
 	seen: Map<object, number> | undefined,
+	state: FingerprintState,
 	canShare = true
 ): string {
 	if (value === null) return 'z;'
@@ -216,7 +217,7 @@ function fingerprint(
 			case 'bigint':
 				return 'g' + value + ';'
 			default:
-				fingerprintBail = true
+				state.bail = true
 
 				return 'y;'
 		}
@@ -231,7 +232,7 @@ function fingerprint(
 
 		let out = '['
 		for (let i = 0; i < value.length; i++)
-			out += fingerprint(value[i], seen)
+			out += fingerprint(value[i], seen, state)
 
 		return out + '];'
 	}
@@ -265,11 +266,11 @@ function fingerprint(
 		// non-enumerable markers clone by reference, so they key by identity
 		out +=
 			!allEnumerable && !isEnumerable.call(value, key)
-				? '!' + byRefKey(property)
-				: '=' + fingerprint(property, seen)
+				? '!' + byRefKey(property, state)
+				: '=' + fingerprint(property, seen, state)
 	}
 
-	if (Object.getOwnPropertySymbols(value).length) fingerprintBail = true
+	if (Object.getOwnPropertySymbols(value).length) state.bail = true
 
 	return out + '};'
 }
@@ -291,7 +292,7 @@ export function snapshotSchema<T>(schema: T): T {
 
 	let cloned: object
 	try {
-		cloned = deepCloneSchema(object, undefined, false) as object
+		cloned = deepCloneSchema(object, false, undefined, false) as object
 	} catch (error) {
 		console.warn(
 			'[Elysia] schema snapshot failed; schema kept by reference:',
@@ -327,13 +328,13 @@ function internSchema<T>(schema: T, intern: boolean): T {
 
 	let key: string | undefined
 	if (intern) {
-		fingerprintBail = false
+		const state: FingerprintState = { bail: false }
 
 		try {
-			key = fingerprint(object, undefined, false)
+			key = fingerprint(object, undefined, state, false)
 		} catch {}
 
-		if (fingerprintBail) key = undefined
+		if (state.bail) key = undefined
 	}
 
 	if (key !== undefined) {
@@ -351,9 +352,8 @@ function internSchema<T>(schema: T, intern: boolean): T {
 	}
 
 	let cloned: object
-	freezeClones = true
 	try {
-		cloned = deepCloneSchema(object, undefined, false) as object
+		cloned = deepCloneSchema(object, true, undefined, false) as object
 	} catch (error) {
 		console.warn(
 			'[Elysia] schema snapshot failed; schema kept by reference:',
@@ -361,8 +361,6 @@ function internSchema<T>(schema: T, intern: boolean): T {
 		)
 
 		return schema
-	} finally {
-		freezeClones = false
 	}
 
 	hookSnapshots.set(object, cloned)

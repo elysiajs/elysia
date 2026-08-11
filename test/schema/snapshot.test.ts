@@ -392,4 +392,79 @@ describe('schema snapshot helpers', () => {
 		expect(Object.getPrototypeOf(snap.properties)).toBe(Object.prototype)
 		expect(Object.hasOwn(snap.properties, '__proto__')).toBe(true)
 	})
+
+	it('keeps an outer hook deeply frozen when a getter snapshots another hook', () => {
+		let reads = 0
+		const schema = {
+			get reenter() {
+				reads++
+				snapshotHookSchemas({ body: { unique: () => {} } })
+
+				return true
+			},
+			child: { value: true },
+			unique: () => {}
+		}
+
+		const snap = snapshotHookSchemas({ body: schema })!.body
+
+		expect({
+			reads,
+			rootFrozen: Object.isFrozen(snap),
+			childFrozen: Object.isFrozen(snap.child)
+		}).toEqual({ reads: 2, rootFrozen: true, childFrozen: true })
+	})
+
+	it('keeps a model mutable when snapshotted from a hook getter', () => {
+		let reads = 0
+		const models: { child: { value: number } }[] = []
+		const schema = {
+			get reenter() {
+				reads++
+				models.push(snapshotSchema({ child: { value: reads } }))
+
+				return true
+			},
+			unique: () => {}
+		}
+
+		snapshotHookSchemas({ body: schema })
+
+		expect({
+			reads,
+			rootFrozen: Object.isFrozen(models[1]!),
+			childFrozen: Object.isFrozen(models[1]!.child)
+		}).toEqual({ reads: 2, rootFrozen: false, childFrozen: false })
+	})
+
+	it('keeps symbol metadata out of interning when a later getter reenters', () => {
+		const metadata = Symbol('metadata')
+		const identity = () => {}
+		let reads = 0
+		const make = (value: string) => ({
+			tagged: { [metadata]: value },
+			get reenter() {
+				reads++
+				snapshotHookSchemas({ body: { unique: () => {} } })
+
+				return true
+			},
+			identity
+		})
+
+		const a = snapshotHookSchemas({ body: make('a') })!.body
+		const b = snapshotHookSchemas({ body: make('b') })!.body
+
+		expect({
+			reads,
+			sameSnapshot: a === b,
+			firstMetadata: a.tagged[metadata],
+			secondMetadata: b.tagged[metadata]
+		}).toEqual({
+			reads: 4,
+			sameSnapshot: false,
+			firstMetadata: 'a',
+			secondMetadata: 'b'
+		})
+	})
 })

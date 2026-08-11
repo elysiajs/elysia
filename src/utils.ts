@@ -1283,4 +1283,19 @@ export function serializeMacroSeed(_key: string, value: unknown) {
 	}
 }
 
+export const throwLifecycleErrors = (errors: unknown[]) => {
+	if (errors.length === 1) throw errors[0]
+	if (errors.length)
+		throw new AggregateError(errors, 'Multiple lifecycle failures')
+}
+
+export const isSocketQuiet = (socket: {
+	readyState: number
+	data: { inflight?: number; opening?: unknown; settling?: number }
+}) =>
+	socket.readyState === 3 &&
+	!socket.data.inflight &&
+	!socket.data.opening &&
+	!socket.data.settling
+
 export { prefix }

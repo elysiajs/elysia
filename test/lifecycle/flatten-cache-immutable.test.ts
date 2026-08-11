@@ -48,7 +48,7 @@ describe('Inherited plugin hook isolation', () => {
 	})
 
 	it('does not duplicate inherited response validators across sibling routes', async () => {
-		const check = spyOn(TypeBoxValidator.prototype, 'Check')
+		const encode = spyOn(TypeBoxValidator.prototype, 'EncodeFrom')
 
 		try {
 			const plugin = new Elysia().guard('global', {
@@ -68,9 +68,9 @@ describe('Inherited plugin hook isolation', () => {
 				expect(res.status).toBe(200)
 			}
 
-			expect(check).toHaveBeenCalledTimes(3)
+			expect(encode).toHaveBeenCalledTimes(3)
 		} finally {
-			check.mockRestore()
+			encode.mockRestore()
 		}
 	})
 

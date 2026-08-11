@@ -77,6 +77,18 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		expect(r.jit).toBe(true)
 	})
 
+	it('keeps handler JIT live for public access to exact duplicate rows', async () => {
+		const app = new Elysia()
+			.get('/duplicate', () => 'loser')
+			.get('/duplicate', () => 'winner')
+
+		const r = await analyzeStubbability(app as any)
+		expect(r).toEqual({
+			jit: false,
+			reasons: ['handler:indexed-duplicate']
+		})
+	})
+
 	// WebSocket routes do not call the HTTP handler compiler.
 	it('WS-only app: handler JIT is stubbable (WS never reaches sucrose)', async () => {
 		const app = new Elysia()

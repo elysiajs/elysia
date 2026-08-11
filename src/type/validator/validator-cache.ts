@@ -377,8 +377,16 @@ export class TypeBoxValidatorCache {
 
 		normalize += TypeBoxValidatorCache.#modelsToken(models, meta.hasRef)
 
-		const refBucket = this.#referenceCache.get(schema)?.get(normalize)
-		if (refBucket?.has(coercions)) return refBucket.get(coercions)
+		const byNormalize = this.#referenceCache.get(schema)
+		const refBucket = byNormalize?.get(normalize)
+		if (refBucket?.has(coercions)) {
+			if (byNormalize!.size >= DEFAULT_CACHE_LIMIT) {
+				byNormalize!.delete(normalize)
+				byNormalize!.set(normalize, refBucket)
+			}
+
+			return refBucket.get(coercions)
+		}
 
 		if (meta.special) return
 
@@ -396,14 +404,27 @@ export class TypeBoxValidatorCache {
 		}
 	}
 
-	#refBucket(schema: TSchema) {
+	#setRefBucket(
+		schema: TSchema,
+		normalize: string,
+		cache: WeakMap<
+			CoerceOption[] | typeof TypeBoxValidatorCache.EMPTY,
+			BaseTypeBoxValidator
+		>
+	) {
 		let byNormalize = this.#referenceCache.get(schema)
 		if (!byNormalize) {
 			byNormalize = new Map()
 			this.#referenceCache.set(schema, byNormalize)
 		}
 
-		return byNormalize
+		if (
+			!byNormalize.has(normalize) &&
+			byNormalize.size >= DEFAULT_CACHE_LIMIT
+		)
+			evictOldestHalf(byNormalize)
+
+		byNormalize.set(normalize, cache)
 	}
 
 	set(
@@ -425,7 +446,7 @@ export class TypeBoxValidatorCache {
 				CoerceOption[] | typeof TypeBoxValidatorCache.EMPTY,
 				BaseTypeBoxValidator
 			>
-			this.#refBucket(schema).set(normalize, cache)
+			this.#setRefBucket(schema, normalize, cache)
 
 			return
 		}
@@ -433,11 +454,11 @@ export class TypeBoxValidatorCache {
 		const key = meta.key + '\0' + normalize
 		if (this.#cache.has(key)) {
 			const cache = this.#cache.get(key)!.set(coercions, validator!)
-			const byNormalize = this.#refBucket(schema)
+			const byNormalize = this.#referenceCache.get(schema)
 
-			if (byNormalize.has(normalize))
+			if (byNormalize?.has(normalize))
 				byNormalize.get(normalize)!.set(coercions, validator!)
-			else byNormalize.set(normalize, cache)
+			else this.#setRefBucket(schema, normalize, cache)
 
 			return
 		}
@@ -450,7 +471,7 @@ export class TypeBoxValidatorCache {
 			BaseTypeBoxValidator
 		>
 		this.#cache.set(key, cache)
-		this.#refBucket(schema).set(normalize, cache)
+		this.#setRefBucket(schema, normalize, cache)
 	}
 
 	clear() {

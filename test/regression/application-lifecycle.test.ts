@@ -47,6 +47,68 @@ describe('server shutdown', () => {
 
 		expect(order).toEqual(['server-stopped', 'cleanup'])
 	})
+
+	it('attempts every cleanup and preserves a single failure', async () => {
+		const order: string[] = []
+		const cleanupError = new Error('cleanup failed')
+		const app = new Elysia()
+			.cleanup(() => {
+				order.push('first')
+				throw cleanupError
+			})
+			.cleanup(() => order.push('second'))
+
+		;(app as any).server = { stop() {} }
+
+		let error: unknown
+		try {
+			await app.stop()
+		} catch (cause) {
+			error = cause
+		}
+
+		expect(error).toBe(cleanupError)
+		expect(order).toEqual(['first', 'second'])
+	})
+
+	it('aggregates server-stop and cleanup failures in execution order', async () => {
+		const order: string[] = []
+		const stopError = new Error('stop failed')
+		const firstError = new Error('first cleanup failed')
+		const secondError = new Error('second cleanup failed')
+		const app = new Elysia()
+			.cleanup(() => {
+				order.push('first')
+				throw firstError
+			})
+			.cleanup(async () => {
+				order.push('second')
+				throw secondError
+			})
+
+		;(app as any).server = {
+			stop() {
+				order.push('stop')
+				throw stopError
+			}
+		}
+
+		let error: unknown
+		try {
+			await app.stop()
+		} catch (cause) {
+			error = cause
+		}
+
+		expect(error).toBeInstanceOf(AggregateError)
+		const errors = (error as AggregateError).errors
+		expect(errors).toHaveLength(3)
+		expect(errors[0]).toBe(stopError)
+		expect(errors[1]).toBe(firstError)
+		expect(errors[2]).toBe(secondError)
+		expect(order).toEqual(['stop', 'first', 'second'])
+		expect(app.server).toBeUndefined()
+	})
 })
 
 describe('application sealing', () => {

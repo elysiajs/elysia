@@ -308,6 +308,10 @@ export function createStreamHandler({
 
 		const typedSSE =
 			!skipFormat && 'sse' in generator && (generator as any).sse === true
+		const sourceIterator =
+			typeof (generator as any).next === 'function'
+				? (generator as AsyncIterator<unknown>)
+				: undefined
 
 		// Since ReadableStream doesn't have next, init might be undefined
 		let init = (
@@ -317,7 +321,8 @@ export function createStreamHandler({
 		if (set) handleSet(set)
 		if (init instanceof Promise) init = await init
 
-		if (init?.value instanceof ReadableStream)
+		const yieldedStream = init?.value instanceof ReadableStream
+		if (yieldedStream)
 			// @ts-ignore
 			generator = init.value
 		else if (init && (typeof init?.done === 'undefined' || init?.done)) {
@@ -386,12 +391,41 @@ export function createStreamHandler({
 				}
 			}
 
-		const iterator: AsyncIterator<unknown> =
-			typeof (generator as any).next === 'function'
-				? (generator as AsyncIterator<unknown>)
-				: (generator as any)[Symbol.asyncIterator]()
+		const sourceStream =
+			generator instanceof ReadableStream ? generator : undefined
+		let streamReader:
+			| {
+					read(): Promise<IteratorResult<unknown>>
+					cancel(): Promise<void>
+					releaseLock(): void
+			  }
+			| undefined
+		const iterator: AsyncIterator<unknown> = sourceStream
+			? {
+					next: () =>
+						(streamReader ??= sourceStream.getReader()).read(),
+					async return() {
+						if (!streamReader) {
+							await sourceStream.cancel()
+
+							return { done: true, value: undefined }
+						}
+
+						try {
+							await streamReader.cancel()
+						} finally {
+							streamReader.releaseLock()
+						}
+
+						return { done: true, value: undefined }
+					}
+				}
+			: (sourceIterator ?? (generator as any)[Symbol.asyncIterator]())
+		const outerIterator =
+			yieldedStream && !init!.done ? sourceIterator : undefined
 
 		let end = false
+		let finalizing: Promise<void> | undefined
 		const signal = request?.signal
 		let onAbort: (() => void) | undefined
 
@@ -402,19 +436,31 @@ export function createStreamHandler({
 			}
 		}
 
-		const safeReturn = () => {
+		const safeReturn = async (target?: AsyncIterator<unknown>) => {
 			try {
-				const r = iterator.return?.()
-				if (r && typeof (r as Promise<unknown>).then === 'function')
-					(r as Promise<unknown>).catch(() => {})
+				await target?.return?.()
 			} catch {}
 		}
 
-		const closeSafely = (controller: ReadableStreamDefaultController) => {
-			try {
-				controller.close()
-			} catch {}
+		const finalize = (
+			mode: 'close' | 'error',
+			controller?: ReadableStreamDefaultController,
+			error?: unknown
+		) => {
+			if (end) return finalizing
+
+			end = true
 			cleanupAbort()
+			finalizing = safeReturn(iterator).then(() =>
+				safeReturn(outerIterator)
+			)
+
+			if (!controller) return finalizing
+
+			try {
+				if (mode === 'error') controller.error(error)
+				else controller.close()
+			} catch {}
 		}
 
 		const enqueueValue = async (
@@ -452,15 +498,7 @@ export function createStreamHandler({
 				{
 					async start(controller) {
 						if (signal) {
-							onAbort = () => {
-								cleanupAbort()
-								end = true
-								safeReturn()
-
-								try {
-									controller.close()
-								} catch {}
-							}
+							onAbort = () => finalize('close', controller)
 
 							if (signal.aborted) onAbort()
 							else
@@ -477,21 +515,22 @@ export function createStreamHandler({
 						)
 							return
 
-						await enqueueValue(controller, init.value)
+						try {
+							await enqueueValue(controller, init.value)
+						} catch (error) {
+							finalize('error', controller, error)
+						}
 					},
 
 					async pull(controller) {
 						// Respect abort/cancel that happened between pull() calls.
-						if (end) {
-							closeSafely(controller)
-							return
-						}
+						if (end) return
 
 						try {
 							const { value: chunk, done } = await iterator.next()
 
 							if (done || end) {
-								closeSafely(controller)
+								finalize('close', controller)
 								return
 							}
 
@@ -499,15 +538,12 @@ export function createStreamHandler({
 
 							await enqueueValue(controller, chunk)
 						} catch (error) {
-							cleanupAbort()
-							controller.error(error)
+							finalize('error', controller, error)
 						}
 					},
 
 					cancel() {
-						end = true
-						cleanupAbort()
-						safeReturn()
+						finalize('close')
 					}
 				},
 				typedSSE ? { highWaterMark: 0 } : undefined

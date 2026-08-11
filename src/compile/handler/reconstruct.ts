@@ -19,11 +19,12 @@ export abstract class Reconstrct {
 		hook: AnyLocalHook,
 		root: AnyElysia,
 		method: HTTPMethod,
-		path: string
+		path: string,
+		liveOnly: boolean = false
 	) {
 		const frozenRoot = frozenRootOf(root)
 
-		if (!isBridgeLive()) {
+		if (!liveOnly && !isBridgeLive()) {
 			const frozen = buildFrozenRouteValidator(hook, root, method, path)
 			if (frozen) return frozen as any
 			// fall through to RouteValidator so the error surfaces as today
@@ -36,12 +37,18 @@ export abstract class Reconstrct {
 				normalize: frozenRoot['~config']?.normalize,
 				sanitize: frozenRoot['~config']?.sanitize,
 				schemas: hook?.schemas,
-				aot: { method, path },
+				aot: liveOnly ? undefined : { method, path },
 				// precompile / .compile() ⇒ eager validator JIT (§10.3)
 				eager: frozenRoot['~config']?.precompile
 			})
 		} catch (error) {
 			if (!isBridgeNotInitialized(error)) throw error
+
+			if (liveOnly)
+				throw new Error(
+					'Duplicate route must compile JIT but the TypeBox bridge is not initialized',
+					{ cause: error }
+				)
 
 			const frozen = buildFrozenRouteValidator(hook, root, method, path)
 			if (frozen) return frozen as any

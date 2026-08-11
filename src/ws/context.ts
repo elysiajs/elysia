@@ -51,6 +51,8 @@ export interface WSConnectionData {
 	inflight?: number
 	/** settles when an async `open` hook finished; dispatch chains onto it */
 	opening?: Promise<void>
+	/** async socket lifecycle callbacks other than message/open */
+	settling?: number
 	elysia?: ElysiaWS<any>
 	context?: Record<string, unknown>
 
@@ -58,6 +60,39 @@ export interface WSConnectionData {
 
 	validator?: WSResponseValidator
 	defaultValidator?: WSValidatorLike
+}
+
+export function trackWSSettling(
+	data: WSConnectionData,
+	result: void | Promise<void>,
+	onSettled?: () => void
+) {
+	if (!(result instanceof Promise)) return
+
+	data.settling = (data.settling ?? 0) + 1
+	const release = () => {
+		data.settling!--
+		onSettled?.()
+	}
+
+	result.then(release, release)
+}
+
+const runWSLifecycle = <T, Args extends unknown[]>(
+	data: WSConnectionData,
+	callback: (...args: Args) => T,
+	...args: Args
+) => {
+	const lifecycle = (
+		data as WSConnectionData & {
+			'~lifecycleRun'?: <T, Args extends unknown[]>(
+				callback: (...args: Args) => T,
+				...args: Args
+			) => T
+		}
+	)['~lifecycleRun']
+
+	return lifecycle ? lifecycle(callback, ...args) : callback(...args)
 }
 
 function memoize<T>(view: ElysiaWS<any>, key: string, value: T): T {
@@ -289,11 +324,20 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		if (!data.closeHandlerInvoked && data.close) {
 			data.closeHandlerInvoked = true
 			try {
-				const result = data.close(this, code ?? 1000, reason ?? '')
-				if (result instanceof Promise)
-					result
+				const result = runWSLifecycle(
+					data,
+					data.close,
+					this,
+					code ?? 1000,
+					reason ?? ''
+				)
+				if (result instanceof Promise) {
+					const closing = result.catch(() => {})
+					trackWSSettling(data, closing)
+					closing
 						.then(() => this.raw.close(code, reason))
 						.catch(() => this.raw.close(code, reason))
+				}
 
 				return
 			} catch {}

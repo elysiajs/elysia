@@ -799,9 +799,17 @@ export class TypeBoxValidator<
 		)
 	}
 
-	#validate(value: unknown): TLocalizedValidationError[] | undefined {
-		if (!this.#refinements)
-			return this.Check(value as Static<T>) ? undefined : []
+	#validate(
+		value: unknown,
+		countHit = true
+	): TLocalizedValidationError[] | undefined {
+		if (!this.#refinements) {
+			const valid = countHit
+				? this.Check(value as Static<T>)
+				: this.#check(value as Static<T>, false)
+
+			return valid ? undefined : []
+		}
 
 		const pool = (this.#refineScratch ??= freshRefineValidation(
 			this.#refinements
@@ -819,7 +827,10 @@ export class TypeBoxValidator<
 		activeRefineValidation = validation
 
 		try {
-			if (this.Check(value as Static<T>)) return
+			const valid = countHit
+				? this.Check(value as Static<T>)
+				: this.#check(value as Static<T>, false)
+			if (valid) return
 
 			validation.replay = true
 			// Replay re-walks occurrences from zero without re-invoking
@@ -954,10 +965,11 @@ export class TypeBoxValidator<
 	}
 
 	Check(value: Static<T>): boolean {
-		// Every request-facing validation routes through Check (directly, or via
-		// #validate from FromSync/FromAsync, or WS outbound response validation);
-		// tick here so all of them count toward materialization
-		this.#tick()
+		return this.#check(value, true)
+	}
+
+	#check(value: Static<T>, countHit: boolean): boolean {
+		if (countHit) this.#tick()
 
 		const pool = this.#refineScratch
 		if (pool?.active && this.#refinements) {
@@ -1043,12 +1055,14 @@ export class TypeBoxValidator<
 	}
 
 	EncodeFrom(value: Static<T>, type?: string): StaticEncode<T> {
-		// The codec encode path never touches Check, so tick here too
-		// or a deferred response-codec validator would never materialize
+		// EncodeFrom owns its hit; internal validation intentionally avoids a
+		// second public Check dispatch and tick
 		this.#tick()
 
 		if (this.#isForm) {
-			const errors = this.#noValidate ? undefined : this.#validate(value)
+			const errors = this.#noValidate
+				? undefined
+				: this.#validate(value, false)
 			if (errors)
 				throw this.#error(
 					value,
@@ -1060,7 +1074,9 @@ export class TypeBoxValidator<
 		}
 
 		if (!this.hasCodec) {
-			const errors = this.#noValidate ? undefined : this.#validate(value)
+			const errors = this.#noValidate
+				? undefined
+				: this.#validate(value, false)
 			if (errors)
 				throw this.#error(
 					value,
@@ -1078,7 +1094,7 @@ export class TypeBoxValidator<
 
 				const errors = this.#noValidate
 					? undefined
-					: this.#validate(out as any)
+					: this.#validate(out as any, false)
 				if (errors)
 					throw new ValidationError(
 						type,

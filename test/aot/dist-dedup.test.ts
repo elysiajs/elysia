@@ -11,7 +11,7 @@ const APP = resolve(import.meta.dir, 'fixtures/dist-dedup-app.ts')
 const isElysiaDist = (path: string) =>
 	/(^|[\\/])dist[\\/].*\.(m?js)$/.test(path) && !path.includes('typebox')
 
-async function buildBundle() {
+async function buildBundle(format: 'esm' | 'cjs' = 'esm') {
 	// Capture and the fixture must share the same dist Elysia instance.
 	const { aot } = await import('elysia/plugin/aot/esbuild')
 
@@ -19,7 +19,7 @@ async function buildBundle() {
 		entryPoints: [APP],
 		bundle: true,
 		write: false,
-		format: 'esm',
+		format,
 		platform: 'neutral',
 		external: ['node:*'],
 		metafile: true,
@@ -81,5 +81,14 @@ describe('AOT plugin — no duplicate CJS elysia copy', () => {
 		expect(
 			inputs.some((p) => /(^|[\\/])dist[\\/]trace\.mjs$/.test(p))
 		).toBe(false)
+	})
+
+	it('keeps the ESM entry condition when emitting CommonJS', async () => {
+		const { inputs, code } = await buildBundle('cjs')
+		const elysiaInputs = inputs.filter(isElysiaDist)
+
+		expect(elysiaInputs.some((path) => path.endsWith('.mjs'))).toBe(true)
+		expect(elysiaInputs.filter((path) => path.endsWith('.js'))).toEqual([])
+		expect(code).toContain('Compiled.register(')
 	})
 })

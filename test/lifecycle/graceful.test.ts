@@ -3,6 +3,24 @@ import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../src'
 
 describe('Setup and cleanup', () => {
+	it('runs direct setup and cleanup duplicates twice', async () => {
+		let setup = 0
+		let cleanup = 0
+		const onSetup = () => setup++
+		const onCleanup = () => cleanup++
+
+		const app = new Elysia()
+			.setup([onSetup, onSetup])
+			.cleanup([onCleanup, onCleanup])
+			.listen(0)
+
+		await Bun.sleep(0)
+		expect(setup).toBe(2)
+
+		await app.stop()
+		expect(cleanup).toBe(2)
+	})
+
 	it('runs setup on listen and cleanup on stop', async () => {
 		const order: string[] = []
 

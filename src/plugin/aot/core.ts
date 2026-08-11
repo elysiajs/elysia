@@ -1,20 +1,25 @@
-import { existsSync, realpathSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, extname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { Worker } from 'node:worker_threads'
 import {
 	compileToSource,
 	captureArtifacts,
 	replayStubbability,
-	type AotTarget
+	type AotTarget,
+	type AotModuleCondition
 } from './source'
 import type { JITProbeResult } from '../../compile/jit-probe'
 import { composeRouteHook } from '../../compile/handler'
 import {
 	isStandardSchema,
-	mergeSchemasAllStandard
+	isResponseMap,
+	mergeSchemasAllStandard,
+	resolveModelRef,
+	REQUEST_SLOTS
 } from '../../compile/handler/frozen-validator'
+import type { CapturedValidator, ValidatorSlot } from '../../compile/aot'
 
 export interface ElysiaAotOptions {
 	/**
@@ -128,6 +133,47 @@ function findPackageRoot(from: string = process.cwd()) {
 
 export const resolveEntry = (entry: string): string =>
 	resolve(findPackageRoot(), entry)
+
+/** @internal Resolve the package condition used to evaluate an AOT entry. */
+export const resolveEntryModuleKind = (entry: string) => {
+	const entryPath = resolveEntry(entry)
+
+	switch (extname(entryPath)) {
+		case '.cjs':
+		case '.cts':
+			return 'cjs'
+
+		case '.mjs':
+		case '.mts':
+		case '.ts':
+		case '.tsx':
+			return 'esm'
+
+		case '.js':
+		case '.jsx': {
+			const packagePath = join(
+				findPackageRoot(dirname(entryPath)),
+				'package.json'
+			)
+			if (!existsSync(packagePath)) return 'cjs'
+
+			const pkg = JSON.parse(readFileSync(packagePath, 'utf8')) as {
+				type?: unknown
+			}
+			if (pkg.type === 'module') return 'esm'
+			if (pkg.type === undefined || pkg.type === 'commonjs') return 'cjs'
+
+			throw new Error(
+				`[elysia-aot] package.json has unsupported "type" ${JSON.stringify(pkg.type)} for JavaScript entry ${JSON.stringify(entryPath)}.`
+			)
+		}
+
+		default:
+			throw new Error(
+				`[elysia-aot] entry ${JSON.stringify(entryPath)} has an ambiguous module condition. Use a .cjs/.cts CommonJS entry or a .mjs/.mts/.ts/.tsx ESM entry; .js/.jsx follows the nearest package.json "type".`
+			)
+	}
+}
 
 /** Runtime handler-JIT module a strip build can replace with a throwing stub. */
 export interface StubPlan {
@@ -633,23 +679,39 @@ export const OVERRIDE_MAP: Record<string, { leaf: string; export: string }> = {
 // Rolldown rewrites `import.meta.url` to `pathToFileURL(__filename).href` in the CJS build
 // so `.resolve` works from this module in both the `.mjs` and `.js` outputs.
 const requireFromHere = createRequire(import.meta.url)
+const moduleMeta = import.meta as ImportMeta & {
+	resolve?: (specifier: string) => string
+}
+const loadedModuleCondition: AotModuleCondition = import.meta.url.endsWith(
+	'.js'
+)
+	? 'cjs'
+	: 'esm'
 
-const resolveSpecifier = (specifier: string): string => {
-	const meta = import.meta as ImportMeta & {
-		resolve?: (s: string) => string
-	}
+const resolveSpecifier = (
+	specifier: string,
+	moduleCondition?: AotModuleCondition
+): string => {
+	if (moduleCondition === 'cjs') return requireFromHere.resolve(specifier)
 
-	if (typeof meta.resolve === 'function') {
-		const url = meta.resolve(specifier)
+	if (moduleMeta.resolve) {
+		const url = moduleMeta.resolve(specifier)
 		return url.startsWith('file://') ? new URL(url).pathname : url
 	}
+	if (moduleCondition === 'esm')
+		throw new Error(
+			'[elysia-aot] CommonJS-loaded build plugin cannot resolve the ESM package condition. Load the build plugin through import for an ESM entry.'
+		)
 
 	return requireFromHere.resolve(specifier)
 }
 
-export async function generateVirtualType(typeSpecifier = 'elysia/type') {
-	const typePath = resolveSpecifier(typeSpecifier)
-	const typeboxPath = resolveSpecifier('typebox/type')
+export async function generateVirtualType(
+	typeSpecifier = 'elysia/type',
+	moduleCondition?: AotModuleCondition
+) {
+	const typePath = resolveSpecifier(typeSpecifier, moduleCondition)
+	const typeboxPath = resolveSpecifier('typebox/type', moduleCondition)
 
 	const ext = typePath.slice(typePath.lastIndexOf('.'))
 	const leafDir = join(dirname(typePath), 'elysia')
@@ -742,7 +804,8 @@ const workerUrl = (): URL => {
 /** @internal Re-evaluate an entry in a disposable worker for watch rebuilds. */
 export async function generateCompiledArtifactsIsolated(
 	file: string,
-	options?: ElysiaAotOptions
+	options?: ElysiaAotOptions,
+	moduleCondition = resolveEntryModuleKind(file)
 ): Promise<CompiledArtifacts> {
 	const entry = resolveEntry(file)
 
@@ -754,7 +817,7 @@ export async function generateCompiledArtifactsIsolated(
 	)
 
 	const worker = new Worker(workerUrl(), {
-		workerData: { file: entry, options }
+		workerData: { file: entry, options, moduleCondition }
 	})
 	activeGenerationWorkers++
 
@@ -797,19 +860,23 @@ export async function generateCompiledArtifactsIsolated(
 	}
 }
 
-function isStandardResponse(response: unknown) {
-	if (response == null || typeof response !== 'object') return false
+type ValidatorSlotIdentity = Pick<CapturedValidator, 'method' | 'path' | 'slot'>
 
-	if (isStandardSchema(response)) return true
+const validatorSlotKey = ({ method, path, slot }: ValidatorSlotIdentity) =>
+	`${method}\0${path}\0${slot}`
 
-	if ('~kind' in (response as object) || '~elyAcl' in (response as object))
-		return false
+/** @internal Exact logical-slot gate used by AOT mode selection. */
+export function validatorSlotSetsMatch(
+	expected: readonly ValidatorSlotIdentity[],
+	captured: readonly ValidatorSlotIdentity[]
+) {
+	const expectedKeys = new Set(expected.map(validatorSlotKey))
+	const capturedKeys = new Set(captured.map(validatorSlotKey))
 
-	// A status map: every entry must be a Standard Schema to skip the count.
-	const entries = Object.values(response as Record<string, unknown>)
-	if (entries.length === 0) return false
+	if (expectedKeys.size !== capturedKeys.size) return false
+	for (const key of expectedKeys) if (!capturedKeys.has(key)) return false
 
-	return entries.every((v) => isStandardSchema(v))
+	return true
 }
 
 /**
@@ -843,8 +910,14 @@ const assertNoMount = (
 
 export async function generateCompiledArtifacts(
 	file: string,
-	options?: ElysiaAotOptions
+	options?: ElysiaAotOptions,
+	moduleCondition = resolveEntryModuleKind(file)
 ): Promise<CompiledArtifacts> {
+	if (moduleCondition !== loadedModuleCondition)
+		throw new Error(
+			`[elysia-aot] entry uses the ${moduleCondition === 'cjs' ? 'CommonJS "require"' : 'ESM "import"'} package condition, but the AOT build plugin was loaded through ${loadedModuleCondition === 'cjs' ? 'CommonJS "require"' : 'ESM "import"'}; entry: ${JSON.stringify(resolveEntry(file))}. Load the plugin through ${moduleCondition === 'cjs' ? 'require()' : 'import'} so capture and generated registration share one Elysia module instance.`
+		)
+
 	const previousAotBuild = process.env.ELYSIA_AOT_BUILD
 	process.env.ELYSIA_AOT_BUILD = '1'
 
@@ -858,7 +931,11 @@ export async function generateCompiledArtifacts(
 		const entryReal = realPath(entry)
 
 		if (_importedEntries.has(entryReal))
-			return generateCompiledArtifactsIsolated(file, options)
+			return generateCompiledArtifactsIsolated(
+				file,
+				options,
+				moduleCondition
+			)
 
 		_importedEntries.add(entryReal)
 		const mod = (await import(entry)) as {
@@ -879,6 +956,7 @@ export async function generateCompiledArtifacts(
 
 		const sourceOptions = {
 			register: true,
+			moduleCondition,
 			registerFrom: options?.registerFrom,
 			reconstructFrom: options?.reconstructFrom,
 			lazy: options?.lazy,
@@ -933,12 +1011,27 @@ export async function generateCompiledArtifacts(
 						?.length || route?.[2]?.['~mount']
 			)
 
-		let expectedSlots = 0
+		const expectedSlots: ValidatorSlotIdentity[] = []
+		// Capture merges repeated logical slots, so their optional fields can be stale.
+		const declaredTypeBoxSlots = new Set<string>()
 
 		let routesForbidSeal = false
 		// WS cookies emit no `cc` alias, see `planFromReport`
 		let wsCookie = false
 		for (const route of history) {
+			const method = route[0] as string
+			const path = route[1] as string
+			const expectTypeBoxSlot = (slot: ValidatorSlot) => {
+				const identity = { method, path, slot }
+				const key = validatorSlotKey(identity)
+
+				if (declaredTypeBoxSlots.has(key)) routesForbidSeal = true
+				else {
+					declaredTypeBoxSlots.add(key)
+					expectedSlots.push(identity)
+				}
+			}
+
 			const [, , , instance, hook, appHook, inheritedChain, macroScope] =
 				route as [
 					unknown,
@@ -970,26 +1063,36 @@ export async function generateCompiledArtifacts(
 			if (!hooks) continue
 
 			let routeHasTypeBoxDirectSlot = false
-			for (const slot of [
-				'body',
-				'query',
-				'params',
-				'headers',
-				'cookie'
-			]) {
-				const value = hooks[slot]
-				if (value === undefined) continue
-				if (isStandardSchema(value)) continue
+			const classify = (schema: unknown, slot: ValidatorSlot) => {
+				if (schema === undefined) {
+					routesForbidSeal = true
+					return
+				}
+				if (isStandardSchema(schema)) return
+
 				routeHasTypeBoxDirectSlot = true
-				expectedSlots++
+				expectTypeBoxSlot(slot)
 			}
 
-			if (
-				hooks.response !== undefined &&
-				!isStandardResponse(hooks.response)
-			) {
-				routeHasTypeBoxDirectSlot = true
-				expectedSlots++
+			for (const slot of REQUEST_SLOTS) {
+				const value = hooks[slot]
+				if (value !== undefined)
+					classify(
+						resolveModelRef(value, typedApp),
+						slot as ValidatorSlot
+					)
+			}
+
+			if (hooks.response !== undefined) {
+				const response = resolveModelRef(hooks.response, typedApp)
+
+				if (isResponseMap(response))
+					for (const status in response)
+						classify(
+							resolveModelRef(response[status], typedApp),
+							`response:${status}` as ValidatorSlot
+						)
+				else classify(response, 'response:200')
 			}
 
 			const mergeSchemas = (hooks as { schemas?: unknown[] }).schemas
@@ -1011,13 +1114,16 @@ export async function generateCompiledArtifacts(
 		)
 			routesForbidSeal = true
 
-		const frozenSlots = artifacts.validators.length
+		const validatorSlotsMatch = validatorSlotSetsMatch(
+			expectedSlots,
+			artifacts.validators
+		)
 
 		const allBridgeFree =
 			(artifacts.handlers.length > 0 ||
 				artifacts.validators.length > 0) &&
 			!routesForbidSeal &&
-			frozenSlots === expectedSlots &&
+			validatorSlotsMatch &&
 			artifacts.validators.every((v) => v.bridgeFree === true)
 
 		const { plan: stub, mode } = planFromReport(
@@ -1042,10 +1148,10 @@ export async function generateCompiledArtifacts(
 						`Every route must be captured into the AOT manifest.`
 				)
 
-			if (frozenSlots !== expectedSlots)
+			if (!validatorSlotsMatch)
 				console.warn(
-					`[elysia-aot] target 'workerd': only ${frozenSlots}/` +
-						`${expectedSlots} validator slots were frozen ` +
+					`[elysia-aot] target 'workerd': captured validator slots ` +
+						`do not exactly match declared slots; ` +
 						`unfrozen slots compile at runtime and will fail on workerd.`
 				)
 		}
@@ -1053,7 +1159,7 @@ export async function generateCompiledArtifacts(
 		const virtualType =
 			mode === 'off'
 				? undefined
-				: await generateVirtualType('elysia/type')
+				: await generateVirtualType('elysia/type', moduleCondition)
 
 		return {
 			source: artifacts.source,

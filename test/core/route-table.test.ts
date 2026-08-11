@@ -8,7 +8,8 @@ import { describe, expect, it } from 'bun:test'
 const buildFixture = () => {
 	const child = new Elysia({ prefix: '/child' })
 		.get('/a', { query: t.Object({ q: t.String() }) }, () => 'a')
-		.use(websocket()).ws('/socket', { message() {} })
+		.use(websocket())
+		.ws('/socket', { message() {} })
 
 	const guarded = new Elysia()
 		.guard({ beforeHandle() {} })
@@ -92,8 +93,7 @@ describe('columnar route table', () => {
 		]
 
 		for (const column of columns)
-			for (const value of column)
-				expect(tuples.has(value)).toBe(false)
+			for (const value of column) expect(tuples.has(value)).toBe(false)
 
 		for (const value of table.macroScope?.values() ?? [])
 			expect(tuples.has(value)).toBe(false)
@@ -155,7 +155,7 @@ describe('columnar route table', () => {
 	describe('route table consumers', () => {
 		it('serves a route promoted to a native static response', async () => {
 			const app = new Elysia().get('/static', 'Static Content')
-			const ready = collectStaticRoutes(app as any)?.[0]
+			const ready = collectStaticRoutes(app as any)
 
 			const response = ready?.['/static']?.['GET']
 			expect(response).toBeInstanceOf(Response)
@@ -178,7 +178,9 @@ describe('columnar route table', () => {
 		})
 
 		it('registers a WebSocket upgrade route', async () => {
-			const app = new Elysia().use(websocket()).ws('/ws', { message() {} })
+			const app = new Elysia()
+				.use(websocket())
+				.ws('/ws', { message() {} })
 			void app.fetch
 
 			expect(app['~map']?.['WS']?.['/ws']).toBeTypeOf('function')

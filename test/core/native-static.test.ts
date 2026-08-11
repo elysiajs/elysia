@@ -4,7 +4,7 @@ import { trace as traceCap } from '../../src/plugin/trace'
 import { collectStaticRoutes } from '../../src/adapter/bun'
 import { describe, expect, it } from 'bun:test'
 
-const collect = (app: any) => collectStaticRoutes(app as any)?.[0]
+const collect = (app: any) => collectStaticRoutes(app as any)
 const route = (app: any, path: string, method = 'GET') =>
 	collect(app)?.[path]?.[method]
 
@@ -248,7 +248,10 @@ describe('Native Static Response', () => {
 		})
 
 		it('excludes routes with an app-level trace hook', () => {
-			const app = new Elysia().use(traceCap()).trace(() => {}).get('/', 'ok')
+			const app = new Elysia()
+				.use(traceCap())
+				.trace(() => {})
+				.get('/', 'ok')
 
 			expect(route(app, '/')).toBeUndefined()
 		})

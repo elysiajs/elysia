@@ -5,7 +5,7 @@ import { collectStaticRoutes } from '../../../src/adapter/bun'
 describe('Bun native static promotion', () => {
 	it('keeps pure literals promoted by default', async () => {
 		const app = new Elysia().get('/literal', 'literal')
-		const promoted = collectStaticRoutes(app as any)?.[0]
+		const promoted = collectStaticRoutes(app as any)
 
 		expect(promoted?.['/literal']?.GET).toBeInstanceOf(Response)
 		await expect(promoted!['/literal'].GET.text()).resolves.toBe('literal')
@@ -147,7 +147,7 @@ describe('Bun native static promotion', () => {
 		// Bun matches `routes` before the fallback `fetch`, so promoting the
 		// dynamic literal would swallow `/user/me`, which is ineligible and
 		// stays on the JS router
-		const promoted = collectStaticRoutes(app as any)?.[0]
+		const promoted = collectStaticRoutes(app as any)
 		expect(promoted?.['/health']?.GET).toBeInstanceOf(Response)
 		expect(promoted?.['/user/:id']).toBeUndefined()
 

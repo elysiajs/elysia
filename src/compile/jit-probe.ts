@@ -1,8 +1,11 @@
 /** A handler-JIT entry point the frozen replay can trip over. */
-export type JITProbeReason = 'sucrose' | 'handler:new-function'
+export type JITProbeReason =
+	| 'sucrose'
+	| 'handler:new-function'
+	| 'handler:indexed-duplicate'
 
 export interface JITProbeResult {
-	/** `sucrose` + the handler `new Function` codegen is unused. */
+	/** No route needs sucrose, handler codegen, or indexed duplicate replay. */
 	jit: boolean
 	reasons: JITProbeReason[]
 }

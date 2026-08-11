@@ -122,37 +122,75 @@ describe('.use() with asynchronous plugins', () => {
 		}
 	})
 
-	it('preserves the first rejection across repeated app.modules reads', async () => {
-		const errors: unknown[] = []
-		const orig = console.error
-		console.error = (...a: unknown[]) => {
-			errors.push(a[0])
-		}
-
-		try {
-			const app = new Elysia().use(
-				Promise.reject(new Error('first-fail'))
-			)
-
-			let caught: unknown
-			try {
-				await app.modules
-			} catch (e) {
-				caught = e
+	it.each([
+		['Error', new Error('first-fail')],
+		['undefined', undefined],
+		['null', null]
+	] as const)(
+		'preserves a first %s rejection across repeated app.modules reads',
+		async (_name, failure) => {
+			const errors: unknown[] = []
+			const orig = console.error
+			console.error = (...a: unknown[]) => {
+				errors.push(a[0])
 			}
-			expect((caught as Error)?.message).toBe('first-fail')
 
-			let caught2: unknown
 			try {
-				await app.modules
-			} catch (e) {
-				caught2 = e
+				const app = new Elysia()
+					.use(Promise.reject(failure))
+					.use(Promise.reject(new Error('later-fail')))
+				const current = await Promise.allSettled([
+					app.modules,
+					app.modules
+				])
+
+				for (const result of current) {
+					expect(result.status).toBe('rejected')
+					if (result.status === 'rejected')
+						expect(result.reason).toBe(failure)
+				}
+
+				const [later] = await Promise.allSettled([app.modules])
+				expect(later.status).toBe('rejected')
+				if (later.status === 'rejected')
+					expect(later.reason).toBe(failure)
+			} finally {
+				console.error = orig
 			}
-			expect((caught2 as Error)?.message).toBe('first-fail')
-		} finally {
-			console.error = orig
 		}
-	})
+	)
+
+	it.each([
+		['undefined', undefined],
+		['null', null]
+	] as const)(
+		'preserves %s thrown while applying a resolved plugin',
+		async (_name, failure) => {
+			const orig = console.error
+			console.error = () => {}
+
+			try {
+				const app = new Elysia()
+					.use(
+						Promise.resolve(() => {
+							throw failure
+						})
+					)
+					.use(Promise.reject(new Error('later-fail')))
+
+				for (const result of await Promise.allSettled([
+					app.modules,
+					app.modules
+				])) {
+					expect(result.status).toBe('rejected')
+					if (result.status === 'rejected')
+						expect(result.reason).toBe(failure)
+				}
+			} finally {
+				console.error = orig
+			}
+		}
+	)
 
 	it('accepts a new plugin after a previous rejection is observed', async () => {
 		const errors: unknown[] = []

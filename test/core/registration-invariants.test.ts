@@ -137,6 +137,36 @@ describe('routing edge contracts', () => {
 				'raw-last'
 			)
 	})
+
+	// Compiling a row by index is an introspection call, not a registration:
+	// it must never take a key the last-wins winner owns. Outside production
+	// no row carries `ExactDuplicate`, so the invariant has to hold without
+	// the flag — `handler()` publishes nothing at all
+	it('does not let a route compiled by index displace the last registration', async () => {
+		const app = new Elysia()
+			.get('/x', () => 'first')
+			.get('/x', () => 'second')
+
+		await expect(app.handle('/x').then((r) => r.text())).resolves.toBe(
+			'second'
+		)
+		;(app as any).handler(0, true)
+		await expect(app.handle('/x').then((r) => r.text())).resolves.toBe(
+			'second'
+		)
+	})
+
+	it('does not let a ws row compiled by index displace its socket handler', async () => {
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws', { message: () => {} })
+
+		void app.fetch
+		const socket = (app as any)['~map'].WS['/ws']
+		expect(socket).toBeDefined()
+		;(app as any).handler(0, true)
+		expect((app as any)['~map'].WS['/ws']).toBe(socket)
+	})
 })
 
 describe('route introspection', () => {

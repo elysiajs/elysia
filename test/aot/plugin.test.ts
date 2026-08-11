@@ -1,6 +1,7 @@
 import { describe, it, expect, spyOn } from 'bun:test'
-import { resolve } from 'node:path'
-import { rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { post, json } from '../utils'
 
 const APP = resolve(import.meta.dir, 'fixtures/app.ts')
@@ -8,6 +9,38 @@ const APP = resolve(import.meta.dir, 'fixtures/app.ts')
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
 
 describe('AOT plugin', () => {
+	it('classifies JavaScript entries from the nearest package type', async () => {
+		const directory = await mkdtemp(join(tmpdir(), 'elysia-aot-kind-'))
+		const { resolveEntryModuleKind } =
+			await import('../../src/plugin/aot/core')
+
+		try {
+			await writeFile(
+				join(directory, 'package.json'),
+				JSON.stringify({ type: 'module' })
+			)
+			expect(resolveEntryModuleKind(join(directory, 'app.js'))).toBe(
+				'esm'
+			)
+			expect(resolveEntryModuleKind(join(directory, 'app.jsx'))).toBe(
+				'esm'
+			)
+
+			await writeFile(
+				join(directory, 'package.json'),
+				JSON.stringify({ type: 'commonjs' })
+			)
+			expect(resolveEntryModuleKind(join(directory, 'app.js'))).toBe(
+				'cjs'
+			)
+			expect(resolveEntryModuleKind(join(directory, 'app.jsx'))).toBe(
+				'cjs'
+			)
+		} finally {
+			await rm(directory, { recursive: true, force: true })
+		}
+	})
+
 	it('generateCompiledModule emits a self-registering manifest', async () => {
 		const { generateCompiledArtifacts } =
 			await import('../../src/plugin/aot/core')
@@ -37,13 +70,41 @@ describe('AOT plugin', () => {
 		expect(src).toContain('Compiled.register((() => {')
 		expect(src).toContain('return { bf: 1, fingerprint')
 		// Simple schemas require no TypeBox runtime imports.
-		expect(src).not.toContain("from 'typebox/")
+		expect(src).not.toContain('typebox/')
 		expect(src).not.toContain('function(CheckContext')
 		expect(src).toContain('"/body"')
 		// /body and /echo share one validator factory.
 		expect((src.match(/const _c\d+ =/g) ?? []).length).toBe(2)
 		// Coerced query validators are emitted too.
 		expect(src).toContain('"/q"')
+	})
+
+	it('preserves explicit specifiers in a CommonJS manifest', async () => {
+		const { Elysia, t } = await import('../../src')
+		const { compileToSource } = await import('../../src/plugin/aot/source')
+		const source = await compileToSource(
+			new Elysia().get(
+				'/cjs',
+				{ query: t.Object({ n: t.Number() }), response: t.String() },
+				({ query }) => String(query.n)
+			),
+			{
+				register: true,
+				moduleCondition: 'cjs',
+				registerFrom: 'custom-register',
+				reconstructFrom: 'custom-reconstruct'
+			}
+		)
+
+		expect(source).toContain(
+			'const { Compiled } = require("custom-register")'
+		)
+		expect(source).toContain(
+			'const { Reconstruct } = require("custom-reconstruct")'
+		)
+		expect(source).toContain(
+			'const { buildCoercedFromPlan } = require("elysia/coerce-plan")'
+		)
 	})
 
 	// Import each TypeBox helper only when generated checks reference it.
@@ -55,7 +116,7 @@ describe('AOT plugin', () => {
 		const bare = await manifest(
 			new Elysia().get('/', () => 'hi').post('/echo', (c: any) => c.body)
 		)
-		expect(bare).not.toContain("from 'typebox/")
+		expect(bare).not.toContain('typebox/')
 
 		const simple = await manifest(
 			new Elysia().post(
@@ -64,19 +125,28 @@ describe('AOT plugin', () => {
 				() => 'ok'
 			)
 		)
-		expect(simple).not.toContain("from 'typebox/")
+		expect(simple).not.toContain('typebox/')
 
 		// Format is the only runtime helper this schema needs.
-		const format = await manifest(
+		const formatApp = () =>
 			new Elysia().post(
 				'/e',
 				{ body: t.Object({ v: t.String({ format: 'email' }) }) },
 				() => 'ok'
 			)
+		const format = await manifest(formatApp())
+		expect(format).toContain('import { Format } from "typebox/format"')
+		expect(format).not.toContain('from "typebox/guard"')
+		expect(format).not.toContain('from "typebox/system"')
+
+		const cjsFormat = await compileToSource(formatApp(), {
+			register: true,
+			moduleCondition: 'cjs'
+		})
+		expect(cjsFormat).toContain('const { Compiled } = require("elysia")')
+		expect(cjsFormat).toContain(
+			'const { Format } = require("typebox/format")'
 		)
-		expect(format).toContain("import { Format } from 'typebox/format'")
-		expect(format).not.toContain("from 'typebox/guard'")
-		expect(format).not.toContain("from 'typebox/system'")
 
 		// multipleOf references Guard; uniqueItems references Hashing
 		const guard = await manifest(
@@ -86,7 +156,7 @@ describe('AOT plugin', () => {
 				() => 'ok'
 			)
 		)
-		expect(guard).toContain("import { Guard } from 'typebox/guard'")
+		expect(guard).toContain('import { Guard } from "typebox/guard"')
 
 		const hashing = await manifest(
 			new Elysia().post(
@@ -99,7 +169,7 @@ describe('AOT plugin', () => {
 				() => 'ok'
 			)
 		)
-		expect(hashing).toContain("import { Hashing } from 'typebox/system'")
+		expect(hashing).toContain('import { Hashing } from "typebox/system"')
 	})
 
 	it('compileToSource restores ELYSIA_AOT_BUILD after direct use', async () => {

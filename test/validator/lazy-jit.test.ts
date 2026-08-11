@@ -15,13 +15,17 @@ import { describe, it, expect } from 'bun:test'
 import { Type } from 'typebox'
 import { Compile } from 'typebox/schema'
 
-import { Elysia, t } from '../../src'
+import { Elysia, form, t, ValidationError } from '../../src'
 import {
 	TypeBoxValidator,
 	schemaMayHaveAsyncRefine
 } from '../../src/type/validator'
 import { Validator, StandardValidator } from '../../src/validator'
 import { isAsyncPredicate } from '../../src/type/elysia/file-type'
+import {
+	getExactMirror,
+	setExactMirror
+} from '../../src/type/validator/exact-mirror'
 
 const LAZY_JIT_THRESHOLD = 16
 
@@ -31,6 +35,38 @@ function buildIsAsync(schema: any) {
 }
 
 const F = () => t.File({ type: 'image' })
+
+const codecResponse = () =>
+	t.Object({
+		id: t
+			.Codec(t.String())
+			.Decode((value) => Number(value))
+			.Encode((value) => String(value))
+	})
+
+const responseCodecValidator = (
+	mirror: Parameters<typeof setExactMirror>[0]
+) => {
+	const previous = getExactMirror()
+	setExactMirror(mirror)
+	try {
+		return new TypeBoxValidator(codecResponse(), {
+			slot: 'response:200' as any
+		})
+	} finally {
+		setExactMirror(previous)
+	}
+}
+
+const plainResponseValidator = () =>
+	new TypeBoxValidator(Type.Object({ id: Type.Number() }), {
+		normalize: false
+	})
+
+const exactEncodeMirror = (_schema: unknown, options?: { encode?: boolean }) =>
+	options?.encode
+		? (value: { id: number }) => ({ id: String(value.id) })
+		: (value: unknown) => value
 
 describe('lazy-jit: async-detection parity matrix (§10.2)', () => {
 	// Each entry is a schema that either does or does not reach an async refine.
@@ -183,39 +219,156 @@ describe('lazy-jit: materialization is output-invariant (§10.2 test 2)', () => 
 	})
 })
 
-describe('lazy-jit: direct Check() ticks toward materialization (§10.4)', () => {
-	it('a validator compiled tb appears only once Check crosses the threshold', () => {
-		const v = new TypeBoxValidator(
-			Type.Object({ a: Type.String() })
-		) as TypeBoxValidator<any>
-		expect(v.tb).toBeUndefined()
-
-		for (let i = 0; i < LAZY_JIT_THRESHOLD - 1; i++)
-			expect(v.Check({ a: 'x' } as any)).toBe(true)
-		// still interpreted at 15 hits
-		expect(v.tb).toBeUndefined()
-
-		// 16th Check materializes (this is the WS-outbound path: Check directly)
-		expect(v.Check({ a: 'x' } as any)).toBe(true)
-		expect(v.tb).toBeDefined()
-
-		// verdicts unchanged on the compiled path
-		expect(v.Check({ a: 'y' } as any)).toBe(true)
-		expect(v.Check({ a: 1 } as any)).toBe(false)
+describe('lazy-jit: each public validation call counts once (§10.4)', () => {
+	type Lane = {
+		validator: TypeBoxValidator<any>
+		invoke: () => unknown
+		expected: unknown
+	}
+	const encodeLane = (
+		validator: TypeBoxValidator<any>,
+		value: unknown,
+		expected: unknown = value
+	): Lane => ({
+		validator,
+		invoke: () => validator.EncodeFrom(value as any),
+		expected
 	})
 
-	it('response (encode) validator materializes via EncodeFrom', () => {
-		const responses = Validator.response(
-			t.Object({ id: t.Numeric() })
-		) as Record<number, TypeBoxValidator<any>>
-		const v = responses[200]
-		expect(v.tb).toBeUndefined()
+	const lanes: Array<[string, () => Lane]> = [
+		[
+			'non-codec EncodeFrom',
+			() => encodeLane(plainResponseValidator(), { id: 1 })
+		],
+		[
+			'form EncodeFrom',
+			() =>
+				encodeLane(
+					new TypeBoxValidator(t.Form({ id: t.Number() })),
+					form({ id: 1 })
+				)
+		],
+		[
+			'exact encode mirror',
+			() =>
+				encodeLane(
+					responseCodecValidator(exactEncodeMirror),
+					{ id: 1 },
+					{ id: '1' }
+				)
+		],
+		[
+			'interpreted codec fallback',
+			() =>
+				encodeLane(
+					responseCodecValidator(undefined),
+					{ id: 1 },
+					{ id: '1' }
+				)
+		],
+		[
+			'NoValidate EncodeFrom',
+			() =>
+				encodeLane(
+					new TypeBoxValidator(
+						t.NoValidate(t.Object({ id: t.Number() }))
+					),
+					{ id: 'unchecked' }
+				)
+		],
+		[
+			'direct Check',
+			() => {
+				const validator = plainResponseValidator()
+				return {
+					validator,
+					invoke: () => validator.Check({ id: 1 }),
+					expected: true
+				}
+			}
+		]
+	]
 
-		for (let i = 0; i < LAZY_JIT_THRESHOLD; i++) {
-			;(v as any).EncodeFrom({ id: 1 })
+	for (const [name, create] of lanes)
+		it(`${name} stays deferred through 15 and materializes on 16`, () => {
+			const { validator, invoke, expected } = create()
+			const checkpoints = new Set([7, 8, 15, 16])
+
+			for (let call = 1; call <= LAZY_JIT_THRESHOLD; call++) {
+				expect(invoke(), `${name} output after call ${call}`).toEqual(
+					expected
+				)
+				if (checkpoints.has(call))
+					expect(
+						validator.tb !== undefined,
+						`${name} after call ${call}`
+					).toBe(call === LAZY_JIT_THRESHOLD)
+			}
+		})
+
+	it('keeps public Check dispatch outside EncodeFrom internal validation', () => {
+		const dispatched = plainResponseValidator()
+		const value = { id: 1 }
+		const check = dispatched.Check.bind(dispatched)
+		let dispatchedCalls = 0
+		dispatched.Check = (input) => {
+			dispatchedCalls++
+			return check(input)
 		}
 
-		expect(v.tb).toBeDefined()
+		expect(dispatched.Check(value)).toBe(true)
+		expect(dispatched.FromSync(value)).toBe(value)
+		expect(dispatchedCalls).toBe(2)
+
+		const encoded = plainResponseValidator()
+		let encodeCheckCalls = 0
+		encoded.Check = () => {
+			encodeCheckCalls++
+			return true
+		}
+
+		for (let call = 1; call <= LAZY_JIT_THRESHOLD; call++) {
+			encoded.EncodeFrom(value)
+			expect(encoded.tb !== undefined).toBe(call === LAZY_JIT_THRESHOLD)
+		}
+		expect(encodeCheckCalls).toBe(0)
+	})
+
+	it('counts a throwing exact encode mirror once and preserves its error', () => {
+		const validator = responseCodecValidator((_schema, options) =>
+			options?.encode
+				? () => {
+						throw new Error('encode failed')
+					}
+				: (value: unknown) => value
+		)
+		const value = { id: 1 }
+		let expected: unknown
+
+		for (let call = 1; call <= LAZY_JIT_THRESHOLD; call++) {
+			let thrown: unknown
+			try {
+				validator.EncodeFrom(value, 'response')
+			} catch (error) {
+				thrown = error
+			}
+
+			expect(thrown).toBeInstanceOf(ValidationError)
+			const error = thrown as ValidationError
+			const shape = {
+				type: error.type,
+				status: error.status,
+				value: error.value,
+				message: error.message
+			}
+			if (call === 1) expected = shape
+			else expect(shape).toEqual(expected)
+
+			if (call === LAZY_JIT_THRESHOLD - 1)
+				expect(validator.tb).toBeUndefined()
+			else if (call === LAZY_JIT_THRESHOLD)
+				expect(validator.tb).toBeDefined()
+		}
 	})
 })
 

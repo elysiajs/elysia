@@ -1,17 +1,19 @@
 import { parentPort, workerData } from 'node:worker_threads'
 
 import { generateCompiledArtifacts, type ElysiaAotOptions } from './core'
+import type { AotModuleCondition } from './source'
 
 const port = parentPort
 
 if (!port) throw new Error('[elysia-aot] worker requires a parent port')
 
-const { file, options } = workerData as {
+const { file, options, moduleCondition } = workerData as {
 	file: string
 	options?: ElysiaAotOptions
+	moduleCondition: AotModuleCondition
 }
 
-generateCompiledArtifacts(file, options).then(
+generateCompiledArtifacts(file, options, moduleCondition).then(
 	(artifacts) => port.postMessage({ ok: true, artifacts }),
 	(error: unknown) => {
 		const failure =

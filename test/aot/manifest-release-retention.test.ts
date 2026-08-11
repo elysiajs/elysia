@@ -29,8 +29,8 @@ const RECONSTRUCT_FROM = resolve(
 	'../../src/compile/aot-reconstruct.ts'
 )
 
-// Distinct plain schemas per route: no coercion/codec, so the emitted module
-// needs no bare `typebox/*` subpath imports (unresolvable from /tmp).
+// Distinct plain schemas per route: no coercion/codec, so retention covers
+// only the registered validator and handler graph.
 const build = () => {
 	const app = new Elysia()
 	for (let i = 0; i < ROUTES; i++)
@@ -106,7 +106,11 @@ describe('AOT manifest release retention (002)', () => {
 
 		// Evaluate as a REAL ES module: module-scope pinning is exactly what
 		// is under test, so `new Function` evaluation would fake the premise.
-		const file = `/tmp/elysia-002-retention-${process.pid}-${Date.now()}.ts`
+		// Bun 1.3.14's test runner cannot dynamically import generated TS from /tmp.
+		const file = resolve(
+			import.meta.dir,
+			`.elysia-002-retention-${process.pid}-${Date.now()}.ts`
+		)
 		tempFiles.push(file)
 		await writeFile(file, src)
 		await import(file)

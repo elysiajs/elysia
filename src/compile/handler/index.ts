@@ -608,7 +608,8 @@ function isContextFreeHandler(handler: Function) {
 export function compileHandler(
 	route: InternalRoute,
 	root: AnyElysia,
-	precomputedStatic?: Response
+	precomputedStatic?: Response,
+	liveOnly: boolean = false
 ): CompiledHandler {
 	let [
 		_method,
@@ -629,11 +630,9 @@ export function compileHandler(
 		typeof handler === 'function' ? (handler as any)['~mount'] : undefined
 	if (mountMeta) handler = resolveMountHandler(mountMeta, path)
 
-	const reconstructed = Compiled.getHandler(
-		frozenRoot['~programId'],
-		method,
-		path
-	)
+	const reconstructed = liveOnly
+		? undefined
+		: Compiled.getHandler(frozenRoot['~programId'], method, path)
 
 	if (
 		reconstructed &&
@@ -679,7 +678,9 @@ export function compileHandler(
 	}
 
 	const buildValidator = () =>
-		hook ? Reconstrct.validator(hook as any, root, method, path) : undefined
+		hook
+			? Reconstrct.validator(hook as any, root, method, path, liveOnly)
+			: undefined
 
 	if (handler instanceof Error) {
 		const error = handler

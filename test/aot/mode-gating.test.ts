@@ -10,7 +10,7 @@ import * as esbuild from 'esbuild'
 const distCore = (await import(
 	resolve(import.meta.dir, '../../dist/plugin/aot/core.mjs')
 )) as typeof import('../../src/plugin/aot/core')
-const { generateCompiledArtifacts } = distCore
+const { generateCompiledArtifacts, validatorSlotSetsMatch } = distCore
 const { Compiled } = (await import(
 	resolve(import.meta.dir, '../../dist/compile/aot.mjs')
 )) as typeof import('../../src/compile/aot')
@@ -49,13 +49,28 @@ const PLAIN_MIXED_RESPONSE_APP = resolve(
 	import.meta.dir,
 	'fixtures/mode-plain-mixed-response-e2e-app.ts'
 )
+const MULTI_RESPONSE_APP = resolve(
+	import.meta.dir,
+	'fixtures/mode-multi-response-app.ts'
+)
+const DUPLICATE_ROUTE_APP = resolve(
+	import.meta.dir,
+	'fixtures/mode-duplicate-route-app.ts'
+)
+const SIMPLE_DUPLICATE_APP = resolve(
+	import.meta.dir,
+	'fixtures/mode-simple-duplicate-app.ts'
+)
 const MAP_DERIVE_APP = resolve(
 	import.meta.dir,
 	'fixtures/mode-map-derive-app.ts'
 )
 const FILE_SCHEMA_APP = resolve(import.meta.dir, 'fixtures/mode-file-app.ts')
 
-async function buildEsbuild(app: string): Promise<string> {
+async function buildEsbuild(
+	app: string,
+	production: boolean = false
+): Promise<string> {
 	const { aot } = await import('elysia/plugin/aot/esbuild')
 
 	const previous = process.env.ELYSIA_AOT_BUILD
@@ -71,7 +86,7 @@ async function buildEsbuild(app: string): Promise<string> {
 			external: ['node:*'],
 			logLevel: 'silent',
 			// Preserve validation details asserted below.
-			plugins: [aot(app, { production: false })]
+			plugins: [aot(app, { production })]
 		})
 		return result.outputFiles[0]!.text
 	} finally {
@@ -121,6 +136,8 @@ beforeAll(async () => {
 	code.esbuildPlainMixedResponse = await buildEsbuild(
 		PLAIN_MIXED_RESPONSE_APP
 	)
+	code.esbuildMultiResponse = await buildEsbuild(MULTI_RESPONSE_APP)
+	code.esbuildDuplicate = await buildEsbuild(DUPLICATE_ROUTE_APP, true)
 	code.esbuildMapDerive = await buildEsbuild(MAP_DERIVE_APP)
 	code.esbuildFile = await buildEsbuild(FILE_SCHEMA_APP)
 
@@ -146,7 +163,16 @@ async function loadApp(label: string) {
 	return mod.app ?? mod.default
 }
 
-// TypeBox codec/value engine markers remain only in wired output.
+async function loadModule(label: string, nonce: string) {
+	return import(`${appPath[label]}?${nonce}`) as Promise<{
+		app: any
+		invokeCapturedLoser: (query?: string) => Promise<Response>
+		invokeFreshLoser: (query?: string) => Promise<Response>
+		programAlive: () => boolean
+	}>
+}
+
+// TypeBox codec/value engine markers remain in wired and live-JIT output.
 const dragsTypeBox = (source: string) => /typebox\/(value|compile)/.test(source)
 
 describe('AOT mode selection', () => {
@@ -164,6 +190,20 @@ describe('AOT mode selection', () => {
 		expect(mode).toBe('wired')
 		expect(stub.compat).toBe(true)
 		expect(stub.bridge).toBe(true)
+	})
+})
+
+describe('AOT validator slot identity', () => {
+	const body = { method: 'GET', path: '/u', slot: 'body' } as const
+	const query = { method: 'GET', path: '/u', slot: 'query' } as const
+
+	it('rejects equal-cardinality sets with different slots', () => {
+		expect(validatorSlotSetsMatch([body], [query])).toBe(false)
+	})
+
+	it('applies the same duplicate registration rule to both sets', () => {
+		expect(validatorSlotSetsMatch([body, body], [body])).toBe(true)
+		expect(validatorSlotSetsMatch([body, query], [body])).toBe(false)
 	})
 })
 
@@ -450,6 +490,124 @@ describe('AOT sealing with mixed response schemas', () => {
 			})
 		)
 		expect(badResponse.status).toBe(422)
+	})
+})
+
+describe('AOT sealing with multiple TypeBox responses', () => {
+	it('resolves models and seals every captured TypeBox response status', async () => {
+		const { mode, stub } =
+			await generateCompiledArtifacts(MULTI_RESPONSE_APP)
+		expect(mode).toBe('sealed')
+		expect(stub.bridge).toBe(false)
+	})
+
+	it('validates every response status after TypeBox is removed', async () => {
+		expect(dragsTypeBox(code.esbuildMultiResponse!)).toBe(false)
+
+		const app = await loadApp('esbuildMultiResponse')
+		const ok = await app.handle(new Request('http://localhost/u'))
+		expect(ok.status).toBe(200)
+		await expect(ok.json()).resolves.toEqual({ ok: true })
+
+		const expectedError = await app.handle(
+			new Request('http://localhost/u?mode=valid-400')
+		)
+		expect(expectedError.status).toBe(400)
+		await expect(expectedError.json()).resolves.toEqual({
+			error: 'bad request'
+		})
+
+		const accepted = await app.handle(
+			new Request('http://localhost/u?mode=valid-202')
+		)
+		expect(accepted.status).toBe(202)
+		await expect(accepted.json()).resolves.toEqual({ accepted: true })
+
+		const invalid = await app.handle(
+			new Request('http://localhost/u?mode=invalid-400')
+		)
+		expect(invalid.status).toBe(422)
+
+		const plain = await app.handle(new Request('http://localhost/plain'))
+		expect(plain.status).toBe(200)
+		await expect(plain.text()).resolves.toBe('second')
+
+		const standard = await app.handle(
+			new Request('http://localhost/standard')
+		)
+		expect(standard.status).toBe(200)
+		await expect(standard.json()).resolves.toEqual({ accepted: true })
+
+		const invalidStandard = await app.handle(
+			new Request('http://localhost/standard?bad=1')
+		)
+		expect(invalidStandard.status).toBe(422)
+	})
+})
+
+describe('AOT sealing with duplicate routes', () => {
+	it('keeps schema-less and Standard duplicate rows on live JIT', async () => {
+		const { mode, stub } =
+			await generateCompiledArtifacts(SIMPLE_DUPLICATE_APP)
+		expect(mode).toBe('off')
+		expect(stub.jit).toBe(false)
+		expect(stub.compat).toBe(false)
+		expect(stub.bridge).toBe(false)
+	})
+
+	it("strip:'auto' keeps indexed duplicate compilation live", async () => {
+		const { mode, stub } =
+			await generateCompiledArtifacts(DUPLICATE_ROUTE_APP)
+		expect(mode).toBe('off')
+		expect(stub.jit).toBe(false)
+		expect(stub.compat).toBe(false)
+		expect(stub.bridge).toBe(false)
+		expect(stub.typeboxValue).toBe(true)
+	})
+
+	it('strip:true rejects indexed duplicates with a typed reason', async () => {
+		await expect(
+			generateCompiledArtifacts(DUPLICATE_ROUTE_APP, { strip: true })
+		).rejects.toThrow('handler:indexed-duplicate')
+	})
+
+	it('a captured loser compiles before the router is published', async () => {
+		const mod = await loadModule(
+			'esbuildDuplicate',
+			`pre-publish-${Date.now()}-${Math.random()}`
+		)
+		expect(mod.programAlive()).toBe(false)
+
+		const loser = await mod.invokeCapturedLoser()
+		expect(loser.status).toBe(200)
+		await expect(loser.json()).resolves.toEqual({ first: 'loser' })
+	})
+
+	it('fresh and captured loser thunks compile their declared route after release', async () => {
+		for (const kind of ['captured', 'fresh'] as const) {
+			const mod = await loadModule(
+				'esbuildDuplicate',
+				`${kind}-${Date.now()}-${Math.random()}`
+			)
+
+			void mod.app.fetch
+			expect(mod.programAlive()).toBe(true)
+			const winner = await mod.app.handle('/u?second=1')
+			expect(winner.status).toBe(200)
+			await expect(winner.json()).resolves.toEqual({ second: 1 })
+			expect(mod.programAlive()).toBe(false)
+
+			const loser = await (kind === 'captured'
+				? mod.invokeCapturedLoser()
+				: mod.invokeFreshLoser())
+			expect(loser.status).toBe(200)
+			await expect(loser.json()).resolves.toEqual({ first: 'loser' })
+
+			const winnerOnlyQuery = await (kind === 'captured'
+				? mod.invokeCapturedLoser('second=1')
+				: mod.invokeFreshLoser('second=1'))
+			expect(winnerOnlyQuery.status).toBe(422)
+		}
 	})
 })
 

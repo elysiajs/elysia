@@ -322,6 +322,10 @@ export abstract class Compiled {
 		return programFor(id)?.handlers?.[method]?.[path]
 	}
 
+	static hasProgram(id: ProgramId | undefined) {
+		return programFor(id) !== undefined
+	}
+
 	static getValidator(
 		method: string,
 		path: string,

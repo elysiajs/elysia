@@ -81,6 +81,51 @@ describe('TypeBoxValidatorCache models identity', () => {
 		).toBe(1)
 	})
 
+	it('caps identity-only model variants and refreshes recency', () => {
+		const cache = new TypeBoxValidatorCache(60_000)
+		const schema = t.Refine(
+			t.Object({ nested: t.Ref('Inner') }),
+			() => true
+		)
+		const meta = TypeBoxValidatorCache.meta(schema)
+
+		// Both facts matter: a $ref scopes entries to model identity, while an
+		// opaque schema cannot hide an identity-cache miss with a structural hit.
+		expect(meta.hasRef).toBe(true)
+		expect(meta.special).toBe(true)
+
+		const inner = t.Object({ value: t.Number() })
+		const models = Array.from({ length: 1025 }, () => ({ Inner: inner }))
+
+		for (let i = 0; i < 1024; i++)
+			cache.set(schema, undefined, validator(i), '', models[i])
+
+		// Refresh the oldest entry before the next insertion triggers the same
+		// oldest-half eviction policy used by the structural cache.
+		expect((cache.get(schema, undefined, '', models[0]) as any).tag).toBe(0)
+		cache.set(schema, undefined, validator(1024), '', models[1024])
+
+		for (let i = 0; i < models.length; i++) {
+			const cached = cache.get(schema, undefined, '', models[i]) as any
+
+			// Refreshing 0 moves it behind 1..1023, so half eviction drops
+			// registries 1..512 and preserves 0 plus every newer variant.
+			if (i === 0 || i >= 513) expect(cached?.tag).toBe(i)
+			else expect(cached).toBeUndefined()
+		}
+
+		// The stable model token makes an evicted registry independently
+		// cacheable again; rebuilding it must not disturb a retained neighbour.
+		cache.set(schema, undefined, validator(10_001), '', models[1])
+		expect((cache.get(schema, undefined, '', models[1]) as any).tag).toBe(
+			10_001
+		)
+		expect((cache.get(schema, undefined, '', models[0]) as any).tag).toBe(0)
+		expect(cache.get(schema, undefined, '', models[2])).toBeUndefined()
+
+		cache.clear()
+	})
+
 	it('shares schemas without references across model registries', () => {
 		const cache = new TypeBoxValidatorCache(60_000)
 
