@@ -332,16 +332,8 @@ export const BunAdapter = createAdapter({
 				'[Elysia] Cannot call listen() while a server or teardown is active'
 			)
 
-		const _config = (app['~config'] as any)?.serve
-		const optionsIsObject = typeof options === 'object'
-
-		let live: ((request: Request, server: unknown) => unknown) | undefined
-		let cancelled = false
-		let startupShutdown: Promise<void> | undefined
-		let shutdownAttempt: Promise<void> | undefined
-
-		const gatedFetch = (request: Request, server: unknown) =>
-			live
+		function gatedFetch(request: Request, server: unknown) {
+			return live
 				? live(request, server)
 				: Promise.resolve(ready).then(async () => {
 						if (!live) {
@@ -353,7 +345,9 @@ export const BunAdapter = createAdapter({
 
 						return live(request, server)
 					})
+		}
 
+		const optionsIsObject = typeof options === 'object'
 		const _options = optionsIsObject
 			? { ...(options as object) }
 			: // monomorphic
@@ -364,10 +358,25 @@ export const BunAdapter = createAdapter({
 
 		if (optionsIsObject) _options.fetch = gatedFetch
 
+		const _config = (app['~config'] as any)?.serve
 		const serve = _config ? { ..._config, ..._options } : _options
+		const server = (app.server = Bun.serve(
+			serve.routes || serve.error
+				? { ...serve, error: unavailableFetch, routes: {} }
+				: serve
+		))
+
+		let live: ((request: Request, server: unknown) => unknown) | undefined
+		let cancelled = false
+		let startupShutdown: Promise<void> | undefined
+		let shutdownAttempt: Promise<void> | undefined
+
 		let ready: Promise<unknown> | undefined
 		let wsLifecycle: WSLifecycle | undefined
 		let modulesReady: Promise<void> | undefined
+
+		let built: ReturnType<typeof build> | undefined
+		let pendingSetups: Promise<unknown>[] | undefined
 
 		const build = () => {
 			const fetch = app.fetch
@@ -421,15 +430,6 @@ export const BunAdapter = createAdapter({
 
 			return { fetch, routes, websocket }
 		}
-
-		let built: ReturnType<typeof build> | undefined
-		let pendingSetups: Promise<unknown>[] | undefined
-
-		const server = (app.server = Bun.serve(
-			serve.routes || serve.error
-				? { ...serve, error: unavailableFetch, routes: {} }
-				: serve
-		))
 
 		let startupFailure: { error: unknown } | undefined
 		let forceRequested = false

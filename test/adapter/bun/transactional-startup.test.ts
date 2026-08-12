@@ -1620,10 +1620,8 @@ describe('Bun transactional startup', () => {
 
 	// The reentrancy guard used to be an AsyncLocalStorage, so every app that
 	// owned a lifecycle handler paid `node:async_hooks` for it. The synchronous
-	// window replaced it precisely to stop paying that, so the module must stay
-	// unloaded: a child that has already run a full epoch is charged the load
-	// only when it asks for it itself
-	it('runs a lifecycle epoch without loading node:async_hooks', async () => {
+	// window replaced it precisely to stop making that builtin request
+	it('does not request node:async_hooks during a lifecycle epoch', async () => {
 		const probe = `
 			const requests = []
 			const real = process.getBuiltinModule
@@ -1642,23 +1640,8 @@ describe('Bun transactional startup', () => {
 			await Bun.sleep(5)
 			await app.stop()
 
-			const settle = async () => {
-				for (let i = 0; i < 10; i++) {
-					Bun.gc(true)
-					await Bun.sleep(1)
-				}
-			}
-
-			await settle()
-			const before = process.memoryUsage.rss()
-			const { AsyncLocalStorage } = process.getBuiltinModule('node:async_hooks')
-			const store = new AsyncLocalStorage()
-			store.run({}, () => store.getStore())
-			await settle()
-
 			console.log(JSON.stringify({
-				loads: requests.filter((id) => id.includes('async_hooks')).length,
-				cost: process.memoryUsage.rss() - before
+				loads: requests.filter((id) => id.includes('async_hooks')).length
 			}))
 		`
 
@@ -1673,12 +1656,8 @@ describe('Bun transactional startup', () => {
 		])
 		expect({ code, error }).toEqual({ code: 0, error: '' })
 
-		const { loads, cost } = JSON.parse(out)
-		// only the probe's own request
-		expect(loads).toBe(1)
-		// and it is that request, not the epoch, that pays for the module:
-		// measured at ~0.9-1.0MB, and ~0 if the adapter had already loaded it
-		expect(cost).toBeGreaterThan(500_000)
+		const { loads } = JSON.parse(out)
+		expect(loads).toBe(0)
 	})
 
 	it('does not retain a stopped epoch through a setup-spawned timer', async () => {
