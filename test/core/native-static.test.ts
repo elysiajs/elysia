@@ -102,6 +102,40 @@ describe('Native Static Response', () => {
 		expect(strictRoutes).not.toHaveProperty('/plugin/')
 	})
 
+	it('keeps declaration ownership across exact, encoded, and loose aliases', async () => {
+		const app = new Elysia()
+			.get('/duplicate', 'promotable')
+			.get('/duplicate', () => 'ineligible winner')
+			.get('/alias-a/café', 'raw-first')
+			.get('/alias-a/caf%C3%A9', 'encoded-last')
+			.get('/alias-b/caf%C3%A9', 'encoded-first')
+			.get('/alias-b/café', 'raw-last')
+			.get('/alias-c/caf%C3%A9', 'percent')
+			.get('/alias-c/café/', 'unicode-slash')
+			.get('/slash', 'plain')
+			.get('/slash/', 'slash')
+			.get('/reverse/', 'reverse-slash')
+			.get('/reverse', 'reverse-plain')
+		const routes = collect(app)!
+
+		expect(routes['/duplicate']?.GET).toBeUndefined()
+		await expectResponseText(routes['/alias-a/caf%C3%A9']?.GET, 'raw-first')
+		await expectResponseText(
+			routes['/alias-a/caf%25C3%25A9']?.GET,
+			'encoded-last'
+		)
+		await expectResponseText(
+			routes['/alias-b/caf%25C3%25A9']?.GET,
+			'encoded-first'
+		)
+		await expectResponseText(routes['/alias-b/caf%C3%A9']?.GET, 'raw-last')
+		expect(routes['/alias-c/caf%25C3%25A9/']).toBeUndefined()
+		await expectResponseText(routes['/slash']?.GET, 'plain')
+		await expectResponseText(routes['/slash/']?.GET, 'slash')
+		await expectResponseText(routes['/reverse']?.GET, 'reverse-plain')
+		await expectResponseText(routes['/reverse/']?.GET, 'reverse-slash')
+	})
+
 	describe('eligibility', () => {
 		it('excludes methods unsupported by Bun native routes', () => {
 			const app = new Elysia().all('/all', 'all')

@@ -7313,11 +7313,6 @@ export class Elysia<
 		const isLoose = this['~config']?.strictPath !== true
 		const collectExplicit = isLoose && table.hasLoose
 
-		// One forward pass answers both questions: which rows a later exact
-		// registration displaces (last-wins), and which keys are claimed
-		// explicitly so a loose alias must not shadow them. A `-1` entry is a
-		// key that exists but can never be displaced — a WS row, or the
-		// percent-encoded twin of a declared path
 		let explicitPaths: Map<string, Map<string, number>> | undefined
 		if (markDuplicates || collectExplicit) {
 			const seen = new Map<string, Map<string, number>>()

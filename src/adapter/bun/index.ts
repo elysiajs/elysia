@@ -1,9 +1,8 @@
 import { createAdapter } from '..'
 import { WebStandardAdapter } from '../web-standard'
 
-import { isDynamicRegex, needEncodeRegex } from '../../constants'
 import { buildNativeStaticResponse } from '../../compile/handler'
-import { routeRow } from '../../route-table'
+import { routeRow, RouteFlag } from '../../route-table'
 import {
 	flattenChain,
 	getLoosePath,
@@ -195,6 +194,15 @@ const withOrigin =
 		}
 	}
 
+const isNativeStaticMethod = (method: string) =>
+	method === 'GET' ||
+	method === 'POST' ||
+	method === 'PUT' ||
+	method === 'DELETE' ||
+	method === 'PATCH' ||
+	method === 'HEAD' ||
+	method === 'OPTIONS'
+
 export function collectStaticRoutes(app: AnyElysia) {
 	if (app['~config']?.nativeStaticResponse === false) return
 
@@ -213,78 +221,78 @@ export function collectStaticRoutes(app: AnyElysia) {
 	const length = table?.length ?? 0
 	if (!table || !length) return
 
-	const { method: methods, path: paths, handler: handlers } = table
-
-	const nativeStaticMethods = new Set([
-		'GET',
-		'POST',
-		'PUT',
-		'DELETE',
-		'PATCH',
-		'HEAD',
-		'OPTIONS'
-	])
-
+	const { method: methods, path: paths, handler: handlers, flags } = table
 	let hasCandidate = false
-	for (let i = 0; i < length; i++) {
-		const h = handlers[i]
 
+	for (let i = 0; i < length; i++) {
 		if (
-			typeof h === 'function' ||
-			h instanceof Error ||
-			h instanceof Promise
+			!isNativeStaticMethod(methods[i]) ||
+			(flags[i] & RouteFlag.Dynamic) !== 0
 		)
 			continue
 
-		if (!nativeStaticMethods.has(methods[i])) continue
-		hasCandidate = true
-
-		break
+		const h = handlers[i]
+		if (
+			typeof h !== 'function' &&
+			!(h instanceof Error) &&
+			!(h instanceof Promise)
+		) {
+			hasCandidate = true
+			break
+		}
 	}
 	if (!hasCandidate) return
 
-	const ready: Record<string, Record<string, Response>> = nullObject()
 	const strictPath = frozenRoot['~config']?.strictPath === true
-	const seen = new Map<string, number>()
+	const routeIndex = new Map<string, Map<string, number>>()
 
-	for (let i = 0; i < length; i++) seen.set(methods[i] + ' ' + paths[i], i)
+	for (let i = 0; i < length; i++) {
+		const method = methods[i]
+		if (
+			!isNativeStaticMethod(method) ||
+			(flags[i] & RouteFlag.Dynamic) !== 0
+		)
+			continue
 
-	let explicitPaths: Map<string, Set<string>> | undefined
-	if (!strictPath) {
-		explicitPaths = new Map()
+		const path = paths[i]
+		let pathsByMethod = routeIndex.get(method)
 
-		for (let i = 0; i < length; i++) {
-			const method = methods[i]
-			const path = paths[i]
-			let set = explicitPaths.get(method)
+		if (!pathsByMethod) routeIndex.set(method, (pathsByMethod = new Map()))
 
-			if (!set) explicitPaths.set(method, (set = new Set()))
+		pathsByMethod.set(path, i)
 
-			set.add(path)
-			if (needEncodeRegex.test(path)) {
-				const encoded = encodeURI(path)
-				if (encoded !== path) set.add(encoded)
-			}
+		if (!strictPath && (flags[i] & RouteFlag.Encode) !== 0) {
+			const encoded = encodeURI(path)
+			if (encoded !== path && !pathsByMethod.has(encoded))
+				pathsByMethod.set(encoded, -1)
 		}
 	}
 
-	const add = (method: string, path: string, value: Response) => {
-		if (needEncodeRegex.test(path)) path = encodeURI(path)
+	const ready: Record<string, Record<string, Response>> = nullObject()
+	let hasReady = false
+	const add = (
+		method: string,
+		path: string,
+		value: Response,
+		needsEncode: boolean
+	) => {
+		if (needsEncode) path = encodeURI(path)
 		;(ready[path] ??= nullObject())[method] = value
+		hasReady = true
 	}
 
 	for (let i = 0; i < length; i++) {
 		const method = methods[i]
-		if (method === 'WS') continue
+		const routeFlags = flags[i]
+		if (
+			!isNativeStaticMethod(method) ||
+			(routeFlags & RouteFlag.Dynamic) !== 0
+		)
+			continue
 
+		const pathsByMethod = routeIndex.get(method)!
 		const path = paths[i]
-		if (seen.get(method + ' ' + path) !== i) continue
-		if (!nativeStaticMethods.has(method)) continue
-
-		// Bun router would promoted `/user/:id` and swallow a `/user/me`
-		// that is ineligible and still on the JS router, so dynamic paths
-		// stay on the JS lane
-		if (isDynamicRegex.test(path)) continue
+		if (pathsByMethod.get(path) !== i) continue
 
 		const h = handlers[i]
 		if (
@@ -297,16 +305,17 @@ export function collectStaticRoutes(app: AnyElysia) {
 		const value = buildNativeStaticResponse(routeRow(table, i), app)
 		if (!value) continue
 
-		add(method, path, value)
+		const needsEncode = (routeFlags & RouteFlag.Encode) !== 0
+		add(method, path, value, needsEncode)
 
 		if (!strictPath) {
 			const loose = getLoosePath(path)
-			if (loose !== path && !explicitPaths?.get(method)?.has(loose))
-				add(method, loose, value)
+			if (loose !== path && !pathsByMethod.has(loose))
+				add(method, loose, value, needsEncode)
 		}
 	}
 
-	if (!Object.keys(ready).length) return
+	if (!hasReady) return
 
 	return ready
 }
