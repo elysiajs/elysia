@@ -908,6 +908,12 @@ export type MacroProperty<
 	derive?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
 	detail?: DocumentDecoration
 	/**
+	 * Type-level route metadata surfaced on the route's Eden type
+	 * (`CreateEdenResponse['meta']`). Reserved key like `seed`/`detail`/
+	 * `introspect` — stripped at runtime, never lands on route hooks
+	 */
+	meta?: unknown
+	/**
 	 * Introspect hook option for documentation generation or analysis
 	 *
 	 * @param option
@@ -1588,6 +1594,12 @@ type InnerMacroToContext<
 						? {
 								// @ts-ignore Trust me bro
 								q: UnwrapMacroSchema<Value, Definitions>
+								// NonNullable: fn-form macro may return `X | undefined`.
+								// `never` (not `unknown`) when absent — never is the
+								// union identity through the later UnionToIntersect pass
+								meta: 'meta' extends keyof NonNullable<Value>
+									? NonNullable<Value>['meta']
+									: never
 								resolve: ExtractResolveFromMacro<
 									Extract<
 										Exclude<
@@ -2028,7 +2040,16 @@ export type CreateEdenResponse<
 				UnionResponseStatus<Res, UnhandledErrorResponse<Err>>
 			>
 			error: Err
-		}
+		} & (MacroContext extends { meta: infer Meta }
+			? IsNever<Meta> extends true
+				? {}
+				: // UnionToIntersect<never> === unknown — a route whose
+					// selected macros declare no meta reaches here as
+					// unknown, not never
+					unknown extends Meta
+					? {}
+					: { meta: Meta }
+			: {})
 
 export type CreateWSEdenResponse<
 	Path extends string,

@@ -1778,4 +1778,59 @@ describe('Macro', () => {
 
 		expect(app['~ext']?.macro?.a).toBe(def)
 	})
+
+	describe('meta', () => {
+		it('strips object-form meta from route hooks while hooks still run', async () => {
+			let ran = false
+
+			const app = new Elysia()
+				.macro({
+					live: {
+						meta: { live: true },
+						beforeHandle: () => {
+							ran = true
+						}
+					}
+				})
+				.get('/', { live: true }, () => 'Hello World')
+
+			// meta is type-level only — it must never land on route hooks,
+			// or the route loses native-static promotion. The consumed
+			// macro flag proves resolution ran before the assertion
+			const hooks = app.routes[0]!.hooks
+			expect('live' in hooks).toBe(false)
+			expect('meta' in hooks).toBe(false)
+
+			const response = await app.handle('/')
+
+			expect(response.status).toBe(200)
+			expect(await response.text()).toBe('Hello World')
+			expect(ran).toBe(true)
+		})
+
+		it('strips fn-form meta from route hooks while hooks still run', async () => {
+			let ran = false
+
+			const app = new Elysia()
+				.macro({
+					live: (enabled: boolean) => ({
+						meta: { live: enabled },
+						beforeHandle: () => {
+							ran = true
+						}
+					})
+				})
+				.get('/', { live: true }, () => 'Hello World')
+
+			const hooks = app.routes[0]!.hooks
+			expect('live' in hooks).toBe(false)
+			expect('meta' in hooks).toBe(false)
+
+			const response = await app.handle('/')
+
+			expect(response.status).toBe(200)
+			expect(await response.text()).toBe('Hello World')
+			expect(ran).toBe(true)
+		})
+	})
 })
