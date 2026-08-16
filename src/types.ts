@@ -1421,7 +1421,7 @@ type FunctionArrayReturnType<T> =
 		: T extends any[]
 			? _FunctionArrayReturnType<T>
 			: // @ts-ignore
-				Awaited<ReturnType<T>>
+				Awaited<ReturnType<NonNullable<T>>>
 
 type _FunctionArrayReturnType<T, Carry = undefined> = T extends [
 	infer Fn,
@@ -1447,7 +1447,7 @@ type FunctionArrayReturnTypeNonNullable<T> =
 		: T extends any[]
 			? _FunctionArrayReturnTypeNonNullable<T>
 			: // @ts-ignore
-				NonNullable<Awaited<ReturnType<T>>>
+				NonNullable<Awaited<ReturnType<NonNullable<T>>>>
 
 type _FunctionArrayReturnTypeNonNullable<T, Carry = undefined> = T extends [
 	infer Fn,
