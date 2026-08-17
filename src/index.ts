@@ -59,7 +59,8 @@ export type {
 	UnwrapRoute,
 	Macro,
 	MacroToProperty,
-	MacroToContext
+	MacroToContext,
+	MacroTypeLambda
 } from './types'
 export type { Cookie } from './cookie/cookie'
 export { InvalidCookie } from './cookie/error'

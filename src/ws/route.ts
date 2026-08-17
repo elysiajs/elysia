@@ -14,9 +14,16 @@ import {
 	type DeriveEntry
 } from '../utils'
 import { frozenRootOf } from '../generation'
+import { sucrose } from '../sucrose'
 import { parseQueryFromURL } from '../parse-query'
 import { compileCookieConfig } from '../cookie/config'
-import { buildCookieJar, parseCookieRaw } from '../cookie/utils'
+import {
+	buildCookieJar,
+	hasSyncHmac,
+	parseCookieRaw,
+	parseCookieRawDeferred,
+	parseCookieRawLazy
+} from '../cookie/utils'
 import {
 	deriveModes,
 	getQueryParseChannels,
@@ -518,12 +525,6 @@ export function buildWSRoute(
 			responseValidator[Object.keys(responseValidator)[0] as any])
 		: undefined
 
-	const cookieConfig = validators.cookie
-		? compileCookieConfig(
-				composed.cookie as any,
-				frozenRootOf(app)['~config']?.cookie as any
-			)
-		: undefined
 	const cookieIsOptional = !!(composed.cookie as any)?.['~optional']
 
 	const queryChannels = getQueryParseChannels(
@@ -600,6 +601,34 @@ export function buildWSRoute(
 		hook.error as any,
 		flatAppHook.error as any
 	)
+
+	// same handler analysis HTTP compiles with: a hook touching
+	// headers/query/cookie materializes the channel even without a schema
+	const inference = sucrose(hook.message as any, {
+		beforeHandle: [
+			...allBeforeHandles,
+			hook.open,
+			hook.close,
+			hook.drain,
+			hook.ping,
+			hook.pong,
+			typeof hook.upgrade === 'function' ? hook.upgrade : undefined
+		].filter(Boolean) as any,
+		parse: parseHooks as any,
+		transform: transforms as any,
+		error: errorHandlers as any,
+		afterHandle: afterHandles as any,
+		mapResponse: mapResponses as any,
+		afterResponse: afterResponses as any
+	})
+
+	const cookieConfig =
+		validators.cookie || inference.cookie
+			? compileCookieConfig(
+					composed.cookie as any,
+					frozenRootOf(app)['~config']?.cookie as any
+				)
+			: undefined
 
 	const parseMessage = createMessageParser(parseHooks as any)
 
@@ -871,6 +900,12 @@ export function buildWSRoute(
 				)
 				if (r instanceof Promise) r = await r
 				;(context as any).query = r
+			} else if (inference.query) {
+				const url = request.url
+				;(context as any).query = parseQueryFromURL(
+					url,
+					(context as any).qi ?? url.indexOf('?')
+				)
 			}
 
 			if (validators.headers) {
@@ -885,31 +920,59 @@ export function buildWSRoute(
 				)
 				if (r instanceof Promise) r = await r
 				;(context as any).headers = r
+			} else if (inference.headers) {
+				;(context as any).headers = isBun
+					? request.headers.toJSON()
+					: Object.fromEntries(request.headers)
 			}
 
 			if (cookieConfig) {
-				const raw = await parseCookieRaw(
-					request.headers.get('cookie'),
-					cookieConfig
-				)
-
-				let r: unknown = raw
-				if (!cookieIsOptional || Object.keys(raw).length) {
-					r = validateUpgradeChannel(
-						validators.cookie as any,
-						raw,
-						'cookie'
-					)
-					if (r instanceof Promise) r = await r
-				}
+				const cookieHeader = request.headers.get('cookie')
 
 				// read/verify surface only: an accepted upgrade carries no
 				// response for `set.cookie` writes to ride on
-				;(context as any).cookie = buildCookieJar(
-					(context as any).set,
-					r as any,
-					cookieConfig
-				)
+				if (validators.cookie) {
+					const raw = await parseCookieRaw(cookieHeader, cookieConfig)
+
+					let r: unknown = raw
+					if (!cookieIsOptional || Object.keys(raw).length) {
+						r = validateUpgradeChannel(
+							validators.cookie as any,
+							raw,
+							'cookie'
+						)
+						if (r instanceof Promise) r = await r
+					}
+
+					;(context as any).cookie = buildCookieJar(
+						(context as any).set,
+						r as any,
+						cookieConfig
+					)
+				} else if (!cookieConfig.hasSign) {
+					// unvalidated lanes mirror HTTP: defer decode/verification
+					// to first access instead of failing the upgrade eagerly
+					;(context as any).cookie = buildCookieJar(
+						(context as any).set,
+						parseCookieRawDeferred(cookieHeader, cookieConfig),
+						cookieConfig,
+						undefined,
+						1
+					)
+				} else if (hasSyncHmac && cookieConfig.verify === 'lazy') {
+					;(context as any).cookie = buildCookieJar(
+						(context as any).set,
+						parseCookieRawLazy(cookieHeader, cookieConfig),
+						cookieConfig,
+						1
+					)
+				} else {
+					;(context as any).cookie = buildCookieJar(
+						(context as any).set,
+						await parseCookieRaw(cookieHeader, cookieConfig),
+						cookieConfig
+					)
+				}
 			}
 
 			for (let i = 0; i < transforms.length; i++) {

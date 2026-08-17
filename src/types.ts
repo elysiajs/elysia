@@ -914,6 +914,13 @@ export type MacroProperty<
 	 */
 	meta?: unknown
 	/**
+	 * Phantom {@link MacroTypeLambda} computing per call site context from
+	 * the route's literal hook value. Reserved key like `seed`/`meta`/
+	 * `introspect` — carry it on the declared return type only; a runtime
+	 * value is tolerated and stripped
+	 */
+	$type?: MacroTypeLambda
+	/**
 	 * Introspect hook option for documentation generation or analysis
 	 *
 	 * @param option
@@ -1547,6 +1554,28 @@ type FlattenMacroResponse<T> = T extends object
 		: T
 	: T
 
+/**
+ * Type-level lambda applied to a macro's per call site hook value. Extend
+ * this interface, compute `output` from `this['input']`, and carry it on
+ * the macro's declared return type as a phantom `$type` member — the
+ * computed `output` joins the route's context
+ */
+export interface MacroTypeLambda {
+	input: unknown
+}
+
+type MacroLambdaContext<Value, HookValue> = NonNullable<Value> extends {
+	$type?: infer Lambda extends MacroTypeLambda
+}
+	? (Lambda & {
+			input: HookValue
+		}) extends {
+			output: infer Output
+		}
+		? Output
+		: {}
+	: {}
+
 type UnionMacroContext<A> = UnionToIntersect<{
 	[K in Exclude<keyof A, 'return'>]: A[K]
 }> & {
@@ -1611,7 +1640,8 @@ type InnerMacroToContext<
 										>,
 										Record<any, unknown>
 									>
-								>
+								> &
+									MacroLambdaContext<Value, SelectedMacro[key]>
 							} & UnwrapMacroSchema<
 								// @ts-ignore Trust me bro
 								Value,

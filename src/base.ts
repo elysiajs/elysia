@@ -4009,6 +4009,7 @@ export class Elysia<
 				// type-level only — a meta key on route hooks would disqualify
 				// the route from native-static promotion (isEmptyPipelineHook)
 				if (k === 'meta') continue
+				if (k === '$type') continue
 				if (k === 'introspect') {
 					v?.(input)
 

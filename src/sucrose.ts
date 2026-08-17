@@ -1154,6 +1154,8 @@ function inferFunction(source: string): Sucrose.Inference {
 			const token = tokens[i]
 			if (token.value === '{') depth++
 			else if (token.value === '}') depth--
+			// later parameters (message body, close code) never carry the context
+			else if (token.value === ',' && depth === 0) break
 			else if (
 				token.value === '[' &&
 				depth === 1 &&
@@ -1169,6 +1171,22 @@ function inferFunction(source: string): Sucrose.Inference {
 				const rest = tokens[i + 1]
 				if (rest?.k === 'i') aliases.add(rest.value)
 			} else if (token.k === 'i' && depth === 1) {
+				// `ws` is the WS context's self-reference: `({ ws })` binds
+				// the whole context, so channels read through it must count
+				if (
+					token.value === 'ws' &&
+					(tokens[i - 1]?.value === '{' ||
+						tokens[i - 1]?.value === ',')
+				) {
+					const renamed =
+						tokens[i + 1]?.value === ':' &&
+						tokens[i + 2]?.k === 'i'
+							? tokens[i + 2].value
+							: token.value
+					aliases.add(renamed)
+					continue
+				}
+
 				const key = channel(token.value)
 				if (key) inference[key] = true
 			}

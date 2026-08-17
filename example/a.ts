@@ -1,29 +1,43 @@
-import { Elysia, problem, HTTPError, t } from '../src'
+import { Elysia, t } from '../src'
+import type { AnySchema, MacroTypeLambda, UnwrapSchema } from '../src'
 
-const plugin = new Elysia({ name: 'final' })
+interface ChannelLambda extends MacroTypeLambda {
+	output: this['input'] extends { of: infer S extends AnySchema }
+		? { custom: UnwrapSchema<S> }
+		: { custom: unknown }
+}
+
+new Elysia()
 	.macro({
-		objForm: {
-			// object-form macro + derive
-			derive: () => ({ iris: { publish: (v: unknown) => String(v) } })
-		},
-		fnForm(value: boolean | undefined) {
-			// function-form macro + derive
-			if (!value) return {}
-
-			return {
-				derive: () => ({ iris: { publish: (v: unknown) => String(v) } })
-			}
-		}
+		channel: (option: {
+			of: AnySchema
+		}): { $type?: ChannelLambda; derive(c: unknown): unknown } => ({
+			derive: (context) => ({ channel: { entries: {}, of: option.of } })
+		})
 	})
-	.derive('global', () => ({ iris: { touch: (route: string) => '...' } }))
+	.get(
+		'/stats',
+		{ channel: { of: t.Object({ count: t.Number() }) } },
+		({ custom }) => {
 
-new Elysia().use(plugin).get('/fn', { fnForm: true }, ({ iris }) => {
-	// iris is any?
-	iris.publish('x')
-	iris.touch('/a')
 
-	// this should error
-	iris.definitelyNotAThing()
 
-	return 'ok'
-})
+			custom.count
+		}
+	)
+	.get(
+		'/room',
+		{ channel: { of: t.Object({ id: t.String(), name: t.String() }) } },
+		({ custom }) => {
+			// hover: Readonly<Record<string, { id: string; name: string }>>
+			channel.entries
+
+			const first = Object.values(channel.entries)[0]
+			first?.name.toUpperCase()
+
+			// @ts-expect-error no such field on the viewer schema
+			first?.count
+
+			return { viewers: Object.values(channel.entries) }
+		}
+	)
