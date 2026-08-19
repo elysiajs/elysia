@@ -1007,10 +1007,12 @@ import { Prettify } from '../../../src/types'
 		])
 
 	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
-		200: 'fouco' | 'sartre' | 'lilith'
+		400: 'lilith' | 'fouco' | 'sartre'
 		401: 'fouco'
-		404: 'lilith'
+		404: 'lilith' | 'fouco' | 'sartre'
 		418: 'sartre'
+		422: 'lilith' | 'fouco' | 'sartre'
+		500: 'lilith' | 'fouco' | 'sartre'
 	}>()
 }
 
@@ -1028,10 +1030,12 @@ import { Prettify } from '../../../src/types'
 		])
 
 	expectTypeOf<(typeof app)['~Ephemeral']['response']>().toEqualTypeOf<{
-		200: 'fouco' | 'sartre' | 'lilith'
+		400: 'lilith' | 'fouco' | 'sartre'
 		401: 'fouco'
-		404: 'lilith'
+		404: 'lilith' | 'fouco' | 'sartre'
 		418: 'sartre'
+		422: 'lilith' | 'fouco' | 'sartre'
+		500: 'lilith' | 'fouco' | 'sartre'
 	}>()
 }
 
@@ -1049,10 +1053,12 @@ import { Prettify } from '../../../src/types'
 		])
 
 	expectTypeOf<(typeof app)['~Metadata']['response']>().toEqualTypeOf<{
-		200: 'fouco' | 'sartre' | 'lilith'
+		400: 'lilith' | 'fouco' | 'sartre'
 		401: 'fouco'
-		404: 'lilith'
+		404: 'lilith' | 'fouco' | 'sartre'
 		418: 'sartre'
+		422: 'lilith' | 'fouco' | 'sartre'
+		500: 'lilith' | 'fouco' | 'sartre'
 	}>()
 }
 
