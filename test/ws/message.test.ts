@@ -646,6 +646,8 @@ describe('WebSocket message', () => {
                 parse(ws, raw) {
                     if (typeof raw === 'string' && raw.startsWith('PREFIX:'))
                         return raw.slice(7)
+                    if (typeof raw === 'string' && raw === '["ping"]')
+                        return raw
                 },
                 message(ws, message) {
                     ws.send(typeof message + ' ' + message)
@@ -657,11 +659,17 @@ describe('WebSocket message', () => {
 
         await wsOpen(ws)
 
-        const message = wsMessage(ws)
+        const message1 = wsMessage(ws)
         ws.send('PREFIX:["ping"]')
-        const res = await message
+        const res1 = await message1
 
-        expect(res.data).toBe('string ["ping"]')
+        expect(res1.data).toBe('string ["ping"]')
+
+        const message2 = wsMessage(ws)
+        ws.send('["ping"]')
+        const res2 = await message2
+
+        expect(res2.data).toBe('string ["ping"]')
 
         await wsClosed(ws)
         app.stop()
