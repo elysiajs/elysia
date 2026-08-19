@@ -688,7 +688,7 @@ export const signCookie = async (val: string, secret: string | null) => {
 }
 
 const constantTimeEqual =
-	typeof crypto?.timingSafeEqual === 'function'
+	typeof crypto !== 'undefined' && typeof crypto.timingSafeEqual === 'function'
 		? (a: string, b: string) => {
 				// Compare as UTF-8 bytes; timingSafeEqual requires equal length
 				const ab = Buffer.from(a, 'utf8')
