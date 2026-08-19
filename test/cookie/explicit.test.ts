@@ -125,5 +125,15 @@ describe('Explicit Cookie', () => {
 		const second = cookie.name
 
 		expect(first).toBe(second)
+
+		const set: Context['set'] = {
+			cookie: {},
+			headers: {}
+		}
+		const store = Object.create(null) as Record<string, any>
+		store.name = { value: 'himari' }
+		const parsed = createCookieJar(set, store)
+
+		expect(parsed.name).toBe(parsed.name)
 	})
 })
