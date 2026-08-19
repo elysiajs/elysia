@@ -1,7 +1,7 @@
 import { env } from '../universal'
 import { nullObject } from '../utils'
 import packageJson from '../../package.json'
-import type { CoercePlan } from '../type/coerce'
+import type { CoerceNode } from '../type/coerce'
 
 export const AOT_MANIFEST_FORMAT = 3
 export const AOT_ABI = `${packageJson.version}:${AOT_MANIFEST_FORMAT}`
@@ -152,7 +152,7 @@ export interface FrozenValidator {
 		// otherwise `s` is a plain (v)=>cleaned cleaner called directly
 		d: FrozenMirror & { x?: 1 }
 	}>
-	cp?: CoercePlan
+	cp?: CoerceNode
 }
 
 export interface ValidatorManifest {
@@ -190,7 +190,7 @@ export interface CompiledProgramRegistration {
 	handlers?: HandlerManifest
 	lazyGroups?: Array<() => ValidatorManifest>
 	lazyGroupOf?: Record<string, Record<string, number>>
-	planRebuilder?: (original: unknown, plan: CoercePlan) => any
+	planRebuilder?: (original: unknown, plan: CoerceNode) => any
 }
 
 interface CompiledProgram extends CompiledProgramRegistration {
@@ -487,7 +487,7 @@ export interface CapturedValidator {
 		decode: CapturedMirror
 	}>
 	// coercion plan (primitive coercions)
-	coercePlan?: CoercePlan
+	coercePlan?: CoerceNode
 	// Use to gate a `setupTypebox` stub.
 	// Set at capture time by `frozen-validator.isCapturedBridgeFree`.
 	bridgeFree?: boolean

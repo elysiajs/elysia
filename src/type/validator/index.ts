@@ -438,6 +438,17 @@ function warnMirrorFailure(schema: unknown, error: unknown) {
 	console.warn(error)
 }
 
+let warnedMissingMirror = false
+
+function warnMissingMirror() {
+	if (warnedMissingMirror) return
+	warnedMissingMirror = true
+
+	console.warn(
+		"exact-mirror is unavailable, normalization degraded to TypeBox. Install exact-mirror, or bundle it statically with the AOT build plugin ('elysia/plugin/aot') to restore the fast path. Use normalize: 'typebox' to silence this."
+	)
+}
+
 interface DefaultFastPath {
 	/** `Default(schema, undefined)`; cloned when object-like. */
 	value: unknown
@@ -715,12 +726,15 @@ export class TypeBoxValidator<
 				!frozen?.m &&
 				!schemaHasDangerousProperties(this.schema) &&
 				options?.normalize !== false &&
-				options?.normalize !== 'typebox' &&
-				(options?.normalize === true ||
-					options?.normalize === 'exactMirror' ||
-					!!options?.sanitize)
-			)
-				throw exactMirrorRequired()
+				options?.normalize !== 'typebox'
+			) {
+				// A named implementation or sanitize is a hard requirement,
+				// `normalize: true` only asks for normalization
+				if (options?.normalize === 'exactMirror' || options?.sanitize)
+					throw exactMirrorRequired()
+
+				if (options?.normalize === true) warnMissingMirror()
+			}
 
 			try {
 				this.Clean =

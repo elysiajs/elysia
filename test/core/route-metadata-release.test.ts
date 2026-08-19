@@ -4,7 +4,7 @@ import { Elysia } from '../../src'
 
 /**
  * Plan 007 — after a production seal, a fast-path (non-macro) app releases its
- * `#declaredRoutes` tuple array because the same metadata is held columnar in
+ * `declaredRoutes` tuple array because the same metadata is held columnar in
  * `~routeTable`. Every consumer rematerializes the array on demand from the
  * table. WHY these tests exist: the release is a pure memory optimization and
  * MUST be invisible — introspection getters (`routes`/`history`), the re-seal
@@ -50,11 +50,11 @@ describe('plan 007 — declaredRoutes release + rematerialize', () => {
 			const app = new Elysia().use(child).get('/root', () => 'root')
 
 			// Seal + publish (JIT). Under production this releases the
-			// fast-path app's #declaredRoutes.
+			// fast-path app's declaredRoutes.
 			void app.fetch
 
 			// Introspection must rebuild the array transparently, including the
-			// separately-retained #routeSources labels.
+			// separately-retained routeSources labels.
 			expect(app.routes.map((r) => r.path)).toEqual([
 				'/first',
 				'/second',
@@ -92,7 +92,7 @@ describe('plan 007 — declaredRoutes release + rematerialize', () => {
 		await withEnv({ NODE_ENV: 'production' }, async () => {
 			const app = new Elysia().get('/a', () => 'a').get('/b', () => 'b')
 
-			// Seal → release #declaredRoutes.
+			// Seal → release declaredRoutes.
 			void app.fetch
 			expect((await app.handle('/a')).status).toBe(200)
 
@@ -117,7 +117,7 @@ describe('plan 007 — declaredRoutes release + rematerialize', () => {
 				.get('/c1', () => 'c1')
 				.get('/c2', () => 'c2')
 
-			// Seal the child independently → its #declaredRoutes is released.
+			// Seal the child independently → its declaredRoutes is released.
 			void child.fetch
 			expect((await child.handle('/c1')).status).toBe(200)
 

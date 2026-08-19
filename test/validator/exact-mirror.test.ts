@@ -1,6 +1,8 @@
 import { Elysia, setupTypebox, t } from '../../src'
 
 import { afterEach, describe, expect, it } from 'bun:test'
+import { spawnSync } from 'node:child_process'
+import { resolve } from 'node:path'
 import { post, json } from '../utils'
 import { TypeBoxValidator } from '../../src/type/validator'
 import {
@@ -50,6 +52,12 @@ describe('without exact-mirror', () => {
 		expect(decoded).toEqual({ at: new Date(0) })
 	})
 
+	// A named implementation cannot be silently swapped, and sanitize is a
+	// security boundary — degrading either without a word is how an app ships
+	// unsanitized output. `normalize: true` names no implementation, so a
+	// runtime without exact-mirror (a `bun build --compile` binary, where the
+	// dynamic require cannot resolve) degrades to TypeBox instead of 500ing
+	// every request that creates a validator.
 	it('fails loud when exact-mirror behavior is explicitly requested', () => {
 		setExactMirror(undefined)
 		const schema = t.Object({ value: t.String() })
@@ -57,9 +65,6 @@ describe('without exact-mirror', () => {
 		expect(
 			() => new TypeBoxValidator(schema, { normalize: 'exactMirror' })
 		).toThrow('exact-mirror is required')
-		expect(() => new TypeBoxValidator(schema, { normalize: true })).toThrow(
-			'exact-mirror is required'
-		)
 		expect(
 			() =>
 				new TypeBoxValidator(schema, {
@@ -68,12 +73,49 @@ describe('without exact-mirror', () => {
 		).toThrow('exact-mirror is required')
 	})
 
+	it('degrades normalize: true to TypeBox instead of throwing', () => {
+		setExactMirror(undefined)
+
+		const validator = new TypeBoxValidator(
+			t.Object({ value: t.String() }),
+			{ normalize: true }
+		)
+
+		expect(validator.Clean!({ value: 'ok', extra: true })).toEqual({
+			value: 'ok'
+		})
+	})
+
 	it('allows explicit registration in runtimes without require', () => {
 		expect(typeof installedMirror).toBe('function')
 		setExactMirror(undefined)
 		setupTypebox({ exactMirror: installedMirror })
 
 		expect(getExactMirror()).toBe(installedMirror)
+	})
+})
+
+// A plugin that builds a validator per request would turn a per-validator
+// warning into one log line per request, so the degraded path announces itself
+// exactly once. The flag is module state, so only a child process can observe
+// the first warning.
+describe('degraded normalization warning', () => {
+	it('warns once per process, not once per validator', () => {
+		const src = resolve(import.meta.dir, '../../src')
+		const script =
+			`import { t } from '${src}/index.ts'\n` +
+			`import { TypeBoxValidator } from '${src}/type/validator/index.ts'\n` +
+			`import { setExactMirror } from '${src}/type/validator/exact-mirror.ts'\n` +
+			`setExactMirror(undefined)\n` +
+			`for (const key of ['a', 'b'])\n` +
+			`	new TypeBoxValidator(t.Object({ [key]: t.String() }), { normalize: true })\n`
+
+		const child = spawnSync('bun', ['-e', script], { encoding: 'utf8' })
+
+		expect(child.status).toBe(0)
+		expect(
+			child.stderr.split('exact-mirror is unavailable').length - 1
+		).toBe(1)
 	})
 })
 

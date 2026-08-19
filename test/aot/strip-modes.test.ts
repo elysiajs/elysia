@@ -145,6 +145,7 @@ describe('automatic AOT stripping', () => {
 			bridge: false,
 			typeboxValue: false,
 			typeboxType: true,
+			exactMirror: false,
 			adapter: false,
 			isProduction: true
 		})

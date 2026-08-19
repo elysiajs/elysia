@@ -13,9 +13,6 @@ import { nullObject } from '../utils'
 
 import {
 	COERCE_LEAF_CTOR,
-	isCoerceLeaf,
-	isCoerceObjStr,
-	isCoerceUnion,
 	buildCoercedFromPlan as buildCoercedFromScalarPlan,
 	type CoerceLeaf,
 	type CoerceNode,
@@ -427,7 +424,7 @@ export function applyCoercions(
 export function captureCoercePlan(
 	original: any,
 	coerced: any
-): CoercePlan | null {
+): CoerceNode | null {
 	let bakeable = true
 	let any = false
 
@@ -548,17 +545,7 @@ export function captureCoercePlan(
 
 	const plan = walk(original, coerced)
 
-	// a root-level leaf/objstr/union plan is not reconstructable,
-	// `buildCoercedFromPlan` patches properties/items of a cloned root
-	if (
-		!bakeable ||
-		!any ||
-		!plan ||
-		isCoerceLeaf(plan) ||
-		isCoerceObjStr(plan) ||
-		isCoerceUnion(plan)
-	)
-		return null
+	if (!bakeable || !any || !plan) return null
 
 	if (!jsonSafe(plan)) return null
 
@@ -601,7 +588,7 @@ function rebuildObjStr(original: any, site: CoerceObjStr) {
 /** Full rebuild: scalar leaves + ObjectString/ArrayString sites (wired path). */
 export const buildCoercedFromPlan = (
 	original: any,
-	plan: CoercePlan,
+	plan: CoerceNode,
 	seen: Set<string> = new Set()
 ) => buildCoercedFromScalarPlan(original, plan, seen, rebuildObjStr)
 

@@ -493,6 +493,16 @@ export function composeRouteHook(
 		root
 	)
 
+	// Fold the route-local (macro-applied) `derive` into its OWN beforeHandle
+	// BEFORE merging with inherited chain hooks. Promoting only after the
+	// merge (compileHandler) hoists it in front of the chain's already-folded
+	// `.derive()` entries, so a macro's derive could not see plugin-derived
+	// values (elysiajs/elysia#1958). Clone first: `resolveLocalHook` memoizes
+	if (localHook && (localHook as any).derive !== undefined) {
+		localHook = cloneHook(localHook)
+		promoteDerive(localHook)
+	}
+
 	const flatAppHook = appHook
 		? flattenChainMemo(root, appHook as ChainNode, resolve)
 		: undefined

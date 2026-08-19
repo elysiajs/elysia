@@ -206,6 +206,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			bridge: false,
 			typeboxValue: false,
 			typeboxType: true,
+			exactMirror: false,
 			adapter: false,
 			isProduction: true
 		})
@@ -224,6 +225,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			bridge: false,
 			typeboxValue: false,
 			typeboxType: true,
+			exactMirror: false,
 			adapter: false,
 			isProduction: true
 		})
@@ -243,6 +245,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			bridge: false,
 			typeboxValue: true,
 			typeboxType: true,
+			exactMirror: true,
 			adapter: false,
 			isProduction: true
 		})

@@ -5,11 +5,8 @@ import { Elysia } from '../../src'
 
 /**
  * Pins the bare `new Elysia()` heap footprint against JSC's property-storage
- * cliffs. Bun lowers declaration-only class fields with define semantics,
- * which defeats the ObjectAllocationProfile: the class stays cheap only while
- * runtime fields are constructor-assigned (see the `declare` block in
- * `src/base.ts`) and the own-property count stays inside the current
- * butterfly bucket.
+ * cliffs. Class fields consume JSC property storage, so the class stays cheap
+ * only while the own-property count stays inside the current butterfly bucket.
  *
  * The steps are discrete and silent: +1 field past the bucket edge costs
  * +96 B on EVERY instance, and crossing the allocation-profile cliff costs
@@ -26,7 +23,8 @@ describe('Elysia instance footprint', () => {
 		expect(app['~programId']).not.toBe(other['~programId'])
 		expect('~programId' in app).toBe(true)
 		expect(Object.hasOwn(app, '~programId')).toBe(false)
-		expect(JSON.stringify(app)).toBe('{}')
+		// TypeScript-private fields are enumerable; pin the initialized surface.
+		expect(JSON.stringify(app)).toBe('{"_pending":0,"routerBuilt":false}')
 	})
 
 	it('bare instance stays under the JSC butterfly cliff', () => {

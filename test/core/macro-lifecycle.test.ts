@@ -192,4 +192,45 @@ describe('macro beforeHandle lifecycle order', () => {
 		// If macro schema is lost, this would be 200 instead of 422
 		expect(invalidResponse.status).toBe(422)
 	})
+
+	// elysiajs/elysia#1958: a macro's `derive` must run AFTER inherited
+	// `.derive()` entries (1.x parity: macro resolve saw instance-derived
+	// values). Both fold into the beforeHandle phase; if the route-local
+	// (macro) derive is promoted only after the chain merge it lands at the
+	// FRONT of the merged pipeline, and an auth macro reading plugin-derived
+	// services gets `undefined` and fails closed.
+	it('macro derive sees values from plugin and instance derive', async () => {
+		const dbValue = { findUser: async () => ({ id: 'u1' }) }
+
+		const services = new Elysia({ name: 'svc' }).derive('plugin', () => ({
+			db: dbValue
+		}))
+
+		const seen: unknown[] = []
+
+		const app = new Elysia()
+			.use(services)
+			.derive(() => ({ local: 'L' }))
+			.macro({
+				auth(enabled: boolean) {
+					return {
+						derive: async ({ db, local }: any) => {
+							seen.push(typeof db, local)
+
+							return { user: db ? await db.findUser() : null }
+						},
+						beforeHandle: ({ user, status }: any) => {
+							if (!user) return status(401, 'no user')
+						}
+					}
+				}
+			})
+			.get('/me', { auth: true }, ({ user }: any) => user)
+
+		const response = await app.handle(new Request('http://localhost/me'))
+
+		expect(response.status).toBe(200)
+		await expect(response.json()).resolves.toEqual({ id: 'u1' })
+		expect(seen).toEqual(['object', 'L'])
+	})
 })

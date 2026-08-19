@@ -451,6 +451,12 @@ export type GuardLocalHook<
 	 */
 	schema?: GuardType
 
+	/**
+	 * Removed in 2.0 — pass the scope as guard's first argument instead:
+	 * `.guard('plugin', { ... })` (1.x `as: 'scoped'` maps to `'plugin'`)
+	 */
+	as?: never
+
 	detail?: DocumentDecoration
 	/**
 	 * Short for 'Content-Type'
@@ -1564,17 +1570,18 @@ export interface MacroTypeLambda {
 	input: unknown
 }
 
-type MacroLambdaContext<Value, HookValue> = NonNullable<Value> extends {
-	$type?: infer Lambda extends MacroTypeLambda
-}
-	? (Lambda & {
-			input: HookValue
-		}) extends {
-			output: infer Output
-		}
-		? Output
+type MacroLambdaContext<Value, HookValue> =
+	NonNullable<Value> extends {
+		$type?: infer Lambda extends MacroTypeLambda
+	}
+		? Lambda & {
+				input: HookValue
+			} extends {
+				output: infer Output
+			}
+			? Output
+			: {}
 		: {}
-	: {}
 
 type UnionMacroContext<A> = UnionToIntersect<{
 	[K in Exclude<keyof A, 'return'>]: A[K]
@@ -1620,65 +1627,65 @@ type InnerMacroToContext<
 						MacroFn[key],
 						SelectedMacro[key]
 					> extends infer Value
-						? {
-								// @ts-ignore Trust me bro
-								q: UnwrapMacroSchema<Value, Definitions>
-								// NonNullable: fn-form macro may return `X | undefined`.
-								// `never` (not `unknown`) when absent — never is the
-								// union identity through the later UnionToIntersect pass
-								meta: 'meta' extends keyof NonNullable<Value>
-									? NonNullable<Value>['meta']
-									: never
-								resolve: ExtractResolveFromMacro<
-									Extract<
-										Exclude<
-											FunctionArrayReturnType<
-												// @ts-ignore Trust me bro
-												Value['derive']
+						? NonNullable<Value> extends infer Def
+							? {
+									meta: 'meta' extends keyof Def
+										? Def['meta']
+										: never
+									resolve: ExtractResolveFromMacro<
+										Extract<
+											Exclude<
+												FunctionArrayReturnType<
+													// @ts-ignore Trust me bro
+													Def['derive']
+												>,
+												AnyElysiaStatus
 											>,
-											AnyElysiaStatus
+											Record<any, unknown>
+										>
+									> &
+										MacroLambdaContext<
+											Value,
+											SelectedMacro[key]
+										>
+								} & UnwrapMacroSchema<
+									// @ts-ignore Trust me bro
+									Def,
+									Definitions
+								> &
+									ExtractAllResponseFromMacro<
+										FunctionArrayReturnTypeNonNullable<
+											// @ts-expect-error type is checked in key mapping
+											Def['beforeHandle']
+										>
+									> &
+									ExtractAllResponseFromMacro<
+										FunctionArrayReturnTypeNonNullable<
+											// @ts-expect-error type is checked in key mapping
+											Def['afterHandle']
+										>
+									> &
+									ExtractAllResponseFromMacro<
+										// @ts-expect-error type is checked in key mapping
+										FunctionArrayReturnType<Def['error']>
+									> &
+									ExtractOnlyResponseFromMacro<
+										FunctionArrayReturnTypeNonNullable<
+											// @ts-expect-error type is checked in key mapping
+											Def['derive']
+										>
+									> &
+									InnerMacroToContext<
+										MacroFn,
+										// @ts-ignore trust me bro
+										Pick<
+											Def,
+											Extract<keyof MacroFn, keyof Def>
 										>,
-										Record<any, unknown>
+										Definitions,
+										[...R, 1]
 									>
-								> &
-									MacroLambdaContext<Value, SelectedMacro[key]>
-							} & UnwrapMacroSchema<
-								// @ts-ignore Trust me bro
-								Value,
-								Definitions
-							> &
-								ExtractAllResponseFromMacro<
-									FunctionArrayReturnTypeNonNullable<
-										// @ts-expect-error type is checked in key mapping
-										Value['beforeHandle']
-									>
-								> &
-								ExtractAllResponseFromMacro<
-									FunctionArrayReturnTypeNonNullable<
-										// @ts-expect-error type is checked in key mapping
-										Value['afterHandle']
-									>
-								> &
-								ExtractAllResponseFromMacro<
-									// @ts-expect-error type is checked in key mapping
-									FunctionArrayReturnType<Value['error']>
-								> &
-								ExtractOnlyResponseFromMacro<
-									FunctionArrayReturnTypeNonNullable<
-										// @ts-expect-error type is checked in key mapping
-										Value['derive']
-									>
-								> &
-								InnerMacroToContext<
-									MacroFn,
-									// @ts-ignore trust me bro
-									Pick<
-										Value,
-										Extract<keyof MacroFn, keyof Value>
-									>,
-									Definitions,
-									[...R, 1]
-								>
+							: {}
 						: {}
 				}[keyof SelectedMacro]
 			>

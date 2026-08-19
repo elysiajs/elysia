@@ -1,4 +1,4 @@
-// Plan 007 (memory): after a production seal, `#declaredRoutes` (an array of N
+// Plan 007 (memory): after a production seal, `declaredRoutes` (an array of N
 // InternalRoute tuple objects) duplicates the route metadata already held
 // columnar in `~routeTable`. For fast-path (non-macro) apps the tuple contents
 // are reference-shared with the table columns, so the tuples themselves are
@@ -48,7 +48,7 @@ async function main() {
 
 	if (MACRO) {
 		// Macro app: NOT on the getter fast path, so plan 007 must NOT release
-		// `#declaredRoutes` (its table column is macro-RESOLVED). Used to prove
+		// `declaredRoutes` (its table column is macro-RESOLVED). Used to prove
 		// no regression for macro apps.
 		app.macro({ tag: () => ({ beforeHandle() {} }) })
 		for (let i = 0; i < ROUTES; i++)

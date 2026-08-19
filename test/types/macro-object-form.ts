@@ -210,3 +210,29 @@ import { expectTypeOf } from 'expect-type'
 			expectTypeOf(level).toEqualTypeOf<'admin' | 'user'>()
 		})
 }
+
+// A fn-form macro that conditionally returns `undefined` (early `return`)
+// still contributes its schema and derived values to the route. The raw
+// `Hooks | undefined` return must be NonNullable'd before indexing —
+// otherwise the indexed access is an error type (`any`) and
+// FunctionArrayReturnType's `any[]` guard collapses the macro's whole
+// contribution to `never`.
+{
+	new Elysia()
+		.macro({
+			auth(enabled: boolean) {
+				if (!enabled) return
+
+				return {
+					body: t.Object({ x: t.String() }),
+					derive: () => ({ user: 'a' as const })
+				}
+			}
+		})
+		.post('/', { auth: true }, ({ body, user }) => {
+			expectTypeOf(body).toEqualTypeOf<{ x: string }>()
+			expectTypeOf(user).toEqualTypeOf<'a'>()
+
+			return 'ok'
+		})
+}

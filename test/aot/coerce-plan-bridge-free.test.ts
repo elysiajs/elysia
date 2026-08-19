@@ -259,7 +259,6 @@ describe('uncapturable coercion plans', () => {
 			'query',
 			t.Object({ x: t.Tuple([t.Number()]) })
 		],
-		['root body coercion', 'body', t.Number()],
 		[
 			'non-JSON-safe constraints',
 			'query',
@@ -284,6 +283,81 @@ describe('uncapturable coercion plans', () => {
 			}).not.toThrow()
 			expect(result).toBeUndefined()
 		})
+})
+
+// A root-level scalar body (`body: t.Integer()`) coerces the schema ROOT
+// itself. If the plan capture bails there, the slot is not bridge-free and
+// strip mode silently retains TypeBox for the whole bundle.
+describe('root body coercion plans without TypeBox', () => {
+	const runBody = (validator: any, value: unknown): Outcome => {
+		try {
+			return { ok: true, value: validator.body.From(value, 'body') }
+		} catch (error: any) {
+			return { ok: false, status: error?.status ?? 500 }
+		}
+	}
+
+	function assertBodyParity(schema: any, inputs: unknown[]) {
+		const body = freezeSlot('body', schema)
+
+		expect(body?.coercePlan, 'expected a coercePlan capture').toBeDefined()
+		expect(body?.bridgeFree, 'expected the slot to be bridge-free').toBe(
+			true
+		)
+
+		const w = new RouteValidator(
+			{ body: schema } as any,
+			{
+				aot: { method: 'POST', path: PATH },
+				app: claimed
+			} as any
+		) as any
+		const f = buildFrozenRouteValidator(
+			{ body: schema } as any,
+			root(),
+			'POST',
+			PATH
+		) as any
+
+		expect(f, 'expected schema to be reconstructed bridge-free').toBeDefined()
+
+		for (const input of inputs) {
+			const wo = runBody(w, structuredClone(input))
+			const fo = runBody(f, structuredClone(input))
+
+			expect(
+				fo.ok,
+				`accept/reject parity for ${JSON.stringify(input)}`
+			).toBe(wo.ok)
+
+			if (wo.ok)
+				expect(
+					JSON.stringify(fo.value),
+					`decoded value parity for ${JSON.stringify(input)}`
+				).toBe(JSON.stringify(wo.value))
+			else
+				expect(
+					fo.status,
+					`reject status parity for ${JSON.stringify(input)}`
+				).toBe(wo.status)
+		}
+	}
+
+	it('coerces a root integer body', () => {
+		assertBodyParity(t.Integer(), [42, 4.5, '42', 'x', -7, 0, null, true])
+	})
+
+	it('preserves root integer constraints', () => {
+		assertBodyParity(t.Integer({ minimum: 2 }), [3, 1, '3', '1'])
+	})
+
+	it('coerces a root number body', () => {
+		assertBodyParity(t.Number(), [1.5, '1.5', 'x', 7, null])
+	})
+
+	it('coerces a root nullable integer body', () => {
+		assertBodyParity(t.Nullable(t.Integer()), [42, null, 4.5, '42', 'x'])
+	})
 })
 
 describe('union coercion plans without TypeBox', () => {

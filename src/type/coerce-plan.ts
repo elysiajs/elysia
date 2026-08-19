@@ -198,10 +198,13 @@ function coerceLeaf(leaf: CoerceLeaf, seen: Set<string>) {
 
 export function buildCoercedFromPlan(
 	original: any,
-	plan: CoercePlan,
+	plan: CoerceNode,
 	seen: Set<string> = new Set(),
 	objStr: RebuildObjStr = rebuildObjStrShape
 ) {
+	if (isCoerceLeaf(plan) || isCoerceObjStr(plan) || isCoerceUnion(plan))
+		return buildCoerceNode(original, plan, seen, objStr)
+
 	const out = cloneSchemaNode(original)
 
 	if (plan.p) {

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, extname, join, resolve } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Worker } from 'node:worker_threads'
 import {
 	compileToSource,
@@ -264,6 +264,18 @@ export interface StubPlan {
 	typeboxType: boolean
 
 	/**
+	 * Re-route `type/validator/exact-mirror` -> its statically-imported `-live`
+	 * mirror so the bundler embeds `exact-mirror` instead of leaving the runtime
+	 * `require('exact-mirror')` unresolvable, which is what breaks normalization
+	 * and sanitize inside a compiled binary
+	 *
+	 * Set whenever `exact-mirror` resolves at build time, except in sealed mode:
+	 * there every mirror is emitted into the manifest, so wiring it would only
+	 * add ~15KB of dead code to the bundle the mode exists to shrink
+	 */
+	exactMirror: boolean
+
+	/**
 	 * Replace `adapter/constants` with a target-specific stub that hard-selects
 	 * either `BunAdapter` or `WebStandardAdapter`, letting the bundler DCE the
 	 * other adapter. Only set when `target` unambiguously implies a runtime
@@ -305,6 +317,7 @@ export const NO_STUB: StubPlan = {
 	bridge: false,
 	typeboxValue: false,
 	typeboxType: false,
+	exactMirror: false,
 	adapter: false,
 	isProduction: false
 } as const
@@ -341,7 +354,9 @@ export function planFromReport(
 	 * outside the handler JIT, so it emits no `cc` alias — stubbing on that
 	 * alias alone would hand `src/ws/route.ts` a throwing `parseCookieRaw`
 	 */
-	wsCookie: boolean = false
+	wsCookie: boolean = false,
+	/** `exact-mirror` resolves from the elysia package at build time. */
+	exactMirror: boolean = false
 ): { plan: StubPlan; mode: BridgeMode } {
 	const jit = report.jit
 
@@ -378,6 +393,7 @@ export function planFromReport(
 			bridge: mode === 'wired',
 			typeboxValue: mode !== 'sealed',
 			typeboxType: true,
+			exactMirror: exactMirror && mode !== 'sealed',
 			adapter: adapterStub,
 			isProduction: productionStub
 		},
@@ -398,7 +414,6 @@ export function adapterConstantsSource(target: 'bun' | 'web-standard'): string {
 	)
 }
 
-/** Filter matching elysia's own `adapter/constants` module (src + dist). */
 export const ADAPTER_CONSTANTS_FILTER =
 	/[\\/]elysia[\\/](dist|src)[\\/]adapter[\\/]constants\.(m?js|ts)$/
 
@@ -408,50 +423,33 @@ export const ADAPTER_BUN_FILTER =
 export const IS_PRODUCTION_FILTER =
 	/[\\/]elysia[\\/](dist|src)[\\/]universal[\\/]is-production\.(m?js|ts)$/
 
-/**
- * Loose fallback filter
- *
- * Matches the `/elysia/(dist|src)/` segment anywhere in a path (node_modules layouts,
- * monorepos, linked installs). Used by esbuild as a broad pre-filter
- *
- * The caller must further check that the path is under the resolved elysia package root
- * to avoid matching user code in a directory that happens to be named "elysia"
- *
- * @internal
- */
 export const ELYSIA_MODULE_FILTER =
 	/[\\/]elysia[\\/](dist|src)[\\/].+\.(m?js|ts)x?$/
 
-/**
- * Build a predicate that returns `true` only for modules that are under the
- * resolved elysia package root (i.e. actually elysia's own files).
- *
- * Anchoring to the real package root prevents user projects rooted in a
- * directory named `elysia` (like this repo itself) from having their code
- * rewritten.
- *
- * Pass the result to both the esbuild `filter` (convert to RegExp via
- * `makeElysiaModuleFilterRegex`) and the Vite transform (`isElysiaModule`).
- */
 export function resolveElysiaRoot(from: string = process.cwd()): string {
 	try {
 		const req = createRequire(join(from, 'package.json'))
 		const pkgJson = req.resolve('elysia/package.json')
 		return dirname(pkgJson)
 	} catch {
-		// Fallback for linked/monorepo setups where createRequire may fail: return `from` as-is.
 		return from
 	}
 }
 
-/**
- * Returns a predicate that is `true` only when the given module path is under
- * the resolved elysia package root AND matches the broad module filter.
- */
-export function makeIsElysiaModule(
-	elysiaRoot: string
-): (path: string) => boolean {
-	// Normalise to posix for comparison on Windows
+export function resolveExactMirror(from: string = process.cwd()): boolean {
+	try {
+		createRequire(join(resolveElysiaRoot(from), 'package.json')).resolve(
+			'exact-mirror'
+		)
+
+		return true
+	} catch {
+		return false
+	}
+}
+
+export function makeIsElysiaModule(elysiaRoot: string) {
+	// To Posix for Windows (curse you, Microsoft)
 	const root = elysiaRoot.replace(/\\/g, '/')
 	return (path: string) => {
 		const posix = path.replace(/\\/g, '/')
@@ -459,25 +457,15 @@ export function makeIsElysiaModule(
 	}
 }
 
-/**
- * Build an esbuild-compatible RegExp that anchors to the resolved elysia root
- * so the `onLoad` pre-filter is as tight as possible. esbuild uses this as an
- * initial path filter before calling the callback, so we still double-check
- * with `makeIsElysiaModule` inside the callback.
- */
-export function makeElysiaModuleFilterRegex(elysiaRoot: string): RegExp {
+export function makeElysiaModuleFilterRegex(elysiaRoot: string) {
 	const escaped = elysiaRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 	return new RegExp(
 		'^' + escaped + '[\\\\/](dist|src)[\\\\/].+\\.(m?js|ts)x?$'
 	)
 }
 
-export function rewriteIsProductionCalls(code: string): string {
-	// Negative lookbehind for `.` and `?.` ensures we only rewrite bare
-	// identifier call expressions and leave member calls (`x.isProduction()`,
-	// `x?.isProduction()`) untouched.
-	return code.replace(/(?<![.?])\bisProduction\(\)/g, 'true')
-}
+export const rewriteIsProductionCalls = (code: string) =>
+	code.replace(/(?<![.?])\bisProduction\(\)/g, 'true')
 
 export const bunAdapterStubSource =
 	`const e=(t)=>{throw new Error(\`[elysia-aot] Bun adapter was stripped for target 'web-standard' .listen() is unavailable; use the exported fetch handler or rebuild with a different target.\`)}\n` +
@@ -626,6 +614,12 @@ export const STUB_SOURCES: Record<
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]type[\\/]typebox-type\.(m?js|ts)$/,
 			source: `export * from './typebox-type-live'\n`
 		}
+	],
+	exactMirror: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]type[\\/]validator[\\/]exact-mirror\.(m?js|ts)$/,
+			source: `export * from './exact-mirror-live'\n`
+		}
 	]
 }
 
@@ -696,7 +690,10 @@ const resolveSpecifier = (
 
 	if (moduleMeta.resolve) {
 		const url = moduleMeta.resolve(specifier)
-		return url.startsWith('file://') ? new URL(url).pathname : url
+		// fileURLToPath, NOT `new URL(url).pathname`: the latter yields
+		// `/D:/...` on Windows (leading slash before the drive letter) and
+		// keeps percent-encoding, both of which break bundler resolution
+		return url.startsWith('file://') ? fileURLToPath(url) : url
 	}
 	if (moduleCondition === 'esm')
 		throw new Error(
@@ -973,6 +970,7 @@ export async function generateCompiledArtifacts(
 					: false
 
 		const productionStub = options?.production !== false
+		const exactMirror = resolveExactMirror(entry)
 
 		if (strip === false)
 			return {
@@ -983,6 +981,7 @@ export async function generateCompiledArtifacts(
 					// importable for the bundler
 					typeboxValue: true,
 					typeboxType: true,
+					exactMirror,
 					adapter: adapterStub,
 					isProduction: productionStub
 				},
@@ -1137,7 +1136,8 @@ export async function generateCompiledArtifacts(
 				artifacts.validators.length === 0,
 			adapterStub,
 			productionStub,
-			wsCookie
+			wsCookie,
+			exactMirror
 		)
 
 		if (options?.target === 'workerd') {

@@ -254,20 +254,20 @@ export class Elysia<
 	declare '~Volatile': Volatile
 	declare '~Routes': Routes
 
-	#hasPlugin?: true
-	#hasGlobal?: true
+	private hasPlugin?: true
+	private hasGlobal?: true
 
-	#ready?: Promise<void>
-	#pending = 0
-	#error?: { error: unknown }
+	private ready?: Promise<void>
+	private _pending = 0
+	private _error?: { error: unknown }
 
-	#hash?: number
-	#childrenHash?: Set<number>
+	private hash?: number
+	private childrenHash?: Set<number>
 
-	#scopeParent?: AnyElysia
+	private scopeParent?: AnyElysia
 	// Macro defs a scope-child absorbed via a nested plugin `.use()` (name → def)
-	#pluginMacros?: Map<string, unknown>
-	#macroBaseline?: Set<string>
+	private pluginMacros?: Map<string, unknown>
+	private macroBaseline?: Set<string>
 
 	declare '~ext'?: {
 		decorator?: Singleton['decorator']
@@ -296,24 +296,24 @@ export class Elysia<
 	declare '~hookChain'?: ChainNode
 	declare '~wsConfig'?: WSOptions
 
-	#declaredRoutes?: InternalRoute[]
-	#routeSources?: (string | undefined)[]
+	private declaredRoutes?: InternalRoute[]
+	private routeSources?: (string | undefined)[]
 	declare server?: Server
 
 	get history(): readonly HistoryEntry[] {
-		if (this.#declaredRoutes === undefined && this['~routeTable']?.length)
+		if (this.declaredRoutes === undefined && this['~routeTable']?.length)
 			this.#materializeDeclaredRoutes()
 
-		if (!this.#declaredRoutes?.length) return emptyHistory
+		if (!this.declaredRoutes?.length) return emptyHistory
 
-		const history = new Array<HistoryEntry>(this.#declaredRoutes.length)
+		const history = new Array<HistoryEntry>(this.declaredRoutes.length)
 		for (
 			let sequence = 0;
-			sequence < this.#declaredRoutes.length;
+			sequence < this.declaredRoutes.length;
 			sequence++
 		) {
-			const route = this.#declaredRoutes[sequence]
-			const source = this.#routeSources?.[sequence]
+			const route = this.declaredRoutes[sequence]
+			const source = this.routeSources?.[sequence]
 
 			history[sequence] = Object.freeze({
 				sequence,
@@ -327,11 +327,11 @@ export class Elysia<
 	}
 
 	get ['~routes'](): readonly InternalRoute[] {
-		if (this.#declaredRoutes === undefined && this['~routeTable']?.length)
+		if (this.declaredRoutes === undefined && this['~routeTable']?.length)
 			this.#materializeDeclaredRoutes()
-		if (!this.#declaredRoutes?.length) return []
+		if (!this.declaredRoutes?.length) return []
 
-		const routes = this.#declaredRoutes
+		const routes = this.declaredRoutes
 		if (!this['~ext']?.macro && !this['~scopeChildren']) return routes
 
 		return routes.map((r) => {
@@ -368,13 +368,13 @@ export class Elysia<
 		return this
 	}
 
-	#compiled?: CompiledHandler[]
+	private compiled?: CompiledHandler[]
 
-	#jitColdRemaining?: number
-	#jitTable?: RouteTable
-	#jitRoute?: (InternalRoute | undefined)[]
-	#jitStatic?: (Response | undefined)[]
-	#jitAliases?: (StaticMapAliases | undefined)[]
+	private jitColdRemaining?: number
+	private jitTable?: RouteTable
+	private jitRoute?: (InternalRoute | undefined)[]
+	private jitStatic?: (Response | undefined)[]
+	private jitAliases?: (StaticMapAliases | undefined)[]
 
 	declare '~router'?: Memoirist<CompiledHandler>
 	declare '~map'?: {
@@ -459,7 +459,7 @@ export class Elysia<
 			) as BasePath
 
 			if (name)
-				this.#hash = fnv1a(
+				this.hash = fnv1a(
 					seed
 						? `${name}_${typeof seed === 'object' ? JSON.stringify(seed, serializeMacroSeed) : seed}`
 						: name
@@ -470,10 +470,10 @@ export class Elysia<
 	}
 
 	get routes() {
-		if (this.#declaredRoutes === undefined && this['~routeTable']?.length)
+		if (this.declaredRoutes === undefined && this['~routeTable']?.length)
 			this.#materializeDeclaredRoutes()
 
-		if (!this.#declaredRoutes?.length) return []
+		if (!this.declaredRoutes?.length) return []
 
 		const routes = this['~routes'].map(
 			([
@@ -711,7 +711,7 @@ export class Elysia<
 	): this {
 		if (this['~generation'] !== undefined)
 			this.#assertMutable(field === 'store' ? 'state' : 'decorate')
-		const ext = this.#ext
+		const ext = this.ext
 		const fresh = !ext[field]
 		const target = (ext[field] ??= nullObject()) as Record<string, unknown>
 
@@ -959,7 +959,7 @@ export class Elysia<
 
 	headers(headers: Record<string, string>) {
 		this.#assertMutable('headers')
-		const ext = this.#ext
+		const ext = this.ext
 
 		if (ext.headers) Object.assign(ext!.headers, headers)
 		else ext.headers = Object.assign(nullObject(), headers)
@@ -992,13 +992,13 @@ export class Elysia<
 			owner: this
 		}
 
-		if (scope === 'plugin') this.#hasPlugin = true
-		else if (scope === 'global') this.#hasGlobal = true
+		if (scope === 'plugin') this.hasPlugin = true
+		else if (scope === 'global') this.hasGlobal = true
 
-		if (this.#hash !== undefined) {
+		if (this.hash !== undefined) {
 			const tag = (f: unknown) => {
 				if (typeof f === 'function' && !fnOrigin.has(f as any))
-					fnOrigin.set(f as any, this.#hash!)
+					fnOrigin.set(f as any, this.hash!)
 			}
 
 			if (Array.isArray(fn)) for (const f of fn) tag(f)
@@ -1119,7 +1119,7 @@ export class Elysia<
 		Volatile
 	> {
 		this.#assertMutable('parser')
-		const ext = this.#ext
+		const ext = this.ext
 		const parsers = (ext.parser ??= nullObject() as Record<
 			string,
 			BodyHandler<any, any>
@@ -1145,7 +1145,7 @@ export class Elysia<
 	 */
 	setup(handler: MaybeArray<GracefulHandler<this>>): this {
 		this.#assertMutable('setup')
-		const arr = (this.#ext.setup ??= [])
+		const arr = (this.ext.setup ??= [])
 
 		if (Array.isArray(handler))
 			arr.push(...(handler as GracefulHandler<any>[]))
@@ -2312,7 +2312,7 @@ export class Elysia<
 						scopeOrFnOrError
 					))
 						if (typeof ErrorClass === 'function')
-							(this.#ext.error ??= new Map()).set(
+							(this.ext.error ??= new Map()).set(
 								ErrorClass as unknown as AnyErrorConstructor,
 								code
 							)
@@ -2337,7 +2337,7 @@ export class Elysia<
 							: () => fnOrError
 					) as EventFn<'error'>
 
-					;(this.#ext.error ??= new Map()).set(
+					;(this.ext.error ??= new Map()).set(
 						scopeOrFnOrError as unknown as AnyErrorConstructor,
 						(scopeOrFnOrError as { name: string }).name
 					)
@@ -2364,7 +2364,7 @@ export class Elysia<
 					? fn
 					: () => fn) as unknown as EventFn<'error'>
 
-				;(this.#ext.error ??= new Map()).set(
+				;(this.ext.error ??= new Map()).set(
 					fnOrError as unknown as AnyErrorConstructor,
 					(fnOrError as { name: string }).name
 				)
@@ -2481,8 +2481,8 @@ export class Elysia<
 
 					for (const fn of fns) {
 						if (typeof fn !== 'function') continue
-						if (scope === 'plugin') this.#hasPlugin = true
-						else this.#hasGlobal = true
+						if (scope === 'plugin') this.hasPlugin = true
+						else this.hasGlobal = true
 					}
 				}
 			}
@@ -3378,6 +3378,25 @@ export class Elysia<
 	>
 
 	guard() {
+		// 1.x accepted the scope INSIDE the hook (`guard({ as: 'scoped' })`).
+		// 2.0 takes it as the first argument; silently treating the 1.x form
+		// as `'local'` would drop the guard from every parent route
+		const maybeHook =
+			typeof arguments[0] === 'string' ? arguments[1] : arguments[0]
+		if (
+			maybeHook &&
+			typeof maybeHook === 'object' &&
+			'as' in maybeHook &&
+			maybeHook.as !== undefined
+		)
+			throw new Error(
+				`[elysia] guard({ as: '${maybeHook.as}' }) was removed in 2.0. ` +
+					`Pass the scope as the first argument instead: ` +
+					`guard('${maybeHook.as === 'scoped' ? 'plugin' : maybeHook.as}', { ... }). ` +
+					`To combine a guard schema with a route's own schema for the ` +
+					`same slot, add schema: 'merge'.`
+			)
+
 		if (arguments.length === 1)
 			return this.#guard('local', arguments[0] as Partial<AnyWSLocalHook>)
 
@@ -3402,8 +3421,8 @@ export class Elysia<
 		const trackFn = (fn: unknown) => {
 			if (typeof fn !== 'function') return
 
-			if (this.#hash !== undefined && !fnOrigin.has(fn as any))
-				fnOrigin.set(fn as any, this.#hash)
+			if (this.hash !== undefined && !fnOrigin.has(fn as any))
+				fnOrigin.set(fn as any, this.hash)
 		}
 
 		for (const key in hook) {
@@ -3697,7 +3716,7 @@ export class Elysia<
 		) as AnyElysia
 
 		child['~scopeChild'] = true
-		child.#scopeParent = this as unknown as AnyElysia
+		child.scopeParent = this as unknown as AnyElysia
 		;(this['~scopeChildren'] ??= []).push(child)
 
 		const src = this['~ext']
@@ -3732,7 +3751,7 @@ export class Elysia<
 		return this
 	}
 
-	get #ext(): NonNullable<this['~ext']> {
+	private get ext(): NonNullable<this['~ext']> {
 		return (this['~ext'] ??= nullObject())
 	}
 
@@ -3772,10 +3791,10 @@ export class Elysia<
 	}
 
 	#ensureMacroTable(): NonNullable<NonNullable<this['~ext']>['macro']> {
-		const ext = this.#ext
+		const ext = this.ext
 		if (ext.macro) return ext.macro
 
-		const parent = this['~scopeChild'] ? this.#scopeParent : undefined
+		const parent = this['~scopeChild'] ? this.scopeParent : undefined
 		ext.macro = parent
 			? Object.create(parent.#ensureMacroTable())
 			: nullObject()
@@ -3917,14 +3936,14 @@ export class Elysia<
 
 		const m = this.#ensureMacroTable() as any
 
-		const baseline = this.#macroBaseline
+		const baseline = this.macroBaseline
 
 		for (const key in macro) {
 			if (typeof macro[key] === 'object')
 				macro[key] = hookToGuard(macro[key] as any) as any
 
-			if (this.#hash !== undefined && !macroOrigin.has(macro[key] as any))
-				macroOrigin.set(macro[key] as any, this.#hash)
+			if (this.hash !== undefined && !macroOrigin.has(macro[key] as any))
+				macroOrigin.set(macro[key] as any, this.hash)
 
 			if (
 				baseline?.has(key) &&
@@ -4005,11 +4024,7 @@ export class Elysia<
 			for (const k in hook) {
 				const v = (hook as any)[k]
 
-				if (k === 'seed') continue
-				// type-level only — a meta key on route hooks would disqualify
-				// the route from native-static promotion (isEmptyPipelineHook)
-				if (k === 'meta') continue
-				if (k === '$type') continue
+				if (k === 'seed' || k === 'meta' || k === '$type') continue
 				if (k === 'introspect') {
 					v?.(input)
 
@@ -4416,15 +4431,15 @@ export class Elysia<
 	}
 
 	#useFn(app: (app: any) => unknown): any {
-		const prevBaseline = this.#macroBaseline
+		const prevBaseline = this.macroBaseline
 		const baseline = new Set<string>()
 		const existingMacro = this['~ext']?.macro
 
 		if (existingMacro) for (const k in existingMacro) baseline.add(k)
-		this.#macroBaseline = baseline
+		this.macroBaseline = baseline
 
 		const result = app(this)
-		this.#macroBaseline = prevBaseline
+		this.macroBaseline = prevBaseline
 
 		if (result && typeof (result as any).then === 'function') {
 			const beforeMacro = new Map(
@@ -4458,24 +4473,24 @@ export class Elysia<
 
 		const name = config?.name
 		if (name) {
-			const hash = app.#hash!
-			if (this.#childrenHash?.has(hash)) return
+			const hash = app.hash!
+			if (this.childrenHash?.has(hash)) return
 
-			this.#childrenHash ??= new Set()
-			this.#childrenHash.add(hash)
+			this.childrenHash ??= new Set()
+			this.childrenHash.add(hash)
 			;(addedByThisCall ??= new Set()).add(hash)
 		}
 
-		if (app.#childrenHash)
+		if (app.childrenHash)
 			addedByThisCall = this.#absorbChildrenHash(app, addedByThisCall)
 
 		if (app['~ext']) this.#assertMacroUnique(app, addedByThisCall)
 		if (app['~hasTrace']) this['~hasTrace'] = true
 
-		if (app.#declaredRoutes === undefined && app['~routeTable']?.length)
+		if (app.declaredRoutes === undefined && app['~routeTable']?.length)
 			app.#materializeDeclaredRoutes()
 
-		if (app.#declaredRoutes?.length) {
+		if (app.declaredRoutes?.length) {
 			if (app['~hasWS']) this['~hasWS'] = true
 
 			this.#emitChildRoutes(app, this['~hookChain'], name)
@@ -4490,7 +4505,7 @@ export class Elysia<
 
 		if (app['~ext']) this.#absorbExt(app)
 
-		if (app.#hasPlugin || app.#hasGlobal || hookChain)
+		if (app.hasPlugin || app.hasGlobal || hookChain)
 			this.#propagateHooks(app, hookChain, addedByThisCall)
 	}
 
@@ -4498,17 +4513,17 @@ export class Elysia<
 		app: AnyElysia,
 		addedByThisCall: Set<number> | undefined
 	) {
-		const incoming = app.#childrenHash!
+		const incoming = app.childrenHash!
 
-		if (this.#childrenHash)
+		if (this.childrenHash)
 			for (const h of incoming) {
-				if (this.#childrenHash.has(h)) continue
+				if (this.childrenHash.has(h)) continue
 
-				this.#childrenHash.add(h)
+				this.childrenHash.add(h)
 				;(addedByThisCall ??= new Set()).add(h)
 			}
 		else {
-			this.#childrenHash = new Set(incoming)
+			this.childrenHash = new Set(incoming)
 			addedByThisCall = new Set(incoming)
 		}
 
@@ -4547,7 +4562,7 @@ export class Elysia<
 
 				if (addedByThisCall)
 					for (const h of addedByThisCall)
-						this.#childrenHash!.delete(h)
+						this.childrenHash!.delete(h)
 
 				throw new Error(
 					`[Elysia] Macro "${macroName}" can be only define once`
@@ -4617,7 +4632,7 @@ export class Elysia<
 
 		if (macro) {
 			if (app['~scopeChild']) {
-				const pluginMacros = app.#pluginMacros
+				const pluginMacros = app.pluginMacros
 				let changed = false
 
 				if (pluginMacros?.size) {
@@ -4628,10 +4643,7 @@ export class Elysia<
 							changed = true
 
 							if (this['~scopeChild'])
-								(this.#pluginMacros ??= new Map()).set(
-									name,
-									def
-								)
+								(this.pluginMacros ??= new Map()).set(name, def)
 						}
 				}
 				if (changed) invalidateMacroEpoch()
@@ -4639,7 +4651,7 @@ export class Elysia<
 				Object.assign(this.#ensureMacroTable(), macro)
 
 				if (this['~scopeChild']) {
-					const pluginMacros = (this.#pluginMacros ??= new Map())
+					const pluginMacros = (this.pluginMacros ??= new Map())
 
 					for (const name in macro)
 						pluginMacros.set(name, (macro as any)[name])
@@ -4752,7 +4764,7 @@ export class Elysia<
 		let pluginMayRef = false
 		let globalMayRef = false
 
-		if (app.#hasGlobal) this.#hasGlobal = true
+		if (app.hasGlobal) this.hasGlobal = true
 
 		const nodes = useNodesBuffer
 		nodes.length = 0
@@ -4800,7 +4812,7 @@ export class Elysia<
 
 					for (const s of schemas) {
 						;((target as any).schemas ??= []).push(s)
-						if (isGlobal) this.#hasGlobal = true
+						if (isGlobal) this.hasGlobal = true
 					}
 
 					continue
@@ -4819,7 +4831,7 @@ export class Elysia<
 							? (raw as Function[])[f]
 							: (raw as Function)
 
-						const childrenHash = this.#childrenHash
+						const childrenHash = this.childrenHash
 						if (childrenHash !== undefined) {
 							const origin = fnOrigin.get(fn)
 							if (
@@ -4835,7 +4847,7 @@ export class Elysia<
 							: (pluginEvents ??= nullObject())
 
 						pushField(target, key, fn)
-						if (isGlobal) this.#hasGlobal = true
+						if (isGlobal) this.hasGlobal = true
 					}
 
 					continue
@@ -4910,7 +4922,7 @@ export class Elysia<
 		preChain: ChainNode | undefined,
 		name: string | undefined
 	) {
-		const declared = app.#declaredRoutes
+		const declared = app.declaredRoutes
 		if (!declared?.length) return
 
 		const limit = declared.length
@@ -4982,32 +4994,32 @@ export class Elysia<
 	}
 
 	get modules(): Promise<void> {
-		const ready = this.#ready
+		const ready = this.ready
 
 		if (!ready) {
-			if (this.#error !== undefined)
-				return Promise.reject(this.#error.error)
+			if (this._error !== undefined)
+				return Promise.reject(this._error.error)
 			return Promise.resolve()
 		}
 
 		return ready.then(() => {
-			if (this.#error !== undefined) throw this.#error.error
+			if (this._error !== undefined) throw this._error.error
 
 			// module may register another async plugin (nested async) and extends the chain
-			if (this.#ready && this.#ready !== ready) return this.modules
+			if (this.ready && this.ready !== ready) return this.modules
 		})
 	}
 
 	get pending() {
-		return this.#pending > 0
+		return this._pending > 0
 	}
 
 	#useAsync(promise: Promise<any>): this {
-		if (!this.#ready) this.#error = undefined
+		if (!this.ready) this._error = undefined
 
-		this.#pending++
+		this._pending++
 
-		const base = this.#ready ?? Promise.resolve()
+		const base = this.ready ?? Promise.resolve()
 
 		const resolved = base
 			.then(() => promise)
@@ -5024,48 +5036,48 @@ export class Elysia<
 					try {
 						this.use(plugin)
 					} catch (err) {
-						this.#error ??= { error: err }
+						this._error ??= { error: err }
 						console.error(err)
 					}
 			})
 			.finally(() => {
-				this.#pending--
+				this._pending--
 			})
 
 		const next: Promise<void> = resolved
 			.then(
 				() => {},
 				(err) => {
-					this.#error ??= { error: err }
+					this._error ??= { error: err }
 					console.error(err)
 				}
 			)
 			.finally(() => this.#tryDrain(next))
 
-		this.#ready = next
+		this.ready = next
 
 		return this
 	}
 
 	#tryDrain(sentinel: Promise<void>) {
-		if (this.#pending > 0) return
-		if (this.#ready !== sentinel) return
+		if (this._pending > 0) return
+		if (this.ready !== sentinel) return
 
-		const previousCompiled = this.#compiled
-		const previousJitColdRemaining = this.#jitColdRemaining
+		const previousCompiled = this.compiled
+		const previousJitColdRemaining = this.jitColdRemaining
 
-		this.#ready = undefined
-		this.#compiled = undefined
-		this.#fetchFn = undefined
-		this.#routerBuilt = false
+		this.ready = undefined
+		this.compiled = undefined
+		this.fetchFn = undefined
+		this.routerBuilt = false
 		clearContextCache(this)
 
 		try {
 			this.#buildRouter(false)
 		} catch (error) {
-			this.#compiled = previousCompiled
-			this.#jitColdRemaining = previousJitColdRemaining
-			this.#error ??= { error }
+			this.compiled = previousCompiled
+			this.jitColdRemaining = previousJitColdRemaining
+			this._error ??= { error }
 		}
 	}
 
@@ -5087,7 +5099,7 @@ export class Elysia<
 		const appHook = this['~hookChain']
 
 		if (this['~generation'] !== undefined) this.#assertMutable('route')
-		;(this.#declaredRoutes ?? this.#materializeDeclaredRoutes()).push(
+		;(this.declaredRoutes ?? this.#materializeDeclaredRoutes()).push(
 			(appHook
 				? [method, path, handler, this, hook, appHook]
 				: hook
@@ -5095,15 +5107,15 @@ export class Elysia<
 					: [method, path, handler, this]) as unknown as InternalRoute
 		)
 
-		if (this.#routerBuilt || this.#compiled !== undefined) {
-			this.#compiled = undefined
-			this.#jitColdRemaining = undefined
-			this.#jitTable = undefined
-			this.#jitRoute = undefined
-			this.#jitStatic = undefined
-			this.#jitAliases = undefined
-			this.#fetchFn = undefined
-			this.#routerBuilt = false
+		if (this.routerBuilt || this.compiled !== undefined) {
+			this.compiled = undefined
+			this.jitColdRemaining = undefined
+			this.jitTable = undefined
+			this.jitRoute = undefined
+			this.jitStatic = undefined
+			this.jitAliases = undefined
+			this.fetchFn = undefined
+			this.routerBuilt = false
 		}
 
 		return this
@@ -5116,35 +5128,35 @@ export class Elysia<
 	}
 
 	#materializeDeclaredRoutes() {
-		if (this.#declaredRoutes !== undefined) return this.#declaredRoutes
+		if (this.declaredRoutes !== undefined) return this.declaredRoutes
 
 		const table = this['~routeTable']
-		if (!table) return (this.#declaredRoutes = [])
+		if (!table) return (this.declaredRoutes = [])
 
 		const routes = new Array<InternalRoute>(table.length)
 		for (let i = 0; i < table.length; i++) routes[i] = routeRow(table, i)
 
-		return (this.#declaredRoutes = routes)
+		return (this.declaredRoutes = routes)
 	}
 
 	#registerRoute(route: InternalRoute, source?: string) {
 		if (this['~generation'] !== undefined) this.#assertMutable('route')
 
-		const routes = this.#declaredRoutes ?? this.#materializeDeclaredRoutes()
+		const routes = this.declaredRoutes ?? this.#materializeDeclaredRoutes()
 		const sequence = routes.length
 		routes.push(route)
 
-		if (source) (this.#routeSources ??= [])[sequence] = source
+		if (source) (this.routeSources ??= [])[sequence] = source
 
-		if (this.#routerBuilt || this.#compiled !== undefined) {
-			this.#compiled = undefined
-			this.#jitColdRemaining = undefined
-			this.#jitTable = undefined
-			this.#jitRoute = undefined
-			this.#jitStatic = undefined
-			this.#jitAliases = undefined
-			this.#fetchFn = undefined
-			this.#routerBuilt = false
+		if (this.routerBuilt || this.compiled !== undefined) {
+			this.compiled = undefined
+			this.jitColdRemaining = undefined
+			this.jitTable = undefined
+			this.jitRoute = undefined
+			this.jitStatic = undefined
+			this.jitAliases = undefined
+			this.fetchFn = undefined
+			this.routerBuilt = false
 		}
 	}
 
@@ -5219,7 +5231,7 @@ export class Elysia<
 		model?: AnySchema
 	): AnyElysia {
 		this.#assertMutable('model')
-		const models = (this.#ext.models ??= nullObject() as Record<
+		const models = (this.ext.models ??= nullObject() as Record<
 			string,
 			AnySchema
 		>)
@@ -5259,7 +5271,7 @@ export class Elysia<
 						next[key] = value
 					}
 				}
-				this.#ext.models = next
+				this.ext.models = next
 
 				return this
 			}
@@ -6759,15 +6771,15 @@ export class Elysia<
 	compile() {
 		this['~config'] ??= nullObject()
 		this['~config']!.precompile = true
-		this.#routerBuilt = false
+		this.routerBuilt = false
 
-		this.#compiled = undefined
-		this.#jitColdRemaining = undefined
-		this.#jitTable = undefined
-		this.#jitRoute = undefined
-		this.#jitStatic = undefined
-		this.#jitAliases = undefined
-		this.#fetchFn = undefined
+		this.compiled = undefined
+		this.jitColdRemaining = undefined
+		this.jitTable = undefined
+		this.jitRoute = undefined
+		this.jitStatic = undefined
+		this.jitAliases = undefined
+		this.fetchFn = undefined
 
 		void this.fetch
 
@@ -6782,11 +6794,11 @@ export class Elysia<
 		aliases?: StaticMapAliases,
 		table?: RouteTable
 	): CompiledHandler {
-		if (this.#compiled?.[index]) return this.#compiled![index]
+		if (this.compiled?.[index]) return this.compiled![index]
 
 		const indexedTable =
-			table ?? (this.#routerBuilt ? this['~routeTable'] : undefined)
-		const compiled = (this.#compiled ??= new Array(
+			table ?? (this.routerBuilt ? this['~routeTable'] : undefined)
+		const compiled = (this.compiled ??= new Array(
 			indexedTable?.length ?? this['~routes'].length
 		))
 
@@ -6815,12 +6827,6 @@ export class Elysia<
 			}
 
 			compiled![index] = handler
-			// Nothing is published here. During a build the caller writes every
-			// key this row answers to, and outside one the map already holds a
-			// thunk that short-circuits through `#compiled[index]`. Publishing
-			// would only let a row compiled by index steal a key its owner
-			// still holds — a duplicate loser over the last registration, or an
-			// HTTP-compiled WS row over its own socket handler
 			if (indexedTable) this.#satisfyJit(indexedTable, index)
 
 			return handler
@@ -6842,11 +6848,11 @@ export class Elysia<
 		aliases?: StaticMapAliases,
 		table?: RouteTable
 	): CompiledHandler {
-		if (table !== undefined) this.#jitTable = table
-		if (route !== undefined) (this.#jitRoute ??= [])[index] = route
+		if (table !== undefined) this.jitTable = table
+		if (route !== undefined) (this.jitRoute ??= [])[index] = route
 		if (precomputedStatic !== undefined)
-			(this.#jitStatic ??= [])[index] = precomputedStatic
-		if (aliases !== undefined) (this.#jitAliases ??= [])[index] = aliases
+			(this.jitStatic ??= [])[index] = precomputedStatic
+		if (aliases !== undefined) (this.jitAliases ??= [])[index] = aliases
 
 		return (context) => this.#jitDispatch(index, context)
 	}
@@ -6887,20 +6893,17 @@ export class Elysia<
 
 	#releaseJit() {
 		Compiled.release(this['~programId'])
-		this.#jitColdRemaining = undefined
-		this.#jitRoute = undefined
-		this.#jitStatic = undefined
-		this.#jitAliases = undefined
-		this.#jitTable = undefined
+		this.jitColdRemaining = undefined
+		this.jitRoute = undefined
+		this.jitStatic = undefined
+		this.jitAliases = undefined
+		this.jitTable = undefined
 	}
 
 	#satisfyJit(table: RouteTable, index: number) {
-		// A duplicate loser never owns dispatch, so compiling it credits
-		// nobody — #publishGeneration excludes it from the cold count for the
-		// same reason, and its winner still has to compile for itself
 		if ((table.flags[index] & RouteFlag.ExactDuplicate) !== 0) return false
 
-		if (this.#jitColdRemaining === undefined) {
+		if (this.jitColdRemaining === undefined) {
 			if (
 				this['~generation'] === undefined &&
 				this['~config']?.precompile !== true &&
@@ -6914,17 +6917,17 @@ export class Elysia<
 		if ((table.flags[index] & RouteFlag.JITCold) === 0) return false
 
 		table.flags[index] &= ~RouteFlag.JITCold
-		if (--this.#jitColdRemaining > 0) return false
+		if (--this.jitColdRemaining > 0) return false
 
 		this.#releaseJit()
 		return true
 	}
 
 	#jitDispatch(index: number, context: any) {
-		if (this.#compiled![index]) return this.#compiled![index](context)
+		if (this.compiled![index]) return this.compiled![index](context)
 
-		const route = this.#jitRoute?.[index]
-		const table = this.#jitTable ?? this['~routeTable']
+		const route = this.jitRoute?.[index]
+		const table = this.jitTable ?? this['~routeTable']
 		const materialized = route ?? routeRow(table!, index)
 		const routeFlags = table?.flags[index] ?? 0
 		const exactDuplicate = (routeFlags & RouteFlag.ExactDuplicate) !== 0
@@ -6934,7 +6937,7 @@ export class Elysia<
 			handler = compileHandler(
 				materialized,
 				this,
-				this.#jitStatic?.[index],
+				this.jitStatic?.[index],
 				exactDuplicate && Compiled.hasProgram(this['~programId'])
 			)
 		} catch (error) {
@@ -6948,14 +6951,11 @@ export class Elysia<
 			throw routeError
 		}
 
-		this.#compiled![index] = handler
+		this.compiled![index] = handler
 
-		// An exact duplicate loser is only reachable by index: the last
-		// registration owns every key it would write, so publishing it here
-		// would break last-wins dispatch
 		if (!exactDuplicate) {
 			const aliases =
-				this.#jitAliases?.[index] ??
+				this.jitAliases?.[index] ??
 				(table ? this.#staticAliases(table, index) : undefined)
 			if (aliases) {
 				this.#initMap()
@@ -6971,9 +6971,9 @@ export class Elysia<
 		const releasedNow = table ? this.#satisfyJit(table, index) : false
 
 		if (!releasedNow) {
-			if (this.#jitRoute) this.#jitRoute[index] = undefined
-			if (this.#jitStatic) this.#jitStatic[index] = undefined
-			if (this.#jitAliases) this.#jitAliases[index] = undefined
+			if (this.jitRoute) this.jitRoute[index] = undefined
+			if (this.jitStatic) this.jitStatic[index] = undefined
+			if (this.jitAliases) this.jitAliases[index] = undefined
 		}
 
 		return handler(context)
@@ -7126,9 +7126,9 @@ export class Elysia<
 				checkSlots(schemas[s] as any)
 	}
 
-	#routerBuilt = false
+	private routerBuilt = false
 	#buildRouter(seal = false) {
-		if (this.#routerBuilt) {
+		if (this.routerBuilt) {
 			if (seal && this['~generation'] === undefined)
 				this.#publishGeneration()
 
@@ -7139,23 +7139,23 @@ export class Elysia<
 
 		const previousMap = this['~map']
 		const previousRouter = this['~router']
-		const previousCompiled = this.#compiled
-		const previousJitTable = this.#jitTable
-		const previousJitRoute = this.#jitRoute
-		const previousJitStatic = this.#jitStatic
-		const previousJitAliases = this.#jitAliases
+		const previousCompiled = this.compiled
+		const previousJitTable = this.jitTable
+		const previousJitRoute = this.jitRoute
+		const previousJitStatic = this.jitStatic
+		const previousJitAliases = this.jitAliases
 		const previousHasDynamicWS = this['~hasDynamicWS']
 
 		const previousGeneration = this['~generation']
 
 		this['~map'] = undefined
 		this['~router'] = undefined
-		this.#compiled = previousCompiled?.slice()
-		this.#jitColdRemaining = undefined
-		this.#jitTable = undefined
-		this.#jitRoute = undefined
-		this.#jitStatic = undefined
-		this.#jitAliases = undefined
+		this.compiled = previousCompiled?.slice()
+		this.jitColdRemaining = undefined
+		this.jitTable = undefined
+		this.jitRoute = undefined
+		this.jitStatic = undefined
+		this.jitAliases = undefined
 		this['~hasDynamicWS'] = undefined
 		this['~generation'] = undefined
 		let buildSucceeded = false
@@ -7175,19 +7175,19 @@ export class Elysia<
 				this['~router'] = previousRouter
 			}
 
-			this.#routerBuilt = true
+			this.routerBuilt = true
 			if (seal) this.#publishGeneration()
 
 			buildSucceeded = true
 		} catch (error) {
 			this['~map'] = previousMap
 			this['~router'] = previousRouter
-			this.#compiled = previousCompiled
-			this.#jitColdRemaining = undefined
-			this.#jitTable = previousJitTable
-			this.#jitRoute = previousJitRoute
-			this.#jitStatic = previousJitStatic
-			this.#jitAliases = previousJitAliases
+			this.compiled = previousCompiled
+			this.jitColdRemaining = undefined
+			this.jitTable = previousJitTable
+			this.jitRoute = previousJitRoute
+			this.jitStatic = previousJitStatic
+			this.jitAliases = previousJitAliases
 			this['~hasDynamicWS'] = previousHasDynamicWS
 			this['~generation'] = previousGeneration
 
@@ -7217,7 +7217,7 @@ export class Elysia<
 			else {
 				const table = this['~routeTable']!
 				const routeCount = table.length
-				const compiled = this.#compiled
+				const compiled = this.compiled
 				let cold = 0
 
 				for (let i = 0; i < routeCount; i++) {
@@ -7240,13 +7240,13 @@ export class Elysia<
 				}
 
 				if (cold === 0) this.#releaseJit()
-				else this.#jitColdRemaining = cold
+				else this.jitColdRemaining = cold
 			}
 
 			clearAuthoringAnalysisCaches(this)
 
 			if (!this['~ext']?.macro && !this['~scopeChildren'])
-				this.#declaredRoutes = undefined
+				this.declaredRoutes = undefined
 		}
 
 		const ext = this['~ext']
@@ -7256,8 +7256,8 @@ export class Elysia<
 	}
 
 	['~newGeneration']() {
-		this.#fetchFn = undefined
-		this.#routerBuilt = false
+		this.fetchFn = undefined
+		this.routerBuilt = false
 		this['~generation'] = undefined
 		this.#buildRouter(true)
 
@@ -7475,15 +7475,15 @@ export class Elysia<
 		this['~wsConfig'] = wsConfig
 	}
 
-	#fetchFn?: (request: Request) => MaybePromise<Response>
+	private fetchFn?: (request: Request) => MaybePromise<Response>
 	get fetch() {
-		if (this.#fetchFn) return this.#fetchFn
+		if (this.fetchFn) return this.fetchFn
 
-		this.#buildRouter(!this.#pending)
-		return (this.#fetchFn ??= applyHoc(this, createFetchHandler(this)))
+		this.#buildRouter(!this._pending)
+		return (this.fetchFn ??= applyHoc(this, createFetchHandler(this)))
 	}
 
-	#handle?: (
+	private _handle?: (
 		url: string | Request,
 		options?: RequestInit
 	) => Promise<Response>
@@ -7492,7 +7492,7 @@ export class Elysia<
 		url: string | Request,
 		options?: RequestInit
 	) => Promise<Response> {
-		return (this.#handle ??= async (
+		return (this._handle ??= async (
 			requestOrUrl: Request | string,
 			options?: RequestInit
 		) =>
@@ -7545,12 +7545,12 @@ export class Elysia<
 		) => MaybePromise<Response>
 	>(callback: WrapFn<T>): this {
 		this.#assertMutable('wrap')
-		if (this.#fetchFn && !this.#pending)
+		if (this.fetchFn && !this._pending)
 			console.warn(
 				'[Elysia] .wrap() was called after the fetch handler was built'
 			)
 
-		const ext = this.#ext
+		const ext = this.ext
 		;(ext.hoc ??= []).push(callback)
 
 		return this
@@ -7578,7 +7578,7 @@ export class Elysia<
 			return this
 
 		this.#assertMutable('cleanup')
-		const arr = (this.#ext.cleanup ??= [])
+		const arr = (this.ext.cleanup ??= [])
 
 		if (Array.isArray(handler))
 			arr.push(...(handler as GracefulHandler<any>[]))
@@ -7588,21 +7588,15 @@ export class Elysia<
 	}
 
 	/**
-	 * Stop the underlying server (if any), then run every `cleanup` handler.
-	 * Omitted and `false` are the same graceful stop: new requests are gated,
-	 * tracked WebSockets are settled and active HTTP is drained, then cleanup
-	 * runs and the epoch is released. `true` force-closes the transport
-	 * instead of draining it, and escalates a graceful stop already in flight.
+	 * Stop the underlying server (if any), then run every `cleanup` handler
 	 *
 	 * Awaiting `stop()` from inside a `setup`, `cleanup` or WebSocket lifecycle
-	 * callback is only supported while that callback is still synchronous; the
-	 * teardown is waiting on the callback, so after an `await` it can only be
-	 * issued as `void app.stop()`.
+	 * callback is only supported while that callback is still synchronous
 	 *
 	 * @param closeActiveConnections Pass `true` to terminate active
 	 *   transports. Omit (or pass `false`) to drain safely.
 	 */
-	stop(closeActiveConnections?: boolean): Promise<void> | void {
+	stop(closeActiveConnections?: boolean) {
 		const stop = this['~ext']?.stop
 		if (stop) return stop(closeActiveConnections)
 

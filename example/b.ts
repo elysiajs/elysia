@@ -1,47 +1,31 @@
-import { HTTPError } from '../src'
+import { Elysia, HTTPError } from '../src'
 
-const a = new Elysia()
+const services = new Elysia({ name: 'svc' }).derive('plugin', () => ({
+	db: {
+		findUser: async () => ({
+			id: 1,
+			name: 'saltyaom'
+		})
+	}
+}))
+
+new Elysia()
+	.use(services)
 	.macro({
 		auth: {
-			derive() {
-				console.log('auth')
-
-				return {
-					user: {
-						id: 1,
-						role: 'admin'
-					}
-				}
+			derive: async ({ db }) => {
+				return { user: db ? await db.findUser() : null }
+			},
+			beforeHandle: ({ user, status }) => {
+				if (!user) return status(401, 'no user')
 			}
 		}
 	})
+	.get('/me', { auth: true }, ({ user }) => user)
 	.macro({
-		rbac: (roles: string[]) => ({
-			auth: true,
-			derive({ user }) {
-				console.log('r1')
-
-				if (roles.includes(user.role)) return { user }
-			}
-		}),
-		rbac2: (roles: string[]) => ({
-			auth: true,
-			derive({ user }) {
-				console.log('r2')
-
-				if (roles.includes(user.role)) return { user }
-			}
-		})
+		auth2(enabled: boolean) {
+			if (!enabled) return
+			return { derive: () => ({ user: { id: 'u1' } }) }
+		}
 	})
-	.get(
-		'/',
-		{
-			rbac: ['user', 'admin'],
-			rbac2: ['user', 'admin']
-		},
-		() => 'a'
-	)
-
-a.handle('/')
-	.then((x) => x.text())
-	.then(console.log)
+	.get('/me', { auth2: true }, (ctx) => ctx.user)
