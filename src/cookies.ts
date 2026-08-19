@@ -352,20 +352,24 @@ export const createCookieJar = (
 ): Record<string, Cookie<unknown>> => {
 	if (!set.cookie) set.cookie = Object.create(null)
 
+	const cache: Record<string, Cookie<unknown>> = Object.create(null)
+
 	return new Proxy(store, {
 		get(_, key: string) {
+			if (key in cache) return cache[key]
+
 			if (key in store)
-				return new Cookie(
+				return (cache[key] = new Cookie(
 					key,
 					set.cookie as Record<string, ElysiaCookie>,
 					Object.assign({}, initial ?? {}, store[key])
-				)
+				))
 
-			return new Cookie(
+			return (cache[key] = new Cookie(
 				key,
 				set.cookie as Record<string, ElysiaCookie>,
 				Object.assign({}, initial)
-			)
+			))
 		}
 	}) as Record<string, Cookie<unknown>>
 }

@@ -118,4 +118,12 @@ describe('Explicit Cookie', () => {
 			Date.now()
 		)
 	})
+
+	it('memoize cookie instance across multiple accesses', () => {
+		const { cookie } = create()
+		const first = cookie.name
+		const second = cookie.name
+
+		expect(first).toBe(second)
+	})
 })
