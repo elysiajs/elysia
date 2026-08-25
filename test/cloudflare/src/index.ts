@@ -1,9 +1,4 @@
-import { Elysia, t } from 'elysia'
-import { CloudflareAdapter } from 'elysia/adapter/cloudflare-worker'
+// Load the frozen AOT manifest before constructing the Worker application.
+import './manifest.generated.js'
 
-const sub = new Elysia().get('/test', () => 'hello')
-
-export default new Elysia({ adapter: CloudflareAdapter })
-	.get('/', () => 'Elysia on Cloudflare Worker!')
-	.use(sub)
-	.compile()
+export { default } from './app.mjs'

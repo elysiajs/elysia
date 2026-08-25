@@ -1,43 +1,911 @@
-import type { TSchema } from '@sinclair/typebox'
-import { Value } from '@sinclair/typebox/value'
-import type {
-	TypeCheck,
-	ValueError,
-	ValueErrorIterator
-} from '@sinclair/typebox/compiler'
+import { Create } from './type/bridge'
 
-import { StatusMap, InvertedStatusMap } from './utils'
-import type { ElysiaTypeCheck } from './schema'
-import { StandardSchemaV1Like } from './types'
+import type { MaybePromise } from './types'
+import { isProduction } from './universal/is-production'
+import { StatusMap, StatusMapBack } from './constants'
+import { primitiveElysiaTypes } from './type/constants'
+import { skipClone } from './adapter/skip-clone'
 
-// ? Cloudflare worker support
-const env =
-	typeof Bun !== 'undefined'
-		? Bun.env
-		: typeof process !== 'undefined'
-			? process?.env
-			: undefined
+export { isProduction } from './universal/is-production'
 
-export const ERROR_CODE = Symbol('ElysiaErrorCode')
-export type ERROR_CODE = typeof ERROR_CODE
+const expectedCache = new WeakMap<object, unknown>()
 
-export const isProduction = (env?.NODE_ENV ?? env?.ENV) === 'production'
+function freezeExpected(value: unknown): unknown {
+	if (!value || typeof value !== 'object') return typeof value !== 'function'
+	if (!Array.isArray(value) && (value as any).constructor !== Object) return
 
-export type ElysiaErrors =
-	| InternalServerError
-	| NotFoundError
-	| ParseError
-	| ValidationError
-	| InvalidCookieSignature
+	for (const key in value as any)
+		if (!freezeExpected((value as any)[key])) return
 
-const emptyHttpStatus = {
-	101: undefined,
-	204: undefined,
-	205: undefined,
-	304: undefined,
-	307: undefined,
-	308: undefined
-} as const
+	return Object.freeze(value)
+}
+
+function isCacheableExpected(value: unknown, visited = new Set<object>()) {
+	if (value === null || value === undefined) return true
+
+	const t = typeof value
+	if (t === 'string' || t === 'number' || t === 'boolean' || t === 'bigint')
+		return true
+
+	if (t !== 'object') return false
+	const obj = value as object
+
+	if (visited.has(obj)) return true
+
+	const proto = Object.getPrototypeOf(obj)
+	if (proto !== Object.prototype && proto !== null && !Array.isArray(obj))
+		return false
+
+	visited.add(obj)
+
+	for (const key in obj)
+		if (!isCacheableExpected((obj as any)[key], visited)) return false
+
+	return true
+}
+
+export class ElysiaError<
+	Status extends number = number,
+	Response extends string = string
+> extends Error {
+	status?: Status
+	response?: Response
+
+	/** RFC 9457 problem `type` slug (overridden per subclass) */
+	problemType = 'about:blank'
+	/** RFC 9457 problem `title` (overridden per subclass) */
+	problemTitle?: string
+
+	constructor(message: string, cause?: Error) {
+		super(message)
+		this.name = this.constructor.name
+		if (cause) this.cause = cause
+	}
+
+	toResponse(headers?: Record<string, any>) {
+		return problemResponse(
+			{
+				type: this.problemType,
+				title: this.problemTitle,
+				status: this.status ?? 500,
+				detail:
+					this.response !== undefined &&
+					this.response !== this.problemTitle
+						? this.response
+						: undefined
+			},
+			headers
+		)
+	}
+}
+
+/**
+ * Wrap a string into a TypeBox `error` callback that overrides the default
+ * validation message. Use as `t.Number({ error: validationDetail('x must be a number') })`.
+ */
+export const validationDetail =
+	<T>(message: T) =>
+	(error: any) => {
+		error.message = message
+		return error
+	}
+
+export class InternalServerError extends ElysiaError {
+	status = 500 as const
+	problemType = 'internal-server-error'
+	problemTitle = 'Internal Server Error'
+
+	constructor(
+		public response = 'Internal Server Error',
+		cause?: Error
+	) {
+		super(response, cause)
+	}
+}
+
+export class NotFound extends ElysiaError {
+	status = 404 as const
+	problemType = 'not-found'
+	problemTitle = 'Not Found'
+
+	constructor(public response = 'Not Found') {
+		super(response)
+	}
+}
+
+export class ParseError extends ElysiaError {
+	status = 400 as const
+	response = 'Bad Request'
+	problemType = 'parse'
+	problemTitle = 'Bad Request'
+
+	constructor(cause?: Error) {
+		super('Bad Request', cause)
+	}
+
+	toResponse(headers?: Record<string, any>) {
+		const cause = this.cause as Error | undefined
+
+		return problemResponse(
+			{
+				type: this.problemType,
+				title: this.problemTitle,
+				status: 400,
+				detail:
+					!isProduction() && cause?.message != null
+						? String(cause.message)
+						: undefined
+			},
+			headers
+		)
+	}
+}
+
+const segmentString = (part: unknown) =>
+	typeof part === 'object' && part !== null
+		? (part as { key: unknown }).key + ''
+		: part + ''
+
+const propertyAccessor = (path: unknown) => {
+	if (Array.isArray(path))
+		return path.length ? '/' + path.map(segmentString).join('/') : 'root'
+
+	if (typeof path === 'string') return path || 'root'
+
+	return 'root'
+}
+
+function walkComposition(
+	schema: any,
+	parts: string[],
+	seen: WeakSet<object> = new WeakSet()
+): unknown {
+	if (parts.length === 0) return schema
+	if (!schema || typeof schema !== 'object' || seen.has(schema)) return
+
+	seen.add(schema)
+
+	try {
+		const branches: any[] | undefined =
+			schema.anyOf ?? schema.oneOf ?? schema.allOf
+
+		if (Array.isArray(branches)) {
+			for (let i = 0; i < branches.length; i++) {
+				const result = walkComposition(branches[i], parts, seen)
+				if (result !== undefined) return result
+			}
+		}
+
+		const [head, ...rest] = parts
+		if (schema.properties?.[head])
+			return walkComposition(schema.properties[head], rest, seen)
+
+		if (
+			schema.additionalProperties &&
+			typeof schema.additionalProperties === 'object'
+		)
+			return walkComposition(schema.additionalProperties, rest, seen)
+
+		if (schema.items) return walkComposition(schema.items, rest, seen)
+	} finally {
+		seen.delete(schema)
+	}
+}
+
+const walkSubSchema = (schema: any, instancePath: string | undefined) =>
+	!schema || !instancePath
+		? schema
+		: walkComposition(schema, instancePath.split('/').filter(Boolean))
+
+const FOUND_ECHO_LIMIT = 8192
+const FOUND_ECHO_OMITTED = `[value exceeds ${FOUND_ECHO_LIMIT} byte echo limit]`
+
+function jsonStringLengthWithin(value: string, budget: number) {
+	budget -= 2
+
+	for (let i = 0; i < value.length && budget >= 0; i++) {
+		const code = value.charCodeAt(i)
+
+		if (code === 34 || code === 92) budget -= 2
+		else if (code < 32)
+			budget -=
+				code === 8 ||
+				code === 9 ||
+				code === 10 ||
+				code === 12 ||
+				code === 13
+					? 2
+					: 6
+		else if (code < 128) budget--
+		else if (code < 2048) budget -= 2
+		else if (code >= 0xd800 && code <= 0xdbff) {
+			const low = value.charCodeAt(i + 1)
+			if (low >= 0xdc00 && low <= 0xdfff) {
+				budget -= 4
+				i++
+			} else budget -= 6
+		} else if (code >= 0xdc00 && code <= 0xdfff) budget -= 6
+		else budget -= 3
+	}
+
+	return budget
+}
+
+const jsonLengthWithin = (value: unknown, budget: number): number => {
+	if (budget < 0) return -1
+
+	switch (typeof value) {
+		case 'object':
+			break
+
+		case 'string':
+			return jsonStringLengthWithin(value, budget)
+
+		case 'number':
+			return budget - (Number.isFinite(value) ? String(value).length : 4)
+
+		case 'boolean':
+			return budget - (value ? 4 : 5)
+
+		default:
+			return budget - 4
+	}
+
+	if (value === null) return budget - 4
+
+	if (Array.isArray(value)) {
+		budget -= 2
+		for (let i = 0; i < value.length; i++) {
+			budget = jsonLengthWithin(value[i], budget - (i ? 1 : 0))
+			if (budget < 0) return -1
+		}
+
+		return budget
+	}
+
+	budget -= 2
+	let first = true
+	for (const key in value) {
+		budget = jsonStringLengthWithin(key, budget - (first ? 0 : 1)) - 1
+		if (budget < 0) return -1
+
+		budget = jsonLengthWithin(
+			(value as Record<string, unknown>)[key],
+			budget
+		)
+		if (budget < 0) return -1
+		first = false
+	}
+
+	return budget
+}
+
+// empty parts resolve to `value` itself (root-level errors); an unrecognized
+// path shape resolves to undefined
+export function subValueAt(value: unknown, path: unknown) {
+	let parts: any[] | undefined
+
+	if (typeof path === 'string') parts = path.split('/').filter(Boolean)
+	else if (Array.isArray(path)) parts = path
+
+	if (!parts) return
+
+	let current: any = value
+	for (let i = 0; i < parts.length; i++) {
+		if (current === null || typeof current !== 'object') return
+
+		const part = parts[i]
+		current =
+			current[typeof part === 'object' && part !== null ? part.key : part]
+	}
+
+	return current
+}
+
+function scopeFound(value: unknown, first: any) {
+	if (jsonLengthWithin(value, FOUND_ECHO_LIMIT) >= 0) return value
+
+	const sub = subValueAt(value, first?.instancePath ?? first?.path)
+	if (sub !== undefined && jsonLengthWithin(sub, FOUND_ECHO_LIMIT) >= 0)
+		return sub
+
+	return FOUND_ECHO_OMITTED
+}
+
+export class ValidationError extends ElysiaError {
+	status = 422 as const
+
+	schema?: unknown
+	declare message: string
+
+	allowUnsafeValidationDetails = false
+
+	#thunk: () => any[]
+	#findCustomError?: (
+		value: unknown
+	) => { instancePath: string; error: unknown } | undefined
+	#state?: { errors: any[]; custom: unknown; message: string }
+
+	constructor(
+		public type: string | undefined,
+		public value: unknown,
+		errors: any[] | (() => any[]),
+		schema?: unknown,
+		findCustomError?: (
+			value: unknown
+		) => { instancePath: string; error: unknown } | undefined
+	) {
+		super(undefined as any)
+
+		this.schema = schema
+		this.#thunk =
+			typeof errors === 'function'
+				? (errors as () => any[])
+				: () => errors as any[]
+
+		this.#findCustomError = findCustomError
+
+		Object.defineProperty(this, 'errors', {
+			get: () => this['~resolve']().errors,
+			set(v) {
+				Object.defineProperty(this, 'errors', {
+					value: v,
+					writable: true,
+					enumerable: true,
+					configurable: true
+				})
+			},
+			enumerable: true,
+			configurable: true
+		})
+	}
+
+	/** @internal lazily resolve and memoize errors/customError/message */
+	'~resolve'() {
+		if (this.#state) return this.#state
+
+		const { type, value } = this
+		const production = isProduction()
+		const allowUnsafe = this.allowUnsafeValidationDetails
+		const findCustomError = this.#findCustomError
+
+		let resolved: any[]
+		let custom: unknown
+		let message: string
+
+		if (production && !allowUnsafe && findCustomError) {
+			const hit = findCustomError(value)
+			resolved = hit ? [{ instancePath: hit.instancePath }] : []
+
+			if (hit && hit.error !== undefined)
+				custom =
+					typeof hit.error === 'function'
+						? hit.error({
+								type: 'validation',
+								on: type,
+								found: undefined
+							})
+						: hit.error
+
+			message =
+				custom !== undefined
+					? typeof custom === 'string'
+						? custom
+						: JSON.stringify(custom)
+					: `Validation error on ${type ?? 'unknown'}`
+
+			return (this.#state = { errors: resolved, custom, message })
+		}
+
+		resolved = this.#thunk() ?? []
+
+		const sub: any = walkSubSchema(this.schema, resolved[0]?.instancePath)
+
+		if (sub?.error !== undefined)
+			custom =
+				typeof sub.error === 'function'
+					? sub.error(
+							production && !allowUnsafe
+								? {
+										type: 'validation',
+										on: type,
+										found: undefined
+									}
+								: {
+										type: 'validation',
+										on: type,
+										value,
+										errors: resolved
+									}
+						)
+					: sub.error
+
+		message =
+			custom !== undefined
+				? typeof custom === 'string'
+					? custom
+					: JSON.stringify(custom)
+				: resolved[0]?.message
+					? resolved[0].message
+					: `Validation error on ${type ?? 'unknown'}`
+
+		return (this.#state = { errors: resolved, custom, message })
+	}
+
+	declare errors: any[]
+
+	get customError(): unknown {
+		return this['~resolve']().custom
+	}
+
+	set customError(v: unknown) {
+		Object.defineProperty(this, 'customError', {
+			value: v,
+			writable: true,
+			enumerable: true,
+			configurable: true
+		})
+	}
+
+	get all() {
+		if (!this.errors) return []
+
+		// need arrow function to preserve `this`
+		return this.#collapseCoercionErrors(this.errors.filter(Boolean)).map(
+			(e) => this.#normalizeIssue(e)
+		)
+	}
+
+	#collapseCoercionErrors(errors: any[]) {
+		if (!this.schema || !errors.length) return errors
+
+		let coercionPaths: Map<string, boolean> | undefined
+		let seen: Set<string> | undefined
+		let out: any[] | undefined
+
+		for (let i = 0; i < errors.length; i++) {
+			const e = errors[i]
+			const path = e?.instancePath
+
+			if (
+				typeof path !== 'string' ||
+				typeof e?.schemaPath !== 'string' ||
+				(e.keyword !== 'anyOf' && !e.schemaPath.includes('/anyOf'))
+			) {
+				out?.push(e)
+				continue
+			}
+
+			coercionPaths ??= new Map()
+			let isCoercion = coercionPaths.get(path)
+			if (isCoercion === undefined) {
+				const sub: any = walkSubSchema(this.schema, path)
+				isCoercion =
+					!!sub?.['~elyTyp'] &&
+					primitiveElysiaTypes.has(sub['~elyTyp'])
+				coercionPaths.set(path, isCoercion)
+			}
+
+			if (!isCoercion) {
+				out?.push(e)
+				continue
+			}
+
+			out ??= errors.slice(0, i)
+			seen ??= new Set()
+
+			if (seen.has(path)) continue
+			seen.add(path)
+
+			const internal = e.keyword === '~refine' || e.keyword === 'anyOf'
+			out.push({
+				...e,
+				keyword: internal ? 'type' : e.keyword,
+				schemaPath: e.schemaPath.replace(/\/anyOf(\/\d+)?$/, ''),
+				params: internal ? {} : e.params,
+				message: internal ? (e.params?.message ?? e.message) : e.message
+			})
+		}
+
+		return out ?? errors
+	}
+
+	#normalizeIssue(e: any) {
+		if (!e) return e
+
+		const path = Array.isArray(e.path)
+			? e.path.length
+				? e.path.map(segmentString).join('.')
+				: 'root'
+			: typeof e.path === 'string'
+				? e.path.replace(/^\//, '').replace(/\//g, '.') || 'root'
+				: 'root'
+
+		return {
+			path,
+			message: e.message ?? '',
+			schemaPath: e.schemaPath,
+			params: e.params,
+			value: this.value
+		}
+	}
+
+	get #productionDetail() {
+		return isProduction() && !this.allowUnsafeValidationDetails
+	}
+
+	get #maskResponseValue() {
+		return this.type === 'response' && this.#productionDetail
+	}
+
+	detail(message: unknown) {
+		if (this.#productionDetail) {
+			if (this.type === 'response')
+				return {
+					type: 'internal-server-error',
+					on: this.type,
+					message
+				}
+
+			return {
+				type: 'validation',
+				on: this.type,
+				message
+			}
+		}
+
+		return {
+			type: 'validation',
+			on: this.type,
+			message,
+			errors: this.all
+		}
+	}
+
+	get payload() {
+		if (this.#productionDetail) {
+			if (this.type === 'response')
+				return {
+					type: 'internal-server-error',
+					title: 'Internal Server Error',
+					status: 500
+				}
+
+			const first = (this.errors ?? []).find(Boolean)
+
+			return {
+				type: 'validation',
+				title: 'Validation Error',
+				status: 422,
+				on: this.type,
+				property: first
+					? propertyAccessor(
+							first.instancePath ??
+								(Array.isArray(first.path)
+									? first.path
+									: undefined)
+						)
+					: 'root'
+			}
+		}
+
+		const errors = this.#collapseCoercionErrors(
+			(this.errors ?? []).filter(Boolean)
+		)
+
+		const first = errors[0] as any
+
+		const property = first
+			? propertyAccessor(first.instancePath ?? first.path)
+			: 'root'
+
+		const detail = first?.message ?? this.message
+
+		let expected: unknown
+		const schemaForExpected = first?.schema ?? this.schema
+
+		if (schemaForExpected)
+			if (expectedCache.has(schemaForExpected as object))
+				expected = expectedCache.get(schemaForExpected as object)
+			else {
+				try {
+					const created = Create(schemaForExpected as any)
+
+					if (isCacheableExpected(created))
+						try {
+							const snapshot = structuredClone(created)
+							expected = snapshot
+							if (freezeExpected(snapshot)) {
+								expectedCache.set(
+									schemaForExpected as object,
+									snapshot
+								)
+							}
+						} catch {
+							expected = created
+						}
+					else
+						// just recreate exotic value (class instance, Date, etc.)
+						expected = created
+				} catch {}
+			}
+
+		return {
+			type: 'validation',
+			title: 'Validation Error',
+			status: 422,
+			detail,
+			on: this.type,
+			property,
+			found: scopeFound(this.value, first),
+			expected,
+			errors
+		}
+	}
+
+	toResponse(headers?: Record<string, any>) {
+		if (this.#maskResponseValue)
+			return problemResponse(this.payload, headers)
+
+		// validateDetail
+		if (this.customError !== undefined) {
+			const isString = typeof this.customError === 'string'
+			const response = new Response(
+				isString
+					? (this.customError as string)
+					: JSON.stringify(this.customError),
+				{
+					status: this.status ?? 422,
+					headers: {
+						...headers,
+						'content-type': isString
+							? 'text/plain'
+							: 'application/json'
+					}
+				}
+			)
+			skipClone.add(response)
+			return response
+		}
+
+		return problemResponse(this.payload, headers)
+	}
+}
+
+Object.defineProperty(ValidationError.prototype, 'message', {
+	get(this: ValidationError) {
+		return this['~resolve']().message
+	},
+	set(this: ValidationError, v: string) {
+		Object.defineProperty(this, 'message', {
+			value: v,
+			writable: true,
+			enumerable: false,
+			configurable: true
+		})
+	},
+	enumerable: false,
+	configurable: true
+})
+
+const emptyHttpStatus = new Set([101, 204, 205, 304, 307, 308])
+
+export class ElysiaStatus<
+	const in out Code extends number | keyof StatusMap,
+	// no in out here so the response can be sub type of return type
+	T = Code extends keyof StatusMapBack ? StatusMapBack[Code] : Code,
+	const in out Status extends Code extends keyof StatusMap
+		? StatusMap[Code]
+		: Code = Code extends keyof StatusMap ? StatusMap[Code] : Code
+> {
+	code: Status
+	response!: T
+	headers?: Record<string, string>
+
+	constructor(code: Code, res: T, headers?: Record<string, string>) {
+		const response =
+			res ??
+			(code in StatusMapBack
+				? StatusMapBack[code as keyof StatusMapBack]
+				: code)
+
+		this.code = (StatusMap[code as keyof StatusMap] as Status) ?? code
+
+		if (!emptyHttpStatus.has(this.code as number))
+			this.response = response as T
+
+		this.headers = headers
+	}
+
+	get status() {
+		return this.code as unknown as number
+	}
+}
+
+Object.defineProperty(ElysiaStatus, 'name', { value: 'ElysiaStatus' })
+
+export const status = <
+	const Code extends number | keyof StatusMap,
+	const T = Code extends keyof StatusMapBack ? StatusMapBack[Code] : Code
+>(
+	code: Code,
+	response?: T
+) => new ElysiaStatus<Code, T>(code, response as T)
+
+export const PROBLEM_JSON = 'application/problem+json'
+
+/**
+ * RFC 9457 Problem Details shape.
+ *
+ * @see https://www.rfc-editor.org/info/rfc9457/
+ */
+export type Problem<
+	Code extends number | keyof StatusMap = number | keyof StatusMap,
+	Extension extends Record<string, unknown> = {}
+> = {
+	/** URI (or slug) identifying the problem type. @default 'about:blank' */
+	type?: string
+
+	/** Short, human-readable summary of the problem type */
+	title?: string
+
+	/** HTTP status. A number or a `StatusMap` name (e.g. `'Conflict'`) */
+	status?: Code
+
+	/** Human-readable explanation specific to this occurrence */
+	detail?: string
+
+	/** URI identifying the specific occurrence of the problem */
+	instance?: string
+} & Extension
+
+type NumericStatus<Code extends number | keyof StatusMap> =
+	Code extends keyof StatusMap ? StatusMap[Code] : Code
+
+type ProblemStatus<P> = P extends {
+	status: infer S extends number | keyof StatusMap
+}
+	? NumericStatus<S>
+	: 500
+
+export type ProblemResponseBody<Status extends number, P> = Omit<
+	{
+		type: string
+		title: string
+		detail?: string
+		instance?: string
+	},
+	keyof P
+> &
+	Omit<P, 'status'> & { status: Status }
+
+export function problemBody(
+	p: Problem
+): Record<string, unknown> & { status: number } {
+	const status =
+		typeof p.status === 'string'
+			? (StatusMap[p.status] ?? 500)
+			: (p.status ?? 500)
+
+	const body: any = { type: 'about:blank', ...p, status }
+	if (body.title == null)
+		body.title =
+			(StatusMapBack as Record<number, string>)[status] ?? 'Error'
+
+	return body
+}
+
+export function problemResponse(p: Problem, headers?: Record<string, any>) {
+	const body = problemBody(p)
+	const response = new Response(
+		emptyHttpStatus.has(body.status) ? null : JSON.stringify(body),
+		{
+			status: body.status,
+			headers: { ...headers, 'content-type': PROBLEM_JSON }
+		}
+	)
+
+	skipClone.add(response)
+
+	return response
+}
+
+export function internalServerErrorBody(error: any) {
+	const body: Record<string, unknown> = {
+		type: 'internal-server-error',
+		title: 'Internal Server Error',
+		status: 500
+	}
+
+	if (!isProduction()) {
+		if (error?.message != null) body.detail = error.message
+		if (error?.name) body.name = error.name
+		if (error?.cause !== undefined) body.cause = error.cause
+	}
+
+	return body
+}
+
+export function internalServerErrorBodyString(error: any): string {
+	try {
+		return JSON.stringify(internalServerErrorBody(error))
+	} catch {
+		// A circular `error.cause` (DB client, Request, stream, looping chain)
+		try {
+			const safe = internalServerErrorBody(error)
+			delete safe.cause
+			return JSON.stringify(safe)
+		} catch {
+			return JSON.stringify({
+				type: 'internal-server-error',
+				title: 'Internal Server Error',
+				status: 500
+			})
+		}
+	}
+}
+
+export function internalServerErrorResponse(error: any) {
+	const body = internalServerErrorBodyString(error)
+
+	const response = new Response(body, {
+		status: 500,
+		headers: { 'content-type': PROBLEM_JSON }
+	})
+
+	skipClone.add(response)
+
+	return response
+}
+
+/**
+ * RFC 9457 Problem Details function
+ *
+ * @example
+ * ```ts
+ * problem(400, { detail: 'Something went wrong' })
+ * ````
+ *
+ * @see https://www.rfc-editor.org/info/rfc9457
+ */
+export function problem<
+	const Code extends number | keyof StatusMap,
+	const P extends Record<string, unknown> & { status?: never } = {}
+>(
+	status: Code,
+	detail?: P & Omit<Problem<Code>, 'status'>
+): ElysiaStatus<
+	NumericStatus<Code>,
+	ProblemResponseBody<NumericStatus<Code>, P>
+>
+
+/**
+ * RFC 9457 Problem Details function
+ *
+ * @example
+ * ```ts
+ * problem({ status: 400, detail: 'Something went wrong' })
+ * ````
+ *
+ * @see https://www.rfc-editor.org/info/rfc9457
+ */
+export function problem<const P extends Problem>(
+	detail: P
+): ElysiaStatus<ProblemStatus<P>, ProblemResponseBody<ProblemStatus<P>, P>>
+
+export function problem(
+	statusOrDetail: number | keyof StatusMap | Problem,
+	detail?: Omit<Problem, 'status'>
+): ElysiaStatus<any, any> {
+	const body =
+		typeof statusOrDetail === 'object'
+			? statusOrDetail
+			: { ...detail, status: statusOrDetail }
+
+	return new ElysiaStatus((body.status ?? 500) as any, problemBody(body), {
+		'content-type': PROBLEM_JSON
+	})
+}
 
 type CheckExcessProps<T, U> = 0 extends 1 & T
 	? T // T is any
@@ -52,7 +920,7 @@ type CheckExcessProps<T, U> = 0 extends 1 & T
 export type SelectiveStatus<in out Res> = <
 	const Code extends
 		| keyof Res
-		| InvertedStatusMap[Extract<keyof InvertedStatusMap, keyof Res>],
+		| StatusMapBack[Extract<keyof StatusMapBack, keyof Res>],
 	T extends Code extends keyof Res
 		? Res[Code]
 		: Code extends keyof StatusMap
@@ -70,541 +938,183 @@ export type SelectiveStatus<in out Res> = <
 					Res[StatusMap[Code]]
 				: never
 	>
-) => ElysiaCustomStatusResponse<
+) => ElysiaStatus<
 	// @ts-ignore trust me bro
 	Code,
 	T
 >
 
-export class ElysiaCustomStatusResponse<
-	const in out Code extends number | keyof StatusMap,
-	// no in out here so the response can be sub type of return type
-	T = Code extends keyof InvertedStatusMap ? InvertedStatusMap[Code] : Code,
-	const in out Status extends Code extends keyof StatusMap
-		? StatusMap[Code]
-		: Code = Code extends keyof StatusMap ? StatusMap[Code] : Code
-> {
-	code: Status
-	response: T
-
-	constructor(code: Code, response: T) {
-		const res =
-			response ??
-			(code in InvertedStatusMap
-				? // @ts-expect-error Always correct
-					InvertedStatusMap[code]
-				: code)
-
-		// @ts-ignore Trust me bro
-		this.code = StatusMap[code] ?? code
-
-		if (code in emptyHttpStatus) this.response = undefined as any
-		else
-			// @ts-ignore Trust me bro
-			this.response = res
-	}
+/**
+ * Class returned by {@link HTTPError.id}
+ */
+export type TaggedHTTPError<Type extends string, Annotation = {}> = {
+	new (
+		message?: string,
+		options?: ErrorOptions
+	): HTTPError<Type> & { type: Type } & Annotation
+	prototype: HTTPError<Type>
 }
 
-export const ElysiaStatus = ElysiaCustomStatusResponse
-
-export const status = <
-	const Code extends number | keyof StatusMap,
-	const T = Code extends keyof InvertedStatusMap
-		? InvertedStatusMap[Code]
-		: Code
->(
-	code: Code,
-	response?: T
-) => new ElysiaCustomStatusResponse<Code, T>(code, response as T)
-
-export class InternalServerError extends Error {
-	code = 'INTERNAL_SERVER_ERROR'
-	status = 500
-
-	constructor(message?: string) {
-		super(message ?? 'INTERNAL_SERVER_ERROR')
-	}
-}
-
-export class NotFoundError extends Error {
-	code = 'NOT_FOUND'
-	status = 404
-
-	constructor(message?: string) {
-		super(message ?? 'NOT_FOUND')
-	}
-}
-
-export class ParseError extends Error {
-	code = 'PARSE'
-	status = 400
-
-	constructor(cause?: Error) {
-		super('Bad Request', {
-			cause
-		})
-	}
-}
-
-export class InvalidCookieSignature extends Error {
-	code = 'INVALID_COOKIE_SIGNATURE'
-	status = 400
-
-	constructor(
-		public key: string,
-		message?: string
-	) {
-		super(message ?? `"${key}" has invalid cookie signature`)
-	}
-}
-
-interface ValueErrorWithSummary extends ValueError {
-	summary?: string
-}
-
-export const mapValueError = (
-	error: ValueError | undefined
-): ValueErrorWithSummary | undefined => {
-	if (!error) return error
-
-	let { message, path, value, type } = error
-	if (Array.isArray(path)) path = path[0]
-
-	const property =
-		typeof path === 'string'
-			? path.slice(1).replaceAll('/', '.')
-			: 'unknown'
-
-	const isRoot = path === ''
-
-	switch (type) {
-		case 42:
-			return {
-				...error,
-				summary: isRoot
-					? `Value should not be provided`
-					: `Property '${property}' should not be provided`
-			}
-
-		case 45:
-			return {
-				...error,
-				summary: isRoot
-					? `Value is missing`
-					: `Property '${property}' is missing`
-			}
-
-		case 50:
-			// Expected string to match 'email' format
-			const quoteIndex = message.indexOf("'")!
-			const format = message.slice(
-				quoteIndex + 1,
-				message.indexOf("'", quoteIndex + 1)
-			)
-
-			return {
-				...error,
-				summary: isRoot
-					? `Value should be an email`
-					: `Property '${property}' should be ${format}`
-			}
-
-		case 54:
-			return {
-				...error,
-				summary: `${message
-					.slice(0, 9)
-					.trim()} property '${property}' to be ${message
-					.slice(8)
-					.trim()} but found: ${value}`
-			}
-
-		case 62:
-			const union = error.schema.anyOf
-				.map((x: Record<string, unknown>) => `'${x?.format ?? x.type}'`)
-				.join(', ')
-
-			return {
-				...error,
-				summary: isRoot
-					? `Value should be one of ${union}`
-					: `Property '${property}' should be one of: ${union}`
-			}
-
-		default:
-			return { summary: message, ...error }
-	}
-}
-
-export class InvalidFileType extends Error {
-	code = 'INVALID_FILE_TYPE'
-	status = 422
-
-	constructor(
-		public property: string,
-		public expected: string | string[],
-		public message = `"${property}" has invalid file type`
-	) {
-		super(message)
-
-		Object.setPrototypeOf(this, InvalidFileType.prototype)
-	}
-
-	toResponse(headers?: Record<string, any>) {
-		if (isProduction)
-			return new Response(
-				JSON.stringify({
-					type: 'validation',
-					on: 'body'
-				}),
-				{
-					status: 422,
-					headers: {
-						...headers,
-						'content-type': 'application/json'
-					}
-				}
-			)
-
-		return new Response(
-			JSON.stringify({
-				type: 'validation',
-				on: 'body',
-				summary: 'Invalid file type',
-				message: this.message,
-				property: this.property,
-				expected: this.expected
-			}),
-			{
-				status: 422,
-				headers: {
-					...headers,
-					'content-type': 'application/json'
-				}
-			}
-		)
-	}
-}
-
-export class ValidationError extends Error {
-	code = 'VALIDATION'
-	status = 422
+/**
+ * Self-describing HTTP error
+ *
+ * Annotate `status`, `headers` and `value` on the subclass and Elysia maps
+ * the instance to a response on its own, no `.error(Class, handler)` needed
+ *
+ * Everything an owned `HTTPError` serves is an RFC 9457 problem document:
+ * `type` is the problem type carried on the wire, an annotated object body
+ * merges into the envelope, and any other body (or the error message, when
+ * there is none) becomes `detail`
+ *
+ * - `detail()` - the common case. Whatever it returns becomes the `detail`
+ *   member of the problem document, verbatim, objects included. The envelope
+ *   still carries `type`, `status` and an auto-filled `title`
+ * - `value()` - the escape hatch. Whatever it returns replaces the *whole*
+ *   response: no envelope, no `application/problem+json`. The annotated
+ *   `status` and `headers` still apply, only the content is yours
+ *
+ * `value` wins over `detail`, `detail` over the error message. A knob
+ * returning `undefined` falls through to the next one.
+ *
+ * @example
+ * ```ts
+ * class OutOfCredit extends HTTPError<'OUT_OF_CREDIT'> {
+ * 	type = 'OUT_OF_CREDIT' as const
+ * 	override readonly status = 402
+ *
+ * 	detail() {
+ * 		return { balance: 0, currency: 'usd' }
+ * 	}
+ * }
+ * // → { type: 'OUT_OF_CREDIT', title: 'Payment Required', status: 402,
+ * //     detail: { balance: 0, currency: 'usd' } }
+ *
+ * class Overdrawn extends HTTPError<'OVERDRAWN'> {
+ * 	type = 'OVERDRAWN' as const
+ * 	override readonly status = 402
+ *
+ * 	async detail() {
+ * 		return await describeBalance()
+ * 	}
+ * }
+ *
+ * class Legacy extends HTTPError<'LEGACY'> {
+ * 	type = 'LEGACY' as const
+ * 	override readonly status = 402
+ *
+ * 	// full control, served as-is
+ * 	value() {
+ * 		return { code: 'OUT_OF_CREDIT', ok: false }
+ * 	}
+ * }
+ * ```
+ *
+ * @see https://www.rfc-editor.org/info/rfc9457
+ * @since 2.0.0
+ */
+export abstract class HTTPError<
+	const in out T extends string = string
+> extends Error {
+	/**
+	 * RFC 9457 problem type served in the `type` member, a URI or a slug.
+	 * Doubles as the tag that discriminates one error class from another
+	 */
+	abstract type: T
 
 	/**
-	 * An actual value of `message`
+	 * HTTP status served when the error reaches the error pipeline,
+	 * as a number or a status name (`'Payment Required'`)
+	 */
+	declare readonly status?: number | keyof StatusMap
+
+	/** Headers merged into `set.headers` when the error is served */
+	declare readonly headers?: Record<string, string>
+
+	/**
+	 * Return a value to serve as the whole response
 	 *
-	 * Since `message` is string
-	 * use this instead of message
+	 * Supports `status()`/`problem()` for status-based Eden response
 	 */
-	valueError?: ValueError
+	value?(): MaybePromise<unknown>
 
 	/**
-	 * Alias of `valueError`
-	 */
-	get messageValue() {
-		return this.valueError
-	}
-
-	/**
-	 * Expected value of the schema
-	 */
-	expected?: unknown
-
-	/**
-	 * Custom error if provided
-	 */
-	customError?: unknown
-
-	constructor(
-		public type: string,
-		public validator:
-			| TSchema
-			| TypeCheck<any>
-			| ElysiaTypeCheck<any>
-			| StandardSchemaV1Like,
-		/**
-		 * Input value
-		 */
-		public value: unknown,
-		private allowUnsafeValidationDetails = false,
-		errors?: ValueErrorIterator
-	) {
-		let message = ''
-		let error
-		let expected
-		let customError
-
-		if (
-			// @ts-ignore
-			validator?.provider === 'standard' ||
-			'~standard' in validator ||
-			// @ts-ignore
-			(validator.schema && '~standard' in validator.schema)
-		) {
-			const standard = // @ts-ignore
-				('~standard' in validator ? validator : validator.schema)[
-					'~standard'
-				]
-
-			const _errors = errors ?? standard.validate(value).issues
-
-			error = _errors?.[0]
-
-			if (isProduction && !allowUnsafeValidationDetails)
-				message = JSON.stringify({
-					type: 'validation',
-					on: type,
-					found: value
-				})
-			else
-				message = JSON.stringify(
-					{
-						type: 'validation',
-						on: type,
-						property: error.path?.[0] || 'root',
-						message: error?.message,
-						summary: error?.problem,
-						expected,
-						found: value,
-						errors
-					},
-					null,
-					2
-				)
-
-			customError = error?.message
-		} else {
-			if (
-				value &&
-				typeof value === 'object' &&
-				value instanceof ElysiaCustomStatusResponse
-			)
-				value = value.response
-
-			error =
-				errors?.First() ??
-				('Errors' in validator
-					? validator.Errors(value).First()
-					: Value.Errors(validator, value).First())
-
-			const accessor = error?.path || 'root'
-
-			// @ts-ignore private field
-			const schema = validator?.schema ?? validator
-
-			if (!isProduction && !allowUnsafeValidationDetails)
-				try {
-					expected = Value.Create(schema)
-				} catch (error) {
-					expected = {
-						type: 'Could not create expected value',
-						// @ts-expect-error
-						message: error?.message,
-						error
-					}
-				}
-
-			customError =
-				error?.schema?.message || error?.schema?.error !== undefined
-					? typeof error.schema.error === 'function'
-						? error.schema.error(
-								isProduction && !allowUnsafeValidationDetails
-									? {
-											type: 'validation',
-											on: type,
-											found: value
-										}
-									: {
-											type: 'validation',
-											on: type,
-											value,
-											property: accessor,
-											message: error?.message,
-											summary:
-												mapValueError(error)?.summary,
-											found: value,
-											expected,
-											errors:
-												'Errors' in validator
-													? [
-															...validator.Errors(
-																value
-															)
-														].map(mapValueError)
-													: [
-															...Value.Errors(
-																validator,
-																value
-															)
-														].map(mapValueError)
-										},
-								validator
-							)
-						: error.schema.error
-					: undefined
-
-			if (customError !== undefined) {
-				message =
-					typeof customError === 'object'
-						? JSON.stringify(customError)
-						: customError + ''
-			} else if (isProduction && !allowUnsafeValidationDetails) {
-				message = JSON.stringify({
-					type: 'validation',
-					on: type,
-					found: value
-				})
-			} else {
-				message = JSON.stringify(
-					{
-						type: 'validation',
-						on: type,
-						property: accessor,
-						message: error?.message,
-						summary: mapValueError(error)?.summary,
-						expected,
-						found: value,
-						errors:
-							'Errors' in validator
-								? [...validator.Errors(value)].map(
-										mapValueError
-									)
-								: [...Value.Errors(validator, value)].map(
-										mapValueError
-									)
-					},
-					null,
-					2
-				)
-			}
-		}
-
-		super(message)
-		this.valueError = error
-		this.expected = expected
-		this.customError = customError
-
-		Object.setPrototypeOf(this, ValidationError.prototype)
-	}
-
-	get all(): ValueErrorWithSummary[] {
-		// Handle standard schema validators (Zod, Valibot, etc.)
-		if (
-			// @ts-ignore
-			this.validator?.provider === 'standard' ||
-			'~standard' in this.validator ||
-			// @ts-ignore
-			('schema' in this.validator &&
-				// @ts-ignore
-				this.validator.schema &&
-				// @ts-ignore
-				'~standard' in this.validator.schema)
-		) {
-			const standard = // @ts-ignore
-				(
-					'~standard' in this.validator
-						? this.validator
-						: // @ts-ignore
-							this.validator.schema
-				)['~standard']
-
-			const issues = standard.validate(this.value).issues
-
-			// Map standard schema issues to the expected format
-			return (
-				issues?.map((issue: any) => ({
-					summary: issue.message,
-					path: issue.path?.join('.') || 'root',
-					message: issue.message,
-					value: this.value
-				})) || []
-			)
-		}
-
-		// Handle TypeBox validators
-		return 'Errors' in this.validator
-			? [...this.validator.Errors(this.value)]
-					.filter((x) => x)
-					.map((x) => mapValueError(x) as ValueErrorWithSummary)
-			: // @ts-ignore
-				[...Value.Errors(this.validator, this.value)].map(mapValueError)
-	}
-
-	static simplifyModel(
-		validator: TSchema | TypeCheck<any> | ElysiaTypeCheck<any>
-	) {
-		// @ts-ignore
-		const model = 'schema' in validator ? validator.schema : validator
-
-		try {
-			return Value.Create(model)
-		} catch {
-			return model
-		}
-	}
-
-	get model() {
-		if ('~standard' in this.validator) return this.validator
-
-		return ValidationError.simplifyModel(this.validator)
-	}
-
-	toResponse(headers?: Record<string, any>) {
-		return new Response(this.message, {
-			status: 400,
-			headers: {
-				...headers,
-				'content-type': 'application/json'
-			}
-		})
-	}
-
-	/**
-	 * Utility function to inherit add custom error and keep the original Validation error
+	 * Return the `detail` member of the RFC 9457 problem document,
+	 * similar to `problem()`
 	 *
-	 * @since 1.3.14
+	 * Use `value()` to override the entire response
+	 */
+	detail?(): MaybePromise<unknown>
+
+	/**
+	 * Create a concrete `HTTPError` subclass carrying `type`
+	 *
+	 * `type` carries no status annotation, annotate `status` in the subclass
+	 * body as a number or a status name
 	 *
 	 * @example
 	 * ```ts
-	 * new Elysia()
-	 *		.onError(({ error, code }) => {
-	 *			if (code === 'VALIDATION') return error.detail(error.message)
-	 *		})
-	 *		.post('/', () => 'Hello World!', {
-	 *			body: t.Object({
-	 *				x: t.Number({
-	 *					error: 'x must be a number'
-	 *				})
-	 *			})
-	 *		})
+	 * class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {
+	 *     headers = {
+	 *         'x-powered-by': 'Elysia'
+	 *     }
+	 * }
 	 * ```
 	 */
-	detail(
-		message: unknown,
-		allowUnsafeValidatorDetails = this.allowUnsafeValidationDetails
-	) {
-		if (!this.customError) return this.message
+	static id<const Type extends string>(type: Type): TaggedHTTPError<Type>
 
-		const value = this.value
-		const expected = this.expected
-		const errors = this.all
+	/**
+	 * Create a concrete `HTTPError` subclass carrying `type`, annotated with
+	 * `status` as a number or a status name
+	 *
+	 * Annotate what is served with `detail()` (problem `detail` member) or
+	 * `value()` (whole-response override), either of which may be `async`
+	 *
+	 * @example
+	 * ```ts
+	 * class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {}
+	 * class Denied extends HTTPError.id('https://example.com/denied', 'Payment Required') {
+	 *     async detail() {
+	 *         return await describeBalance()
+	 *     }
+	 * }
+	 * ```
+	 */
+	static id<
+		const Type extends string,
+		const S extends number | keyof StatusMap
+	>(
+		type: Type,
+		status: S
+	): TaggedHTTPError<
+		Type,
+		{ readonly status: S extends keyof StatusMap ? StatusMap[S] : S }
+	>
 
-		return isProduction && !allowUnsafeValidatorDetails
-			? {
-					type: 'validation',
-					on: this.type,
-					found: value,
-					message
-				}
-			: {
-					type: 'validation',
-					on: this.type,
-					property: this.valueError?.path || 'root',
-					message,
-					summary: mapValueError(this.valueError)?.summary,
-					found: value,
-					expected,
-					errors
-				}
+	static id<const Type extends string>(
+		type: Type,
+		status?: number | keyof StatusMap
+	): TaggedHTTPError<Type> {
+		const Tagged = class extends HTTPError<string> {
+			declare type: Type
+			declare status?: number
+			declare readonly headers?: Record<string, string>
+		}
+
+		Tagged.prototype.type = type
+		Tagged.prototype.name = type
+
+		Object.defineProperty(Tagged, 'name', {
+			value: type,
+			configurable: true
+		})
+
+		const resolved =
+			typeof status === 'string'
+				? StatusMap[status as keyof StatusMap]
+				: status
+
+		if (typeof resolved === 'number') Tagged.prototype.status = resolved
+
+		return Tagged
 	}
 }

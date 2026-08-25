@@ -1,17 +1,21 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect } from 'bun:test'
 import { Context, Elysia, t } from '../../src'
-import { post, req } from '../utils'
+import { post } from '../utils'
 
 describe('code generation', () => {
 	it('fallback query if not presented', async () => {
-		const app = new Elysia().get('/', () => 'hi', {
-			query: t.Object({
-				id: t.Optional(t.Number())
-			})
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					id: t.Optional(t.Number())
+				})
+			},
+			() => 'hi'
+		)
 
-		const res = await app.handle(req('/')).then((x) => x.text())
+		const res = await app.handle('/').then((x) => x.text())
 
 		expect(res).toBe('hi')
 	})
@@ -40,21 +44,33 @@ describe('code generation', () => {
 
 				return body
 			})
-			.post('/6', () => body, {
-				transform({ body }) {
-					// not empty
-				}
-			})
-			.post('/7', () => body, {
-				beforeHandle({ body }) {
-					// not empty
-				}
-			})
-			.post('/8', () => body, {
-				afterHandle({ body }) {
-					// not empty
-				}
-			})
+			.post(
+				'/6',
+				{
+					transform({ body }) {
+						// not empty
+					}
+				},
+				() => body
+			)
+			.post(
+				'/7',
+				{
+					beforeHandle({ body }) {
+						// not empty
+					}
+				},
+				() => body
+			)
+			.post(
+				'/8',
+				{
+					afterHandle({ body }) {
+						// not empty
+					}
+				},
+				() => body
+			)
 			.post('/9', ({ ...rest }) => rest.body)
 
 		const from = (number: number) =>
@@ -90,16 +106,24 @@ describe('code generation', () => {
 
 				return handle(a)
 			})
-			.post('/5', () => '', {
-				beforeHandle(context) {
-					return handle(context)
-				}
-			})
-			.post('/6', () => body, {
-				afterHandle(context) {
-					return handle(context)
-				}
-			})
+			.post(
+				'/5',
+				{
+					beforeHandle(context) {
+						return handle(context)
+					}
+				},
+				() => ''
+			)
+			.post(
+				'/6',
+				{
+					afterHandle(context) {
+						return handle(context)
+					}
+				},
+				() => body
+			)
 			.post('/7', ({ ...rest }) => handle(rest))
 
 		const from = (number: number) =>

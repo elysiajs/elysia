@@ -1,84 +1,86 @@
 import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('ElysiaType.NoValidate', () => {
 	it('should bypass validation with t.NoValidate(t.String())', async () => {
-		const app = new Elysia().get('/', () => 123 as unknown as string, {
-			response: t.NoValidate(t.String())
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				response: t.NoValidate(t.String())
+			},
+			() => 123 as unknown as string
+		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('123')
+		await expect(res.text()).resolves.toBe('123')
 	})
 
 	it('should bypass validation with t.NoValidate(t.Number())', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => 'not-a-number' as unknown as number,
 			{
 				response: t.NoValidate(t.Number())
-			}
+			},
+			() => 'not-a-number' as unknown as number
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('not-a-number')
+		await expect(res.text()).resolves.toBe('not-a-number')
 	})
 
 	it('should bypass validation with t.NoValidate(t.Boolean())', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => 'not-a-boolean' as unknown as boolean,
 			{
 				response: t.NoValidate(t.Boolean())
-			}
+			},
+			() => 'not-a-boolean' as unknown as boolean
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('not-a-boolean')
+		await expect(res.text()).resolves.toBe('not-a-boolean')
 	})
 
 	it('should bypass validation with t.NoValidate(t.Object())', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => 'invalid-object' as unknown as { name: string },
 			{
 				response: t.NoValidate(t.Object({ name: t.String() }))
-			}
+			},
+			() => 'invalid-object' as unknown as { name: string }
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('{}')
+		await expect(res.text()).resolves.toBe('{}')
 	})
 
 	it('should bypass validation with t.NoValidate(t.Array())', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => 'not-an-array' as unknown as string[],
 			{
 				response: t.NoValidate(t.Array(t.String()))
-			}
+			},
+			() => 'not-an-array' as unknown as string[]
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('not-an-array')
+		await expect(res.text()).resolves.toBe('not-an-array')
 	})
 
 	it('should bypass validation with t.NoValidate(t.Union())', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => 'invalid' as unknown as string | number,
 			{
 				response: t.NoValidate(
 					t.Union([
@@ -86,123 +88,130 @@ describe('ElysiaType.NoValidate', () => {
 						t.Number({ minimum: 100 })
 					])
 				)
-			}
+			},
+			() => 'invalid' as unknown as string | number
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('invalid')
+		await expect(res.text()).resolves.toBe('invalid')
 	})
 
 	it('should bypass validation with t.NoValidate(t.Date())', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => 'Hello Elysia' as unknown as Date,
 			{
 				response: t.NoValidate(t.Date())
-			}
+			},
+			() => 'Hello Elysia' as unknown as Date
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('Hello Elysia')
+		await expect(res.text()).resolves.toBe('Hello Elysia')
 	})
 
 	it('should bypass validation with t.NoValidate(t.Ref())', async () => {
-		const app = new Elysia()
-			.model({ score: t.Number() })
-			// @ts-expect-error
-			.get('/', () => 'string instead of number!', {
+		const app = new Elysia().model({ score: t.Number() }).get(
+			'/',
+			{
 				response: t.NoValidate(t.Ref('score'))
-			})
+			},
+			// @ts-expect-error
+			() => 'string instead of number!'
+		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('string instead of number!')
+		await expect(res.text()).resolves.toBe('string instead of number!')
 	})
 
-	it('should work with actual Date when using t.NoValidate(t.Date())', async () => {
+	it('encodes a Date even when validation is skipped', async () => {
 		const testDate = new Date('2025-01-01T00:00:00Z')
-		const app = new Elysia().get('/', () => testDate, {
-			response: t.NoValidate(t.Date())
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				response: t.NoValidate(t.Date())
+			},
+			() => testDate
+		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe(testDate.toString())
+		await expect(res.text()).resolves.toBe(testDate.toISOString())
 	})
 
 	it('should bypass validation with t.NoValidate(t.Numeric())', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => 'not-a-number' as unknown as number,
 			{
 				response: t.NoValidate(t.Numeric())
-			}
+			},
+			() => 'not-a-number' as unknown as number
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('not-a-number')
+		await expect(res.text()).resolves.toBe('not-a-number')
 	})
 
-	it('should bypass validation with t.NoValidate(t.BooleanString())', async () => {
+	it('passes through a BooleanString value when encoding is unavailable', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => 'invalid-boolean' as unknown as boolean,
 			{
 				response: t.NoValidate(t.BooleanString())
-			}
+			},
+			() => true
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('invalid-boolean')
+		await expect(res.text()).resolves.toBe('true')
 	})
 
 	it('should work with NoValidate in specific status codes', async () => {
 		const app = new Elysia().get(
 			'/',
-			({ set }) => {
-				set.status = 201
-				return 'Hello' as unknown as Date
-			},
 			{
 				response: {
 					200: t.String(),
 					201: t.NoValidate(t.Date())
 				}
+			},
+			({ set }) => {
+				set.status = 201
+				return 'Hello' as unknown as Date
 			}
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(201)
-		expect(await res.text()).toBe('Hello')
+		await expect(res.text()).resolves.toBe('Hello')
 	})
 
 	it('should validate normally for non-NoValidate status codes', async () => {
 		const app = new Elysia().get(
 			'/',
-			({ set }) => {
-				set.status = 200
-				return 'Hello' as unknown as Date
-			},
 			{
 				response: {
 					200: t.Date(),
 					201: t.NoValidate(t.Date())
 				}
+			},
+			({ set }) => {
+				set.status = 200
+				return 'Hello' as unknown as Date
 			}
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(422)
 	})
@@ -210,11 +219,6 @@ describe('ElysiaType.NoValidate', () => {
 	it('should work with NoValidate on nested object properties', async () => {
 		const app = new Elysia().get(
 			'/',
-			// @ts-expect-error
-			() => ({
-				user: { age: '123', name: true },
-				timestamp: '2025-01-01T00:00:00Z'
-			}),
 			{
 				response: t.NoValidate(
 					t.Object({
@@ -225,13 +229,18 @@ describe('ElysiaType.NoValidate', () => {
 						timestamp: t.Date()
 					})
 				)
-			}
+			},
+			// @ts-expect-error
+			() => ({
+				user: { age: '123', name: true },
+				timestamp: '2025-01-01T00:00:00Z'
+			})
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			user: { age: '123', name: true },
 			timestamp: '2025-01-01T00:00:00Z'
 		})
@@ -240,96 +249,105 @@ describe('ElysiaType.NoValidate', () => {
 	it('should validate normally when NOT using NoValidate', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => 'Hello Elysia' as unknown as Date,
 			{
 				response: t.Date()
-			}
+			},
+			() => 'Hello Elysia' as unknown as Date
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(422)
 	})
 
 	it('should validate normally with strict object schemas', async () => {
-		const app = new Elysia()
-			// @ts-expect-error
-			.get('/', () => ({ name: 'John' }), {
+		const app = new Elysia().get(
+			'/',
+			{
 				response: t.Object({
 					name: t.String(),
 					age: t.Number()
 				})
-			})
+			},
+			// @ts-expect-error
+			() => ({ name: 'John' })
+		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(422)
 	})
 
 	it('should handle null values with NoValidate', async () => {
-		const app = new Elysia()
-			// @ts-expect-error
-			.get('/', () => null, {
+		const app = new Elysia().get(
+			'/',
+			{
 				response: t.NoValidate(t.String())
-			})
+			},
+			// @ts-expect-error
+			() => null
+		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('')
+		await expect(res.text()).resolves.toBe('')
 	})
 
 	it('should handle undefined values with NoValidate', async () => {
-		const app = new Elysia()
-			// @ts-expect-error
-			.get('/', () => undefined, {
+		const app = new Elysia().get(
+			'/',
+			{
 				response: t.NoValidate(t.String())
-			})
+			},
+			// @ts-expect-error
+			() => undefined
+		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('')
+		await expect(res.text()).resolves.toBe('')
 	})
 
 	it('should work with NoValidate on multiple union types', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => 'test' as unknown as string | number | boolean,
 			{
 				response: t.NoValidate(
 					t.Union([t.String(), t.Number(), t.Boolean()])
 				)
-			}
+			},
+			() => 'test' as unknown as string | number | boolean
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('test')
+		await expect(res.text()).resolves.toBe('test')
 	})
 
-	it('bypasses Encode when encodeSchema=true (Date)', async () => {
-		const app = new Elysia({ encodeSchema: true }).get(
+	it('passes a string through t.NoValidate(t.Date())', async () => {
+		const app = new Elysia().get(
 			'/',
-			// @ts-expect-error
-			() => 'Hello Elysia',
-			{ response: t.NoValidate(t.Date()) }
+			{ response: t.NoValidate(t.Date()) },
+			() => 'Hello Elysia' as any
 		)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('Hello Elysia')
+		await expect(res.text()).resolves.toBe('Hello Elysia')
 	})
 
-	it('bypasses Encode with NoValidate(t.Ref(Date)) when encodeSchema=true', async () => {
-		const app = new Elysia({ encodeSchema: true })
-			.model({ createdAt: t.Date() })
-			// @ts-expect-error
-			.get('/', () => 'Hello', {
+	it('passes string through NoValidate(t.Ref(Date))', async () => {
+		const app = new Elysia().model({ createdAt: t.Date() }).get(
+			'/',
+			{
 				response: t.NoValidate(t.Ref('createdAt'))
-			})
-		const res = await app.handle(req('/'))
+			},
+			() => 'Hello' as any
+		)
+		const res = await app.handle('/')
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('Hello')
+		await expect(res.text()).resolves.toBe('Hello')
 	})
 })

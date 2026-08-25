@@ -1,0 +1,196 @@
+import { nullObject } from '../utils'
+import type { AnySchema } from '../type'
+import type { BaseCookie, CookieOptions } from './types'
+import { InvalidCookie } from './error'
+
+export interface AppCookieConfig extends CookieOptions {
+	sign?: true | string | string[]
+	verify?: 'lazy' | 'eager'
+}
+
+export interface FieldCookieConfig {
+	secrets?: string | null | (string | null)[]
+	sign: boolean
+	defaults?: Partial<BaseCookie>
+}
+
+export interface CompiledCookieConfig {
+	defaults: Partial<BaseCookie>
+	fields: Record<string, FieldCookieConfig>
+	globalSign: true | string[] | undefined
+	globalSignSet?: Set<string>
+	globalSecrets: string | null | (string | null)[] | undefined
+	hasSign: boolean
+	verify: 'lazy' | 'eager'
+	legacySignature: boolean
+}
+
+const ATTRIBUTE_KEYS = new Set([
+	'domain',
+	'expires',
+	'httpOnly',
+	'maxAge',
+	'path',
+	'priority',
+	'sameSite',
+	'secure',
+	'partitioned'
+] as const)
+
+function getAttributes(source: Partial<BaseCookie> | undefined) {
+	if (!source) return
+
+	const keys = Object.keys(source)
+	if (!keys.length) return
+
+	let out: Partial<BaseCookie> | undefined
+
+	for (const key of keys)
+		if (ATTRIBUTE_KEYS.has(key as any)) {
+			out ??= nullObject()
+			// @ts-expect-error
+			out[key] = (source as any)[key]
+		}
+
+	return out
+}
+
+function normalizeSign(sign: true | string | string[] | undefined) {
+	if (sign === undefined) return
+	if (sign === true) return true
+	if (Array.isArray(sign)) return sign.length ? sign : undefined
+
+	return [sign]
+}
+
+// an empty secret is a real HMAC under a zero-length key, which anyone can
+// reproduce — treat it as absent so signing fails loudly
+const hasUsableSecret = (
+	secrets: string | null | (string | null)[] | undefined
+) =>
+	Array.isArray(secrets)
+		? secrets.some((s) => !!s?.trim())
+		: !!secrets?.trim()
+
+export function compileCookieConfig(
+	routeSchema: AnySchema | undefined,
+	appConfig: AppCookieConfig | undefined
+): CompiledCookieConfig {
+	const routeConfig: AppCookieConfig | undefined =
+		(routeSchema as any)?.config ?? undefined
+
+	const appAttributes = getAttributes(appConfig)
+	const routeAttributes = getAttributes(routeConfig)
+
+	const defaults: Partial<BaseCookie> =
+		appAttributes && routeAttributes
+			? {
+					...appAttributes,
+					...routeAttributes
+				}
+			: (appAttributes ?? routeAttributes ?? nullObject())
+
+	if (!defaults.path) defaults.path = '/'
+
+	const globalSign = normalizeSign(routeConfig?.sign ?? appConfig?.sign)
+	const globalSecrets =
+		routeConfig?.secrets !== undefined
+			? routeConfig.secrets
+			: appConfig?.secrets
+
+	const fields: Record<string, FieldCookieConfig> = nullObject()
+	const properties = (routeSchema as any)?.properties as
+		| Record<string, AnySchema & { config?: AppCookieConfig }>
+		| undefined
+
+	let hasSign = false
+	if (properties) {
+		for (const name in properties) {
+			const config = (properties[name] as any)?.config as
+				| AppCookieConfig
+				| undefined
+
+			if (!config) continue
+
+			const sign = !!config.secrets || config.sign === true
+			if (sign) hasSign = true
+
+			fields[name] = {
+				secrets: config.secrets,
+				sign,
+				defaults: getAttributes(config)
+			}
+		}
+	}
+
+	if (globalSign !== undefined) hasSign = true
+
+	if (hasSign) {
+		if (globalSign !== undefined && !hasUsableSecret(globalSecrets)) {
+			const fieldsWithOwnSecrets = new Set<string>()
+			for (const name in fields)
+				if (hasUsableSecret(fields[name].secrets))
+					fieldsWithOwnSecrets.add(name)
+
+			const fieldKeys = Object.keys(fields)
+
+			const uncovered =
+				globalSign === true
+					? fieldKeys.length === 0 ||
+						fieldKeys.some((n) => !fieldsWithOwnSecrets.has(n))
+					: globalSign.some((n) => !fieldsWithOwnSecrets.has(n))
+
+			if (uncovered) throw InvalidCookie.secret()
+		}
+
+		for (const name in fields)
+			if (
+				fields[name].sign &&
+				!hasUsableSecret(fields[name].secrets) &&
+				!hasUsableSecret(globalSecrets)
+			)
+				throw InvalidCookie.secret(name)
+	}
+
+	return {
+		defaults,
+		fields,
+		globalSign,
+		globalSignSet: Array.isArray(globalSign) ? new Set(globalSign) : undefined,
+		globalSecrets,
+		hasSign,
+		verify: appConfig?.verify ?? 'lazy',
+		legacySignature:
+			(routeConfig?.legacySignature ?? appConfig?.legacySignature) !==
+			false
+	}
+}
+
+export function resolveSignSecrets(
+	name: string,
+	config: CompiledCookieConfig
+): CompiledCookieConfig['globalSecrets'] | undefined {
+	const field = config.fields[name]
+	if (field?.sign) return field.secrets ?? config.globalSecrets
+	if (config.globalSign === true || config.globalSignSet?.has(name) === true)
+		return config.globalSecrets
+}
+
+export function isCookieSigned(
+	name: string,
+	config: CompiledCookieConfig
+):
+	| { signed: true; secrets: string | null | (string | null)[] }
+	| { signed: false } {
+	const secrets = resolveSignSecrets(name, config)
+	if (secrets !== undefined) return { signed: true, secrets }
+
+	if (
+		config.fields[name]?.sign ||
+		config.globalSign === true ||
+		config.globalSignSet?.has(name) === true
+	)
+		throw InvalidCookie.secret()
+
+	return { signed: false }
+}

@@ -1,9 +1,10 @@
 import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { post, req } from '../utils'
+import { post, json } from '../utils'
 
 describe('guard', () => {
+	// Nearer schemas override inherited fields unless a guard is merge.
 	it('inherits global', async () => {
 		const app = new Elysia().state('counter', 0).guard(
 			{
@@ -12,16 +13,20 @@ describe('guard', () => {
 				}
 			},
 			(app) =>
-				app.get('/', ({ store: { counter } }) => counter, {
-					transform: ({ store }) => {
-						store.counter++
-					}
-				})
+				app.get(
+					'/',
+					{
+						transform: ({ store }) => {
+							store.counter++
+						}
+					},
+					({ store: { counter } }) => counter
+				)
 		)
 
-		const valid = await app.handle(req('/'))
+		const valid = await app.handle('/')
 
-		expect(await valid.text()).toBe('2')
+		await expect(valid.text()).resolves.toBe('2')
 	})
 
 	it('delegate onRequest', async () => {
@@ -30,14 +35,14 @@ describe('guard', () => {
 			.guard({}, (app) =>
 				app
 					.state('counter', 0)
-					.onRequest(({ store }) => {
+					.request(({ store }) => {
 						store.counter++
 					})
 					.get('/counter', ({ store: { counter } }) => counter)
 			)
 
-		await app.handle(req('/'))
-		const res = await app.handle(req('/counter')).then((r) => r.text())
+		await app.handle('/')
+		const res = await app.handle('/counter').then((r) => r.text())
 
 		expect(res).toBe('2')
 	})
@@ -47,7 +52,7 @@ describe('guard', () => {
 			app.decorate('a', 'b').get('/', ({ a }) => a)
 		)
 
-		const res = await app.handle(req('/')).then((x) => x.text())
+		const res = await app.handle('/').then((x) => x.text())
 
 		expect(res).toBe('b')
 	})
@@ -62,7 +67,7 @@ describe('guard', () => {
 			(app) => app.get('/', () => 'Hello')
 		)
 
-		const error = await app.handle(req('/'))
+		const error = await app.handle('/')
 		const correct = await app.handle(
 			new Request('http://localhost/', {
 				headers: {
@@ -88,8 +93,8 @@ describe('guard', () => {
 			(app) => app.get('/id/:id', () => 'Hello')
 		)
 
-		const error = await app.handle(req('/id/a'))
-		const correct = await app.handle(req('/id/1'))
+		const error = await app.handle('/id/a')
+		const correct = await app.handle('/id/1')
 
 		expect(correct.status).toBe(200)
 		expect(error.status).toBe(422)
@@ -105,8 +110,8 @@ describe('guard', () => {
 			(app) => app.get('/', () => 'Hello')
 		)
 
-		const error = await app.handle(req('/?id=1'))
-		const correct = await app.handle(req('/?name=a'))
+		const error = await app.handle('/?id=1')
+		const correct = await app.handle('/?name=a')
 
 		expect(correct.status).toBe(200)
 		expect(error.status).toBe(422)
@@ -123,12 +128,14 @@ describe('guard', () => {
 		)
 
 		const error = await app.handle(
-			post('/', {
+			'/',
+			json({
 				id: 'hi'
 			})
 		)
 		const correct = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'hi'
 			})
 		)
@@ -147,8 +154,8 @@ describe('guard', () => {
 				app.get('/correct', () => 'Hello').get('/error', () => 1)
 		)
 
-		const error = await app.handle(req('/error'))
-		const correct = await app.handle(req('/correct'))
+		const error = await app.handle('/error')
+		const correct = await app.handle('/correct')
 
 		expect(correct.status).toBe(200)
 		expect(error.status).toBe(422)
@@ -164,8 +171,8 @@ describe('guard', () => {
 			// @ts-expect-error
 			.get('/error', () => 1)
 
-		const error = await app.handle(req('/error'))
-		const correct = await app.handle(req('/correct'))
+		const error = await app.handle('/error')
+		const correct = await app.handle('/correct')
 
 		expect(correct.status).toBe(200)
 		expect(error.status).toBe(422)
@@ -176,35 +183,23 @@ describe('guard', () => {
 			.decorate({ a: 'a' })
 			.state({ a: 'a' })
 			.model('a', t.String())
-			.error('a', Error)
 			.group('/posts', (app) => {
-				// @ts-expect-error
-				expect(Object.keys(app.singleton.decorator)).toEqual(['a'])
-				// @ts-expect-error
-				expect(Object.keys(app.singleton.store)).toEqual(['a'])
-				// @ts-expect-error
-				expect(Object.keys(app.definitions.type)).toEqual(['a'])
-				// @ts-expect-error
-				expect(Object.keys(app.definitions.error)).toEqual(['a'])
+				expect(Object.keys(app['~ext']?.decorator ?? {})).toEqual(['a'])
+				expect(Object.keys(app['~ext']?.store ?? {})).toEqual(['a'])
+				expect(Object.keys(app['~ext']?.models ?? {})).toEqual(['a'])
 
 				return app
 					.decorate({ b: 'b' })
 					.state({ b: 'b' })
 					.model('b', t.String())
-					.error('b', Error)
 					.get('/', ({ a }) => a ?? 'Aint no response')
 			})
 
-		// @ts-expect-error
-		expect(Object.keys(app.singleton.decorator)).toEqual(['a', 'b'])
-		// @ts-expect-error
-		expect(Object.keys(app.singleton.store)).toEqual(['a', 'b'])
-		// @ts-expect-error
-		expect(Object.keys(app.definitions.type)).toEqual(['a', 'b'])
-		// @ts-expect-error
-		expect(Object.keys(app.definitions.error)).toEqual(['a', 'b'])
+		expect(Object.keys(app['~ext']?.decorator ?? {})).toEqual(['a', 'b'])
+		expect(Object.keys(app['~ext']?.store ?? {})).toEqual(['a', 'b'])
+		expect(Object.keys(app['~ext']?.models ?? {})).toEqual(['a', 'b'])
 
-		const response = await app.handle(req('/posts')).then((x) => x.text())
+		const response = await app.handle('/posts').then((x) => x.text())
 
 		expect(response).toEqual('a')
 	})
@@ -213,8 +208,7 @@ describe('guard', () => {
 		let called = 0
 
 		const inner = new Elysia()
-			.guard({
-				as: 'global',
+			.guard('global', {
 				response: t.Number(),
 				transform() {
 					called++
@@ -232,21 +226,20 @@ describe('guard', () => {
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')
 
 		const response = await Promise.all([
-			app.handle(req('/inner')).then((x) => x.status),
-			app.handle(req('/plugin')).then((x) => x.status),
-			app.handle(req('/')).then((x) => x.status)
+			app.handle('/inner').then((x) => x.status),
+			app.handle('/plugin').then((x) => x.status),
+			app.handle('/').then((x) => x.status)
 		])
 
 		expect(called).toBe(3)
 		expect(response).toEqual([422, 422, 422])
 	})
 
-	it('handle as global with local override', async () => {
+	it('nearer guard overrides inherited response', async () => {
 		let called = 0
 
 		const inner = new Elysia()
-			.guard({
-				as: 'global',
+			.guard('global', {
 				response: t.Number(),
 				transform() {
 					called++
@@ -269,21 +262,20 @@ describe('guard', () => {
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')
 
 		const response = await Promise.all([
-			app.handle(req('/inner')).then((x) => x.status),
-			app.handle(req('/plugin')).then((x) => x.status),
-			app.handle(req('/')).then((x) => x.status)
+			app.handle('/inner').then((x) => x.status),
+			app.handle('/plugin').then((x) => x.status),
+			app.handle('/').then((x) => x.status)
 		])
 
 		expect(called).toBe(4)
 		expect(response).toEqual([422, 200, 422])
 	})
 
-	it('handle as global with scoped override', async () => {
+	it('nearer plugin-scope guard overrides inherited response', async () => {
 		let called = 0
 
 		const inner = new Elysia()
-			.guard({
-				as: 'global',
+			.guard('global', {
 				response: t.Number(),
 				transform() {
 					called++
@@ -294,8 +286,7 @@ describe('guard', () => {
 
 		const plugin = new Elysia()
 			.use(inner)
-			.guard({
-				as: 'scoped',
+			.guard('plugin', {
 				response: t.String(),
 				transform() {
 					called++
@@ -306,9 +297,9 @@ describe('guard', () => {
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')
 
 		const response = await Promise.all([
-			app.handle(req('/inner')).then((x) => x.status),
-			app.handle(req('/plugin')).then((x) => x.status),
-			app.handle(req('/')).then((x) => x.status)
+			app.handle('/inner').then((x) => x.status),
+			app.handle('/plugin').then((x) => x.status),
+			app.handle('/').then((x) => x.status)
 		])
 
 		expect(called).toBe(5)
@@ -319,8 +310,7 @@ describe('guard', () => {
 		let called = 0
 
 		const inner = new Elysia()
-			.guard({
-				as: 'scoped',
+			.guard('plugin', {
 				response: t.Number(),
 				transform() {
 					called++
@@ -337,9 +327,9 @@ describe('guard', () => {
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')
 
 		const response = await Promise.all([
-			app.handle(req('/inner')).then((x) => x.status),
-			app.handle(req('/plugin')).then((x) => x.status),
-			app.handle(req('/')).then((x) => x.status)
+			app.handle('/inner').then((x) => x.status),
+			app.handle('/plugin').then((x) => x.status),
+			app.handle('/').then((x) => x.status)
 		])
 
 		expect(called).toBe(2)
@@ -350,8 +340,7 @@ describe('guard', () => {
 		let called = 0
 
 		const inner = new Elysia()
-			.guard({
-				as: 'local',
+			.guard('local', {
 				response: t.Number(),
 				transform() {
 					called++
@@ -365,9 +354,9 @@ describe('guard', () => {
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')
 
 		const response = await Promise.all([
-			app.handle(req('/inner')).then((x) => x.status),
-			app.handle(req('/plugin')).then((x) => x.status),
-			app.handle(req('/')).then((x) => x.status)
+			app.handle('/inner').then((x) => x.status),
+			app.handle('/plugin').then((x) => x.status),
+			app.handle('/').then((x) => x.status)
 		])
 
 		expect(called).toBe(1)
@@ -378,14 +367,13 @@ describe('guard', () => {
 		let called = 0
 
 		const plugin = new Elysia()
-			.guard({
-				as: 'scoped',
+			.guard('plugin', {
 				response: t.Number(),
 				transform() {
 					called++
 				}
 			})
-			.onTransform(() => {
+			.transform(() => {
 				called++
 			})
 			// @ts-expect-error
@@ -394,8 +382,8 @@ describe('guard', () => {
 		const app = new Elysia().use(plugin).get('/', () => 1)
 
 		const response = await Promise.all([
-			app.handle(req('/inner')).then((x) => x.status),
-			app.handle(req('/')).then((x) => x.status)
+			app.handle('/inner').then((x) => x.status),
+			app.handle('/').then((x) => x.status)
 		])
 
 		expect(called).toBe(3)
@@ -410,9 +398,13 @@ describe('guard', () => {
 					500: t.String()
 				}
 			})
-			.get('/', () => '', {
-				response: t.String()
-			})
+			.get(
+				'/',
+				{
+					response: t.String()
+				},
+				() => ''
+			)
 
 		expect(Object.keys(app.routes[0].hooks.response)).toEqual([
 			'200',
@@ -421,25 +413,50 @@ describe('guard', () => {
 		])
 	})
 
-	it('cast callback function schema to standaloneValidator', async () => {
+	it('route-local schema overrides the wrapper schema', async () => {
 		const app = new Elysia().guard(
 			{ params: t.Object({ id: t.Number() }) },
 			(app) =>
-				app.get('/guard/:id/:name', ({ params }) => params, {
-					params: t.Object({ name: t.String() })
-				})
+				app.get(
+					'/guard/:id/:name',
+					{
+						params: t.Object({ name: t.String() })
+					},
+					({ params }) => params
+				)
 		)
 
-		const valid = app.handle(req('/guard/1/saltyaom')).then((x) => x.json())
-		const invalid = app
-			.handle(req('/guard/a/saltyaom'))
-			.then((x) => x.status)
+		const valid = app.handle('/guard/1/saltyaom').then((x) => x.json())
+		const invalid = app.handle('/guard/a/saltyaom').then((x) => x.status)
 
-		expect(await valid).toEqual({ id: 1, name: 'saltyaom' })
-		expect(await invalid).toBe(422)
+		await expect(valid).resolves.toEqual({ name: 'saltyaom' })
+		await expect(invalid).resolves.toBe(200)
 	})
 
-	it('handle multiple nested guard with schema', async () => {
+	it("wrapper schema with schema: 'merge' stays additive", async () => {
+		const app = new Elysia().guard(
+			{
+				schema: 'merge',
+				params: t.Object({ id: t.Number() })
+			},
+			(app) =>
+				app.get(
+					'/guard/:id/:name',
+					{
+						params: t.Object({ name: t.String() })
+					},
+					({ params }) => params
+				)
+		)
+
+		const valid = app.handle('/guard/1/saltyaom').then((x) => x.json())
+		const invalid = app.handle('/guard/a/saltyaom').then((x) => x.status)
+
+		await expect(valid).resolves.toEqual({ id: 1, name: 'saltyaom' })
+		await expect(invalid).resolves.toBe(422)
+	})
+
+	it('nested guard: route-local schema overrides the wrappers', async () => {
 		const app = new Elysia().guard(
 			{
 				query: t.Object({
@@ -454,16 +471,64 @@ describe('guard', () => {
 						})
 					},
 					(app) =>
-						app.get('/', ({ query }) => query, {
-							query: t.Object({
-								playing: t.Boolean()
-							})
-						})
+						app.get(
+							'/',
+							{
+								query: t.Object({
+									playing: t.Boolean()
+								})
+							},
+							({ query }) => query
+						)
 				)
 		)
 
 		const value = await app
-			.handle(req('/?name=lilith&playing=true&limit=10'))
+			.handle('/?name=lilith&playing=true&limit=10')
+			.then((x) => x.json())
+
+		expect(value).toEqual({
+			playing: true
+		})
+
+		const error = await app
+			.handle('/?name=lilith&playing=true')
+			.then((x) => x.status)
+
+		expect(error).toBe(200)
+	})
+
+	it('nested merge guard schemas stay additive', async () => {
+		const app = new Elysia().guard(
+			{
+				schema: 'merge',
+				query: t.Object({
+					name: t.Literal('lilith')
+				})
+			},
+			(app) =>
+				app.guard(
+					{
+						schema: 'merge',
+						query: t.Object({
+							limit: t.Number()
+						})
+					},
+					(app) =>
+						app.get(
+							'/',
+							{
+								query: t.Object({
+									playing: t.Boolean()
+								})
+							},
+							({ query }) => query
+						)
+				)
+		)
+
+		const value = await app
+			.handle('/?name=lilith&playing=true&limit=10')
 			.then((x) => x.json())
 
 		expect(value).toEqual({
@@ -473,7 +538,7 @@ describe('guard', () => {
 		})
 
 		const error = await app
-			.handle(req('/?name=lilith&playing=true'))
+			.handle('/?name=lilith&playing=true')
 			.then((x) => x.status)
 
 		expect(error).toBe(422)

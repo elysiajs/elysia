@@ -1,10 +1,12 @@
 import { Elysia } from '../../src'
+import { trace } from '../../src/plugin/trace'
 import { describe, expect, it } from 'bun:test'
-import { post, req } from '../utils'
+import { post, json } from '../utils'
 
 describe('Trace Detail', async () => {
 	it('report parse units name', async () => {
 		const app = new Elysia()
+			.use(trace())
 			.trace(({ onParse, set }) => {
 				onParse(({ onEvent, onStop }) => {
 					const names = <string[]>[]
@@ -18,18 +20,23 @@ describe('Trace Detail', async () => {
 					})
 				})
 			})
-			.onParse(function luna() {})
-			.post('/', ({ body }) => body, {
-				parse: [function kindred() {}]
-			})
+			.parse(function luna() {})
+			.post(
+				'/',
+				{
+					parse: [function kindred() {}]
+				},
+				({ body }) => body
+			)
 
-		const { headers } = await app.handle(post('/', {}))
+		const { headers } = await app.handle('/', json({}))
 
 		expect(headers.get('name')).toBe('luna, kindred')
 	})
 
 	it('report transform units name', async () => {
 		const app = new Elysia()
+			.use(trace())
 			.trace(({ onTransform, set }) => {
 				onTransform(({ onEvent, onStop }) => {
 					const names = <string[]>[]
@@ -43,18 +50,23 @@ describe('Trace Detail', async () => {
 					})
 				})
 			})
-			.onTransform(function luna() {})
-			.get('/', () => 'a', {
-				transform: [function kindred() {}]
-			})
+			.transform(function luna() {})
+			.get(
+				'/',
+				{
+					transform: [function kindred() {}]
+				},
+				() => 'a'
+			)
 
-		const { headers } = await app.handle(req('/'))
+		const { headers } = await app.handle('/')
 
 		expect(headers.get('name')).toBe('luna, kindred')
 	})
 
 	it('report beforeHandle units name', async () => {
 		const app = new Elysia()
+			.use(trace())
 			.trace(({ onBeforeHandle, set }) => {
 				onBeforeHandle(({ onEvent, onStop }) => {
 					const names = <string[]>[]
@@ -68,18 +80,23 @@ describe('Trace Detail', async () => {
 					})
 				})
 			})
-			.onBeforeHandle(function luna() {})
-			.get('/', () => 'a', {
-				beforeHandle: [function kindred() {}]
-			})
+			.beforeHandle(function luna() {})
+			.get(
+				'/',
+				{
+					beforeHandle: [function kindred() {}]
+				},
+				() => 'a'
+			)
 
-		const { headers } = await app.handle(req('/'))
+		const { headers } = await app.handle('/')
 
 		expect(headers.get('name')).toBe('luna, kindred')
 	})
 
 	it('report afterHandle units name', async () => {
 		const app = new Elysia()
+			.use(trace())
 			.trace(({ onAfterHandle, set }) => {
 				onAfterHandle(({ onEvent, onStop }) => {
 					const names = <string[]>[]
@@ -93,18 +110,23 @@ describe('Trace Detail', async () => {
 					})
 				})
 			})
-			.onAfterHandle(function luna() {})
-			.get('/', () => 'a', {
-				afterHandle: [function kindred() {}]
-			})
+			.afterHandle(function luna() {})
+			.get(
+				'/',
+				{
+					afterHandle: [function kindred() {}]
+				},
+				() => 'a'
+			)
 
-		const { headers } = await app.handle(req('/'))
+		const { headers } = await app.handle('/')
 
 		expect(headers.get('name')).toBe('luna, kindred')
 	})
 
 	it('report mapResponse units name', async () => {
 		const app = new Elysia()
+			.use(trace())
 			.trace(({ onMapResponse, set }) => {
 				onMapResponse(({ onEvent, onStop }) => {
 					const names = <string[]>[]
@@ -119,18 +141,25 @@ describe('Trace Detail', async () => {
 				})
 			})
 			.mapResponse(function luna() {})
-			.get('/', () => 'a', {
-				mapResponse: [function kindred() {}]
-			})
+			.get(
+				'/',
+				{
+					mapResponse: [function kindred() {}]
+				},
+				() => 'a'
+			)
 
-		const { headers } = await app.handle(req('/'))
+		const { headers } = await app.handle('/')
 
 		expect(headers.get('name')).toBe('luna, kindred')
 	})
 
 	it('report afterResponse units name', async () => {
+		const { promise, resolve } = Promise.withResolvers<string>()
+
 		const app = new Elysia()
-			.trace(({ onAfterResponse, set }) => {
+			.use(trace())
+			.trace(({ onAfterResponse }) => {
 				onAfterResponse(({ onEvent, onStop }) => {
 					const names = <string[]>[]
 
@@ -139,15 +168,21 @@ describe('Trace Detail', async () => {
 					})
 
 					onStop(() => {
-						expect(names.join(', ')).toBe('luna, kindred')
+						resolve(names.join(', '))
 					})
 				})
 			})
-			.onAfterResponse(function luna() {})
-			.get('/', () => 'a', {
-				afterResponse: [function kindred() {}]
-			})
+			.afterResponse(function luna() {})
+			.get(
+				'/',
+				{
+					afterResponse: [function kindred() {}]
+				},
+				() => 'a'
+			)
 
-		app.handle(req('/'))
+		await app.handle('/')
+
+		await expect(promise).resolves.toBe('luna, kindred')
 	})
 })

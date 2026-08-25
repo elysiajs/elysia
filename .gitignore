@@ -11,5 +11,11 @@ trace
 .elysia
 heap.json
 server
-AGENTS.md
+.claude
+src-old
+design
 CLAUDE.md
+AGENTS.md
+plans
+bench/d1/baseline
+bench/d1/runs

@@ -1,0 +1,1189 @@
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { dirname, extname, join, resolve } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { Worker } from 'node:worker_threads'
+import {
+	compileToSource,
+	captureArtifacts,
+	replayStubbability,
+	type AotTarget,
+	type AotModuleCondition
+} from './source'
+import type { JITProbeResult } from '../../compile/jit-probe'
+import { composeRouteHook } from '../../compile/handler'
+import {
+	isStandardSchema,
+	isResponseMap,
+	mergeSchemasAllStandard,
+	resolveModelRef,
+	REQUEST_SLOTS
+} from '../../compile/handler/frozen-validator'
+import type { CapturedValidator, ValidatorSlot } from '../../compile/aot'
+
+export interface ElysiaAotOptions {
+	/**
+	 * Specifier the generated module imports `Compiled` from
+	 * Must resolve to the same `elysia` instance the app runs
+	 *
+	 * @default 'elysia'
+	 */
+	registerFrom?: string
+
+	/**
+	 * Specifier the generated module imports the `Reconstruct` table from.
+	 * Pure so any elysia copy works (registration goes through `Compiled`)
+	 *
+	 * @default 'elysia/reconstruct'
+	 */
+	reconstructFrom?: string
+
+	/**
+	 * Split the emitted validator manifest into lazily-materialized groups
+	 *
+	 * Validator entries are registered as grouped thunks: a group's
+	 * validators are constructed on the first request to any route in that
+	 * group, trading first-request latency in unbuilt groups for lower
+	 * startup cost. Handlers are always eager. Only validator construction
+	 * is deferred. Pass a number to set the group size explicitly.
+	 *
+	 * @default decided by Elysia based on route batch scale
+	 */
+	lazy?: boolean | number
+
+	/**
+	 * Deploy target for build-time-baked codegen consts (the response-header
+	 * path). Set `target: 'workerd'` to build under Bun yet ship a manifest
+	 * valid on Cloudflare Workers / Node.
+	 *
+	 * When set to an unambiguous runtime (`'bun'` or `'node'`/`'workerd'`),
+	 * the plugin also aliases `adapter/constants` so that only the matching
+	 * adapter ships in the bundle (the other one DCEs). When `target` is
+	 * absent the runtime `isBun` check is preserved unchanged.
+	 *
+	 * @default the build runtime
+	 */
+	target?: AotTarget
+
+	/**
+	 * Replace `import { t } from 'elysia'` with `import * as t from 'elysia/type'`
+	 * at build time so unused TypeBox constructors tree-shake
+	 *
+	 * @default true
+	 */
+	treeShake?: boolean
+
+	/**
+	 * Replace the internal handler compiler with a throwing stub so the bundler
+	 * can drop the handler-JIT graph
+	 *
+	 * This is only safe when every route is reconstructed from the frozen AOT
+	 * handler manifest. The plugin verifies that by replaying a frozen build and
+	 * watching whether handler JIT is reached
+	 *
+	 * - `'auto'` (default): stub only when the frozen replay proves handler JIT
+	 *   is unused. Skip if any route still reaches handler JIT
+	 * - `true`: require a fully precompiled handler manifest and throw if any
+	 *   route still reaches handler JIT
+	 * - `false`: never stub
+	 *
+	 * @default 'auto'
+	 */
+	strip?: boolean | 'auto'
+
+	/**
+	 * Treat this as a production build, making `isProduction` a compile-time
+	 * constant `true` so bundlers can DCE `!isProduction()` branches.
+	 *
+	 * - `true` (default): stub `isProduction` as `() => true` so dev-verbose
+	 *   error paths tree-shake
+	 * - `false`: leave `isProduction` as a runtime env read (preserves dev
+	 *   behaviour in the bundle)
+	 *
+	 * @default true
+	 */
+	production?: boolean
+
+	/**
+	 * Log one detail line per affected route when a sealed validator carries
+	 * a coercion/codec schema (its 422 error detail can only name the
+	 * offending field coarsely, best-effort).
+	 *
+	 * - unset (default): follow the `ELYSIA_AOT_VERBOSE` environment variable
+	 * - `false`: collapse all affected routes into a single build-end
+	 *   summary line (none if no route is affected)
+	 * - `true`: also print the per-route detail line as each one is found
+	 *
+	 * @default undefined
+	 */
+	verbose?: boolean
+}
+
+function findPackageRoot(from: string = process.cwd()) {
+	let dir = from
+
+	while (!existsSync(join(dir, 'package.json'))) {
+		const parent = dirname(dir)
+		if (parent === dir) return from
+		dir = parent
+	}
+
+	return dir
+}
+
+export const resolveEntry = (entry: string): string =>
+	resolve(findPackageRoot(), entry)
+
+/** @internal Resolve the package condition used to evaluate an AOT entry. */
+export const resolveEntryModuleKind = (entry: string) => {
+	const entryPath = resolveEntry(entry)
+
+	switch (extname(entryPath)) {
+		case '.cjs':
+		case '.cts':
+			return 'cjs'
+
+		case '.mjs':
+		case '.mts':
+		case '.ts':
+		case '.tsx':
+			return 'esm'
+
+		case '.js':
+		case '.jsx': {
+			const packagePath = join(
+				findPackageRoot(dirname(entryPath)),
+				'package.json'
+			)
+			if (!existsSync(packagePath)) return 'cjs'
+
+			const pkg = JSON.parse(readFileSync(packagePath, 'utf8')) as {
+				type?: unknown
+			}
+			if (pkg.type === 'module') return 'esm'
+			if (pkg.type === undefined || pkg.type === 'commonjs') return 'cjs'
+
+			throw new Error(
+				`[elysia-aot] package.json has unsupported "type" ${JSON.stringify(pkg.type)} for JavaScript entry ${JSON.stringify(entryPath)}.`
+			)
+		}
+
+		default:
+			throw new Error(
+				`[elysia-aot] entry ${JSON.stringify(entryPath)} has an ambiguous module condition. Use a .cjs/.cts CommonJS entry or a .mjs/.mts/.ts/.tsx ESM entry; .js/.jsx follows the nearest package.json "type".`
+			)
+	}
+}
+
+/** Runtime handler-JIT module a strip build can replace with a throwing stub. */
+export interface StubPlan {
+	/** Stub the internal handler codegen module. */
+	jit: boolean
+
+	/** Stub internal WS route builders when the app declares no WS routes. */
+	ws: boolean
+
+	/**
+	 * Stub frozen-handler reconstruction (validator `va`, cookie `cc`, trace `tr`)
+	 * when no replayed handler aliases any of them.
+	 */
+	reconstruct: boolean
+
+	/**
+	 * Stub the request-side cookie machinery (parse / jar / signing in
+	 * `cookie/utils` + `cookie/config`) when no replayed handler aliases the
+	 * cookie config (`cc`)
+	 */
+	cookie: boolean
+
+	/**
+	 * Stub the trace runtime (`trace.ts` `createTracer` + recorder machinery)
+	 * when no replayed handler aliases trace (`tr`), or even under live
+	 * handler JIT when the app registers no trace handler at all (`~hasTrace`
+	 * + history sweep; a mount forbids it). Every call site (fetch, JIT
+	 * codegen, frozen reconstruct) only calls in when trace handlers exist, so
+	 * a throwing stub is unreachable once detection proves trace is unused
+	 *
+	 * NOT moot after the `elysia/trace` capability severance. The reachable
+	 * post-severance case is: an app that `.use(trace())` (so the capability
+	 * is registered and `dist/trace.mjs` IS in the bundle graph via
+	 * `dist/plugin/trace.mjs`) but never attaches `.trace(fn)` (no trace
+	 * hooks, so `tr` is unaliased and `mayTrace` is false). Under the frozen
+	 * path (`jit`) this flag is still `true`, so the stub replaces the real
+	 * trace module with the non-throwing `unionTracePhases(){return new Set()}`
+	 * fallback (+ throwing `createTracer`, unreachable with zero hooks).
+	 * Measured saving for that shape: ~18KB severing trace also tree-shakes
+	 * sucrose's `separateFunction`, which trace is the sole importer of. A
+	 * traceless app that never imports the capability (Fixture B) has no
+	 * trace module in the graph, so the stub is a no-op there.
+	 */
+	trace: boolean
+
+	/**
+	 * Stub the `memory` module's `clearSucroseCache` edge when handler JIT is
+	 * stubbed. Sucrose never runs in a precompiled app, so its caches are always
+	 * empty and the flush is a no-op. Dropping the import lets the Sucrose
+	 * analyzer tree-shake. `flushMemory`'s other clears are preserved, and the
+	 * public `elysia/sucrose` module is left untouched
+	 */
+	sucrose: boolean
+
+	/**
+	 * Stub `type/compat` so `setupTypebox` becomes a no-op, un-wiring the
+	 * TypeBox bridge from the bundle. Set in BOTH sealed (mode A) and wired
+	 * (mode B) builds. In mode A the bridge is severed entirely. Every captured
+	 * validator is bridge-free so nothing reaches it. In mode B the mirror
+	 * (`bridge` → `bridge-live` reroute) replaces the latch, so `setupTypebox`
+	 * must still be a no-op to guarantee the bridge is wired exactly once
+	 */
+	compat: boolean
+
+	/**
+	 * Re-route `type/bridge` → `type/bridge-live` (the statically-wired mirror)
+	 * so the bridge exports resolve to real TypeBox members without the runtime
+	 * `setupTypebox` latch. Set only in the wired build (mode B): the app has at
+	 * least one validator that is not bridge-free, so the bridge is still needed
+	 */
+	bridge: boolean
+
+	/**
+	 * Re-route `type/typebox-value` -> its statically-imported `-live` mirror
+	 * (bundlers can't follow the runtime `require`)
+	 * Every mode except sealed, there the unresolvable `require` is what lets TypeBox collapse
+	 */
+	typeboxValue: boolean
+
+	/**
+	 * Re-route `type/typebox-type` -> its `-live` mirror
+	 * Every mode, sealed included (unlike `typeboxValue`), sealed still executes
+	 * user `t.*()` at route definition and `typebox/type` is already in the bundle
+	 * via the virtual `elysia/type` module
+	 *
+	 * skipping the rewrite collapses nothing and only buys a startup crash on loader-less runtimes
+	 */
+	typeboxType: boolean
+
+	/**
+	 * Re-route `type/validator/exact-mirror` -> its statically-imported `-live`
+	 * mirror so the bundler embeds `exact-mirror` instead of leaving the runtime
+	 * `require('exact-mirror')` unresolvable, which is what breaks normalization
+	 * and sanitize inside a compiled binary
+	 *
+	 * Set whenever `exact-mirror` resolves at build time, except in sealed mode:
+	 * there every mirror is emitted into the manifest, so wiring it would only
+	 * add ~15KB of dead code to the bundle the mode exists to shrink
+	 */
+	exactMirror: boolean
+
+	/**
+	 * Replace `adapter/constants` with a target-specific stub that hard-selects
+	 * either `BunAdapter` or `WebStandardAdapter`, letting the bundler DCE the
+	 * other adapter. Only set when `target` unambiguously implies a runtime
+	 * (`'bun'` → Bun; `'node'`/`'workerd'` → WebStandard). When `target` is
+	 * absent or ambiguous this is `false` and the runtime `isBun` path is kept.
+	 */
+	adapter: 'bun' | 'web-standard' | false
+
+	/**
+	 * Replace `universal/is-production` with a stub that returns `true` at
+	 * compile time so bundlers can DCE `!isProduction()` branches. Set when
+	 * `production: true` (the default for plugin builds).
+	 */
+	isProduction: boolean
+}
+
+/**
+ * Chosen TypeBox-collapse strategy for the build, logged in the dry-run line.
+ *
+ * - `'sealed'` (mode A): every captured validator is bridge-free (HTTP and WS
+ *   alike) and the app is fully stripped (handler JIT unused). `compat` is
+ *   stubbed and the bridge is severed, TypeBox collapses entirely
+ * - `'wired'` (mode B): at least one validator still needs the bridge. `compat`
+ *   is stubbed AND the bridge is re-routed to the statically-wired mirror so it
+ *   works without the DCE-fragile `setupTypebox()` anchor
+ * - `'off'`: no bridge action (strip disabled, or handler JIT still reachable,
+ *   the frozen path is not active so the bridge stays wired the normal way)
+ */
+export type BridgeMode = 'sealed' | 'wired' | 'off'
+
+export const NO_STUB: StubPlan = {
+	jit: false,
+	ws: false,
+	reconstruct: false,
+	cookie: false,
+	trace: false,
+	sucrose: false,
+	compat: false,
+	bridge: false,
+	typeboxValue: false,
+	typeboxType: false,
+	exactMirror: false,
+	adapter: false,
+	isProduction: false
+} as const
+
+/**
+ * Resolve whether handler JIT is safe to stub for `entry`, honouring the
+ * `strip` option. `'auto'` stubs only when detection proves handler JIT unused;
+ * `true` throws when handler JIT is still reachable; `false` disables.
+ *
+ * Also decides the TypeBox-collapse `mode`:
+ * - `'sealed'`: the frozen path is active (`jit`) and EVERY captured
+ *   validator, HTTP and WS is bridge-free (`bridgeFree`). `setupTypebox` is
+ *   stubbed and the bridge is severe, nothing reaches it, TypeBox collapses.
+ * - `'wired'`: the frozen path is active but at least one validator
+ *   still needs the bridge. `setupTypebox` is stubbed AND the bridge is
+ *   re-routed to the statically-wired mirror (works without the DCE-fragile
+ *   `setupTypebox()` anchor).
+ * - `'off'`: handler JIT still reachable (or strip disabled). The frozen path
+ *   is not active, so the bridge must stay wired the ordinary way. No compat
+ *   stub, no reroute.
+ */
+export function planFromReport(
+	strip: boolean | 'auto',
+	report: JITProbeResult,
+	hasWS: boolean,
+	mayTrace: boolean,
+	aliases: Set<string>,
+	allBridgeFree: boolean,
+	zeroCapture: boolean,
+	adapterStub: 'bun' | 'web-standard' | false = false,
+	productionStub: boolean = true,
+	/**
+	 * A WS route declares a `cookie` schema. Its upgrade path handles cookies
+	 * outside the handler JIT, so it emits no `cc` alias — stubbing on that
+	 * alias alone would hand `src/ws/route.ts` a throwing `parseCookieRaw`
+	 */
+	wsCookie: boolean = false,
+	/** `exact-mirror` resolves from the elysia package at build time. */
+	exactMirror: boolean = false
+): { plan: StubPlan; mode: BridgeMode } {
+	const jit = report.jit
+
+	if (strip === true && !jit)
+		throw new Error(
+			`[elysia-aot] strip: true requires every route to be covered by the` +
+				` AOT handler manifest, but handler JIT is still reachable (` +
+				`${report.reasons.join(', ') || 'unknown'}).` +
+				` Use strip: 'auto' to skip stubbing when the app is not fully precompiled.`
+		)
+
+	const frozenActive = jit
+	const mode: BridgeMode = !frozenActive
+		? 'off'
+		: allBridgeFree
+			? 'sealed'
+			: hasWS && zeroCapture
+				? 'off'
+				: 'wired'
+
+	return {
+		plan: {
+			jit,
+			ws: !hasWS,
+			reconstruct:
+				jit &&
+				!aliases.has('va') &&
+				!aliases.has('cc') &&
+				!aliases.has('tr'),
+			cookie: jit && !aliases.has('cc') && !wsCookie,
+			trace: !aliases.has('tr') && (jit || !mayTrace),
+			sucrose: jit,
+			compat: mode !== 'off',
+			bridge: mode === 'wired',
+			typeboxValue: mode !== 'sealed',
+			typeboxType: true,
+			exactMirror: exactMirror && mode !== 'sealed',
+			adapter: adapterStub,
+			isProduction: productionStub
+		},
+		mode
+	}
+}
+
+export function adapterConstantsSource(target: 'bun' | 'web-standard'): string {
+	if (target === 'bun')
+		return (
+			`import { BunAdapter } from './bun/index'\n` +
+			`export const defaultAdapter = BunAdapter\n`
+		)
+
+	return (
+		`import { WebStandardAdapter } from './web-standard/index'\n` +
+		`export const defaultAdapter = WebStandardAdapter\n`
+	)
+}
+
+export const ADAPTER_CONSTANTS_FILTER =
+	/[\\/]elysia[\\/](dist|src)[\\/]adapter[\\/]constants\.(m?js|ts)$/
+
+export const ADAPTER_BUN_FILTER =
+	/[\\/]elysia[\\/](dist|src)[\\/]adapter[\\/]bun[\\/]index\.(m?js|ts)$/
+
+export const IS_PRODUCTION_FILTER =
+	/[\\/]elysia[\\/](dist|src)[\\/]universal[\\/]is-production\.(m?js|ts)$/
+
+export const ELYSIA_MODULE_FILTER =
+	/[\\/]elysia[\\/](dist|src)[\\/].+\.(m?js|ts)x?$/
+
+export function resolveElysiaRoot(from: string = process.cwd()): string {
+	try {
+		const req = createRequire(join(from, 'package.json'))
+		const pkgJson = req.resolve('elysia/package.json')
+		return dirname(pkgJson)
+	} catch {
+		return from
+	}
+}
+
+export function resolveExactMirror(from: string = process.cwd()): boolean {
+	try {
+		createRequire(join(resolveElysiaRoot(from), 'package.json')).resolve(
+			'exact-mirror'
+		)
+
+		return true
+	} catch {
+		return false
+	}
+}
+
+export function makeIsElysiaModule(elysiaRoot: string) {
+	// To Posix for Windows (curse you, Microsoft)
+	const root = elysiaRoot.replace(/\\/g, '/')
+	return (path: string) => {
+		const posix = path.replace(/\\/g, '/')
+		return posix.startsWith(root + '/') && ELYSIA_MODULE_FILTER.test(path)
+	}
+}
+
+export function makeElysiaModuleFilterRegex(elysiaRoot: string) {
+	const escaped = elysiaRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+	return new RegExp(
+		'^' + escaped + '[\\\\/](dist|src)[\\\\/].+\\.(m?js|ts)x?$'
+	)
+}
+
+export const rewriteIsProductionCalls = (code: string) =>
+	code.replace(/(?<![.?])\bisProduction\(\)/g, 'true')
+
+export const bunAdapterStubSource =
+	`const e=(t)=>{throw new Error(\`[elysia-aot] Bun adapter was stripped for target 'web-standard' .listen() is unavailable; use the exported fetch handler or rebuild with a different target.\`)}\n` +
+	`export const BunAdapter={name:'bun',runtime:'bun',isWebStandard:true,parse:{},response:{},listen:e}\n` +
+	`export function collectStaticRoutes(){}\n`
+
+export const STUB_SOURCES: Record<
+	Exclude<keyof StubPlan, 'adapter' | 'isProduction'>,
+	Array<{ filter: RegExp; source: string }>
+> = {
+	jit: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]handler[\\/]jit\.(m?js|ts)$/,
+			source:
+				`const e=()=>{throw new Error("[elysia-aot] handler compiler JIT was stripped (strip mode) but a route needed runtime compilation. Rebuild with strip:false.")}\n` +
+				`export function compileHandlerJit(){return e()}\n` +
+				`export function createInlineHandler(){return e()}\n` +
+				`export function setCaptureHeaderShorthand(){}\n`
+		},
+		{
+			// `describeRoute` (per-route descriptor) is only ever called on the
+			// live JIT path, immediately before `compileHandlerJit`
+			//
+			// it pulls in `sucrose`. Stub it alongside the JIT compiler so the sucrose
+			// analyzer stays tree-shakeable in strip mode
+			//
+			// The always-on exports `isEmptyPipelineHook` (native-static promotion)
+			// and `routeDescriptors` are sucrose-free and re-implemented here so the
+			// non-JIT path keeps working.
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]handler[\\/]descriptor\.(m?js|ts)$/,
+			source:
+				`const e=()=>{throw new Error("[elysia-aot] handler compiler JIT was stripped (strip mode) but a route needed runtime compilation. Rebuild with strip:false.")}\n` +
+				`export function describeRoute(){return e()}\n` +
+				`export const routeDescriptors=new WeakMap()\n` +
+				`export function isEmptyPipelineHook(hook){\n` +
+				`	if(!hook)return true\n` +
+				`	for(const key in hook){\n` +
+				`		if(key==='detail'||key==='tags')continue\n` +
+				`		const value=hook[key]\n` +
+				`		if(value!==undefined&&value!==false&&(!Array.isArray(value)||value.length))return false\n` +
+				`	}\n` +
+				`	return true\n` +
+				`}\n`
+		}
+	],
+	ws: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]ws[\\/]route\.(m?js|ts)$/,
+			source:
+				`const e=()=>{throw new Error("[elysia-aot] WebSocket route builder was stripped (strip mode) but a WS route was used. Rebuild with strip:false.")}\n` +
+				`export function buildWSRoute(){return e()}\n` +
+				`export function buildGlobalWSHandler(){return e()}\n`
+		}
+	],
+	reconstruct: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]handler[\\/]reconstruct\.(m?js|ts)$/,
+			source:
+				`const e=()=>{throw new Error("[elysia-aot] handler reconstruction was stripped (strip mode) but a route needed it. Rebuild with strip:false.")}\n` +
+				`export class Reconstrct {\n` +
+				`  static validator(){return e()}\n` +
+				`  static cookie(){return e()}\n` +
+				`  static trace(){return e()}\n` +
+				`}\n`
+		}
+	],
+	cookie: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]utils\.(m?js|ts)$/,
+			source:
+				`const e=()=>{throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a route used cookies. Rebuild with strip:false.")}\n` +
+				`export const hasSyncHmac=false\n` +
+				`export function parseCookie(){return e()}\n` +
+				`export function parseCookieRaw(){return e()}\n` +
+				`export function parseCookieRawSync(){return e()}\n` +
+				`export function parseCookieRawSigned(){return e()}\n` +
+				`export function parseCookieRawLazy(){return e()}\n` +
+				`export function parseCookieRawDeferred(){return e()}\n` +
+				`export function buildCookieJar(){return e()}\n` +
+				`export function signCookieValues(){return e()}\n` +
+				`export function signCookie(){return e()}\n` +
+				`export function signCookieSubtle(){return e()}\n` +
+				`export function signCookieSync(){return e()}\n` +
+				`export function unsignCookie(){return e()}\n` +
+				`export function unsignCookieSync(){return e()}\n`
+		},
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]config\.(m?js|ts)$/,
+			source:
+				`const e=()=>{throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a route used cookies. Rebuild with strip:false.")}\n` +
+				`export function compileCookieConfig(){return e()}\n` +
+				`export function isCookieSigned(){return e()}\n`
+		}
+	],
+	trace: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]trace\.(m?js|ts)$/,
+			source:
+				`const e=()=>{throw new Error("[elysia-aot] trace support was stripped (strip mode) but a route used trace. Rebuild with strip:false.")}\n` +
+				`export function createTracer(){return e()}\n` +
+				`export function unionTracePhases(){return new Set()}\n`
+		}
+	],
+	sucrose: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]memory\.(m?js|ts)$/,
+			source:
+				`import { clearContextCache } from './context'\n` +
+				`import { Validator } from './validator'\n` +
+				`export function flushMemory() {\n` +
+				`	clearContextCache()\n` +
+				`	Validator.clear()\n` +
+				`}\n`
+		},
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]analysis-cache\.(m?js|ts)$/,
+			source:
+				`import { clearHandlerAnalysisCaches } from './handler/index'\n` +
+				`import { clearFlattenChainMemo } from '../utils'\n` +
+				`export function clearAuthoringAnalysisCaches(root) {\n` +
+				`	clearHandlerAnalysisCaches(root)\n` +
+				`	clearFlattenChainMemo(root)\n` +
+				`}\n`
+		}
+	],
+	compat: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]type[\\/]compat\.(m?js|ts)$/,
+			source: `export function setupTypebox(){}\n`
+		}
+	],
+	bridge: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]type[\\/]bridge\.(m?js|ts)$/,
+			source: `export * from './bridge-live'\n`
+		}
+	],
+	typeboxValue: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]type[\\/]typebox-value\.(m?js|ts)$/,
+			source: `export * from './typebox-value-live'\n`
+		}
+	],
+	typeboxType: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]type[\\/]typebox-type\.(m?js|ts)$/,
+			source: `export * from './typebox-type-live'\n`
+		}
+	],
+	exactMirror: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]type[\\/]validator[\\/]exact-mirror\.(m?js|ts)$/,
+			source: `export * from './exact-mirror-live'\n`
+		}
+	]
+}
+
+export const alignStubExtensions = (
+	stubSource: string,
+	targetPath: string
+): string => {
+	const ext = targetPath.slice(targetPath.lastIndexOf('.'))
+	if (ext !== '.mjs' && ext !== '.js' && ext !== '.cjs') return stubSource
+
+	return stubSource.replace(
+		/(from ')(\.[^']+)(')/g,
+		(_m, open: string, spec: string, close: string) =>
+			open +
+			(spec === './validator' ? spec + '/index' : spec) +
+			ext +
+			close
+	)
+}
+
+export const OVERRIDE_MAP: Record<string, { leaf: string; export: string }> = {
+	Accelerate: { leaf: 'accelerate', export: 'Accelerate' },
+	Array: { leaf: 'array', export: 'ArrayType' },
+	ArrayBuffer: { leaf: 'array-buffer', export: 'ArrayBufferType' },
+	ArrayString: { leaf: 'array-string', export: 'ArrayString' },
+	Boolean: { leaf: 'boolean', export: 'BooleanType' },
+	BooleanString: { leaf: 'boolean-string', export: 'BooleanString' },
+	Cookie: { leaf: 'cookie', export: 'Cookie' },
+	Date: { leaf: 'date', export: 'DateType' },
+	File: { leaf: 'file', export: 'File' },
+	Files: { leaf: 'files', export: 'Files' },
+	Form: { leaf: 'form', export: 'Form' },
+	Integer: { leaf: 'integer', export: 'Integer' },
+	IntegerString: { leaf: 'integer-string', export: 'IntegerString' },
+	Intersect: { leaf: 'intersect', export: 'Intersect' },
+	MaybeEmpty: { leaf: 'maybe-empty', export: 'MaybeEmpty' },
+	NoValidate: { leaf: 'no-validate', export: 'NoValidate' },
+	Nullable: { leaf: 'nullable', export: 'Nullable' },
+	Number: { leaf: 'number', export: 'NumberType' },
+	Numeric: { leaf: 'numeric', export: 'Numeric' },
+	NumericEnum: { leaf: 'numeric-enum', export: 'NumericEnum' },
+	Object: { leaf: 'object', export: 'ObjectType' },
+	ObjectString: { leaf: 'object-string', export: 'ObjectString' },
+	Optional: { leaf: 'optional', export: 'Optional' },
+	String: { leaf: 'string', export: 'StringType' },
+	Uint8Array: { leaf: 'uint8-array', export: 'Uint8ArrayType' },
+	Union: { leaf: 'union', export: 'Union' },
+	UnionEnum: { leaf: 'union-enum', export: 'UnionEnum' }
+}
+
+// Rolldown rewrites `import.meta.url` to `pathToFileURL(__filename).href` in the CJS build
+// so `.resolve` works from this module in both the `.mjs` and `.js` outputs.
+const requireFromHere = createRequire(import.meta.url)
+const moduleMeta = import.meta as ImportMeta & {
+	resolve?: (specifier: string) => string
+}
+const loadedModuleCondition: AotModuleCondition = import.meta.url.endsWith(
+	'.js'
+)
+	? 'cjs'
+	: 'esm'
+
+const resolveSpecifier = (
+	specifier: string,
+	moduleCondition?: AotModuleCondition
+): string => {
+	if (moduleCondition === 'cjs') return requireFromHere.resolve(specifier)
+
+	if (moduleMeta.resolve) {
+		const url = moduleMeta.resolve(specifier)
+		// fileURLToPath, NOT `new URL(url).pathname`: the latter yields
+		// `/D:/...` on Windows (leading slash before the drive letter) and
+		// keeps percent-encoding, both of which break bundler resolution
+		return url.startsWith('file://') ? fileURLToPath(url) : url
+	}
+	if (moduleCondition === 'esm')
+		throw new Error(
+			'[elysia-aot] CommonJS-loaded build plugin cannot resolve the ESM package condition. Load the build plugin through import for an ESM entry.'
+		)
+
+	return requireFromHere.resolve(specifier)
+}
+
+export async function generateVirtualType(
+	typeSpecifier = 'elysia/type',
+	moduleCondition?: AotModuleCondition
+) {
+	const typePath = resolveSpecifier(typeSpecifier, moduleCondition)
+	const typeboxPath = resolveSpecifier('typebox/type', moduleCondition)
+
+	const ext = typePath.slice(typePath.lastIndexOf('.'))
+	const leafDir = join(dirname(typePath), 'elysia')
+
+	const typebox = (await import(pathToFileURL(typeboxPath).href)) as Record<
+		string,
+		unknown
+	>
+	const overrideNames = new Set(Object.keys(OVERRIDE_MAP))
+	const passthrough = Object.keys(typebox).filter(
+		(name) => !overrideNames.has(name)
+	)
+
+	// use correct posix (fucking Windows)
+	const toSpecifier = (p: string): string =>
+		JSON.stringify(p.replace(/\\/g, '/'))
+
+	let source = `// Generated by Elysia build plugin. Virtual 'elysia/type' re-export surface.\n`
+	source += `export { ${passthrough.join(', ')} } from ${toSpecifier(
+		typeboxPath
+	)}\n`
+
+	for (const [name, { leaf, export: exported }] of Object.entries(
+		OVERRIDE_MAP
+	)) {
+		const spec = toSpecifier(join(leafDir, leaf + ext))
+		source +=
+			exported === name
+				? `export { ${name} } from ${spec}\n`
+				: `export { ${exported} as ${name} } from ${spec}\n`
+	}
+
+	return source
+}
+
+export interface CompiledArtifacts {
+	source: string
+
+	/** Handler-JIT modules detection proved safe to stub for this app. */
+	stub: StubPlan
+
+	/** Chosen TypeBox-collapse strategy (`sealed` / `wired` / `off`). */
+	mode: BridgeMode
+
+	/**
+	 * Virtual `elysia/type` module source (re-export surface, no `setupTypebox`).
+	 * Served for `elysia/type` in both sealed and wired modes so unused `t.*`
+	 * constructors tree-shake. `undefined` when the bridge is left wired (`off`).
+	 */
+	virtualType?: string
+}
+
+const _importedEntries = new Set<string>()
+
+type IsolatedGenerationResult =
+	| { ok: true; artifacts: CompiledArtifacts }
+	| {
+			ok: false
+			error: { name: string; message: string; stack?: string }
+	  }
+
+let activeGenerationWorkers = 0
+let lastGenerationWorkerExit: Promise<number> | undefined
+
+/** @internal Test diagnostic for deterministic worker cleanup. */
+export const getAotWorkerDiagnostics = () => ({
+	activeWorkers: activeGenerationWorkers,
+	lastExit: lastGenerationWorkerExit
+})
+
+/**
+ * Extension mirroring the running module's own build output, so a sibling
+ * source file can be resolved from `import.meta.url` in `.mjs`/`.js`/`.ts`
+ * builds alike.
+ */
+export function siblingModuleExt(moduleUrl: string): '.mjs' | '.js' | '.ts' {
+	return moduleUrl.endsWith('.mjs')
+		? '.mjs'
+		: moduleUrl.endsWith('.js')
+			? '.js'
+			: '.ts'
+}
+
+const workerUrl = (): URL => {
+	const moduleUrl = import.meta.url
+
+	return new URL('./worker' + siblingModuleExt(moduleUrl), moduleUrl)
+}
+
+/** @internal Re-evaluate an entry in a disposable worker for watch rebuilds. */
+export async function generateCompiledArtifactsIsolated(
+	file: string,
+	options?: ElysiaAotOptions,
+	moduleCondition = resolveEntryModuleKind(file)
+): Promise<CompiledArtifacts> {
+	const entry = resolveEntry(file)
+
+	console.warn(
+		'[elysia-aot] re-evaluating "' +
+			entry +
+			'" in an isolated worker for rebuild. ' +
+			'Top-level side effects run only inside the worker.'
+	)
+
+	const worker = new Worker(workerUrl(), {
+		workerData: { file: entry, options, moduleCondition }
+	})
+	activeGenerationWorkers++
+
+	const exit = new Promise<number>((resolve) => worker.once('exit', resolve))
+	lastGenerationWorkerExit = exit
+
+	try {
+		return await new Promise<CompiledArtifacts>((resolve, reject) => {
+			let received = false
+
+			worker.once('message', (result: IsolatedGenerationResult) => {
+				received = true
+				if (result.ok) return resolve(result.artifacts)
+
+				const error = new Error(
+					`[elysia-aot] isolated rebuild failed for "${entry}": ${result.error.message}`
+				)
+				error.name = result.error.name
+				if (result.error.stack)
+					error.stack += '\nCaused by:\n' + result.error.stack
+				reject(error)
+			})
+			worker.once('error', reject)
+			worker.once('exit', (code) => {
+				if (!received)
+					reject(
+						new Error(
+							`[elysia-aot] isolated rebuild worker for "${entry}" exited with code ${code}`
+						)
+					)
+			})
+		})
+	} finally {
+		try {
+			await worker.terminate()
+		} finally {
+			await exit
+			activeGenerationWorkers--
+		}
+	}
+}
+
+type ValidatorSlotIdentity = Pick<CapturedValidator, 'method' | 'path' | 'slot'>
+
+const validatorSlotKey = ({ method, path, slot }: ValidatorSlotIdentity) =>
+	`${method}\0${path}\0${slot}`
+
+/** @internal Exact logical-slot gate used by AOT mode selection. */
+export function validatorSlotSetsMatch(
+	expected: readonly ValidatorSlotIdentity[],
+	captured: readonly ValidatorSlotIdentity[]
+) {
+	const expectedKeys = new Set(expected.map(validatorSlotKey))
+	const capturedKeys = new Set(captured.map(validatorSlotKey))
+
+	if (expectedKeys.size !== capturedKeys.size) return false
+	for (const key of expectedKeys) if (!capturedKeys.has(key)) return false
+
+	return true
+}
+
+/**
+ * The manifest is one flat `method -> path` table with no per-app namespace,
+ * bound to whichever app builds a router first, so a mounted sub-app (a second
+ * Elysia building on its own schedule) is not representable
+ *
+ * refuse at build time rather than ship a coin flip
+ */
+const assertNoMount = (
+	app: Parameters<typeof captureArtifacts>[0],
+	entry: string
+) => {
+	const routes = app['~routes']
+	if (!routes) return
+
+	const mounted: string[] = []
+	for (const route of routes) {
+		const handler = route[2] as { ['~mount']?: unknown } | undefined
+
+		if (handler?.['~mount'] && !mounted.includes(route[1]))
+			mounted.push(route[1])
+	}
+
+	if (!mounted.length) return
+
+	throw new Error(
+		`[elysia-aot] "${entry}" mounts a sub-app (${mounted.join(', ')}). AOT cannot compile a mounted sub-app. Compose with .use() instead of .mount(), or disable AOT plugin`
+	)
+}
+
+export async function generateCompiledArtifacts(
+	file: string,
+	options?: ElysiaAotOptions,
+	moduleCondition = resolveEntryModuleKind(file)
+): Promise<CompiledArtifacts> {
+	if (moduleCondition !== loadedModuleCondition)
+		throw new Error(
+			`[elysia-aot] entry uses the ${moduleCondition === 'cjs' ? 'CommonJS "require"' : 'ESM "import"'} package condition, but the AOT build plugin was loaded through ${loadedModuleCondition === 'cjs' ? 'CommonJS "require"' : 'ESM "import"'}; entry: ${JSON.stringify(resolveEntry(file))}. Load the plugin through ${moduleCondition === 'cjs' ? 'require()' : 'import'} so capture and generated registration share one Elysia module instance.`
+		)
+
+	const previousAotBuild = process.env.ELYSIA_AOT_BUILD
+	process.env.ELYSIA_AOT_BUILD = '1'
+
+	const previousAotVerbose = process.env.ELYSIA_AOT_VERBOSE
+	if (options?.verbose) process.env.ELYSIA_AOT_VERBOSE = '1'
+	// unset option: leave ELYSIA_AOT_VERBOSE as the user set it
+	else if (options?.verbose === false) delete process.env.ELYSIA_AOT_VERBOSE
+
+	try {
+		const entry = resolveEntry(file)
+		const entryReal = realPath(entry)
+
+		if (_importedEntries.has(entryReal))
+			return generateCompiledArtifactsIsolated(
+				file,
+				options,
+				moduleCondition
+			)
+
+		_importedEntries.add(entryReal)
+		const mod = (await import(entry)) as {
+			app?: unknown
+			default?: unknown
+		}
+
+		const app = mod.app ?? mod.default
+
+		if (
+			!app ||
+			typeof (app as { compile?: unknown }).compile !== 'function'
+		)
+			throw new Error(`[elysia-aot] "${entry}" must export an Elysia app`)
+
+		const typedApp = app as Parameters<typeof captureArtifacts>[0]
+		assertNoMount(typedApp, entry)
+
+		const sourceOptions = {
+			register: true,
+			moduleCondition,
+			registerFrom: options?.registerFrom,
+			reconstructFrom: options?.reconstructFrom,
+			lazy: options?.lazy,
+			target: options?.target
+		}
+
+		const strip = options?.strip ?? 'auto'
+
+		const adapterStub: 'bun' | 'web-standard' | false =
+			options?.target === 'bun'
+				? 'bun'
+				: options?.target === 'node' || options?.target === 'workerd'
+					? 'web-standard'
+					: false
+
+		const productionStub = options?.production !== false
+		const exactMirror = resolveExactMirror(entry)
+
+		if (strip === false)
+			return {
+				source: await compileToSource(typedApp, sourceOptions),
+				stub: {
+					...NO_STUB,
+					// TypeBox stays fully wired here, so keep the ops statically
+					// importable for the bundler
+					typeboxValue: true,
+					typeboxType: true,
+					exactMirror,
+					adapter: adapterStub,
+					isProduction: productionStub
+				},
+				mode: 'off'
+			}
+
+		const artifacts = await captureArtifacts(typedApp, sourceOptions)
+		const report = replayStubbability(typedApp, artifacts.handlers)
+		const aliases = new Set<string>()
+
+		for (const handler of artifacts.handlers)
+			if (handler.alias)
+				for (const name of handler.alias.split(',')) aliases.add(name)
+
+		const hasWS =
+			!!(typedApp as { ['~hasWS']?: unknown })['~hasWS'] ||
+			!!typedApp['~routes']?.some((route: any) => route?.[0] === 'WS')
+
+		const history = typedApp['~routes'] ?? []
+
+		const mayTrace =
+			!!(typedApp as { ['~hasTrace']?: unknown })['~hasTrace'] ||
+			history.some(
+				(route: any) =>
+					(route?.[4] as { trace?: unknown[] } | undefined)?.trace
+						?.length || route?.[2]?.['~mount']
+			)
+
+		const expectedSlots: ValidatorSlotIdentity[] = []
+		// Capture merges repeated logical slots, so their optional fields can be stale.
+		const declaredTypeBoxSlots = new Set<string>()
+
+		let routesForbidSeal = false
+		// WS cookies emit no `cc` alias, see `planFromReport`
+		let wsCookie = false
+		for (const route of history) {
+			const method = route[0] as string
+			const path = route[1] as string
+			const expectTypeBoxSlot = (slot: ValidatorSlot) => {
+				const identity = { method, path, slot }
+				const key = validatorSlotKey(identity)
+
+				if (declaredTypeBoxSlots.has(key)) routesForbidSeal = true
+				else {
+					declaredTypeBoxSlots.add(key)
+					expectedSlots.push(identity)
+				}
+			}
+
+			const [, , , instance, hook, appHook, inheritedChain, macroScope] =
+				route as [
+					unknown,
+					unknown,
+					unknown,
+					unknown,
+					unknown,
+					unknown,
+					unknown,
+					unknown
+				]
+			const hooks = composeRouteHook(
+				instance as any,
+				hook as any,
+				appHook as any,
+				inheritedChain as any,
+				typedApp as any,
+				macroScope as any
+			) as Record<string, unknown> | undefined
+
+			if (
+				(route as { [0]?: unknown })[0] === 'WS' &&
+				((hook as { cookie?: unknown } | undefined)?.cookie !==
+					undefined ||
+					hooks?.cookie !== undefined)
+			)
+				wsCookie = true
+
+			if (!hooks) continue
+
+			let routeHasTypeBoxDirectSlot = false
+			const classify = (schema: unknown, slot: ValidatorSlot) => {
+				if (schema === undefined) {
+					routesForbidSeal = true
+					return
+				}
+				if (isStandardSchema(schema)) return
+
+				routeHasTypeBoxDirectSlot = true
+				expectTypeBoxSlot(slot)
+			}
+
+			for (const slot of REQUEST_SLOTS) {
+				const value = hooks[slot]
+				if (value !== undefined)
+					classify(
+						resolveModelRef(value, typedApp),
+						slot as ValidatorSlot
+					)
+			}
+
+			if (hooks.response !== undefined) {
+				const response = resolveModelRef(hooks.response, typedApp)
+
+				if (isResponseMap(response))
+					for (const status in response)
+						classify(
+							resolveModelRef(response[status], typedApp),
+							`response:${status}` as ValidatorSlot
+						)
+				else classify(response, 'response:200')
+			}
+
+			const mergeSchemas = (hooks as { schemas?: unknown[] }).schemas
+			if (Array.isArray(mergeSchemas) && mergeSchemas.length > 0) {
+				if (
+					routeHasTypeBoxDirectSlot ||
+					!mergeSchemasAllStandard(
+						mergeSchemas as Array<Record<string, unknown>>
+					)
+				)
+					routesForbidSeal = true
+			}
+		}
+
+		// `normalize: 'typebox'` need 'typebox/value'
+		if (
+			(typedApp as { ['~config']?: { normalize?: unknown } })['~config']
+				?.normalize === 'typebox'
+		)
+			routesForbidSeal = true
+
+		const validatorSlotsMatch = validatorSlotSetsMatch(
+			expectedSlots,
+			artifacts.validators
+		)
+
+		const allBridgeFree =
+			(artifacts.handlers.length > 0 ||
+				artifacts.validators.length > 0) &&
+			!routesForbidSeal &&
+			validatorSlotsMatch &&
+			artifacts.validators.every((v) => v.bridgeFree === true)
+
+		const { plan: stub, mode } = planFromReport(
+			strip,
+			report,
+			hasWS,
+			mayTrace,
+			aliases,
+			allBridgeFree,
+			artifacts.handlers.length === 0 &&
+				artifacts.validators.length === 0,
+			adapterStub,
+			productionStub,
+			wsCookie,
+			exactMirror
+		)
+
+		if (options?.target === 'workerd') {
+			if (!report.jit)
+				throw new Error(
+					`[elysia-aot] target 'workerd' but handler JIT is still ` +
+						`reachable (${report.reasons.join(', ') || 'unknown'}). ` +
+						`Every route must be captured into the AOT manifest.`
+				)
+
+			if (!validatorSlotsMatch)
+				console.warn(
+					`[elysia-aot] target 'workerd': captured validator slots ` +
+						`do not exactly match declared slots; ` +
+						`unfrozen slots compile at runtime and will fail on workerd.`
+				)
+		}
+
+		const virtualType =
+			mode === 'off'
+				? undefined
+				: await generateVirtualType('elysia/type', moduleCondition)
+
+		return {
+			source: artifacts.source,
+			stub,
+			mode,
+			virtualType
+		}
+	} finally {
+		if (previousAotBuild === undefined) delete process.env.ELYSIA_AOT_BUILD
+		else process.env.ELYSIA_AOT_BUILD = previousAotBuild
+
+		if (previousAotVerbose === undefined)
+			delete process.env.ELYSIA_AOT_VERBOSE
+		else process.env.ELYSIA_AOT_VERBOSE = previousAotVerbose
+	}
+}
+
+// eslint-disable-next-line sonarjs/single-character-alternation
+export const SOURCE_REGEX = /\.(c|m)?(t|j)sx?$/
+
+export const realPath = (path: string): string => {
+	try {
+		return realpathSync(path)
+	} catch {
+		return path
+	}
+}

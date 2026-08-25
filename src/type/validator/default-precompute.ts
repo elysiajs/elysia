@@ -1,0 +1,767 @@
+import { Default } from '../typebox-value'
+import type { TSchema } from 'typebox/type'
+
+import { nullObject } from '../../utils'
+import { dangerousKeys } from '../../constants'
+
+type DefaultCloner = () => unknown
+type ObjectDefaultMerger = (
+	value: Record<string, unknown>
+) => Record<string, unknown>
+
+function isPrecomputeSafe(schema: any, depth = 0) {
+	if (!schema || typeof schema !== 'object') return true
+
+	const kind = schema['~kind']
+	if (
+		kind === 'Union' ||
+		kind === 'Intersect' ||
+		kind === 'Ref' ||
+		kind === 'This' ||
+		kind === 'Cyclic'
+	)
+		return false
+
+	if (schema['~codec'] || schema['~refine']) return false
+
+	// Nested Object without its own default = not preallocatable.
+	if (depth > 0 && (kind === 'Object' || schema.type === 'object'))
+		if (schema.default === undefined || nestedOwnDefaultDiverges(schema))
+			return false
+
+	if (schema.properties)
+		for (const key in schema.properties)
+			if (
+				Object.hasOwn(schema.properties, key) &&
+				!isPrecomputeSafe(schema.properties[key], depth + 1)
+			)
+				return false
+
+	if (schema.items) {
+		if (Array.isArray(schema.items)) {
+			for (const v of schema.items)
+				if (!isPrecomputeSafe(v, depth + 1)) return false
+		} else if (!isPrecomputeSafe(schema.items, depth + 1)) return false
+	}
+
+	if (
+		typeof schema.additionalProperties === 'object' &&
+		!isPrecomputeSafe(schema.additionalProperties, depth + 1)
+	)
+		return false
+
+	if (schema.patternProperties)
+		for (const key in schema.patternProperties)
+			if (
+				Object.hasOwn(schema.patternProperties, key) &&
+				!isPrecomputeSafe(schema.patternProperties[key], depth + 1)
+			)
+				return false
+
+	return true
+}
+
+// Nested Object with `default` is precompute-safe only when default agrees
+// field by field, with the defaults its children would fill in
+function nestedOwnDefaultDiverges(objectSchema: any) {
+	const own = objectSchema.default
+	if (own === null || typeof own !== 'object' || Array.isArray(own))
+		return false
+
+	const props = objectSchema.properties
+	if (!props) return false
+
+	for (const key in props) {
+		const child = props[key]
+		if (!child || typeof child !== 'object') continue
+
+		if ('default' in child) {
+			if (
+				!(key in own) ||
+				canonical((own as any)[key]) !== canonical(child.default)
+			)
+				return true
+		} else if (child['~kind'] === 'Object' || child.type === 'object') {
+			if (key in own) {
+				if (
+					nestedOwnDefaultDiverges({
+						...child,
+						default: (own as any)[key]
+					})
+				)
+					return true
+			} else if (hasDefaultBelow(child)) return true
+		}
+	}
+
+	return false
+}
+
+// recursive merge precompute default
+export function applyPrecomputed(
+	defaults: Record<string, unknown>,
+	value: Record<string, unknown>
+): Record<string, unknown> {
+	const out: Record<string, unknown> = nullObject()
+
+	// clone in case of a shared reference default value
+	for (const k in defaults) {
+		const d = defaults[k]
+		const v = value[k]
+
+		if (v === undefined)
+			out[k] =
+				d !== null && typeof d === 'object' ? structuredClone(d) : d
+		else if (!Object.hasOwn(value, k))
+			// Preserve TypeBox exotic keys like "constructor"
+			// while avoiding reuse of the shared default object
+			out[k] = v
+		else out[k] = d
+	}
+
+	for (const k in value) {
+		const v = value[k]
+		if (v === undefined) continue
+		const d = out[k]
+		if (
+			v &&
+			typeof v === 'object' &&
+			!Array.isArray(v) &&
+			d &&
+			typeof d === 'object' &&
+			!Array.isArray(d)
+		)
+			out[k] = applyPrecomputed(
+				d as Record<string, unknown>,
+				v as Record<string, unknown>
+			)
+		else out[k] = v
+	}
+
+	return out
+}
+
+const subtreeHasDefault = (n: any) =>
+	!!n &&
+	typeof n === 'object' &&
+	('default' in n || childSchemaSome(n, subtreeHasDefault))
+
+function childSchemaSome(n: any, f: (x: any) => boolean): boolean {
+	if (!n || typeof n !== 'object') return false
+
+	if (n.properties)
+		for (const k in n.properties) if (f(n.properties[k])) return true
+
+	const items = n.items
+	if (Array.isArray(items)) {
+		for (const it of items) if (f(it)) return true
+	} else if (items && f(items)) return true
+
+	for (const key of ['anyOf', 'allOf', 'oneOf'] as const) {
+		const arr = n[key]
+		if (Array.isArray(arr)) for (const s of arr) if (f(s)) return true
+	}
+
+	if (typeof n.additionalProperties === 'object' && f(n.additionalProperties))
+		return true
+
+	if (n.patternProperties)
+		for (const k in n.patternProperties)
+			if (f(n.patternProperties[k])) return true
+
+	for (const key of ['not', 'if', 'then', 'else'] as const)
+		if (n[key] && f(n[key])) return true
+
+	return false
+}
+
+const hasDefaultBelow = (node: any) => childSchemaSome(node, subtreeHasDefault)
+
+function hasUnemittableDefaultValue(node: any): boolean {
+	if (!node || typeof node !== 'object') return false
+
+	if ('default' in node && !isEmittable(node.default, new Set(), true))
+		return true
+
+	return childSchemaSome(node, hasUnemittableDefaultValue)
+}
+
+function containsRefLike(node: any, seen = new WeakSet()): boolean {
+	if (!node || typeof node !== 'object' || seen.has(node)) return false
+	seen.add(node)
+
+	if (
+		node.$ref !== undefined ||
+		node['~kind'] === 'Ref' ||
+		node['~kind'] === 'This' ||
+		node['~kind'] === 'Cyclic'
+	)
+		return true
+
+	return childSchemaSome(node, (child) => containsRefLike(child, seen))
+}
+
+function hasDivergentDefaultBelow(node: any) {
+	const ownKey = 'default' in node ? canonical(node.default) : undefined
+	let bad = false
+
+	const visit = (n: any) => {
+		if (!n || typeof n !== 'object') return false
+		if (
+			'default' in n &&
+			(ownKey === undefined || canonical(n.default) !== ownKey)
+		)
+			return (bad = true)
+
+		return childSchemaSome(n, visit)
+	}
+
+	childSchemaSome(node, visit)
+
+	return bad
+}
+
+function structuralPreallocatable(schema: any, depth = 0) {
+	if (!schema || typeof schema !== 'object') return true
+
+	if (
+		!(
+			(schema['~kind'] === 'Object' || schema.type === 'object') &&
+			!schema['~codec'] &&
+			!schema['~refine'] &&
+			!Array.isArray(schema.anyOf) &&
+			!Array.isArray(schema.allOf) &&
+			!Array.isArray(schema.oneOf) &&
+			schema.$ref === undefined &&
+			schema.if === undefined &&
+			schema.not === undefined
+		)
+	)
+		return !hasDivergentDefaultBelow(schema)
+
+	if (depth > 0 && schema.default === undefined && hasDefaultBelow(schema))
+		return false
+
+	if (
+		typeof schema.additionalProperties === 'object' &&
+		subtreeHasDefault(schema.additionalProperties)
+	)
+		return false
+
+	if (schema.patternProperties)
+		for (const k in schema.patternProperties)
+			if (subtreeHasDefault(schema.patternProperties[k])) return false
+
+	if (schema.properties)
+		for (const k in schema.properties)
+			if (!structuralPreallocatable(schema.properties[k], depth + 1))
+				return false
+
+	return true
+}
+
+function emittableObjectKeys(v: object): string[] | undefined {
+	if (Object.getOwnPropertySymbols(v).length) return
+
+	const keys = Object.keys(v)
+	if (Object.getOwnPropertyNames(v).length !== keys.length) return
+
+	for (const k of keys) {
+		const descriptor = Object.getOwnPropertyDescriptor(v, k)
+		if (
+			!descriptor ||
+			descriptor.get ||
+			descriptor.set ||
+			!descriptor.enumerable
+		)
+			return
+	}
+
+	return keys
+}
+
+export function isEmittable(
+	v: unknown,
+	seen: Set<unknown>,
+	top = false
+): boolean {
+	if (v === undefined) return top
+	if (v === null) return true
+	const t = typeof v
+	if (t === 'number') return Number.isFinite(v as number) && !Object.is(v, -0)
+	if (t === 'string' || t === 'boolean') return true
+	if (t !== 'object') return false
+	if (seen.has(v)) return false
+	seen.add(v)
+
+	let ok = true
+	if (Array.isArray(v)) {
+		if (Object.getOwnPropertySymbols(v).length) ok = false
+		for (const x of v)
+			if (!isEmittable(x, seen)) {
+				ok = false
+				break
+			}
+	} else {
+		const proto = Object.getPrototypeOf(v)
+		if (proto !== Object.prototype && proto !== null) ok = false
+		else {
+			const keys = emittableObjectKeys(v)
+
+			if (!keys) ok = false
+			else
+				for (const k of keys) {
+					if (dangerousKeys.has(k)) {
+						ok = false
+						break
+					}
+
+					if (!isEmittable((v as Record<string, unknown>)[k], seen)) {
+						ok = false
+						break
+					}
+				}
+		}
+	}
+
+	seen.delete(v)
+	return ok
+}
+
+function cloneExpression(v: unknown): string | undefined {
+	if (v === undefined) return 'undefined'
+	if (v === null) return 'null'
+
+	const t = typeof v
+	if (t === 'number' || t === 'string' || t === 'boolean')
+		return JSON.stringify(v)
+
+	if (t !== 'object') return
+
+	if (Array.isArray(v)) {
+		if (Object.getOwnPropertySymbols(v).length) return
+		const values: string[] = []
+		for (const x of v) {
+			const value = cloneExpression(x)
+			if (value === undefined) return
+			values.push(value)
+		}
+
+		return '[' + values.join(',') + ']'
+	}
+
+	const proto = Object.getPrototypeOf(v)
+	if (proto !== Object.prototype && proto !== null) return
+	const keys = emittableObjectKeys(v)
+	if (!keys) return
+
+	const entries: string[] = []
+	for (const k of keys) {
+		if (dangerousKeys.has(k)) return
+
+		const value = cloneExpression((v as Record<string, unknown>)[k])
+		if (value === undefined) return
+
+		entries.push(JSON.stringify(k) + ':' + value)
+	}
+
+	return '{' + entries.join(',') + '}'
+}
+
+export function buildDefaultClonerSource(value: unknown) {
+	if (!isEmittable(value, new Set(), true)) return
+
+	const expression = cloneExpression(value)
+	if (expression === undefined) return
+
+	return `function(){return ${expression}}`
+}
+
+function buildObjectMergeFunction(
+	defaults: Record<string, unknown>,
+	helpers: string[]
+) {
+	const name = `_m${helpers.length}`
+	helpers.push('')
+
+	const keys = Object.keys(defaults)
+
+	const guard: string[] = []
+	let body =
+		"if(v===null||typeof v!=='object'||Array.isArray(v))return v;const out=Object.create(null);let x;"
+
+	for (const key of keys) {
+		const access = `v[${JSON.stringify(key)}]`
+		const write = `out[${JSON.stringify(key)}]`
+		const d = defaults[key]
+		const value = cloneExpression(d)
+		if (value === undefined) return
+
+		body += `x=${access};`
+
+		if (d !== null && typeof d === 'object') {
+			if (Array.isArray(d)) {
+				body += `if(x===undefined)${write}=${value};else ${write}=x;`
+				guard.push(`${access}===undefined`)
+				continue
+			}
+
+			const nested = buildObjectMergeFunction(
+				d as Record<string, unknown>,
+				helpers
+			)
+			if (!nested) return
+
+			body += `if(x===undefined)${write}=${value};else if(x&&typeof x==='object'&&!Array.isArray(x))${write}=${nested}(x);else ${write}=x;`
+			guard.push(
+				`(${access}===undefined||(typeof ${access}==='object'&&${access}!==null&&!Array.isArray(${access})&&${nested}(${access})!==${access}))`
+			)
+		} else {
+			body += `${write}=x===undefined?${value}:x;`
+			guard.push(`${access}===undefined`)
+		}
+	}
+
+	body += 'for(const k in v){x=v[k];if(x!==undefined'
+	for (const key of keys) body += `&&k!==${JSON.stringify(key)}`
+	body += ')out[k]=x}return out'
+
+	const fastPath = guard.length
+		? `if(v!==null&&typeof v==='object'&&!Array.isArray(v)&&!(${guard.join('||')}))return v;`
+		: ''
+
+	helpers[+name.slice(2)] = `function ${name}(v){${fastPath}${body}}`
+
+	return name
+}
+
+export function buildObjectDefaultMergeSource(
+	defaults: Record<string, unknown>
+) {
+	if (!isEmittable(defaults, new Set(), true)) return
+
+	const helpers: string[] = []
+	const root = buildObjectMergeFunction(defaults, helpers)
+	if (!root) return
+
+	return `(function(){${helpers.join(';')};return ${root}})()`
+}
+
+function fromSource<T extends Function>(source: string) {
+	try {
+		// eslint-disable-next-line sonarjs/code-eval
+		return Function(`return ${source}`)() as T
+	} catch {
+		return
+	}
+}
+
+export function createDefaultCloner(value: unknown) {
+	const source = buildDefaultClonerSource(value)
+
+	return source ? fromSource<DefaultCloner>(source) : undefined
+}
+
+export function createObjectDefaultMerger(defaults: Record<string, unknown>) {
+	const source = buildObjectDefaultMergeSource(defaults)
+
+	return source ? fromSource<ObjectDefaultMerger>(source) : undefined
+}
+
+// Compile a schema-driven merger source (`ms`) for the non-AOT runtime path, so
+// it makes the exact same merge decision the frozen manifest baked.
+export function createMergerFromSource(source: string) {
+	return fromSource<(value: any) => any>(source)
+}
+
+type MergeCategory = 'identity' | 'object' | 'array' | 'bail'
+
+function mergeCategory(node: any): MergeCategory {
+	if (!node || typeof node !== 'object') return 'identity'
+	if (!subtreeHasDefault(node)) return 'identity'
+	if (node['~codec'] || node['~refine']) return 'bail'
+
+	const kind = node['~kind']
+	if (
+		kind === 'Union' ||
+		kind === 'Intersect' ||
+		kind === 'Ref' ||
+		kind === 'This' ||
+		kind === 'Cyclic'
+	)
+		return 'bail'
+
+	if (kind === 'Object' || node.type === 'object') return 'object'
+
+	if ((kind === 'Array' || node.type === 'array') && node.items)
+		return !Array.isArray(node.items) && subtreeHasDefault(node.items)
+			? 'array'
+			: 'identity'
+
+	return 'identity'
+}
+
+function presentExpr(child: string, isObject: boolean, varName: string) {
+	if (child === '') return varName
+
+	return isObject
+		? `(${varName}!==null&&typeof ${varName}==='object'&&!Array.isArray(${varName})?${child}(${varName}):${varName})`
+		: `(Array.isArray(${varName})?${child}(${varName}):${varName})`
+}
+
+function mergeExpression(
+	schema: any,
+	varName: string,
+	helpers: string[],
+	memo: WeakMap<object, string>
+):
+	| {
+			absent: string | undefined
+			present: string
+			child: string
+			isObject: boolean
+	  }
+	| undefined {
+	const full = Default(schema, undefined)
+	const child = emitMerger(schema, helpers, memo)
+	if (child === undefined) return
+
+	const absent = full === undefined ? undefined : cloneExpression(full)
+	if (full !== undefined && absent === undefined) return
+
+	const isObject = mergeCategory(schema) === 'object'
+	const present = presentExpr(child, isObject, varName)
+
+	return { absent, present, child, isObject }
+}
+
+function emitMerger(
+	node: any,
+	helpers: string[],
+	memo: WeakMap<object, string> = new WeakMap()
+) {
+	if (memo.has(node)) return memo.get(node)!
+
+	const category = mergeCategory(node)
+	if (category === 'identity') return ''
+	if (category === 'bail') return
+
+	const name = `_d${helpers.length}`
+	helpers.push('')
+
+	memo.set(node, name)
+
+	if (category === 'object') {
+		const props = node.properties ?? nullObject()
+		const handled: string[] = []
+
+		const typeGuard =
+			"if(v===null||typeof v!=='object'||Array.isArray(v))return v;"
+		let tempDecls = 'let x;'
+
+		const guard: string[] = []
+		let mergeBody = 'const out=Object.create(null);'
+
+		let tempCount = 0
+
+		for (const key in props) {
+			if (!Object.hasOwn(props, key)) continue
+			const ps = props[key]
+			if (!subtreeHasDefault(ps)) continue
+			if (dangerousKeys.has(key)) return
+
+			const expr = mergeExpression(ps, 'x', helpers, memo)
+			if (!expr) return
+
+			handled.push(key)
+			const access = JSON.stringify(key)
+			const vk = `v[${access}]`
+
+			const absentTest =
+				expr.absent === undefined ? undefined : `${vk}===undefined`
+
+			if (expr.child !== '') {
+				// Compute the merged result once into a temp variable.
+				const tmp = `_t${tempCount++}`
+				const typeCheck = expr.isObject
+					? `${vk}!==null&&typeof ${vk}==='object'&&!Array.isArray(${vk})`
+					: `Array.isArray(${vk})`
+				tempDecls += `let ${tmp}=${typeCheck}?${expr.child}(${vk}):${vk};`
+
+				const presentTest = `(${vk}!==undefined&&${tmp}!==${vk})`
+				const test = [absentTest, presentTest]
+					.filter(Boolean)
+					.join('||')
+				if (test) guard.push(test)
+
+				mergeBody +=
+					expr.absent === undefined
+						? `if(${vk}!==undefined)out[${access}]=${tmp};`
+						: `out[${access}]=${vk}===undefined?${expr.absent}:${tmp};`
+			} else {
+				// Identity child, no merger call so retain the original approach
+				mergeBody += `x=${vk};`
+				mergeBody +=
+					expr.absent === undefined
+						? `if(x!==undefined)out[${access}]=${expr.present};`
+						: `out[${access}]=x===undefined?${expr.absent}:${expr.present};`
+
+				if (absentTest) guard.push(absentTest)
+			}
+		}
+
+		if (!handled.length) {
+			helpers.pop()
+			return ''
+		}
+
+		mergeBody += 'for(const k in v){x=v[k];if(x!==undefined'
+		for (const key of handled) mergeBody += `&&k!==${JSON.stringify(key)}`
+		mergeBody += ')out[k]=x}return out'
+
+		const fastPath = guard.length
+			? `if(!(${guard.join('||')}))return v;`
+			: ''
+
+		helpers[+name.slice(2)] =
+			`function ${name}(v){${typeGuard}${tempDecls}${fastPath}${mergeBody}}`
+		return name
+	}
+
+	const expr = mergeExpression(node.items, 'e', helpers, memo)
+	if (!expr) return
+
+	if (expr.absent === undefined && expr.present === 'e') {
+		helpers.pop()
+		return ''
+	}
+
+	const assign =
+		expr.absent === undefined
+			? `e===undefined?undefined:${expr.present}`
+			: `e===undefined?${expr.absent}:${expr.present}`
+
+	helpers[+name.slice(2)] =
+		`function ${name}(v){if(!Array.isArray(v))return v;` +
+		`const o=new Array(v.length);let e;` +
+		`for(let i=0;i<v.length;i++){e=v[i];o[i]=${assign}}return o}`
+
+	return name
+}
+
+function buildMergeSource(schema: any) {
+	const category = mergeCategory(schema)
+	if (category !== 'object' && category !== 'array') return
+
+	const helpers: string[] = []
+	const memo = new WeakMap<object, string>()
+	const root = emitMerger(schema, helpers, memo)
+	if (!root) return
+
+	return `(function(){${helpers.join(';')};return ${root}})()`
+}
+
+// Build-time differential probes (empty containers, sentinel fills) live in
+// build-only `src/compile/aot-capture.ts`
+export interface DefaultProbeImpl {
+	validateMergeSource(schema: TSchema, source: string): boolean
+	validateObjectDefault(
+		schema: TSchema,
+		pod: Record<string, unknown>
+	): boolean
+}
+
+let probeImpl: DefaultProbeImpl | undefined
+
+export function setDefaultProbeImpl(impl: DefaultProbeImpl) {
+	probeImpl = impl
+}
+
+function probe() {
+	if (!probeImpl)
+		throw new Error(
+			'[Elysia] validating a preallocatable default requires the ' +
+				'build-only AOT capture module (src/compile/aot-capture)'
+		)
+
+	return probeImpl
+}
+
+export function canonical(v: unknown): string {
+	if (v === undefined) return '\0u'
+	if (Object.is(v, -0)) return '-0'
+	if (v === null || typeof v !== 'object') return JSON.stringify(v) ?? '\0u'
+	if (Array.isArray(v)) return '[' + v.map(canonical).join(',') + ']'
+
+	return (
+		'{' +
+		Object.keys(v)
+			.sort()
+			.map(
+				(k) =>
+					JSON.stringify(k) +
+					':' +
+					canonical((v as Record<string, unknown>)[k])
+			)
+			.join(',') +
+		'}'
+	)
+}
+
+// ? build-time, check if a default is preallocatable (emittable, JSON-serializable)
+export function verifyPreallocatableDefault(schema: TSchema, validate = true) {
+	if (hasUnemittableDefaultValue(schema)) return
+
+	// preallocated default
+	let pd: unknown
+	// preallocatable object default raw
+	let podRaw: unknown
+
+	try {
+		pd = Default(schema, undefined)
+		podRaw = Default(schema, nullObject())
+	} catch {
+		return
+	}
+
+	const s = schema as any
+	const rootIsObject = s.type === 'object' || s['~kind'] === 'Object'
+
+	const pod =
+		rootIsObject &&
+		podRaw &&
+		typeof podRaw === 'object' &&
+		!Array.isArray(podRaw) &&
+		// empty pod = no present-object defaults → passthrough, not a no-op copy
+		Object.keys(podRaw).length !== 0
+			? (podRaw as Record<string, unknown>)
+			: undefined
+
+	if (containsRefLike(schema)) return
+
+	if (
+		!isEmittable(pd, new Set(), true) ||
+		(pod !== undefined && !isEmittable(pod, new Set(), true))
+	)
+		return
+
+	const nullDefault = isPrecomputeSafe(schema as any)
+
+	let ms = buildMergeSource(schema)
+	if (ms !== undefined && validate && !probe().validateMergeSource(schema, ms))
+		ms = undefined
+
+	if (!nullDefault && ms === undefined) {
+		if (!rootIsObject) return
+		if (!structuralPreallocatable(schema as any)) return
+
+		if (
+			validate &&
+			pod !== undefined &&
+			!probe().validateObjectDefault(schema, pod)
+		)
+			return
+	}
+
+	return { pd, pn: nullDefault, pod, ms }
+}

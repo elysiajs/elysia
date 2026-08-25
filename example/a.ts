@@ -1,34 +1,43 @@
 import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+import type { AnySchema, MacroTypeLambda, UnwrapSchema } from '../src'
 
-const app = new Elysia()
-	.get('/', async () => {
-		const file = Bun.file('test/kyuukurarin.mp4')
+interface ChannelLambda extends MacroTypeLambda {
+	output: this['input'] extends { of: infer S extends AnySchema }
+		? { custom: UnwrapSchema<S> }
+		: { custom: unknown }
+}
 
-		// Wrap the stream in another ReadableStream
-		// perhaps we are concatenating streams or whatever
-		const body = new ReadableStream({
-			async start(controller) {
-				const reader = file.stream().getReader()
-				try {
-					while (true) {
-						const { done, value } = await reader.read()
-						if (done) break
-						controller.enqueue(value)
-					}
-					controller.close()
-				} catch (err) {
-					controller.error(err)
-				} finally {
-					reader.releaseLock()
-				}
-			}
+new Elysia()
+	.macro({
+		channel: (option: {
+			of: AnySchema
+		}): { $type?: ChannelLambda; derive(c: unknown): unknown } => ({
+			derive: (context) => ({ channel: { entries: {}, of: option.of } })
 		})
-
-		// Returning the stream uses 100% for several minutes
-		return body
-
-		// Returning the same stream wrapped in a Response servers the stream in a fraction of a second
-		// return new Response(body);
 	})
-	.listen(3000)
+	.get(
+		'/stats',
+		{ channel: { of: t.Object({ count: t.Number() }) } },
+		({ custom }) => {
+
+
+
+			custom.count
+		}
+	)
+	.get(
+		'/room',
+		{ channel: { of: t.Object({ id: t.String(), name: t.String() }) } },
+		({ custom }) => {
+			// hover: Readonly<Record<string, { id: string; name: string }>>
+			channel.entries
+
+			const first = Object.values(channel.entries)[0]
+			first?.name.toUpperCase()
+
+			// @ts-expect-error no such field on the viewer schema
+			first?.count
+
+			return { viewers: Object.values(channel.entries) }
+		}
+	)

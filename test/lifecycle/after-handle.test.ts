@@ -1,34 +1,38 @@
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
-describe('After Handle', () => {
-	it('work global', async () => {
-		const app = new Elysia().onAfterHandle(() => 'A').get('/', () => 'NOOP')
+describe('afterHandle', () => {
+	it('replaces a response from an app hook', async () => {
+		const app = new Elysia().afterHandle(() => 'A').get('/', () => 'NOOP')
 
-		const res = await app.handle(req('/')).then((x) => x.text())
-
-		expect(res).toBe('A')
-	})
-
-	it('work local', async () => {
-		const app = new Elysia().get('/', () => 'NOOP', {
-			afterHandle() {
-				return 'A'
-			}
-		})
-
-		const res = await app.handle(req('/')).then((x) => x.text())
+		const res = await app.handle('/').then((x) => x.text())
 
 		expect(res).toBe('A')
 	})
 
-	it('inherits from plugin', async () => {
-		const transformType = new Elysia().onAfterHandle(
-			{ as: 'global' },
-			({ response }) => {
-				if (response === 'string') return 'number'
+	it('replaces a response from a route-local hook', async () => {
+		const app = new Elysia().get(
+			'/',
+			{
+				afterHandle() {
+					return 'A'
+				}
+			},
+			() => 'NOOP'
+		)
+
+		const res = await app.handle('/').then((x) => x.text())
+
+		expect(res).toBe('A')
+	})
+
+	it('propagates global hooks out of plugins', async () => {
+		const transformType = new Elysia().afterHandle(
+			'global',
+			// @ts-ignore
+			({ responseValue }) => {
+				if (responseValue === 'string') return 'number'
 			}
 		)
 
@@ -36,127 +40,97 @@ describe('After Handle', () => {
 			.use(transformType)
 			.get('/id/:id', ({ params: { id } }) => typeof id)
 
-		const res = await app.handle(req('/id/1'))
+		const res = await app.handle('/id/1')
 
-		expect(await res.text()).toBe('number')
+		await expect(res.text()).resolves.toBe('number')
 	})
 
-	it('not inherits plugin on local', async () => {
-		const transformType = new Elysia().onAfterHandle(({ response }) => {
-			if (response === 'string') return 'number'
+	it('keeps local hooks inside plugins', async () => {
+		// @ts-ignore
+		const transformType = new Elysia().afterHandle(({ responseValue }) => {
+			if (responseValue === 'string') return 'number'
 		})
 
 		const app = new Elysia()
 			.use(transformType)
 			.get('/id/:id', ({ params: { id } }) => typeof id)
 
-		const res = await app.handle(req('/id/1'))
+		const res = await app.handle('/id/1')
 
-		expect(await res.text()).toBe('string')
+		await expect(res.text()).resolves.toBe('string')
 	})
 
-	it('register using on', async () => {
-		const app = new Elysia()
-			.on('transform', (request) => {
-				if (request.params?.id) request.params.id = +request.params.id
-			})
-			.get('/id/:id', ({ params: { id } }) => typeof id)
-
-		const res = await app.handle(req('/id/1'))
-
-		expect(await res.text()).toBe('number')
-	})
-
-	it('after handle in order', async () => {
+	it('runs hooks in registration order', async () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.onAfterHandle(() => {
+			.afterHandle(() => {
 				order.push('A')
 			})
-			.onAfterHandle(() => {
+			.afterHandle(() => {
 				order.push('B')
 			})
 			.get('/', () => '')
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(order).toEqual(['A', 'B'])
 	})
 
-	it('accept response', async () => {
-		const app = new Elysia().get('/', () => 'NOOP', {
-			afterHandle({ response }) {
-				return response
+	it('receives the handler result as responseValue', async () => {
+		const app = new Elysia().get(
+			'/',
+			{
+				afterHandle({ responseValue }) {
+					return responseValue
+				},
+				mapResponse() {}
 			},
-			mapResponse() {
+			() => 'NOOP'
+		)
 
-			}
-		})
-
-		const res = await app.handle(req('/')).then((x) => x.text())
+		const res = await app.handle('/').then((x) => x.text())
 
 		expect(res).toBe('NOOP')
 	})
 
-	it('accept responseValue', async () => {
-		const app = new Elysia().get('/', () => 'NOOP', {
-			afterHandle({ responseValue }) {
-				return responseValue
-			},
-			mapResponse() {
-
-			}
-		})
-
-		const res = await app.handle(req('/')).then((x) => x.text())
-
-		expect(res).toBe('NOOP')
-	})
-
-	it('as global', async () => {
+	it('runs a global plugin hook on plugin and parent routes', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onAfterHandle({ as: 'global' }, ({ path }) => {
+			.afterHandle('global', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
 
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
-		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
+		await Promise.all([app.handle('/inner'), app.handle('/outer')])
 
 		expect(called).toEqual(['/inner', '/outer'])
 	})
 
-	it('as local', async () => {
+	it('runs a local plugin hook only on plugin routes', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onAfterHandle({ as: 'local' }, ({ path }) => {
+			.afterHandle('local', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
 
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
-		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
+		await Promise.all([app.handle('/inner'), app.handle('/outer')])
 
 		expect(called).toEqual(['/inner'])
 	})
 
-	it('support array', async () => {
+	it('accepts an array of hooks', async () => {
 		let total = 0
 
 		const app = new Elysia()
-			.onAfterHandle([
+			.afterHandle([
 				() => {
 					total++
 				},
@@ -166,7 +140,7 @@ describe('After Handle', () => {
 			])
 			.get('/', () => 'NOOP')
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(total).toEqual(2)
 	})

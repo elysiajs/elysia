@@ -1,26 +1,34 @@
 import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { post, req } from '../utils'
+import { post } from '../utils'
 
 describe('Validator Additional Case', () => {
 	it('validate beforeHandle', async () => {
 		const app = new Elysia()
-			.get('/', () => 'Mutsuki need correction 💢💢💢', {
-				beforeHandle: () => 'Mutsuki need correction 💢💢💢',
-				response: t.String()
-			})
-			.get('/invalid', () => 1 as any, {
-				beforeHandle() {
-					return 1 as any
+			.get(
+				'/',
+				{
+					beforeHandle: () => 'Mutsuki need correction 💢💢💢',
+					response: t.String()
 				},
-				response: t.String()
-			})
+				() => 'Mutsuki need correction 💢💢💢'
+			)
+			.get(
+				'/invalid',
+				{
+					beforeHandle() {
+						return 1 as any
+					},
+					response: t.String()
+				},
+				() => 1 as any
+			)
 
-		const res = await app.handle(req('/'))
-		const invalid = await app.handle(req('/invalid'))
+		const res = await app.handle('/')
+		const invalid = await app.handle('/invalid')
 
-		expect(await res.text()).toBe('Mutsuki need correction 💢💢💢')
+		await expect(res.text()).resolves.toBe('Mutsuki need correction 💢💢💢')
 		expect(res.status).toBe(200)
 
 		expect(invalid.status).toBe(422)
@@ -28,19 +36,27 @@ describe('Validator Additional Case', () => {
 
 	it('validate afterHandle', async () => {
 		const app = new Elysia()
-			.get('/', () => 'Mutsuki need correction 💢💢💢', {
-				afterHandle: () => 'Mutsuki need correction 💢💢💢',
-				response: t.String()
-			})
-			.get('/invalid', () => 1 as any, {
-				afterHandle: () => 1 as any,
-				response: t.String()
-			})
+			.get(
+				'/',
+				{
+					afterHandle: () => 'Mutsuki need correction 💢💢💢',
+					response: t.String()
+				},
+				() => 'Mutsuki need correction 💢💢💢'
+			)
+			.get(
+				'/invalid',
+				{
+					afterHandle: () => 1 as any,
+					response: t.String()
+				},
+				() => 1 as any
+			)
 
-		const res = await app.handle(req('/'))
-		const invalid = await app.handle(req('/invalid'))
+		const res = await app.handle('/')
+		const invalid = await app.handle('/invalid')
 
-		expect(await res.text()).toBe('Mutsuki need correction 💢💢💢')
+		await expect(res.text()).resolves.toBe('Mutsuki need correction 💢💢💢')
 
 		expect(res.status).toBe(200)
 		expect(invalid.status).toBe(422)
@@ -48,23 +64,31 @@ describe('Validator Additional Case', () => {
 
 	it('validate beforeHandle with afterHandle', async () => {
 		const app = new Elysia()
-			.get('/', () => 'Mutsuki need correction 💢💢💢', {
-				beforeHandle() {},
-				afterHandle() {
-					return 'Mutsuki need correction 💢💢💢'
+			.get(
+				'/',
+				{
+					beforeHandle() {},
+					afterHandle() {
+						return 'Mutsuki need correction 💢💢💢'
+					},
+					response: t.String()
 				},
-				response: t.String()
-			})
-			.get('/invalid', () => 1 as any, {
-				afterHandle() {
-					return 1 as any
+				() => 'Mutsuki need correction 💢💢💢'
+			)
+			.get(
+				'/invalid',
+				{
+					afterHandle() {
+						return 1 as any
+					},
+					response: t.String()
 				},
-				response: t.String()
-			})
-		const res = await app.handle(req('/'))
-		const invalid = await app.handle(req('/invalid'))
+				() => 1 as any
+			)
+		const res = await app.handle('/')
+		const invalid = await app.handle('/invalid')
 
-		expect(await res.text()).toBe('Mutsuki need correction 💢💢💢')
+		await expect(res.text()).resolves.toBe('Mutsuki need correction 💢💢💢')
 		expect(res.status).toBe(200)
 
 		expect(invalid.status).toBe(422)
@@ -78,15 +102,19 @@ describe('Validator Additional Case', () => {
 				})
 			},
 			(app) =>
-				app.post('/user', ({ query: { name } }) => name, {
-					body: t.Object({
-						id: t.Number(),
-						username: t.String(),
-						profile: t.Object({
-							name: t.String()
+				app.post(
+					'/user',
+					{
+						body: t.Object({
+							id: t.Number(),
+							username: t.String(),
+							profile: t.Object({
+								name: t.String()
+							})
 						})
-					})
-				})
+					},
+					({ query: { name } }) => name
+				)
 		)
 
 		const body = JSON.stringify({
@@ -108,7 +136,7 @@ describe('Validator Additional Case', () => {
 			})
 		)
 
-		expect(await valid.text()).toBe('salt')
+		await expect(valid.text()).resolves.toBe('salt')
 		expect(valid.status).toBe(200)
 
 		const invalidQuery = await app.handle(
@@ -153,8 +181,8 @@ describe('Validator Additional Case', () => {
 			)
 
 		const res = await Promise.all([
-			app.handle(req('/')),
-			app.handle(req('/', { headers: { Cookie: 'session=value' } }))
+			app.handle('/'),
+			app.handle('/', { headers: { Cookie: 'session=value' } })
 		])
 
 		expect(res[0].status).toBe(422)
@@ -162,11 +190,15 @@ describe('Validator Additional Case', () => {
 	})
 
 	it('handle record', async () => {
-		const app = new Elysia().get('/', () => 'SAFE', {
-			query: t.Record(t.String(), t.String())
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Record(t.String(), t.String())
+			},
+			() => 'SAFE'
+		)
 
-		const response = await app.handle(req('/?x=1'))
+		const response = await app.handle('/?x=1')
 
 		expect(response.status).toBe(200)
 	})
