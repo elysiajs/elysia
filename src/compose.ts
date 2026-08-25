@@ -2697,8 +2697,8 @@ export const composeErrorHandler = (app: AnyElysia) => {
 					afterResponse() +
 					`return mapResponse(_r,set${adapter.mapResponseContext})}` +
 					`if(_r instanceof ElysiaCustomStatusResponse){` +
-					`error.status=error.code\n` +
-					`error.message=error.response` +
+					`set.status=_r.code\n` +
+					`_r=_r.response` +
 					`}` +
 					`if(set.status===200||!set.status)set.status=error.status\n`
 
