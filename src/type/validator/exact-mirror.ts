@@ -11,7 +11,8 @@ function loadExactMirror(): CreateMirror | undefined {
 				?.getBuiltinModule?.('module')
 				?.createRequire(import.meta.url)
 
-		const module = require?.('exact-mirror')
+		const pkg = 'exact-mirror'
+		const module = require?.(pkg)
 		const mirror = module?.default ?? module
 
 		return typeof mirror === 'function' ? mirror : undefined
