@@ -15,6 +15,20 @@ import type { FlattenResponse, WSParseHandler } from './types'
 import type { MaybeArray, Prettify, RouteSchema } from '../types'
 import { ValidationError } from '../error'
 
+function isInvalidResponse(
+	validator: TypeCheck<any> | ElysiaTypeCheck<any> | undefined,
+	data: unknown
+) {
+	if (!validator) return false
+
+	// @ts-ignore
+	if (validator.provider === 'standard')
+		// @ts-ignore
+		return validator.schema['~standard'].validate(data).issues
+
+	return validator.Check(data) === false
+}
+
 export const websocket: WebSocketHandler<any> = {
 	open(ws) {
 		ws.data.open?.(ws)
@@ -94,9 +108,9 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 		if (Buffer.isBuffer(data))
 			return this.raw.send(data as unknown as BufferSource, compress)
 
-		if (this.validator?.Check(data) === false)
+		if (isInvalidResponse(this.validator, data))
 			return this.raw.send(
-				new ValidationError('message', this.validator, data).message
+				new ValidationError('message', this.validator!, data).message
 			)
 
 		if (typeof data === 'object') data = JSON.stringify(data) as any
@@ -115,9 +129,9 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 		if (Buffer.isBuffer(data))
 			return this.raw.ping(data as unknown as BufferSource)
 
-		if (this.validator?.Check(data) === false)
+		if (isInvalidResponse(this.validator, data))
 			return this.raw.send(
-				new ValidationError('message', this.validator, data).message
+				new ValidationError('message', this.validator!, data).message
 			)
 
 		if (typeof data === 'object') data = JSON.stringify(data) as any
@@ -136,9 +150,9 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 		if (Buffer.isBuffer(data))
 			return this.raw.pong(data as unknown as BufferSource)
 
-		if (this.validator?.Check(data) === false)
+		if (isInvalidResponse(this.validator, data))
 			return this.raw.send(
-				new ValidationError('message', this.validator, data).message
+				new ValidationError('message', this.validator!, data).message
 			)
 
 		if (typeof data === 'object') data = JSON.stringify(data) as any
@@ -169,9 +183,9 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 				compress
 			)
 
-		if (this.validator?.Check(data) === false)
+		if (isInvalidResponse(this.validator, data))
 			return this.raw.send(
-				new ValidationError('message', this.validator, data).message
+				new ValidationError('message', this.validator!, data).message
 			)
 
 		if (typeof data === 'object') data = JSON.stringify(data) as any
@@ -255,18 +269,12 @@ export const createHandleWSResponse = (
 
 		if (data === undefined) return
 
-		const validateResponse = responseValidator
-			? // @ts-ignore
-				responseValidator.provider === 'standard'
-				? (data: unknown) =>
-						// @ts-ignore
-						responseValidator.schema['~standard'].validate(data)
-							.issues
-				: (data: unknown) => responseValidator.Check(data) === false
-			: undefined
-
 		const send = (datum: unknown) => {
-			if (validateResponse && validateResponse(datum) === false)
+			// ? A generator that yields nothing produce no message to
+			// ? validate, same as returning undefined above
+			if (datum === undefined) return
+
+			if (isInvalidResponse(responseValidator, datum))
 				return ws.send(
 					new ValidationError('message', responseValidator!, datum)
 						.message
@@ -285,15 +293,6 @@ export const createHandleWSResponse = (
 		if (init instanceof Promise)
 			return (async () => {
 				const first = await init
-
-				if (validateResponse && validateResponse(first))
-					return ws.send(
-						new ValidationError(
-							'message',
-							responseValidator!,
-							first
-						).message
-					)
 
 				send(first.value as any)
 

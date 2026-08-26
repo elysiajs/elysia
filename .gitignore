@@ -13,3 +13,7 @@ heap.json
 server
 AGENTS.md
 CLAUDE.md
+bench
+design
+test/cloudflare
+.claude

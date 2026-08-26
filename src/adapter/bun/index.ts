@@ -260,6 +260,17 @@ export const BunAdapter: ElysiaAdapter = {
 				>{}
 				const ops = <Promise<any>[]>[]
 
+
+				if (
+					app.event.request?.length ||
+					app.event.trace?.length ||
+					// @ts-expect-error private
+					app.extender.higherOrderFunctions.length
+				)
+					return (
+						withAsync ? Promise.resolve(staticRoutes) : staticRoutes
+					) as any
+
 				for (let [path, route] of Object.entries(iterator)) {
 					path = encodeURI(path)
 
