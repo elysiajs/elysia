@@ -2,7 +2,7 @@
 Chore:
 - update test case for Bun 1.4
 
-Adivosory:
+Advisory:
 - GHSA-gmm9-qwx3-2m3h
 - GHSA-2p5p-r4r9-f9jm
 - GHSA-3958-wq4x-729c
