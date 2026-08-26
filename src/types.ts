@@ -2228,6 +2228,85 @@ export type ElysiaHandlerToResponseSchemaAmbiguous<
 				? ElysiaHandlerToResponseSchemas<Schemas>
 				: {}
 
+/**
+ * HTTP statuses an error may resolve to when it reaches an `onError`
+ * handler, as assigned by Elysia's built-in error handling:
+ *
+ * - `400` - `PARSE`
+ * - `404` - `NOT_FOUND`
+ * - `422` - `VALIDATION`
+ * - `500` - unhandled errors (`INTERNAL_ERROR` and unknown errors)
+ *
+ * Which one applies is decided at runtime by the thrown error, so a plain
+ * value returned from an `onError` handler (without an explicit
+ * `status(code, value)`) is recorded under all of them.
+ */
+type DefaultErrorStatusesToResponseSchema<Response> = {
+	400: Response
+	404: Response
+	422: Response
+	500: Response
+}
+
+/**
+ * Like {@link ValueToResponseSchema} but for values returned from an
+ * `onError` handler: explicit `status(code, value)` returns keep their
+ * exact status, while plain returns become the body of the runtime error
+ * status (see {@link DefaultErrorStatusesToResponseSchema}) instead of
+ * being recorded as a `200` response.
+ *
+ * When a plain return coexists with an explicit `status(code, value)`
+ * whose code is one of the default error statuses, both bodies are
+ * unioned under that status.
+ */
+type ErrorValueToResponseSchema<Value> =
+	ExtractErrorFromHandle<Value> extends infer Explicit
+		? Extract200<Value> extends infer Plain
+			? undefined extends Plain
+				? Explicit
+				: IsNever<Plain> extends true
+					? Explicit
+					: Prettify<
+						Omit<Explicit, 400 | 404 | 422 | 500> & {
+							[K in 400 | 404 | 422 | 500]: K extends keyof Explicit
+								? Explicit[K] | Plain
+								: Plain
+						}
+					>
+			: never
+		: never
+
+export type ElysiaErrorHandlerToResponseSchema<
+	in out Handle extends Function
+> = Prettify<
+	Handle extends (...a: any) => MaybePromise<infer R>
+		? ErrorValueToResponseSchema<Exclude<R, undefined>>
+		: {}
+>
+
+export type ElysiaErrorHandlerToResponseSchemas<
+	Handle extends Function[],
+	Carry extends PossibleResponse = {}
+> = Handle extends [infer Current, ...infer Rest]
+	? ElysiaErrorHandlerToResponseSchemas<
+			// @ts-ignore Trust me bro
+			Rest,
+			// @ts-ignore Trust me bro
+			UnionResponseStatus<ElysiaErrorHandlerToResponseSchema<Current>, Carry>
+		>
+	: Prettify<Carry>
+
+export type ElysiaErrorHandlerToResponseSchemaAmbiguous<
+	Schemas extends MaybeArray<Function>
+> =
+	MaybeArray<(...a: any) => any> extends Schemas
+		? {}
+		: Schemas extends Function
+			? ElysiaErrorHandlerToResponseSchema<Schemas>
+			: Schemas extends Function[]
+				? ElysiaErrorHandlerToResponseSchemas<Schemas>
+				: {}
+
 type ReconcileStatus<
 	in out A extends Record<number, unknown>,
 	in out B extends Record<number, unknown>
