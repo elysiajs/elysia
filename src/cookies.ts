@@ -326,10 +326,11 @@ export class Cookie<T> implements ElysiaCookie {
 		return this
 	}
 
-	remove() {
+	remove(config?: Omit<CookieOptions, 'expires' | 'maxAge' | 'value'>) {
 		if (this.value === undefined) return
 
 		this.set({
+			...config,
 			expires: new Date(0),
 			maxAge: 0,
 			value: ''
