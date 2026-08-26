@@ -689,6 +689,7 @@ export type HTTPMethod =
 	| 'PROPPATCH'
 	| 'PURGE'
 	| 'PUT'
+	| 'QUERY'
 	| 'REBIND'
 	| 'REPORT'
 	| 'SEARCH'
