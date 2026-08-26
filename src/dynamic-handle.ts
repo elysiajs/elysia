@@ -125,22 +125,28 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			if (request.method !== 'GET' && request.method !== 'HEAD') {
 				if (content) {
 					switch (content) {
+						case 'json':
 						case 'application/json':
 							body = (await request.json()) as any
 							break
 
+						case 'text':
 						case 'text/plain':
 							body = await request.text()
 							break
 
+						case 'urlencoded':
 						case 'application/x-www-form-urlencoded':
 							body = parseQuery(await request.text())
 							break
 
+						case 'arrayBuffer':
 						case 'application/octet-stream':
 							body = await request.arrayBuffer()
 							break
 
+						case 'formdata':
+						case 'multipart':
 						case 'multipart/form-data': {
 							const form = parseFormData(
 								await request.formData()
