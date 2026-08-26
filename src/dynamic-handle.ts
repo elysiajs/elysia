@@ -447,45 +447,83 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				}
 
 				const bodyValidator = validator.createBody?.()
-				if (bodyValidator?.Check(body) === false) {
-					if (
-						structuredForm === undefined ||
-						bodyValidator.Check(structuredForm) === false
-					)
-						throw new ValidationError('body', validator.body!, body)
-
-					context.body = body = structuredForm
-				} else if (
-					structuredForm !== undefined &&
-					bodyValidator?.provider === 'standard'
-				) {
+				if (bodyValidator) {
 					let result = bodyValidator.Check(body) as any
 					if (result instanceof Promise) result = await result
 
-					if (result?.issues) {
-						let structuredResult = bodyValidator.Check(
-							structuredForm
-						) as any
-						if (structuredResult instanceof Promise)
-							structuredResult = await structuredResult
+					const isFail = (res: any) =>
+						bodyValidator.provider === 'standard'
+							? !!res?.issues
+							: res === false
 
-						if (!structuredResult?.issues)
-							context.body = body = structuredForm
-						else
+					if (isFail(result)) {
+						let isValid = false
+						if (structuredForm !== undefined) {
+							let structuredResult = bodyValidator.Check(
+								structuredForm
+							) as any
+							if (structuredResult instanceof Promise)
+								structuredResult = await structuredResult
+
+							if (!isFail(structuredResult)) {
+								context.body = body = structuredForm
+								result = structuredResult
+								isValid = true
+							} else {
+								const differingKeys = Object.keys(
+									structuredForm
+								).filter(
+									(key) => structuredForm[key] !== body[key]
+								)
+								const numCombos = 1 << differingKeys.length
+								if (numCombos <= 16) {
+									for (let i = 1; i < numCombos - 1; i++) {
+										const combo = { ...body }
+										for (
+											let j = 0;
+											j < differingKeys.length;
+											j++
+										) {
+											if (i & (1 << j)) {
+												combo[differingKeys[j]] =
+													structuredForm[
+														differingKeys[j]
+													]
+											}
+										}
+										let comboResult = bodyValidator.Check(
+											combo
+										) as any
+										if (comboResult instanceof Promise)
+											comboResult = await comboResult
+										if (!isFail(comboResult)) {
+											context.body = body = combo
+											result = comboResult
+											isValid = true
+											break
+										}
+									}
+								}
+							}
+						}
+
+						if (!isValid)
 							throw new ValidationError(
 								'body',
 								validator.body!,
 								body
 							)
 					}
-				}
 
-				if (validator.body?.Decode) {
-					let decoded = validator.body.Decode(body) as any
-					if (decoded instanceof Promise) decoded = await decoded
+					if (validator.body?.Decode) {
+						let decoded = validator.body.Decode(body) as any
+						if (decoded instanceof Promise) decoded = await decoded
 
-					// Zod returns { value: ... } wrapper
-					context.body = decoded?.value ?? decoded
+						// Zod returns { value: ... } wrapper
+						context.body = decoded?.value ?? decoded
+					} else if (bodyValidator.provider === 'standard') {
+						context.body = result?.value ?? body
+					}
 				}
 			}
 

@@ -378,4 +378,27 @@ describe('Multipart string field', () => {
 			settings: { theme: 'dark' }
 		})
 	})
+
+	it('handle async standard schema body validator in dynamic mode', async () => {
+		const app = new Elysia({ aot: false }).post(
+			'/upload',
+			({ body }) => body.metadata,
+			{
+				body: z.object({
+					metadata: z.string().refine(async (v) => v.length > 0)
+				}),
+				type: 'multipart'
+			}
+		)
+
+		const metadata = JSON.stringify({ theme: 'dark' })
+
+		const form = new FormData()
+		form.append('metadata', metadata)
+
+		const response = await app.handle(upload(form))
+
+		expect(response.status).toBe(200)
+		expect(await response.text()).toBe(metadata)
+	})
 })
