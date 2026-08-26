@@ -275,7 +275,7 @@ describe('Web Standard - Map Early Response', () => {
 		// expect(await response?.text()).toEqual('Shiroko')
 		expect(response?.headers.toJSON()).toEqual({
 			name: 'Sorasaki Hina',
-			location: 'https://cunny.school'
+			location: 'https://cunny.school/'
 		})
 
 		expect(response).toBeInstanceOf(Response)
