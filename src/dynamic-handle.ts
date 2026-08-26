@@ -470,15 +470,16 @@ export const createDynamicHandler = (app: AnyElysia) => {
 								result = structuredResult
 								isValid = true
 							} else {
+								const bodyObj = body as Record<string, any>
 								const differingKeys = Object.keys(
 									structuredForm
 								).filter(
-									(key) => structuredForm[key] !== body[key]
+									(key) => structuredForm[key] !== bodyObj[key]
 								)
 								const numCombos = 1 << differingKeys.length
 								if (numCombos <= 16) {
 									for (let i = 1; i < numCombos - 1; i++) {
-										const combo = { ...body }
+										const combo = { ...bodyObj }
 										for (
 											let j = 0;
 											j < differingKeys.length;
