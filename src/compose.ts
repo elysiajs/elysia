@@ -1241,11 +1241,11 @@ export const composeHandler = ({
 						typeof value === 'object'
 							? JSON.stringify(value)
 							: typeof value === 'string'
-								? `'${value}'`
+								? JSON.stringify(value)
 								: value
 
 					if (parsed !== undefined)
-						fnLiteral += `c.headers['${key}']??=${parsed}\n`
+						fnLiteral += `c.headers[${JSON.stringify(key)}]??=${parsed}\n`
 				}
 
 			fnLiteral += composeCleaner({
@@ -1294,11 +1294,11 @@ export const composeHandler = ({
 						typeof value === 'object'
 							? JSON.stringify(value)
 							: typeof value === 'string'
-								? `'${value}'`
+								? JSON.stringify(value)
 								: value
 
 					if (parsed !== undefined)
-						fnLiteral += `c.params['${key}']??=${parsed}\n`
+						fnLiteral += `c.params[${JSON.stringify(key)}]??=${parsed}\n`
 				}
 
 			if (validator.params.provider === 'standard') {
@@ -1335,11 +1335,11 @@ export const composeHandler = ({
 						typeof value === 'object'
 							? JSON.stringify(value)
 							: typeof value === 'string'
-								? `'${value}'`
+								? JSON.stringify(value)
 								: value
 
 					if (parsed !== undefined)
-						fnLiteral += `if(c.query['${key}']===undefined)c.query['${key}']=${parsed}\n`
+						fnLiteral += `if(c.query[${JSON.stringify(key)}]===undefined)c.query[${JSON.stringify(key)}]=${parsed}\n`
 				}
 
 			fnLiteral += composeCleaner({
@@ -1423,7 +1423,7 @@ export const composeHandler = ({
 					typeof value === 'object'
 						? JSON.stringify(value)
 						: typeof value === 'string'
-							? `'${value}'`
+							? JSON.stringify(value)
 							: value
 
 				if (value !== undefined && value !== null) {

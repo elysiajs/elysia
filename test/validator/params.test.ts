@@ -183,6 +183,38 @@ describe('Params Validator', () => {
 		})
 	})
 
+	it('escapes single quote in default string value', async () => {
+		const payload = "tea';globalThis.__paramsDefaultValueInjection=1;//"
+		const app = new Elysia().get('/:name', ({ params }) => params, {
+			params: t.Object({
+				name: t.String(),
+				faction: t.String({ default: payload })
+			})
+		})
+
+		const value = await app.handle(req('/nagisa')).then((x) => x.json())
+
+		expect(
+			(globalThis as any).__paramsDefaultValueInjection
+		).toBeUndefined()
+		expect(value.faction).toBe(payload)
+	})
+
+	it('escapes single quote in default property key', async () => {
+		const key = "faction'];globalThis.__paramsDefaultKeyInjection=1;//"
+		const app = new Elysia().get('/:name', () => 'ok', {
+			params: t.Object({
+				name: t.String(),
+				[key]: t.String({ default: 'tea_party' })
+			})
+		})
+
+		const res = await app.handle(req('/nagisa'))
+
+		expect((globalThis as any).__paramsDefaultKeyInjection).toBeUndefined()
+		expect(res.status).toBe(200)
+	})
+
 	it('create default number params', async () => {
 		const app = new Elysia().get('/:name', ({ params }) => params, {
 			params: t.Object({
