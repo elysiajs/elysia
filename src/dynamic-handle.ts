@@ -9,6 +9,7 @@ import {
 	ValidationError
 } from './error'
 import type { AnyElysia, CookieOptions } from './index'
+import { parseFormData } from './parse-form-data'
 import { parseQuery } from './parse-query'
 import { getSchemaProperties, type ElysiaTypeCheck } from './schema'
 import type { TypeCheck } from './type-system'
@@ -22,150 +23,6 @@ export type DynamicHandler = {
 	hooks: Partial<LifeCycleStore>
 	validator?: SchemaValidator
 	route: string
-}
-
-/**
- * Matches array index notation in property paths
- * Examples:
- *   "users[0]"  → Group 1: "users", Group 2: "0"
- *   "items[42]" → Group 1: "items", Group 2: "42"
- *   "a[123]"    → Group 1: "a",     Group 2: "123"
- *
- * Does not match:
- *   "users"     → no brackets
- *   "users[]"   → no index
- *   "users[ab]" → non-numeric index
- */
-const ARRAY_INDEX_REGEX = /^(.+)\[(\d+)\]$/
-const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
-
-const isDangerousKey = (key: string): boolean => {
-	if (DANGEROUS_KEYS.has(key)) return true
-
-	const match = key.match(ARRAY_INDEX_REGEX)
-	return match ? DANGEROUS_KEYS.has(match[1]) : false
-}
-
-const parseArrayKey = (key: string) => {
-	const match = key.match(ARRAY_INDEX_REGEX)
-	if (!match) return null
-
-	return {
-		name: match[1],
-		index: parseInt(match[2], 10)
-	}
-}
-
-const parseObjectString = (entry: unknown) => {
-	if (typeof entry !== 'string' || entry.charCodeAt(0) !== 123) return
-
-	try {
-		const parsed = JSON.parse(entry)
-		if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
-			return parsed
-	} catch {
-		return
-	}
-}
-
-const setNestedValue = (obj: Record<string, any>, path: string, value: any) => {
-	const keys = path.split('.')
-	const lastKey = keys.pop() as string
-
-	// Validate all keys upfront
-	if (isDangerousKey(lastKey) || keys.some(isDangerousKey)) return
-
-	let current = obj
-
-	// Traverse intermediate keys
-	for (const key of keys) {
-		const arrayInfo = parseArrayKey(key)
-
-		if (arrayInfo) {
-			// Initialize array if needed
-			if (!Array.isArray(current[arrayInfo.name]))
-				current[arrayInfo.name] = []
-
-			const existing = current[arrayInfo.name][arrayInfo.index]
-			const isFile =
-				typeof File !== 'undefined' && existing instanceof File
-
-			// Initialize object at index if needed
-			if (
-				!existing ||
-				typeof existing !== 'object' ||
-				Array.isArray(existing) ||
-				isFile
-			)
-				current[arrayInfo.name][arrayInfo.index] =
-					parseObjectString(existing) ?? {}
-
-			current = current[arrayInfo.name][arrayInfo.index]
-		} else {
-			// Initialize object property if needed
-			if (!current[key] || typeof current[key] !== 'object')
-				current[key] = {}
-
-			current = current[key]
-		}
-	}
-
-	// Set final value
-	const arrayInfo = parseArrayKey(lastKey)
-
-	if (arrayInfo) {
-		if (!Array.isArray(current[arrayInfo.name]))
-			current[arrayInfo.name] = []
-
-		current[arrayInfo.name][arrayInfo.index] = value
-	} else {
-		current[lastKey] = value
-	}
-}
-
-const normalizeFormValue = (value: unknown[]) => {
-    if (value.length === 1) {
-        const stringValue = value[0]
-        if (typeof stringValue === 'string') {
-            // Try to parse JSON objects (starting with '{') or arrays (starting with '[')
-            if (stringValue.charCodeAt(0) === 123 || stringValue.charCodeAt(0) === 91) {
-                try {
-                    const parsed = JSON.parse(stringValue)
-                    if (parsed && typeof parsed === 'object') {
-                        return parsed
-                    }
-                } catch {}
-            }
-        }
-        return value[0]
-    }
-
-	const stringValue = value.find(
-		(entry): entry is string => typeof entry === 'string'
-	)
-	if (!stringValue) return value
-
-	if (typeof File === 'undefined') return value
-	const files = value.filter((entry): entry is File => entry instanceof File)
-	if (!files.length) return value
-
-	if (stringValue.charCodeAt(0) !== 123) return value
-
-	let parsed: unknown
-	try {
-		parsed = JSON.parse(stringValue)
-	} catch {
-		return value
-	}
-
-	if (typeof parsed !== 'object' || parsed === null) return value
-
-	if (!('file' in parsed) && files.length === 1)
-		(parsed as Record<string, unknown>).file = files[0]
-	else if (!('files' in parsed) && files.length > 1)
-		(parsed as Record<string, unknown>).files = files
-
-	return parsed
 }
 
 const injectDefaultValues = (
@@ -264,44 +121,38 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				return await hooks.config.mount(request)
 
 			let body: string | Record<string, any> | undefined
+			let structuredForm: Record<string, any> | undefined
 			if (request.method !== 'GET' && request.method !== 'HEAD') {
 				if (content) {
 					switch (content) {
+						case 'json':
 						case 'application/json':
 							body = (await request.json()) as any
 							break
 
+						case 'text':
 						case 'text/plain':
 							body = await request.text()
 							break
 
+						case 'urlencoded':
 						case 'application/x-www-form-urlencoded':
 							body = parseQuery(await request.text())
 							break
 
+						case 'arrayBuffer':
 						case 'application/octet-stream':
 							body = await request.arrayBuffer()
 							break
 
+						case 'formdata':
+						case 'multipart':
 						case 'multipart/form-data': {
-							body = {}
-
-							const form = await request.formData()
-							const grouped = new Map<string, any[]>()
-							form.forEach((v, k) => {
-								const list = grouped.get(k)
-								if (list) list.push(v)
-								else grouped.set(k, [v])
-							})
-							for (const [key, value] of grouped) {
-								if (body[key]) continue
-
-								const finalValue = normalizeFormValue(value)
-
-								if (key.includes('.') || key.includes('['))
-									setNestedValue(body, key, finalValue)
-								else body[key] = finalValue
-							}
+							const form = parseFormData(
+								await request.formData()
+							)
+							body = form.body
+							structuredForm = form.structured
 
 							break
 						}
@@ -349,24 +200,11 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 										case 'formdata':
 										case 'multipart/form-data': {
-											body = {}
-
-											const form = await request.formData()
-											const grouped = new Map<string, any[]>()
-											form.forEach((v, k) => {
-												const list = grouped.get(k)
-												if (list) list.push(v)
-												else grouped.set(k, [v])
-											})
-											for (const [key, value] of grouped) {
-												if (body[key]) continue
-
-												const finalValue = normalizeFormValue(value)
-
-												if (key.includes('.') || key.includes('['))
-													setNestedValue(body, key, finalValue)
-												else body[key] = finalValue
-											}
+											const form = parseFormData(
+												await request.formData()
+											)
+											body = form.body
+											structuredForm = form.structured
 
 											break
 										}
@@ -424,24 +262,11 @@ export const createDynamicHandler = (app: AnyElysia) => {
 									break
 
 								case 'multipart/form-data': {
-									body = {}
-
-									const form = await request.formData()
-									const grouped = new Map<string, any[]>()
-									form.forEach((v, k) => {
-										const list = grouped.get(k)
-										if (list) list.push(v)
-										else grouped.set(k, [v])
-									})
-									for (const [key, value] of grouped) {
-										if (body[key]) continue
-
-										const finalValue = normalizeFormValue(value)
-
-										if (key.includes('.') || key.includes('['))
-											setNestedValue(body, key, finalValue)
-										else body[key] = finalValue
-									}
+									const form = parseFormData(
+										await request.formData()
+									)
+									body = form.body
+									structuredForm = form.structured
 
 									break
 								}
@@ -450,6 +275,12 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					}
 				}
 			}
+
+			// Without body validation the structured multipart
+			// interpretation is adopted as-is, otherwise validation decides
+			// which interpretation matches the schema
+			if (structuredForm !== undefined && !validator?.createBody?.())
+				body = structuredForm
 
 			context.route = route
 			context.body = body
@@ -621,15 +452,85 @@ export const createDynamicHandler = (app: AnyElysia) => {
 						) as any
 				}
 
-				if (validator.createBody?.()?.Check(body) === false)
-					throw new ValidationError('body', validator.body!, body)
-				else if (validator.body?.Decode) {
+				const bodyValidator = validator.createBody?.()
+				if (bodyValidator) {
+					let result = bodyValidator.Check(body) as any
+					if (result instanceof Promise) result = await result
+
+					const isFail = (res: any) =>
+						bodyValidator.provider === 'standard'
+							? !!res?.issues
+							: res === false
+
+					if (isFail(result)) {
+						let isValid = false
+						if (structuredForm !== undefined) {
+							let structuredResult = bodyValidator.Check(
+								structuredForm
+							) as any
+							if (structuredResult instanceof Promise)
+								structuredResult = await structuredResult
+
+							if (!isFail(structuredResult)) {
+								context.body = body = structuredForm
+								result = structuredResult
+								isValid = true
+							} else {
+								const bodyObj = body as Record<string, any>
+								const differingKeys = Object.keys(
+									structuredForm
+								).filter(
+									(key) => structuredForm[key] !== bodyObj[key]
+								)
+								const numCombos = 1 << differingKeys.length
+								if (numCombos <= 16) {
+									for (let i = 1; i < numCombos - 1; i++) {
+										const combo = { ...bodyObj }
+										for (
+											let j = 0;
+											j < differingKeys.length;
+											j++
+										) {
+											if (i & (1 << j)) {
+												combo[differingKeys[j]] =
+													structuredForm[
+														differingKeys[j]
+													]
+											}
+										}
+										let comboResult = bodyValidator.Check(
+											combo
+										) as any
+										if (comboResult instanceof Promise)
+											comboResult = await comboResult
+										if (!isFail(comboResult)) {
+											context.body = body = combo
+											result = comboResult
+											isValid = true
+											break
+										}
+									}
+								}
+							}
+						}
+
+						if (!isValid)
+							throw new ValidationError(
+								'body',
+								validator.body!,
+								body
+							)
+					}
+
+					if (validator.body?.Decode) {
 						let decoded = validator.body.Decode(body) as any
-						if (decoded instanceof Promise)
-							decoded = await decoded
+						if (decoded instanceof Promise) decoded = await decoded
 
 						// Zod returns { value: ... } wrapper
 						context.body = decoded?.value ?? decoded
+					} else if (bodyValidator.provider === 'standard') {
+						context.body = result?.value ?? body
+					}
 				}
 			}
 
