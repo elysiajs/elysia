@@ -471,6 +471,12 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 						if (!structuredResult?.issues)
 							context.body = body = structuredForm
+						else
+							throw new ValidationError(
+								'body',
+								validator.body!,
+								body
+							)
 					}
 				}
 
