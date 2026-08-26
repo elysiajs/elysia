@@ -580,6 +580,34 @@ describe('Body Validator', () => {
 		expect(value).toBe('hifumi_daisuki')
 	})
 
+	// GHSA-gmm9-qwx3-2m3h: a schema default must never reach generated code
+	// unescaped. The `;//` payload is the advisory's original (it breaks a
+	// statement-per-line emitter); the `'+(…)+'` payload is expression-shaped so
+	// it survives a single-line emitter, which is the shape this branch emits.
+	// A root-scalar default is assigned directly rather than emitted, so this
+	// pair guards against scalar defaults ever becoming codegen'd; the emitter
+	// itself is covered with teeth by the query/header/params counterparts.
+	for (const payload of [
+		"hifumi';globalThis.__bodyDefaultValueInjection=1;//",
+		"hifumi'+(globalThis.__bodyDefaultValueInjection=1,'')+'"
+	])
+		it(`escapes single quote in default string body: ${payload}`, async () => {
+			const app = new Elysia().post(
+				'/',
+				{
+					body: t.String({ default: payload })
+				},
+				({ body }) => body
+			)
+
+			const value = await app.handle(post('/')).then((x) => x.text())
+
+			expect(
+				(globalThis as any).__bodyDefaultValueInjection
+			).toBeUndefined()
+			expect(value).toBe(payload)
+		})
+
 	it('create default boolean body', async () => {
 		const app = new Elysia().post(
 			'/',

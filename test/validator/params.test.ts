@@ -191,6 +191,58 @@ describe('Params Validator', () => {
 		})
 	})
 
+	// GHSA-gmm9-qwx3-2m3h: a schema default must never reach generated code
+	// unescaped. The `;//` payload is the advisory's original (it breaks a
+	// statement-per-line emitter); the `'+(…)+'` payload is expression-shaped so
+	// it survives a single-line emitter, which is the shape this branch emits.
+	for (const payload of [
+		"tea';globalThis.__paramsDefaultValueInjection=1;//",
+		"tea'+(globalThis.__paramsDefaultValueInjection=1,'')+'"
+	])
+		it(`escapes single quote in default string value: ${payload}`, async () => {
+			const app = new Elysia().get(
+				'/:name',
+				{
+					params: t.Object({
+						name: t.String(),
+						faction: t.String({ default: payload })
+					})
+				},
+				({ params }) => params
+			)
+
+			const value = await app.handle('/nagisa').then((x) => x.json())
+
+			expect(
+				(globalThis as any).__paramsDefaultValueInjection
+			).toBeUndefined()
+			expect(value.faction).toBe(payload)
+		})
+
+	for (const key of [
+		"faction'];globalThis.__paramsDefaultKeyInjection=1;//",
+		"faction'+(globalThis.__paramsDefaultKeyInjection=1,'')+'"
+	])
+		it(`escapes single quote in default property key: ${key}`, async () => {
+			const app = new Elysia().get(
+				'/:name',
+				{
+					params: t.Object({
+						name: t.String(),
+						[key]: t.String({ default: 'tea_party' })
+					})
+				},
+				() => 'ok'
+			)
+
+			const res = await app.handle('/nagisa')
+
+			expect(
+				(globalThis as any).__paramsDefaultKeyInjection
+			).toBeUndefined()
+			expect(res.status).toBe(200)
+		})
+
 	it('create default number params', async () => {
 		const app = new Elysia().get(
 			'/:name',

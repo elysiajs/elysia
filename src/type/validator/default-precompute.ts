@@ -3,6 +3,7 @@ import type { TSchema } from 'typebox/type'
 
 import { nullObject } from '../../utils'
 import { dangerousKeys } from '../../constants'
+import { isProduction } from '../../universal/is-production'
 
 type DefaultCloner = () => unknown
 type ObjectDefaultMerger = (
@@ -447,12 +448,43 @@ export function buildObjectDefaultMergeSource(
 	return `(function(){${helpers.join(';')};return ${root}})()`
 }
 
+let compileFailures = 0
+
+/**
+ * How many emitted default-precompute sources have failed to compile.
+ *
+ * Build-time only. A non-zero count means codegen emitted source that
+ * `Function()` rejected, so those routes silently fell back to the interpreted
+ * default path — always a bug in this module, never a user error.
+ */
+export const precomputeCompileFailures = () => compileFailures
+
+// Every caller checks that a source was emitted before reaching here, so a
+// throw is never the "declined to emit" case — it is always a codegen bug.
 function fromSource<T extends Function>(source: string) {
 	try {
 		// eslint-disable-next-line sonarjs/code-eval
 		return Function(`return ${source}`)() as T
-	} catch {
-		return
+	} catch (error) {
+		compileFailures++
+
+		console.warn(
+			'[Elysia] default precompute emitted source that does not compile; ' +
+				'falling back to the interpreted default path. ' +
+				'This is a bug, please report it:',
+			error,
+			// The source is developer-authored schema defaults, never request
+			// data, but a default may still hold a sensitive literal — keep it
+			// out of production logs, and truncate since nesting makes it grow.
+			...(isProduction()
+				? []
+				: [
+						'\nsource: ' +
+							(source.length > 512
+								? source.slice(0, 512) + '…'
+								: source)
+					])
+		)
 	}
 }
 

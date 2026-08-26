@@ -54,6 +54,7 @@ import {
 	createDefaultCloner,
 	createMergerFromSource,
 	createObjectDefaultMerger,
+	precomputeCompileFailures,
 	verifyPreallocatableDefault
 } from './default-precompute'
 import { buildFindCustomError } from './custom-error'
@@ -673,6 +674,11 @@ export class TypeBoxValidator<
 							>)
 						: undefined
 
+				// Snapshot rather than a resettable flag: `verifyPreallocatableDefault`
+				// above already compiles and discards a merge source during AOT
+				// capture, so only failures from the calls below are ours.
+				const failures = precomputeCompileFailures()
+
 				this.#defaultFastPath = {
 					value: defaults.pd,
 					appliesToNull: defaults.pn,
@@ -687,6 +693,12 @@ export class TypeBoxValidator<
 							? createObjectDefaultMerger(objectTemplate)
 							: undefined
 				}
+
+				// A source was emitted but did not compile: the JIT fast path is
+				// gone and we fell back to `applyPrecomputed`. Declining to emit
+				// keeps `precomputeSafe` true, as before.
+				if (precomputeCompileFailures() !== failures)
+					this.precomputeSafe = false
 			} else {
 				this.precomputeSafe = false
 				this.#defaultFastPath = undefined

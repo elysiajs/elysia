@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it, spyOn } from 'bun:test'
 import { Type } from 'typebox'
 import { Default } from 'typebox/value'
 
 import { Elysia, t, ValidationError } from '../../src'
 import { TypeBoxValidator } from '../../src/type/validator'
+import {
+	createDefaultCloner,
+	createMergerFromSource,
+	precomputeCompileFailures
+} from '../../src/type/validator/default-precompute'
 import { setupTypebox } from '../../src/type/compat'
 import { req } from '../utils'
 
@@ -342,5 +347,119 @@ describe('emitMerger shared-schema construction time', () => {
 		}
 		const out = merger(makeInput(7)) as any
 		expect(out.a.a.a.a.a.a.a.leaf).toBe(99)
+	})
+})
+
+// Emitting source that `Function()` rejects is a codegen bug: correctness is
+// preserved because the interpreted path takes over, so the only way it ever
+// surfaces is if we report it. These tests pin that it is reported, and that
+// the routine "we declined to emit" case stays silent.
+describe('TypeBoxValidator default precompute — codegen failure is loud', () => {
+	// Fails only our own emitted merger/cloner sources, so unrelated `Function`
+	// users (exact-mirror) keep working and the fallback stays observable.
+	function withBrokenCodegen<T>(fn: () => T): T {
+		const real = globalThis.Function
+
+		globalThis.Function = function (...args: string[]) {
+			if (
+				args.length === 1 &&
+				/^return \(function\(\)\{function _[dm]\d/.test(String(args[0]))
+			)
+				throw new SyntaxError('injected codegen failure')
+
+			return (real as any)(...args)
+		} as any
+
+		try {
+			return fn()
+		} finally {
+			globalThis.Function = real
+		}
+	}
+
+	it('warns and counts when emitted source does not compile', () => {
+		const before = precomputeCompileFailures()
+		const warn = spyOn(console, 'warn').mockImplementation(() => {})
+
+		let merger: unknown
+		let calls: any[][]
+		try {
+			// createMergerFromSource takes a raw source, so a malformed one
+			// reaches `Function()` exactly the way a codegen bug would
+			merger = createMergerFromSource('(function(){')
+			calls = warn.mock.calls.map((call) => [...call])
+		} finally {
+			warn.mockRestore()
+		}
+
+		expect(merger).toBeUndefined()
+		expect(precomputeCompileFailures()).toBe(before + 1)
+		expect(calls!.length).toBe(1)
+
+		const message = calls![0].join(' ')
+		expect(message).toContain('[Elysia]')
+		// the error itself must survive, not be swallowed
+		expect(message).toContain('SyntaxError')
+		// and the offending source, so the bug is debuggable outside production
+		expect(message).toContain('(function(){')
+	})
+
+	it('stays silent when precompute declined to emit at all', () => {
+		const before = precomputeCompileFailures()
+		const warn = spyOn(console, 'warn').mockImplementation(() => {})
+
+		let cloner: unknown
+		let count: number
+		try {
+			// a function default is not emittable, so no source is ever built
+			cloner = createDefaultCloner(() => {})
+			count = warn.mock.calls.length
+		} finally {
+			warn.mockRestore()
+		}
+
+		expect(cloner).toBeUndefined()
+		expect(count!).toBe(0)
+		expect(precomputeCompileFailures()).toBe(before)
+	})
+
+	it('reports precomputeSafe false when the emitted fast path failed to compile', () => {
+		const schema = Type.Object({ a: Type.String({ default: 'x' }) })
+
+		const warn = spyOn(console, 'warn').mockImplementation(() => {})
+		let broken: TypeBoxValidator<any>
+		try {
+			broken = withBrokenCodegen(() => new TypeBoxValidator(schema))
+		} finally {
+			warn.mockRestore()
+		}
+
+		// the indicator must not claim the fast path is live when it is gone
+		expect(broken!.precomputeSafe).toBe(false)
+		// but the interpreted fallback still applies the default correctly
+		expect(broken!.FromSync({} as any)).toEqual(
+			Default(schema, {}) as any
+		)
+	})
+
+	it('keeps precomputeSafe true and warns nothing when codegen compiles', () => {
+		const schema = Type.Object({ a: Type.String({ default: 'x' }) })
+
+		const before = precomputeCompileFailures()
+		const warn = spyOn(console, 'warn').mockImplementation(() => {})
+
+		let healthy: TypeBoxValidator<any>
+		let count: number
+		try {
+			healthy = new TypeBoxValidator(schema)
+			count = warn.mock.calls.length
+		} finally {
+			warn.mockRestore()
+		}
+
+		expect(healthy!.precomputeSafe).toBe(true)
+		expect(count!).toBe(0)
+		expect(precomputeCompileFailures()).toBe(before)
+		expect(healthy!.FromSync({} as any)).toEqual(Default(schema, {}) as any)
 	})
 })
