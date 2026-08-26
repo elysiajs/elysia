@@ -10,7 +10,7 @@ export { isProduction } from './universal/is-production'
 
 const expectedCache = new WeakMap<object, unknown>()
 
-function freezeExpected(value: unknown): unknown {
+function freezeExpected(value: unknown) {
 	if (!value || typeof value !== 'object') return typeof value !== 'function'
 	if (!Array.isArray(value) && (value as any).constructor !== Object) return
 
@@ -199,6 +199,7 @@ const walkSubSchema = (schema: any, instancePath: string | undefined) =>
 
 const FOUND_ECHO_LIMIT = 8192
 const FOUND_ECHO_OMITTED = `[value exceeds ${FOUND_ECHO_LIMIT} byte echo limit]`
+export const MAX_ERRORS = 64
 
 function jsonStringLengthWithin(value: string, budget: number) {
 	budget -= 2
@@ -312,6 +313,71 @@ function scopeFound(value: unknown, first: any) {
 	return FOUND_ECHO_OMITTED
 }
 
+const issueLocator = new Set(['keyword', 'schemaPath', 'instancePath', 'path'])
+
+function scopeIssues(errors: any[]) {
+	let budget = FOUND_ECHO_LIMIT
+	let out: any[] | undefined
+
+	for (let i = 0; i < errors.length; i++) {
+		const issue = errors[i]
+
+		if (!issue || typeof issue !== 'object') {
+			out?.push(issue)
+			continue
+		}
+
+		let scoped: any
+
+		for (const key in issue) {
+			if (issueLocator.has(key)) continue
+
+			const member = issue[key]
+			const remaining = jsonLengthWithin(member, budget)
+
+			if (remaining >= 0) {
+				budget = remaining
+				continue
+			}
+
+			scoped ??= { ...issue }
+
+			if (
+				member === null ||
+				typeof member !== 'object' ||
+				Array.isArray(member)
+			) {
+				scoped[key] = FOUND_ECHO_OMITTED
+				continue
+			}
+
+			const narrowed: Record<string, unknown> = {}
+
+			for (const name in member) {
+				const value = member[name]
+				const rest = jsonLengthWithin(value, budget)
+
+				if (rest >= 0) {
+					narrowed[name] = value
+					budget = rest
+				} else narrowed[name] = FOUND_ECHO_OMITTED
+			}
+
+			scoped[key] = narrowed
+		}
+
+		if (!scoped) {
+			out?.push(issue)
+			continue
+		}
+
+		out ??= errors.slice(0, i)
+		out.push(scoped)
+	}
+
+	return out ?? errors
+}
+
 export class ValidationError extends ElysiaError {
 	status = 422 as const
 
@@ -398,6 +464,9 @@ export class ValidationError extends ElysiaError {
 		}
 
 		resolved = this.#thunk() ?? []
+		if (resolved.length > MAX_ERRORS)
+			resolved = resolved.slice(0, MAX_ERRORS)
+		resolved = scopeIssues(resolved)
 
 		const sub: any = walkSubSchema(this.schema, resolved[0]?.instancePath)
 
@@ -521,13 +590,21 @@ export class ValidationError extends ElysiaError {
 				? e.path.replace(/^\//, '').replace(/\//g, '.') || 'root'
 				: 'root'
 
-		return {
+		const issue = {
 			path,
 			message: e.message ?? '',
 			schemaPath: e.schemaPath,
-			params: e.params,
-			value: this.value
+			params: e.params
 		}
+
+		Object.defineProperty(issue, 'value', {
+			value: this.value,
+			writable: true,
+			enumerable: false,
+			configurable: true
+		})
+
+		return issue
 	}
 
 	get #productionDetail() {

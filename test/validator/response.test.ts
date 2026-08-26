@@ -635,4 +635,164 @@ describe('Response Validator', () => {
 
 		expect(status).resolves.toBe(200)
 	})
+
+	// A non-function handler used to be baked into a `Response` at build time,
+	// and the JIT skips response validation for anything already a `Response`.
+	// The schema was therefore never applied: a field the author declared away
+	// still shipped. These pin that a literal is governed by its own schema.
+	it('strips an undeclared field from a static literal handler', async () => {
+		const app = new Elysia().get(
+			'/',
+			{ response: t.Object({ name: t.String() }) },
+			{ name: 'bob', passwordHash: 'DEADBEEF' } as any
+		)
+
+		const res = await app.handle('/')
+
+		expect(res.status).toBe(200)
+		await expect(res.json()).resolves.toEqual({ name: 'bob' })
+	})
+
+	it('strips an undeclared field from a static literal via a guard', async () => {
+		const app = new Elysia()
+			.guard({ response: t.Object({ name: t.String() }) })
+			.get('/', { name: 'bob', passwordHash: 'DEADBEEF' } as any)
+
+		const res = await app.handle('/')
+
+		expect(res.status).toBe(200)
+		await expect(res.json()).resolves.toEqual({ name: 'bob' })
+	})
+
+	it('rejects a static literal that violates its own response schema', async () => {
+		const app = new Elysia().get(
+			'/',
+			{ response: t.Object({ name: t.String() }) },
+			{ name: 123 } as any
+		)
+
+		const res = await app.handle('/')
+
+		expect(res.status).toBe(422)
+	})
+
+	// The response validator is keyed on the status (`va.response[set.status]`)
+	// and a hook may still move it, so the schema cannot be chosen when the
+	// route is built — only per request. This is the case that rules out
+	// validating the literal once at build time.
+	it('applies the status-keyed response schema a hook selected to a static literal', async () => {
+		const app = new Elysia().get(
+			'/',
+			{
+				beforeHandle({ set }) {
+					set.status = 201
+				},
+				response: {
+					200: t.Object({ name: t.String() }),
+					201: t.Object({ secret: t.String() })
+				}
+			},
+			{ name: 'bob', secret: 'S' } as any
+		)
+
+		const res = await app.handle('/')
+
+		expect(res.status).toBe(201)
+		await expect(res.json()).resolves.toEqual({ secret: 'S' })
+	})
+
+	it('treats a static literal exactly like the equivalent function handler', async () => {
+		const response = t.Object({ name: t.String() })
+		const value = { name: 'bob', passwordHash: 'DEADBEEF' }
+
+		const app = new Elysia()
+			.get('/literal', { response }, value as any)
+			.get('/function', { response }, () => structuredClone(value) as any)
+			.get('/literal-bad', { response }, { name: 123 } as any)
+			.get('/function-bad', { response }, () => ({ name: 123 }) as any)
+
+		const [literal, fn, literalBad, fnBad] = await Promise.all(
+			['/literal', '/function', '/literal-bad', '/function-bad'].map(
+				(path) => app.handle(path)
+			)
+		)
+
+		expect(literal.status).toBe(fn.status)
+		expect(await literal.text()).toBe(await fn.text())
+
+		expect(literalBad.status).toBe(fnBad.status)
+		expect(literalBad.status).toBe(422)
+	})
+
+	// A literal with no `response` keeps the build-time `Response`, so the fix
+	// above must not cost every static route its fast path
+	it('keeps serving a static literal that declares no response schema', async () => {
+		const app = new Elysia().get('/', { name: 'bob' } as any)
+
+		const res = await app.handle('/')
+
+		expect(res.status).toBe(200)
+		await expect(res.json()).resolves.toEqual({ name: 'bob' })
+	})
+
+	// Validating a literal per request means the hooks that run before
+	// validation see the value itself rather than a finished `Response`. Every
+	// request must get its own copy: a hook stamping the caller onto the
+	// response would otherwise hand the next caller the previous one's data,
+	// and corrupt the route's own literal for the life of the process
+	it('gives each request its own copy of a static literal', async () => {
+		const literal = { meta: { owner: 'none' }, name: 'bob' }
+
+		const app = new Elysia().get(
+			'/',
+			{
+				response: t.Object({
+					meta: t.Object({ owner: t.String() }),
+					name: t.String()
+				}),
+				afterHandle({ responseValue, query }) {
+					const owner = (query as Record<string, string>).owner
+					if (owner) (responseValue as any).meta.owner = owner
+				}
+			},
+			literal as any
+		)
+
+		await expect(
+			app.handle('/?owner=alice').then((res) => res.json())
+		).resolves.toEqual({ meta: { owner: 'alice' }, name: 'bob' })
+
+		// the request that stamps nothing must not inherit alice
+		await expect(
+			app.handle('/').then((res) => res.json())
+		).resolves.toEqual({ meta: { owner: 'none' }, name: 'bob' })
+
+		expect(literal).toEqual({ meta: { owner: 'none' }, name: 'bob' })
+	})
+
+	it('gives each request its own copy of a static literal a mapResponse mutates', async () => {
+		const literal = { owner: 'none', name: 'bob' }
+
+		const app = new Elysia().get(
+			'/',
+			{
+				response: t.Object({ owner: t.String(), name: t.String() }),
+				mapResponse({ responseValue, query }) {
+					const owner = (query as Record<string, string>).owner
+					if (owner) (responseValue as any).owner = owner
+				}
+			},
+			literal as any
+		)
+
+		await expect(
+			app.handle('/?owner=alice').then((res) => res.json())
+		).resolves.toEqual({ owner: 'alice', name: 'bob' })
+
+		await expect(
+			app.handle('/').then((res) => res.json())
+		).resolves.toEqual({ owner: 'none', name: 'bob' })
+
+		expect(literal).toEqual({ owner: 'none', name: 'bob' })
+	})
 })

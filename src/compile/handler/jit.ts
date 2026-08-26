@@ -34,6 +34,7 @@ import { parseQueryFromURL } from '../../parse-query'
 import {
 	armEntryAbort,
 	cloneResponse,
+	cloneStaticValue,
 	emptyResponse,
 	getQueryParseChannels,
 	hasRequestBody,
@@ -519,6 +520,16 @@ export function compileHandlerJit({
 		}
 	}
 
+	const needsStaticClone =
+		!isHandleFunction &&
+		!isStaticResponse &&
+		!isPromiseHandler &&
+		(hasAfterHandle || hasMapResponse) &&
+		typeof handler === 'object' &&
+		handler !== null
+
+	if (needsStaticClone) link(cloneStaticValue, 'scl')
+
 	const callHandler = isHandleFunction
 		? callHandlerSyncOnAsync
 			? `_r=h(c)\nif(_r instanceof Promise)_r=await _r\n`
@@ -527,7 +538,9 @@ export function compileHandlerJit({
 			? `_r=cr(h)\n`
 			: isPromiseHandler
 				? `_r=h.then(cr)\n`
-				: `_r=h\n`
+				: needsStaticClone
+					? `_r=scl(h)\n`
+					: `_r=h\n`
 
 	// va,rm,rc,re,pa,pf,pj,pt,pu,er,ar
 	let code = `${isAsync ? 'async ' : ''}function route(c){\n`

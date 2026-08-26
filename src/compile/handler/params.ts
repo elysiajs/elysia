@@ -24,6 +24,7 @@ import {
 } from '../../adapter/utils'
 import {
 	cloneResponse,
+	cloneStaticValue,
 	emptyResponse,
 	getQueryParseChannels,
 	hasRequestBody,
@@ -86,6 +87,7 @@ export const handlerParams = (): Record<string, Resolver> =>
 	tee: () => tee,
 	msh: () => materializeSetHeaders,
 	cr: () => cloneResponse,
+	scl: () => cloneStaticValue,
 	pcr: () => parseCookieRaw,
 	pcrs: () => parseCookieRawSync,
 	pcrsg: () => parseCookieRawSigned,

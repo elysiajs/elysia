@@ -699,12 +699,20 @@ export function compileHandler(
 		}
 	}
 
+	const declaresResponse =
+		!!hook &&
+		(hook.response != null ||
+			!!(hook.schemas as { response?: unknown }[] | undefined)?.some(
+				(schema) => schema?.response
+			))
+
 	const isHandleFunction = typeof handler === 'function'
 	if (precomputedStatic) handler = precomputedStatic
 	else if (
 		!isHandleFunction &&
 		!(handler instanceof Promise) &&
-		!(!isBun && handler instanceof ElysiaFile)
+		!(!isBun && handler instanceof ElysiaFile) &&
+		!declaresResponse
 	) {
 		const rootHeaders = frozenRoot['~ext']?.headers
 

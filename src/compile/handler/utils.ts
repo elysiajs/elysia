@@ -44,6 +44,14 @@ export function cloneResponse(r: unknown) {
 	return r
 }
 
+export function cloneStaticValue(value: unknown) {
+	try {
+		return structuredClone(value)
+	} catch {
+		return value
+	}
+}
+
 export function hasRequestBody(request: Request) {
 	const length = request.headers.get('content-length')
 	if (length !== null) return length !== '0'
