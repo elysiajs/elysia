@@ -199,9 +199,6 @@ async function validateStandardSchema(
 			validator,
 			value,
 			false,
-			// ValidationError types `errors` as a TypeBox ValueErrorIterator,
-			// but its Standard Schema branch consumes it as a plain issue
-			// array — same as the value the AOT codegen passes
 			result.issues as any
 		)
 
