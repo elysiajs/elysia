@@ -1,3 +1,14 @@
+# 1.4.30 - 26 Aug 2026
+Chore:
+- update test case for Bun 1.4
+
+Adivosory:
+- GHSA-gmm9-qwx3-2m3h
+- GHSA-2p5p-r4r9-f9jm
+- GHSA-3958-wq4x-729c
+- GHSA-46qc-v7pw-4j7j
+- GHSA-mx4m-hmpr-4w39
+
 # 1.4.29 - 17 Jun 2026
 Bug fix:
 - normalize a `multipart/form-data` with `.get` instead of `.getAll` for faster performance
