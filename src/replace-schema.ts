@@ -1,5 +1,6 @@
 import { Kind, type TAnySchema, type TSchema } from "@sinclair/typebox";
 import { t } from "./type-system";
+import { compile } from "./type-system/utils";
 import type { MaybeArray } from "./types";
 
 export interface ReplaceSchemaTypeOptions {
@@ -205,9 +206,35 @@ export const stringToStructureCoercions = () => {
 
 let _queryCoercions: ReplaceSchemaTypeOptions[];
 
+const coerceNumericLiteralUnion = (schema: TSchema) => {
+	if (
+		!schema.anyOf?.length ||
+		!schema.anyOf.every((variant: TSchema) => typeof variant.const === "number")
+	)
+		return schema;
+
+	const compiler = compile(schema);
+
+	return t
+		.Transform(t.Union([t.String({ format: "numeric" }), schema], schema))
+		.Decode((value) => {
+			const number = +(value as string | number);
+
+			if (Number.isNaN(number) || !compiler.Check(number))
+				throw compiler.Error(number);
+
+			return number;
+		})
+		.Encode((value) => value) as any;
+};
+
 export const queryCoercions = () => {
 	if (!_queryCoercions) {
 		_queryCoercions = [
+			{
+				from: t.Union([t.Any(), t.Any()]),
+				to: coerceNumericLiteralUnion,
+			},
 			{
 				from: t.Object({}),
 				to: (schema) => t.ObjectString(schema.properties ?? {}, schema),
