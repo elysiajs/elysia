@@ -6,6 +6,30 @@ const KEY_NEEDS_DECODE = 2
 const VALUE_HAS_PLUS = 4
 const VALUE_NEEDS_DECODE = 8
 
+const DANGEROUS_KEYS = ['__proto__', 'constructor', 'prototype']
+
+// `JSON.parse` keeps `__proto__` (and friends) as enumerable own keys, e.g.
+// `JSON.parse('{"__proto__":{}}')` produces an object with an own `__proto__`
+// property. Spreading or merging such a value downstream can pollute the
+// prototype chain, so strip these keys from any parsed query value.
+const stripDangerousKeys = <T>(value: T): T => {
+	if (!value || typeof value !== 'object') return value
+
+	if (Array.isArray(value)) {
+		for (let i = 0; i < value.length; i++) stripDangerousKeys(value[i])
+
+		return value
+	}
+
+	for (const key of DANGEROUS_KEYS)
+		if (Object.prototype.hasOwnProperty.call(value, key))
+			delete (value as Record<string, unknown>)[key]
+
+	for (const key in value) stripDangerousKeys((value as any)[key])
+
+	return value
+}
+
 // Parse query without array
 export function parseQueryFromURL(
 	input: string,
@@ -92,7 +116,7 @@ export function parseQueryFromURL(
 		if (array && array?.[finalKey]) {
 			if (finalValue.charCodeAt(0) === 91) {
 				if (object && object?.[finalKey])
-					finalValue = JSON.parse(finalValue) as any
+					finalValue = stripDangerousKeys(JSON.parse(finalValue)) as any
 				else finalValue = finalValue.slice(1, -1).split(',') as any
 
 				if (currentValue === undefined) result[finalKey] = finalValue
@@ -204,7 +228,7 @@ export function parseQueryStandardSchema(
 		) {
 			try {
 				// @ts-ignore
-				finalValue = JSON.parse(finalValue)
+				finalValue = stripDangerousKeys(JSON.parse(finalValue))
 			} catch {
 				// If JSON parsing fails, treat it as a regular string
 			}
@@ -218,7 +242,7 @@ export function parseQueryStandardSchema(
 		) {
 			try {
 				// @ts-ignore
-				finalValue = JSON.parse(finalValue)
+				finalValue = stripDangerousKeys(JSON.parse(finalValue))
 			} catch {
 				// If JSON parsing fails, treat it as a regular string
 			}
