@@ -228,4 +228,34 @@ describe('Mount', () => {
 		expect(response.status).toBe(302)
 		expect(response.headers.get('location')).toBe('/redirect')
 	})
+
+	// https://github.com/elysiajs/elysia/issues/1806
+	it('mount(handler) with prefix should strip prefix from path', async () => {
+		const plugin = new Elysia({ prefix: '/api' }).mount((request) => {
+			return Response.json({ path: new URL(request.url).pathname })
+		})
+
+		const app = new Elysia().use(plugin)
+
+		const response = await app
+			.handle(new Request('http://localhost/api/auth/dash/users'))
+			.then((x) => x.json() as Promise<{ path: string }>)
+
+		expect(response.path).toBe('/auth/dash/users')
+	})
+
+	// https://github.com/elysiajs/elysia/issues/1806
+	it('mount(handler) with prefix should handle root path', async () => {
+		const plugin = new Elysia({ prefix: '/api' }).mount((request) => {
+			return Response.json({ path: new URL(request.url).pathname })
+		})
+
+		const app = new Elysia().use(plugin)
+
+		const response = await app
+			.handle(new Request('http://localhost/api/'))
+			.then((x) => x.json() as Promise<{ path: string }>)
+
+		expect(response.path).toBe('/')
+	})
 })
