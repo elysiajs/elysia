@@ -409,6 +409,18 @@ function composeRootHook(
 	return mergeHook(inherited, locals as any)
 }
 
+function staticPrimitiveType(response: Response, value: unknown) {
+	if (
+		(typeof value === 'string' ||
+			typeof value === 'number' ||
+			typeof value === 'boolean') &&
+		!response.headers.has('content-type')
+	)
+		response.headers.set('content-type', 'text/plain;charset=utf-8')
+
+	return response
+}
+
 export function buildNativeStaticResponse(
 	route: InternalRoute,
 	root: AnyElysia
@@ -461,17 +473,8 @@ export function buildNativeStaticResponse(
 			: nullObject()
 	})
 
-	if (mapped instanceof Response) {
-		if (
-			!mapped.headers.has('content-type') &&
-			(typeof handler === 'string' ||
-				typeof handler === 'number' ||
-				typeof handler === 'boolean')
-		)
-			mapped.headers.set('content-type', 'text/plain;charset=utf-8')
-
-		return mapped
-	}
+	if (mapped instanceof Response)
+		return staticPrimitiveType(mapped, handler)
 }
 
 function toArray(name: string, hook: any) {
@@ -723,7 +726,8 @@ export function compileHandler(
 		}
 
 		const mapped = (adapter.response.map as Function)(handler, set)
-		if (mapped instanceof Response) handler = mapped
+		if (mapped instanceof Response)
+			handler = staticPrimitiveType(mapped, handler)
 	}
 
 	const isStaticResponse = !isHandleFunction && handler instanceof Response

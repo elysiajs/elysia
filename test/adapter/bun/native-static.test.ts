@@ -11,6 +11,29 @@ describe('Bun native static promotion', () => {
 		await expect(promoted!['/literal'].GET.text()).resolves.toBe('literal')
 	})
 
+	it('keeps primitive literals text/plain when a wrapper blocks promotion', async () => {
+		const app = new Elysia()
+			.headers({ server: 'Elysia' })
+			.wrap((fetch) => fetch)
+			.get('/literal', 'literal')
+
+		expect(collectStaticRoutes(app as any)).toBeUndefined()
+		app.listen(0)
+
+		try {
+			const response = await fetch(
+				`http://localhost:${app.server!.port}/literal`
+			)
+
+			expect(response.headers.get('content-type')).toBe(
+				'text/plain;charset=utf-8'
+			)
+			await expect(response.text()).resolves.toBe('literal')
+		} finally {
+			await app.stop(true)
+		}
+	})
+
 	it('keeps .all() on the JS lane without a later rejection', async () => {
 		const rejections: unknown[] = []
 		const onUnhandled = (error: unknown) => rejections.push(error)
