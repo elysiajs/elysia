@@ -402,6 +402,13 @@ export const lifeCycleToArray = (a: LifeCycleStore) => {
 export const hasHeaderShorthand = isBun ? 'toJSON' in new Headers() : false
 export const hasSetImmediate = typeof setImmediate === 'function'
 
+export const scheduleImmediate: (callback: () => unknown) => void =
+	hasSetImmediate
+		? setImmediate
+		: (callback) => {
+				void Promise.resolve().then(callback)
+			}
+
 // https://stackoverflow.com/a/52171480
 export const checksum = (s: string) => {
 	let h = 9
