@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia, t } from '../../src'
+import { signCookie } from '../../src/utils'
 import { req } from '../utils'
 
 describe('Cookie Validation', () => {
@@ -637,6 +638,77 @@ describe('Cookie Validation', () => {
 		)
 
 		expect(second.status).toBe(200)
+	})
+
+	it('handle invalid signed cookie during unsigned transition', async () => {
+		const app = new Elysia({
+			cookie: {
+				secrets: ['1234567890', null],
+				sign: 'wizard'
+			}
+		})
+			.onError(({ code, error, set }) => {
+				if (code !== 'INVALID_COOKIE_SIGNATURE') return
+
+				set.status = 400
+
+				return {
+					type: 'invalid_cookie_signature',
+					message: error.message
+				}
+			})
+			.get('/', ({ cookie: { wizard } }) => wizard.value ?? 'empty', {
+				cookie: t.Cookie({
+					wizard: t.Optional(
+						t.Union([
+							t.Literal('1'),
+							t.Literal('2'),
+							t.Literal('3')
+						])
+					)
+				})
+			})
+
+		const signed = await signCookie('1', '1234567890')
+
+		const [unsigned, valid, invalid] = await Promise.all([
+			app.handle(
+				req('/', {
+					headers: {
+						cookie: 'wizard=1'
+					}
+				})
+			),
+			app.handle(
+				req('/', {
+					headers: {
+						cookie: `wizard=${signed}`
+					}
+				})
+			),
+			app.handle(
+				req('/', {
+					headers: {
+						cookie: 'wizard=1.invalid_sign'
+					}
+				})
+			)
+		])
+
+		expect(unsigned.status).toBe(200)
+		expect(await unsigned.text()).toBe('1')
+
+		expect(valid.status).toBe(200)
+		expect(await valid.text()).toBe('1')
+
+		expect(invalid.status).toBe(400)
+		expect(invalid.headers.get('content-type')).toBe(
+			'application/json;charset=utf-8'
+		)
+		expect(await invalid.json()).toEqual({
+			type: 'invalid_cookie_signature',
+			message: '"wizard" has invalid cookie signature'
+		})
 	})
 
 	it('handle prototype pollution', () => {
