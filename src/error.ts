@@ -124,6 +124,23 @@ export class InternalServerError extends Error {
 	constructor(message?: string) {
 		super(message ?? 'INTERNAL_SERVER_ERROR')
 	}
+
+	toResponse(headers?: Record<string, any>) {
+		return new Response(
+			JSON.stringify({
+				type: this.code,
+				message: this.message,
+				status: this.status
+			}),
+			{
+				status: this.status,
+				headers: {
+					...headers,
+					'content-type': 'application/json'
+				}
+			}
+		)
+	}
 }
 
 export class NotFoundError extends Error {
@@ -132,6 +149,23 @@ export class NotFoundError extends Error {
 
 	constructor(message?: string) {
 		super(message ?? 'NOT_FOUND')
+	}
+
+	toResponse(headers?: Record<string, any>) {
+		return new Response(
+			JSON.stringify({
+				type: this.code,
+				message: this.message,
+				status: this.status
+			}),
+			{
+				status: this.status,
+				headers: {
+					...headers,
+					'content-type': 'application/json'
+				}
+			}
+		)
 	}
 }
 
@@ -144,6 +178,23 @@ export class ParseError extends Error {
 			cause
 		})
 	}
+
+	toResponse(headers?: Record<string, any>) {
+		return new Response(
+			JSON.stringify({
+				type: this.code,
+				message: this.message,
+				status: this.status
+			}),
+			{
+				status: this.status,
+				headers: {
+					...headers,
+					'content-type': 'application/json'
+				}
+			}
+		)
+	}
 }
 
 export class InvalidCookieSignature extends Error {
@@ -155,6 +206,24 @@ export class InvalidCookieSignature extends Error {
 		message?: string
 	) {
 		super(message ?? `"${key}" has invalid cookie signature`)
+	}
+
+	toResponse(headers?: Record<string, any>) {
+		return new Response(
+			JSON.stringify({
+				type: this.code,
+				key: this.key,
+				message: this.message,
+				status: this.status
+			}),
+			{
+				status: this.status,
+				headers: {
+					...headers,
+					'content-type': 'application/json'
+				}
+			}
+		)
 	}
 }
 

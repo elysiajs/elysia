@@ -20,8 +20,10 @@ describe('Handle Error', () => {
 				new NotFoundError()
 			)
 
-		expect(await res.text()).toBe('NOT_FOUND')
+		const body = await res.json()
+		expect(body.type).toBe('NOT_FOUND')
 		expect(res.status).toBe(404)
+		expect(res.headers.get('content-type')).toStartWith('application/json')
 	})
 
 	it('handle INTERNAL_SERVER_ERROR', async () => {
@@ -38,8 +40,10 @@ describe('Handle Error', () => {
 				new InternalServerError()
 			)
 
-		expect(await res.text()).toBe('INTERNAL_SERVER_ERROR')
+		const body = await res.json()
+		expect(body.type).toBe('INTERNAL_SERVER_ERROR')
 		expect(res.status).toBe(500)
+		expect(res.headers.get('content-type')).toStartWith('application/json')
 	})
 
 	it('handle VALIDATION', async () => {
@@ -239,13 +243,14 @@ describe('Handle Error', () => {
 			.handle(req('/?aid=a'))
 
 		expect(response.status).toEqual(404)
-		expect(await response.text()).toEqual('foo')
+		const body = await response.json()
+		expect(body.type).toBe('NOT_FOUND')
 
 		response = await new Elysia({ aot: true })
 			.use(route)
 			.handle(req('/?aid=a'))
 		expect(response.status).toEqual(404)
-		expect(await response.text()).toEqual('foo')
+		expect(await response.json()).toEqual(expect.objectContaining({ type: 'NOT_FOUND' }))
 	})
 
 	it('map status error to response', async () => {
