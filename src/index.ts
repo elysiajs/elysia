@@ -97,6 +97,9 @@ import type {
 	MergeSchema,
 	RouteSchema,
 	UnwrapRoute,
+	UnwrapRouteInput,
+	InferRouteInput,
+	StripRouteInput,
 	InternalRoute,
 	HTTPMethod,
 	SchemaValidator,
@@ -223,7 +226,9 @@ export default class Elysia<
 		schema: {}
 		standaloneSchema: {}
 		response: {}
-	}
+	},
+	const in out RoutesInput extends RouteBase = RouteBase &
+		InferRouteInput<Routes>
 > {
 	config: ElysiaConfig<BasePath>
 
@@ -236,7 +241,8 @@ export default class Elysia<
 	'~Metadata' = null as unknown as Metadata
 	'~Ephemeral' = null as unknown as Ephemeral
 	'~Volatile' = null as unknown as Volatile
-	'~Routes' = null as unknown as Routes
+	'~Routes' = null as unknown as StripRouteInput<Routes>
+	'~RoutesInput' = null as unknown as RoutesInput
 
 	protected singleton = {
 		decorator: {},
@@ -3852,7 +3858,8 @@ export default class Elysia<
 		Metadata,
 		Routes & NewElysia['~Routes'],
 		Ephemeral,
-		Volatile
+		Volatile,
+		RoutesInput & NewElysia['~RoutesInput']
 	>
 
 	group<
@@ -3945,7 +3952,8 @@ export default class Elysia<
 		Metadata,
 		Routes & NewElysia['~Routes'],
 		Ephemeral,
-		Volatile
+		Volatile,
+		RoutesInput & NewElysia['~RoutesInput']
 	>
 
 	/**
@@ -4459,7 +4467,8 @@ export default class Elysia<
 			response: Volatile['response'] &
 				// @ts-ignore
 				MacroContext['response']
-		}
+		},
+		RoutesInput & NewElysia['~RoutesInput']
 	>
 
 	/**
@@ -4751,7 +4760,10 @@ export default class Elysia<
 			? Routes & NewElysia['~Routes']
 			: Routes & CreateEden<BasePath, NewElysia['~Routes']>,
 		Ephemeral,
-		Volatile & NewElysia['~Ephemeral']
+		Volatile & NewElysia['~Ephemeral'],
+		BasePath extends ``
+			? RoutesInput & NewElysia['~RoutesInput']
+			: RoutesInput & CreateEden<BasePath, NewElysia['~RoutesInput']>
 	>
 
 	/**
@@ -4785,7 +4797,10 @@ export default class Elysia<
 			? Routes & NewElysia['~Routes']
 			: Routes & CreateEden<BasePath, NewElysia['~Routes']>,
 		Ephemeral & NewElysia['~Ephemeral'],
-		Volatile & NewElysia['~Volatile']
+		Volatile & NewElysia['~Volatile'],
+		BasePath extends ``
+			? RoutesInput & NewElysia['~RoutesInput']
+			: RoutesInput & CreateEden<BasePath, NewElysia['~RoutesInput']>
 	>
 
 	/**
@@ -4826,7 +4841,10 @@ export default class Elysia<
 				Partial<LazyLoadElysia['~Ephemeral']['derive']>
 			response: Volatile['response'] &
 				LazyLoadElysia['~Ephemeral']['response']
-		}
+		},
+		BasePath extends ``
+			? RoutesInput & LazyLoadElysia['~RoutesInput']
+			: RoutesInput & CreateEden<BasePath, LazyLoadElysia['~RoutesInput']>
 	>
 
 	/**
@@ -4854,7 +4872,10 @@ export default class Elysia<
 			? Routes & NewElysia['~Routes']
 			: Routes & CreateEden<BasePath, NewElysia['~Routes']>,
 		Ephemeral & NewElysia['~Ephemeral'],
-		Volatile & NewElysia['~Volatile']
+		Volatile & NewElysia['~Volatile'],
+		BasePath extends ``
+			? RoutesInput & NewElysia['~RoutesInput']
+			: RoutesInput & CreateEden<BasePath, NewElysia['~RoutesInput']>
 	>
 
 	/**
@@ -4907,7 +4928,10 @@ export default class Elysia<
 			derive: Volatile['derive'] &
 				Partial<NewElysia['~Volatile']['derive']>
 			response: Volatile['response'] & NewElysia['~Volatile']['response']
-		}
+		},
+		BasePath extends ``
+			? RoutesInput & NewElysia['~RoutesInput']
+			: RoutesInput & CreateEden<BasePath, NewElysia['~RoutesInput']>
 	>
 
 	/**
@@ -5794,6 +5818,15 @@ export default class Elysia<
 								>
 							>
 						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -5903,6 +5936,15 @@ export default class Elysia<
 								>
 							>
 						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -6012,6 +6054,15 @@ export default class Elysia<
 								>
 							>
 						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -6119,6 +6170,15 @@ export default class Elysia<
 								>
 							>
 						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -6226,6 +6286,15 @@ export default class Elysia<
 								>
 							>
 						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -6333,6 +6402,15 @@ export default class Elysia<
 								>
 							>
 						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -6440,6 +6518,15 @@ export default class Elysia<
 								>
 							>
 						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -6547,6 +6634,15 @@ export default class Elysia<
 								>
 							>
 						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -6654,6 +6750,15 @@ export default class Elysia<
 								>
 							>
 						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -6768,6 +6873,15 @@ export default class Elysia<
 								>
 							>
 						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -6869,6 +6983,15 @@ export default class Elysia<
 								>
 							>
 						>
+					,
+						UnwrapRouteInput<
+							Input,
+							Definitions['typebox'],
+							JoinPath<BasePath, Path>
+						>,
+						Metadata['macroFn'],
+						Omit<Input, NonResolvableMacroKey>,
+						Definitions['typebox']
 					>
 				}
 			>,
@@ -8292,6 +8415,8 @@ export type {
 	LifeCycleType,
 	MaybePromise,
 	UnwrapSchema,
+	UnwrapSchemaInput,
+	UnwrapSchemaOutput,
 	AnySchema,
 	ModelsToTypes,
 	Checksum,
@@ -8308,6 +8433,11 @@ export type {
 	ModelValidator,
 	MetadataBase,
 	UnwrapBodySchema,
+	UnwrapBodySchemaInput,
+	UnwrapBodySchemaOutput,
+	UnwrapRouteInput,
+	InferRouteInput,
+	InferElysiaRoutesInput,
 	UnwrapGroupGuardRoute,
 	ModelValidatorError,
 	ExcludeElysiaResponse,
