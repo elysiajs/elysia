@@ -271,8 +271,14 @@ export const mergeHook = (
 	if (!b) return (a as any) ?? {}
 	if (!a) return b ?? {}
 
-	if (!Object.values(b).find((x) => x !== undefined && x !== null))
-		return { ...a } as any
+	if (!Object.values(b).find((x) => x !== undefined && x !== null)) {
+		const copy = {} as any
+		for (const key in a)
+			copy[key] = Array.isArray((a as any)[key])
+				? [...(a as any)[key]]
+				: (a as any)[key]
+		return copy
+	}
 
 	const hook = {
 		...a,
