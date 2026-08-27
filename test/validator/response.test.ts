@@ -582,4 +582,16 @@ describe('Response Validator', () => {
 
 		expect(status).resolves.toBe(200)
 	})
+
+	it('handle empty body', () => {
+		const app = new Elysia().get('/', ({ status }) => status(201, null), {
+			response: {
+				201: t.Null()
+			}
+		})
+
+		const status = app.handle(req('/')).then((x) => x.status)
+
+		expect(status).resolves.toBe(201)
+	})
 })
