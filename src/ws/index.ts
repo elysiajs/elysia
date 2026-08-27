@@ -4,8 +4,11 @@ import type {
 	ServerWebSocket,
 	ServerWebSocketSendStatus,
 	BufferSource,
-	WebSocketHandler
+	WebSocketHandler,
+	WebSocketConfig
 } from './bun'
+
+export type { WebSocketConfig }
 
 import type { TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '../type-system'
