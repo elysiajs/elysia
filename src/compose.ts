@@ -848,6 +848,7 @@ export const composeHandler = ({
 			`\n${setImmediateFn}(async()=>{` +
 			`if(c.responseValue){` +
 			`if(c.responseValue instanceof ElysiaCustomStatusResponse) c.set.status=c.responseValue.code\n` +
+			`else if(c.responseValue instanceof Response) c.set.status=c.responseValue.status\n` +
 			(hasStream
 				? `if(typeof afterHandlerStreamListener!=='undefined')for await(const v of afterHandlerStreamListener){}\n`
 				: '') +
@@ -2390,7 +2391,8 @@ export const composeGeneralHandler = (
 		const prefix = app.event.afterResponse.some(isAsync) ? 'async' : ''
 		afterResponse +=
 			`\n${setImmediateFn}(${prefix}()=>{` +
-			`if(c.responseValue instanceof ElysiaCustomStatusResponse) c.set.status=c.responseValue.code\n`
+			`if(c.responseValue instanceof ElysiaCustomStatusResponse) c.set.status=c.responseValue.code\n` +
+			`else if(c.responseValue instanceof Response) c.set.status=c.responseValue.status\n`
 
 		for (let i = 0; i < app.event.afterResponse.length; i++) {
 			const fn = app.event.afterResponse[i].fn
