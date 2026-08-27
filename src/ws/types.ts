@@ -135,7 +135,7 @@ export type WSLocalHook<
 	 * Headers to register to websocket before `upgrade`
 	 */
 	upgrade?: Record<string, unknown> | ((context: Context) => unknown)
-	parse?: MaybeArray<WSParseHandler<Schema>>
+	parse?: MaybeArray<WSParseHandler<Schema>> | 'none'
 
 	/**
 	 * Transform context's value

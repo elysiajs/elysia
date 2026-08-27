@@ -609,4 +609,69 @@ describe('WebSocket message', () => {
         await wsClosed(ws)
         app.stop()
     })
+
+    it('should not parse message when parse is none', async () => {
+        const app = new Elysia()
+            .ws('/ws', {
+                parse: 'none',
+                message(ws, message) {
+                    ws.send(typeof message + ' ' + message)
+                }
+            })
+            .listen(0)
+
+        const ws = newWebsocket(app.server!)
+
+        await wsOpen(ws)
+
+        const message1 = wsMessage(ws)
+        ws.send('["ping"]')
+        const res1 = await message1
+
+        expect(res1.data).toBe('string ["ping"]')
+
+        const message2 = wsMessage(ws)
+        ws.send('{"hello":"world"}')
+        const res2 = await message2
+
+        expect(res2.data).toBe('string {"hello":"world"}')
+
+        await wsClosed(ws)
+        app.stop()
+    })
+
+    it('should pass raw message to custom parse handler', async () => {
+        const app = new Elysia()
+            .ws('/ws', {
+                parse(ws, raw) {
+                    if (typeof raw === 'string' && raw.startsWith('PREFIX:'))
+                        return raw.slice(7)
+                    if (typeof raw === 'string' && raw === '["ping"]')
+                        return raw
+                },
+                message(ws, message) {
+                    ws.send(typeof message + ' ' + message)
+                }
+            })
+            .listen(0)
+
+        const ws = newWebsocket(app.server!)
+
+        await wsOpen(ws)
+
+        const message1 = wsMessage(ws)
+        ws.send('PREFIX:["ping"]')
+        const res1 = await message1
+
+        expect(res1.data).toBe('string ["ping"]')
+
+        const message2 = wsMessage(ws)
+        ws.send('["ping"]')
+        const res2 = await message2
+
+        expect(res2.data).toBe('string ["ping"]')
+
+        await wsClosed(ws)
+        app.stop()
+    })
 })

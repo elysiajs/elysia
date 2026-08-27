@@ -223,11 +223,27 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 }
 
 export const createWSMessageParser = (
-	parse: MaybeArray<WSParseHandler<any>>
+	parse: MaybeArray<WSParseHandler<any>> | 'none' | undefined
 ) => {
+	if (parse === 'none')
+		return function parseMessage(ws: ServerWebSocket<any>, message: any) {
+			return message
+		}
+
 	const parsers = typeof parse === 'function' ? [parse] : parse
 
 	return async function parseMessage(ws: ServerWebSocket<any>, message: any) {
+		if (parsers) {
+			const elysiaWS = new ElysiaWS(ws as any, ws.data as any)
+
+			for (let i = 0; i < parsers.length; i++) {
+				let temp = parsers[i](elysiaWS as any, message)
+				if (temp instanceof Promise) temp = await temp
+
+				if (temp !== undefined) return temp
+			}
+		}
+
 		if (typeof message === 'string') {
 			const start = message?.charCodeAt(0)
 
@@ -242,14 +258,6 @@ export const createWSMessageParser = (
 			else if (message === 'false') message = false
 			else if (message === 'null') message = null
 		}
-
-		if (parsers)
-			for (let i = 0; i < parsers.length; i++) {
-				let temp = parsers[i](ws as any, message)
-				if (temp instanceof Promise) temp = await temp
-
-				if (temp !== undefined) return temp
-			}
 
 		return message
 	}
