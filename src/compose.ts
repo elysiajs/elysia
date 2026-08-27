@@ -2700,7 +2700,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 					`error.status=error.code\n` +
 					`error.message=error.response` +
 					`}` +
-					`if(set.status===200||!set.status)set.status=error.status\n`
+					`if(set.status===200||!set.status)set.status=error.status??500\n`
 
 				const mapResponseReporter = report('mapResponse', {
 					total: hooks.mapResponse?.length,
