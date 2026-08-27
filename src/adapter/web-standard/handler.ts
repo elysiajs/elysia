@@ -270,6 +270,13 @@ export const mapEarlyResponse = (
 				)
 
 			case 'FormData':
+				if (
+					isNotEmpty(set.headers) ||
+					set.status !== 200 ||
+					isNotEmpty(set.cookie)
+				)
+					return new Response(response as FormData, set as any)
+
 				return new Response(response as FormData)
 
 			case 'Cookie':
@@ -318,12 +325,15 @@ export const mapEarlyResponse = (
 
 				// custom class with an array-like value
 				// eg. Bun.sql`` result
-				if (Array.isArray(response))
-					return new Response(JSON.stringify(response), {
-						headers: {
-							'Content-Type': 'application/json'
-						}
-					}) as any
+				if (Array.isArray(response)) {
+					if (!set.headers['Content-Type'])
+						set.headers['Content-Type'] = 'application/json'
+
+					return new Response(
+						JSON.stringify(response),
+						set as any
+					) as any
+				}
 
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)

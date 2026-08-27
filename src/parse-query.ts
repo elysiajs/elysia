@@ -21,7 +21,7 @@ export function parseQueryFromURL(
 	let startingIndex = startIndex - 1
 	let equalityIndex = startingIndex
 
-	for (let i = 0; i < inputLength; i++)
+	for (let i = startIndex; i < inputLength; i++)
 		switch (input.charCodeAt(i)) {
 			// '&'
 			case 38:
@@ -130,7 +130,7 @@ export function parseQueryStandardSchema(
 	let startingIndex = startIndex - 1
 	let equalityIndex = startingIndex
 
-	for (let i = 0; i < inputLength; i++)
+	for (let i = startIndex; i < inputLength; i++)
 		switch (input.charCodeAt(i)) {
 			// '&'
 			case 38:
