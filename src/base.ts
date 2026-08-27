@@ -268,6 +268,7 @@ export class Elysia<
 	// Macro defs a scope-child absorbed via a nested plugin `.use()` (name → def)
 	private pluginMacros?: Map<string, unknown>
 	private macroBaseline?: Set<string>
+	private macroSnapshots?: Set<Map<string, unknown>>
 
 	declare '~ext'?: {
 		decorator?: Singleton['decorator']
@@ -4438,26 +4439,53 @@ export class Elysia<
 		if (existingMacro) for (const k in existingMacro) baseline.add(k)
 		this.macroBaseline = baseline
 
+		// Snapshot the macro table at the end of the current synchronous run,
+		// not at return: sibling `.macro()` / sync `.use()` calls later in the
+		// chain are legitimate, while an async plugin's post-await registrations
+		// run in continuations queued during `app(this)` — after this microtask
+		let wantSnapshot = false
+		let settled = false
+		let beforeMacro: Map<string, unknown> | undefined
+		queueMicrotask(() => {
+			if (wantSnapshot && !settled) {
+				beforeMacro = new Map(
+					Object.entries(this['~ext']?.macro ?? nullObject())
+				)
+				;(this.macroSnapshots ??= new Set()).add(beforeMacro)
+			}
+		})
+
 		const result = app(this)
 		this.macroBaseline = prevBaseline
 
 		if (result && typeof (result as any).then === 'function') {
-			const beforeMacro = new Map(
-				Object.entries(this['~ext']?.macro ?? nullObject())
-			)
+			wantSnapshot = true
 
 			return this.#useAsync(
-				(result as Promise<any>).then((value) => {
-					const after = this['~ext']?.macro
-					if (after)
-						for (const [k, def] of Object.entries(after))
-							if (beforeMacro.get(k) !== def)
-								throw new Error(
-									`Macro ${k} can only run in sync plugin`
-								)
+				Promise.resolve(result).then(
+					(value) => {
+						settled = true
 
-					return value
-				})
+						if (!beforeMacro) return value
+
+						this.macroSnapshots?.delete(beforeMacro)
+
+						const after = this['~ext']?.macro
+						if (after)
+							for (const [k, def] of Object.entries(after))
+								if (beforeMacro.get(k) !== def)
+									throw new Error(
+										`Macro ${k} can only run in sync plugin`
+									)
+
+						return value
+					},
+					(err) => {
+						settled = true
+						if (beforeMacro) this.macroSnapshots?.delete(beforeMacro)
+						throw err
+					}
+				)
 			)
 		}
 
@@ -5032,6 +5060,13 @@ export class Elysia<
 						? value.default
 						: value
 
+				const snapshots = this.macroSnapshots
+				let before: Map<string, unknown> | undefined
+				if (snapshots?.size) {
+					const macro = this['~ext']?.macro
+					before = macro ? new Map(Object.entries(macro)) : new Map()
+				}
+
 				if (plugin)
 					try {
 						this.use(plugin)
@@ -5039,6 +5074,27 @@ export class Elysia<
 						this._error ??= { error: err }
 						console.error(err)
 					}
+
+				// This absorption is ready-chain-serialized and deterministic, so
+				// macros it lands are legitimate: patch them into every open #useFn
+				// snapshot so a pending sibling's diff doesn't blame them. Only keys
+				// whose def changed ACROSS this use() call are patched — anything a
+				// plugin registered earlier in its own body is already in `before`
+				// and stays blameable. A snapshot that disagrees with the pre-merge
+				// entry saw such a write; skip it so a same-origin overwrite can't
+				// erase the evidence.
+				if (before) {
+					const after = this['~ext']?.macro
+					if (after)
+						for (const [k, def] of Object.entries(after))
+							if (before.get(k) !== def)
+								for (const snap of snapshots!)
+									if (
+										snap.has(k) === before.has(k) &&
+										snap.get(k) === before.get(k)
+									)
+										snap.set(k, def)
+				}
 			})
 			.finally(() => {
 				this._pending--

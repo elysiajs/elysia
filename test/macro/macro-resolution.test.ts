@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { websocket } from '../../src/plugin/websocket'
+import { autoHead } from '../../src/plugin/auto-head'
 import { newWebsocket, wsOpen, wsMessage, wsClosed } from '../ws/utils'
 
 describe('Macro resolution isolation', () => {
@@ -952,6 +953,223 @@ describe('Functional plugin macros', () => {
 			(await app.handle(new Request('http://localhost/me'))).status
 		).toBe(200)
 	})
+
+	it('allows a sibling .macro() registered after use(autoHead())', async () => {
+		const app = new Elysia()
+			.use(autoHead())
+			.macro({ tag: { beforeHandle() {} } })
+			.get('/me', { tag: true } as any, () => 'ME')
+
+		await (app as any).modules
+
+		expect(
+			(await app.handle(new Request('http://localhost/me'))).status
+		).toBe(200)
+	})
+
+	it('allows a sibling sync plugin macro registered after an async functional plugin', async () => {
+		const asyncPlugin = async (app: any) => {
+			await Promise.resolve()
+			return app
+		}
+		const macroPlugin = new Elysia().macro({ tag: { beforeHandle() {} } })
+
+		const app = new Elysia()
+			.use(asyncPlugin)
+			.use(macroPlugin)
+			.get('/me', { tag: true } as any, () => 'ME')
+
+		await (app as any).modules
+
+		expect(
+			(await app.handle(new Request('http://localhost/me'))).status
+		).toBe(200)
+	})
+
+	it('allows a sibling async plugin to define a pre-await macro while another async plugin is pending', async () => {
+		const slow = async (app: any) => {
+			await new Promise((resolve) => setTimeout(resolve, 10))
+			return app
+		}
+		const fast = async (app: any) => {
+			app.macro({ tag: { beforeHandle() {} } })
+			await Promise.resolve()
+			return app
+		}
+
+		const app = new Elysia()
+			.use(slow)
+			.use(fast)
+			.get('/me', { tag: true } as any, () => 'ME')
+
+		await (app as any).modules
+
+		expect(
+			(await app.handle(new Request('http://localhost/me'))).status
+		).toBe(200)
+	})
+
+	it('names the offending macro when an async plugin registers one post-await', async () => {
+		const app = new Elysia()
+			.use(async (app: any) => {
+				await Promise.resolve()
+				app.macro({ evil: { beforeHandle() {} } })
+				return app
+			})
+			.macro({ safe: { beforeHandle() {} } })
+
+		let err: unknown
+		await (app as any).modules.catch((e: unknown) => {
+			err = e
+		})
+
+		expect((err as Error | undefined)?.message).toBe(
+			'Macro evil can only run in sync plugin'
+		)
+	})
+
+	it('allows an async plugin resolving to a macro instance while a slower async sibling is pending', async () => {
+		const lazy = new Elysia({ name: 'lazy-macro-a' }).macro({
+			tag: { beforeHandle() {} }
+		})
+
+		const app = new Elysia()
+			.use(async () => ({ default: lazy }))
+			.use(async (app: any) => {
+				await new Promise((resolve) => setTimeout(resolve, 10))
+				return app
+			})
+			.get('/me', { tag: true } as any, () => 'ME')
+
+		await (app as any).modules
+
+		expect(
+			(await app.handle(new Request('http://localhost/me'))).status
+		).toBe(200)
+	})
+
+	it('allows an async plugin resolving to a macro instance registered after a slower async sibling', async () => {
+		const lazy = new Elysia({ name: 'lazy-macro-b' }).macro({
+			tag: { beforeHandle() {} }
+		})
+
+		const app = new Elysia()
+			.use(async (app: any) => {
+				await new Promise((resolve) => setTimeout(resolve, 10))
+				return app
+			})
+			.use(async () => lazy)
+			.get('/me', { tag: true } as any, () => 'ME')
+
+		await (app as any).modules
+
+		expect(
+			(await app.handle(new Request('http://localhost/me'))).status
+		).toBe(200)
+	})
+
+	it('allows a guard scope-child to absorb an async macro plugin while an async sibling is pending', async () => {
+		const lazy = new Elysia({ name: 'lazy-macro-c' }).macro({
+			tag: { beforeHandle() {} }
+		})
+
+		const app = new Elysia()
+			.guard({} as any, (app: any) => app.use(async () => lazy))
+			.use(async (app: any) => {
+				await new Promise((resolve) => setTimeout(resolve, 10))
+				return app
+			})
+
+		await (app as any).modules
+	})
+
+	it('names the offending macro when an absorbed macro plugin shares the window', async () => {
+		const lazy = new Elysia({ name: 'lazy-macro-d' }).macro({
+			good: { beforeHandle() {} }
+		})
+
+		const app = new Elysia()
+			.use(async () => lazy)
+			.use(async (app: any) => {
+				await new Promise((resolve) => setTimeout(resolve, 10))
+				app.macro({ evil: { beforeHandle() {} } })
+				return app
+			})
+
+		let err: unknown
+		await (app as any).modules.catch((e: unknown) => {
+			err = e
+		})
+
+		expect((err as Error | undefined)?.message).toBe(
+			'Macro evil can only run in sync plugin'
+		)
+	})
+
+	it('absorbs a plugin resolved from a synchronously-resolving custom thenable', async () => {
+		const lazy = new Elysia({ name: 'sync-thenable-lazy' })
+			.macro({ tag: { beforeHandle() {} } })
+			.get('/lazy', () => 'LAZY')
+
+		const app = new Elysia()
+			.use(() => ({
+				// a sync-invoking then whose return value is undefined:
+				// direct .then chaining would drop the resolved plugin
+				then(onFulfilled: (value: unknown) => void) {
+					onFulfilled(lazy)
+				}
+			}))
+			.get('/me', { tag: true } as any, () => 'ME')
+
+		await (app as any).modules
+
+		expect(
+			(await app.handle(new Request('http://localhost/lazy'))).status
+		).toBe(200)
+		expect(
+			(await app.handle(new Request('http://localhost/me'))).status
+		).toBe(200)
+	})
+
+	it('names the offending macro when a sync thenable registers one inside its own then', async () => {
+		const app = new Elysia().use((app: any) => ({
+			// then runs as an async continuation (after the snapshot
+			// microtask), so this registration must still be blamed.
+			// Also pins that thenable guard errors surface through the
+			// async modules rejection lane, not a synchronous throw
+			then(onFulfilled: (value: unknown) => void) {
+				app.macro({ evil: { beforeHandle() {} } })
+				onFulfilled(app)
+			}
+		}))
+
+		let err: unknown
+		await (app as any).modules.catch((e: unknown) => {
+			err = e
+		})
+
+		expect((err as Error | undefined)?.message).toBe(
+			'Macro evil can only run in sync plugin'
+		)
+	})
+
+	it('surfaces a synchronously-rejecting thenable plugin through modules', async () => {
+		const app = new Elysia().use(() => ({
+			then(
+				_onFulfilled: (value: unknown) => void,
+				onRejected: (err: unknown) => void
+			) {
+				onRejected(new Error('sync thenable boom'))
+			}
+		}))
+
+		let err: unknown
+		await (app as any).modules.catch((e: unknown) => {
+			err = e
+		})
+
+		expect((err as Error | undefined)?.message).toBe('sync thenable boom')
+	})
 })
 
 describe('Scoped macro resolution after composition', () => {
@@ -969,8 +1187,8 @@ describe('Scoped macro resolution after composition', () => {
 			} as any)
 
 		const guardForm = new Elysia()
-			.guard({} as any, (g: any) =>
-				g
+			.guard({}, (app) =>
+				app
 					.macro({ log: { beforeHandle() {} } })
 					.get('/y', { secure: true } as any, () => 'Y')
 			)
