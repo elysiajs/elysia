@@ -18,7 +18,7 @@ import {
 import {
 	ELYSIA_REQUEST_ID,
 	getLoosePath,
-	hasSetImmediate,
+	scheduleImmediate,
 	lifeCycleToFn,
 	randomId,
 	redirect,
@@ -469,10 +469,6 @@ const coerceTransformDecodeError = (
 	`throw error.error ?? new ValidationError('${type}',validator.${type},${value},${allowUnsafeValidationDetails})}` +
 	`}`
 
-const setImmediateFn = hasSetImmediate
-	? 'setImmediate'
-	: 'Promise.resolve().then'
-
 export const composeHandler = ({
 	app,
 	path,
@@ -845,7 +841,7 @@ export const composeHandler = ({
 		let afterResponse = ''
 
 		afterResponse +=
-			`\n${setImmediateFn}(async()=>{` +
+			`\nsetImmediate(async()=>{` +
 			`if(c.responseValue){` +
 			`if(c.responseValue instanceof ElysiaCustomStatusResponse) c.set.status=c.responseValue.code\n` +
 			(hasStream
@@ -1823,7 +1819,7 @@ export const composeHandler = ({
 					(hasTrace || hooks.afterResponse?.length
 						? `afterHandlerStreamListener=stream[2]\n`
 						: '') +
-					`${setImmediateFn}(async ()=>{` +
+					`setImmediate(async ()=>{` +
 					`if(listener)for await(const v of listener){}\n`
 				handleReporter.resolve()
 				fnLiteral += `})` + (maybeAsync ? '' : `})()`) + `}else{`
@@ -2129,6 +2125,7 @@ export const composeHandler = ({
 		`const {` +
 		`handler,` +
 		`handleError,` +
+		`setImmediate,` +
 		`hooks:e, ` +
 		allocateIf(`validator,`, hasValidation) +
 		`mapResponse,` +
@@ -2178,6 +2175,7 @@ export const composeHandler = ({
 		)({
 			handler,
 			hooks: lifeCycleToFn(hooks),
+			setImmediate: scheduleImmediate,
 			validator: hasValidation ? validator : undefined,
 			// @ts-expect-error
 			handleError: app.handleError,
@@ -2389,7 +2387,7 @@ export const composeGeneralHandler = (
 
 		const prefix = app.event.afterResponse.some(isAsync) ? 'async' : ''
 		afterResponse +=
-			`\n${setImmediateFn}(${prefix}()=>{` +
+			`\nsetImmediate(${prefix}()=>{` +
 			`if(c.responseValue instanceof ElysiaCustomStatusResponse) c.set.status=c.responseValue.code\n`
 
 		for (let i = 0; i < app.event.afterResponse.length; i++) {
@@ -2493,6 +2491,7 @@ export const composeGeneralHandler = (
 		`NotFoundError,` +
 		`randomId,` +
 		`handleError,` +
+		`setImmediate,` +
 		`status,` +
 		`redirect,` +
 		`getResponseLength,` +
@@ -2560,6 +2559,7 @@ export const composeGeneralHandler = (
 		NotFoundError,
 		randomId,
 		handleError,
+		setImmediate: scheduleImmediate,
 		status,
 		redirect,
 		getResponseLength,
@@ -2600,6 +2600,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		allocateIf(`onMapResponse,`, app.event.mapResponse) +
 		allocateIf(`ELYSIA_TRACE,`, hasTrace) +
 		allocateIf(`ELYSIA_REQUEST_ID,`, hasTrace) +
+		`setImmediate,` +
 		adapterVariables +
 		`}=inject\n`
 
@@ -2623,7 +2624,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 
 		let afterResponse = ''
 		const prefix = hooks.afterResponse?.some(isAsync) ? 'async' : ''
-		afterResponse += `\n${setImmediateFn}(${prefix}()=>{`
+		afterResponse += `\nsetImmediate(${prefix}()=>{`
 
 		const reporter = createReport({
 			context: 'context',
@@ -2795,6 +2796,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		TransformDecodeError,
 		onError: app.event.error?.map(mapFn),
 		afterResponse: app.event.afterResponse?.map(mapFn),
+		setImmediate: scheduleImmediate,
 		trace: app.event.trace?.map(mapFn),
 		onMapResponse: app.event.mapResponse?.map(mapFn),
 		ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,
