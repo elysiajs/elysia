@@ -1352,6 +1352,55 @@ const a = app
 	}>()
 }
 
+// ? onError plain return type should be exposed on error status
+{
+	const app = new Elysia()
+		.onError(({ status }) =>
+			Math.random() > 0.5
+				? status(404, { reason: 'missing' as const })
+				: { failure: 'maintenance' as const }
+		)
+		.get('/', () => 'ok')
+
+	type Actual = (typeof app)['~Routes']['get']['response']
+	type Expected = {
+		200: string
+		404: {
+			reason: 'missing'
+		}
+		500: {
+			failure: 'maintenance'
+		}
+	}
+	expectTypeOf<Actual>().toMatchTypeOf<Expected>()
+	expectTypeOf<Expected>().toMatchTypeOf<Actual>()
+}
+
+// ? onError explicit and inferred 500 responses should be unions
+{
+	const app = new Elysia()
+		.onError(({ status }) =>
+			Math.random() > 0.5
+				? status(500, { explicit: 'server' as const })
+				: { failure: 'maintenance' as const }
+		)
+		.get('/', () => 'ok')
+
+	type Actual = (typeof app)['~Routes']['get']['response']
+	type Expected = {
+		200: string
+		500:
+			| {
+					explicit: 'server'
+			  }
+			| {
+					failure: 'maintenance'
+			  }
+	}
+	expectTypeOf<Actual>().toMatchTypeOf<Expected>()
+	expectTypeOf<Expected>().toMatchTypeOf<Actual>()
+}
+
 app.get('/', ({ set }) => {
 	// ? Able to set literal type to set.status
 	set.status = "I'm a teapot"
