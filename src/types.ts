@@ -951,16 +951,29 @@ type _FunctionArrayReturnTypeNonNullable<T, Carry = undefined> = T extends [
 		>
 	: Carry
 
-type ExtractResolveFromMacro<A> =
-	IsNever<A> extends true
+// Flatten a union of objects into one object that unions their values
+// per key. `MacroToContext` later runs `UnionToIntersect` on each key to
+// merge contributions from different macros; without this step a single
+// macro whose resolve returns `{user: A} | {user: B}` would intersect to
+// `{user: A & B}` and collapse to `never` for disjoint A and B. See #1773.
+type UnionToSharedKeyObject<A> = [A] extends [never]
+	? {}
+	: {
+			[K in A extends unknown ? keyof A : never]: A extends unknown
+				? K extends keyof A
+					? A[K]
+					: never
+				: never
+		}
+
+// Caller already filters `AnyElysiaCustomStatusResponse` out via `Exclude`
+// and narrows to `Record<any, unknown>` via `Extract`, so here `A` is only
+// the object-returning branches of the resolve return type.
+type ExtractResolveFromMacro<A> = IsNever<A> extends true
+	? {}
+	: IsAny<A> extends true
 		? {}
-		: A extends AnyElysiaCustomStatusResponse
-			? A
-			: Exclude<A, AnyElysiaCustomStatusResponse> extends infer A
-				? IsAny<A> extends true
-					? {}
-					: A
-				: {}
+		: UnionToSharedKeyObject<A>
 
 type ExtractOnlyResponseFromMacro<A> =
 	IsNever<A> extends true
