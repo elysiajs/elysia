@@ -1,6 +1,15 @@
+import { isCloudflareWorker } from '../../universal/constants'
+
 export type CreateMirror = (schema: any, options?: any) => any
 
 function loadExactMirror(): CreateMirror | undefined {
+	// workerd has no CJS loader, so this probe can only fail — and its module
+	// fallback service asserts in the host process before the catch below ever
+	// sees it, printing an unsuppressable stack trace on every dev boot.
+	// On workerd the supported paths are the AOT `-live` reroute or
+	// `setupTypebox({ exactMirror })`.
+	if (isCloudflareWorker) return undefined
+
 	try {
 		const meta = import.meta as ImportMeta & {
 			require?: (specifier: string) => any

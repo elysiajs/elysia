@@ -16,6 +16,10 @@ export const isCloudflareWorker = (() => {
 
 		// @ts-ignore
 		if (typeof WebSocketPair !== 'undefined') return true
+
+		// @ts-ignore
+		if (typeof navigator !== 'undefined' && navigator.userAgent === 'Cloudflare-Workers')
+			return true
 	} catch {
 		return false
 	}
