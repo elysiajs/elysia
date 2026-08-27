@@ -36,6 +36,8 @@ const handleElysiaFile = (
 		set.status !== 416
 	)
 		return file.stats!.then((stat) => {
+			if (!stat) return handleFile(file.value as any, set, request)
+
 			const size = stat.size as number
 
 			if (size !== undefined) {

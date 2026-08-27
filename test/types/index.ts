@@ -2498,6 +2498,33 @@ type a = keyof {}
 	})
 }
 
+// onError plain returns should be typed as error responses
+{
+	const app = new Elysia()
+		.onError(() => ({
+			failure: 'Server is during maintenance'
+		}))
+		.get('/', () => 'ok')
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: string
+		500: {
+			failure: string
+		}
+	}>()
+
+	const explicit = new Elysia()
+		.onError(({ status }) => status(401, 'Unauthorized'))
+		.get('/', () => 'ok')
+
+	expectTypeOf<
+		(typeof explicit)['~Routes']['get']['response']
+	>().toEqualTypeOf<{
+		200: string
+		401: 'Unauthorized'
+	}>()
+}
+
 // onAfterHandle should have response
 {
 	new Elysia().onAfterHandle(
