@@ -2058,8 +2058,8 @@ export const composeHandler = ({
 				'c.code="VALIDATION"\n' +
 				'c.set.status=422' +
 				'}else{' +
-				`c.code=error.code??error[ERROR_CODE]??"UNKNOWN"}`
-		else fnLiteral += `c.code=error.code??error[ERROR_CODE]??"UNKNOWN"\n`
+				`c.code=error[ERROR_CODE]??"UNKNOWN"}`
+		else fnLiteral += `c.code=error[ERROR_CODE]??"UNKNOWN"\n`
 
 		fnLiteral += `let er\n`
 		// Mapped error Response
@@ -2657,7 +2657,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 	fnLiteral +=
 		`const set=context.set\n` +
 		`let _r\n` +
-		`if(!context.code)context.code=error.code??error[ERROR_CODE]\n` +
+		`if(!context.code)context.code=error[ERROR_CODE]??"UNKNOWN"\n` +
 		`if(!(context.error instanceof Error))context.error=error\n` +
 		`if(error instanceof ElysiaCustomStatusResponse){` +
 		`set.status=error.status=error.code\n` +
