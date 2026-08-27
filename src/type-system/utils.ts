@@ -101,6 +101,30 @@ export const checkFileExtension = (type: string, extension: string) => {
 	)
 }
 
+const isTextType = (type: string) => type === 'text' || type.startsWith('text/')
+
+const checkFileExtensions = (
+	type: string,
+	extension: FileType | FileType[]
+) => {
+	if (typeof extension === 'string')
+		return checkFileExtension(type, extension)
+
+	for (let i = 0; i < extension.length; i++)
+		if (checkFileExtension(type, extension[i])) return true
+
+	return false
+}
+
+const allowUnsniffableTextType = (
+	file: Blob | File,
+	extension: FileType | FileType[]
+) => {
+	if (!file.type || !isTextType(file.type)) return false
+
+	return checkFileExtensions(file.type, extension)
+}
+
 let _fileTypeFromBlobWarn = false
 const warnIfFileTypeIsNotInstalled = () => {
 	if (!_fileTypeFromBlobWarn) {
@@ -143,14 +167,13 @@ export const fileType = async (
 	if (!file) return false
 
 	const result = await fileTypeFromBlob(file)
-	if (!result) throw new InvalidFileType(name, extension)
+	if (!result) {
+		if (allowUnsniffableTextType(file, extension)) return true
 
-	if (typeof extension === 'string')
-		if (!checkFileExtension(result.mime, extension))
-			throw new InvalidFileType(name, extension)
+		throw new InvalidFileType(name, extension)
+	}
 
-	for (let i = 0; i < extension.length; i++)
-		if (checkFileExtension(result.mime, extension[i])) return true
+	if (checkFileExtensions(result.mime, extension)) return true
 
 	throw new InvalidFileType(name, extension)
 }
