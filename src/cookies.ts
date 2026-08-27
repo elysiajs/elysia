@@ -122,6 +122,14 @@ export interface CookieOptions {
 	secure?: boolean | undefined
 
 	/**
+	 * Specifies a function that will be used to encode a cookie value before
+	 * serializing it into the `Set-Cookie` header.
+	 *
+	 * @default encodeURIComponent
+	 */
+	encode?: ((value: string) => string) | undefined
+
+	/**
 	 * Secret key for signing cookie
 	 *
 	 * If array is passed, will use Key Rotation.
@@ -295,6 +303,14 @@ export class Cookie<T> implements ElysiaCookie {
 
 	set partitioned(partitioned: boolean | undefined) {
 		this.setCookie.partitioned = partitioned
+	}
+
+	get encode() {
+		return this.cookie.encode
+	}
+
+	set encode(encode: ElysiaCookie['encode']) {
+		this.setCookie.encode = encode
 	}
 
 	get secrets() {

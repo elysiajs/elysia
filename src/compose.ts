@@ -601,10 +601,12 @@ export const composeHandler = ({
 	const cookieMeta: {
 		secrets?: string | string[]
 		sign: string[] | true
+		encode?: CookieOptions['encode']
 		properties: { [x: string]: Object }
 	} = validator.cookie?.config
 		? mergeCookie(validator?.cookie?.config, app.config.cookie as any)
 		: app.config.cookie
+	const hasCookieEncode = typeof cookieMeta?.encode === 'function'
 
 	let _encodeCookie = ''
 	const encodeCookie = () => {
@@ -736,6 +738,7 @@ export const composeHandler = ({
 				get('priority') +
 				get('sameSite') +
 				get('secure') +
+				(hasCookieEncode ? 'encode:cookieEncode,' : '') +
 				'}'
 			: 'undefined'
 
@@ -2151,6 +2154,7 @@ export const composeHandler = ({
 		allocateIf(`parseCookie,`, hasCookie) +
 		allocateIf(`signCookie,`, hasCookie) +
 		allocateIf(`decodeURIComponent,`, hasQuery) +
+		allocateIf(`cookieEncode,`, hasCookieEncode) +
 		`ElysiaCustomStatusResponse,` +
 		allocateIf(`ELYSIA_TRACE,`, hasTrace) +
 		allocateIf(`ELYSIA_REQUEST_ID,`, hasTrace) +
@@ -2205,6 +2209,7 @@ export const composeHandler = ({
 			ERROR_CODE,
 			parseCookie: hasCookie ? parseCookie : undefined,
 			signCookie: hasCookie ? signCookie : undefined,
+			cookieEncode: hasCookieEncode ? cookieMeta.encode : undefined,
 			Cookie: hasCookie ? Cookie : undefined,
 			decodeURIComponent: hasQuery ? decode : undefined,
 			ElysiaCustomStatusResponse,
