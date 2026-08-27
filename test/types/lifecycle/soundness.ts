@@ -1006,11 +1006,15 @@ import { Prettify } from '../../../src/types'
 				Math.random() > 0.5 ? status(418, 'sartre') : 'sartre'
 		])
 
+	// Plain returns from onError map to error status codes (400, 404, 422, 500)
+	// instead of 200, matching runtime behavior where error status is preserved
 	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
-		200: 'fouco' | 'sartre' | 'lilith'
+		400: 'fouco' | 'sartre' | 'lilith'
 		401: 'fouco'
-		404: 'lilith'
+		404: 'fouco' | 'sartre' | 'lilith'
 		418: 'sartre'
+		422: 'fouco' | 'sartre' | 'lilith'
+		500: 'fouco' | 'sartre' | 'lilith'
 	}>()
 }
 
@@ -1028,10 +1032,12 @@ import { Prettify } from '../../../src/types'
 		])
 
 	expectTypeOf<(typeof app)['~Ephemeral']['response']>().toEqualTypeOf<{
-		200: 'fouco' | 'sartre' | 'lilith'
+		400: 'fouco' | 'sartre' | 'lilith'
 		401: 'fouco'
-		404: 'lilith'
+		404: 'fouco' | 'sartre' | 'lilith'
 		418: 'sartre'
+		422: 'fouco' | 'sartre' | 'lilith'
+		500: 'fouco' | 'sartre' | 'lilith'
 	}>()
 }
 
@@ -1049,10 +1055,12 @@ import { Prettify } from '../../../src/types'
 		])
 
 	expectTypeOf<(typeof app)['~Metadata']['response']>().toEqualTypeOf<{
-		200: 'fouco' | 'sartre' | 'lilith'
+		400: 'fouco' | 'sartre' | 'lilith'
 		401: 'fouco'
-		404: 'lilith'
+		404: 'fouco' | 'sartre' | 'lilith'
 		418: 'sartre'
+		422: 'fouco' | 'sartre' | 'lilith'
+		500: 'fouco' | 'sartre' | 'lilith'
 	}>()
 }
 
