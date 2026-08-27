@@ -13,7 +13,13 @@ import { parseQuery } from './parse-query'
 import { getSchemaProperties, type ElysiaTypeCheck } from './schema'
 import type { TypeCheck } from './type-system'
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
-import { hasSetImmediate, redirect, StatusMap, signCookie } from './utils'
+import {
+	getResponseLength,
+	hasSetImmediate,
+	redirect,
+	StatusMap,
+	signCookie
+} from './utils'
 
 // JIT Handler
 export type DynamicHandler = {
@@ -261,10 +267,16 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 			const methodKey = isWS ? 'WS' : request.method
 
-			const handler =
+			let handler =
 				app.router.dynamic.find(request.method, path) ??
 				app.router.dynamic.find(methodKey, path) ??
 				app.router.dynamic.find('ALL', path)
+
+			// Align with composeGeneralHandler: when HEAD is not
+			// registered, fall back to the GET route (auto HEAD)
+			const isHeadFallback = !handler && request.method === 'HEAD'
+			if (isHeadFallback)
+				handler = app.router.dynamic.find('GET', path)
 
 			if (!handler) {
 				// @ts-expect-error
@@ -919,8 +931,25 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				}
 			}
 
+			const result = mapResponse((context.response = response), context.set)
+
+			// Auto HEAD: mirror composeGeneralHandler — resolve the body
+			// length, set content-length, then respond without the body
+			if (isHeadFallback)
+				return Promise.resolve(result as Response).then((result) =>
+					getResponseLength(result).then((length) => {
+						result.headers.set('content-length', String(length))
+
+						return new Response(null, {
+							status: result.status,
+							statusText: result.statusText,
+							headers: result.headers
+						})
+					})
+				)
+
 			// @ts-expect-error
-			return mapResponse((context.response = response), context.set)
+			return result
 		} catch (error) {
 			const reportedError =
 				error instanceof TransformDecodeError && error.error

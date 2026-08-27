@@ -420,6 +420,36 @@ describe('Edge Case', () => {
 		})
 	})
 
+	it('automatically handle HEAD request for GET static path (aot: false)', async () => {
+		const app = new Elysia({ aot: false }).get('/', () => 'hello world')
+
+		const response = await app.handle(
+			new Request('http://localhost', {
+				method: 'HEAD'
+			})
+		)
+
+		expect(response.status).toBe(200)
+		expect(response.headers.toJSON()).toEqual({
+			'content-length': '11'
+		})
+	})
+
+	it('automatically handle HEAD request for GET dynamic path (aot: false)', async () => {
+		const app = new Elysia({ aot: false }).get('/:id', () => 'hello world')
+
+		const response = await app.handle(
+			new Request('http://localhost/1', {
+				method: 'HEAD'
+			})
+		)
+
+		expect(response.status).toBe(200)
+		expect(response.headers.toJSON()).toEqual({
+			'content-length': '11'
+		})
+	})
+
 	it('handle arbitrary code execution from cookie', async () => {
 		const app = new Elysia({
 			cookie: {
