@@ -2,7 +2,11 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../src'
 
-import { separateFunction, sucrose } from '../../src/sucrose'
+import {
+	isContextPassToFunction,
+	separateFunction,
+	sucrose
+} from '../../src/sucrose'
 import { req } from '../utils'
 
 describe('sucrose', () => {
@@ -327,5 +331,73 @@ describe('sucrose', () => {
 			url: true,
 			route: true
 		})
+	})
+
+	it('handles minified method context pass without warning', () => {
+		const beforeHandle = () => {}
+		beforeHandle.toString = () =>
+			'beforeHandle(ctx){await executeMiddleware(ctx, guardFn, logMessage)}'
+
+		const log = console.log
+		const logs: unknown[] = []
+		console.log = (...args) => {
+			logs.push(args)
+		}
+
+		try {
+			expect(
+				sucrose({
+					beforeHandle: [beforeHandle]
+				})
+			).toEqual({
+				query: true,
+				headers: true,
+				body: true,
+				cookie: true,
+				set: true,
+				server: true,
+				path: true,
+				url: true,
+				route: true
+			})
+
+			expect(logs).toEqual([])
+		} finally {
+			console.log = log
+		}
+	})
+
+	it('escapes invalid context before function-pass regex', () => {
+		const inference = {
+			query: false,
+			headers: false,
+			body: false,
+			cookie: false,
+			set: false,
+			server: false,
+			path: false,
+			url: false,
+			route: false
+		}
+
+		const log = console.log
+		const logs: unknown[] = []
+		console.log = (...args) => {
+			logs.push(args)
+		}
+
+		try {
+			expect(
+				isContextPassToFunction(
+					'ctx){awaitexecuteMiddleware(ctx',
+					'executeMiddleware(ctx, guardFn)',
+					inference
+				)
+			).toBe(false)
+
+			expect(logs).toEqual([])
+		} finally {
+			console.log = log
+		}
 	})
 })
