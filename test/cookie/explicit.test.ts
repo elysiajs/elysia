@@ -118,4 +118,22 @@ describe('Explicit Cookie', () => {
 			Date.now()
 		)
 	})
+
+	it('memoize cookie instance across multiple accesses', () => {
+		const { cookie } = create()
+		const first = cookie.name
+		const second = cookie.name
+
+		expect(first).toBe(second)
+
+		const set: Context['set'] = {
+			cookie: {},
+			headers: {}
+		}
+		const store = Object.create(null) as Record<string, any>
+		store.name = { value: 'himari' }
+		const parsed = createCookieJar(set, store)
+
+		expect(parsed.name).toBe(parsed.name)
+	})
 })
