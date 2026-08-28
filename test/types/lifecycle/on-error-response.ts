@@ -53,3 +53,22 @@ import { Prettify } from '../../../src/types'
 		500: { failure: boolean }
 	}>()
 }
+
+// An explicit status(200, value) returned from onError keeps its 200 body
+// only under 200 — it is NOT merged into the default error statuses
+{
+	const app = new Elysia()
+		.onError(({ status }) =>
+			status(
+				200,
+				'ok' as string | number
+			)
+		)
+		.get('/', () => 'ok')
+
+	type Response = Prettify<(typeof app)['~Routes']['get']['response']>
+
+	expectTypeOf<Response>().toEqualTypeOf<{
+		200: string | number
+	}>()
+}

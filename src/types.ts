@@ -2255,13 +2255,14 @@ type DefaultErrorStatusesToResponseSchema<Response> = {
  * status (see {@link DefaultErrorStatusesToResponseSchema}) instead of
  * being recorded as a `200` response.
  *
- * When a plain return coexists with an explicit `status(code, value)`
- * whose code is one of the default error statuses, both bodies are
- * unioned under that status.
+ * When a plain return coexists with an explicit `status(code, value)`, only
+ * plain returns become error-status bodies; the explicit statuses keep their
+ * exact code (so e.g. `status(200, value)` is never merged into the 4xx/5xx
+ * error bodies).
  */
 type ErrorValueToResponseSchema<Value> =
 	ExtractErrorFromHandle<Value> extends infer Explicit
-		? Extract200<Value> extends infer Plain
+		? Exclude<Value, AnyElysiaCustomStatusResponse> extends infer Plain
 			? undefined extends Plain
 				? Explicit
 				: IsNever<Plain> extends true
