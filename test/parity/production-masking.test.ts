@@ -4,19 +4,25 @@ import { describe, it, expect } from 'bun:test'
 
 const PROBE = new URL('./_prod-probe.ts', import.meta.url).pathname
 
-async function runProbe(): Promise<{
+async function runProbe(nodeEnv = 'production'): Promise<{
 	NODE_ENV: string
 	httpValidation: string
 	httpError: string
 	httpThrowString: string
 	httpThrowObject: string
+	httpElysiaError: string
+	httpElysiaError4xx: string
+	httpExplicitResponse: string
 	wsValidation: string[]
 	wsError: string[]
 	wsThrowString: string[]
 	wsThrowObject: string[]
+	wsElysiaError: string[]
+	wsElysiaError4xx: string[]
+	wsReturnedElysiaError: string[]
 }> {
 	const proc = Bun.spawn(['bun', PROBE], {
-		env: { ...process.env, NODE_ENV: 'production' },
+		env: { ...process.env, NODE_ENV: nodeEnv },
 		stdout: 'pipe',
 		stderr: 'pipe'
 	})
@@ -105,5 +111,97 @@ describe('production error masking across HTTP and WebSocket', () => {
 		expect(wsThrowObject[0]).not.toContain('secret-object')
 		expect(wsThrowObject[0]).not.toContain('[object Object]')
 		expect(wsThrowObject[0]).toBe(httpThrowObject)
+	})
+
+	// An explicit 5xx `response` is published in production by contract, so
+	// `InvalidCookie.secret()` was handing clients our own `cookie.secrets`
+	// setup advice on a 500. The advice is ours, not the operator's, so the
+	// class serves the status text in production and keeps the advice on
+	// `message` for the log
+	it('masks the cookie.secrets advice identically on HTTP and WS in production', async () => {
+		const { httpElysiaError, wsElysiaError } = await runProbe()
+
+		for (const body of [httpElysiaError, ...wsElysiaError]) {
+			expect(body).not.toContain('cookie.secrets')
+			expect(body).not.toContain('anyone can forge')
+		}
+
+		const http = JSON.parse(httpElysiaError)
+		expect(http.detail).toBeUndefined()
+		// masking the advice must not blank the error's identity — a client
+		// still gets a token to dispatch on
+		expect(http).toMatchObject({
+			type: 'invalid-cookie',
+			code: 'invalid-cookie',
+			status: 500,
+			title: 'Internal Server Error'
+		})
+
+		expect(wsElysiaError).toHaveLength(1)
+		expect(wsElysiaError[0]).toBe(httpElysiaError)
+	})
+
+	// The mask lives in `response` rather than in the problem serializer
+	// because a WS handler may *return* the error, which is framed as plain
+	// data and never reaches the error lane at all
+	it('masks the advice on a returned, never-thrown ElysiaError in production', async () => {
+		const { wsReturnedElysiaError } = await runProbe()
+
+		expect(wsReturnedElysiaError).toHaveLength(1)
+		expect(wsReturnedElysiaError[0]).not.toContain('cookie.secrets')
+		expect(wsReturnedElysiaError[0]).not.toContain('anyone can forge')
+		expect(JSON.parse(wsReturnedElysiaError[0])).toMatchObject({
+			status: 500,
+			response: 'Internal Server Error'
+		})
+	})
+
+	// Scoped to the advice, not to 5xx detail at large: an explicitly authored
+	// `response` on a 500 stays published, which is the documented contract
+	// ("any ElysiaError with status >= 500 *without explicit response*")
+	it('still publishes an explicitly authored 5xx response in production', async () => {
+		const { httpExplicitResponse } = await runProbe()
+
+		expect(JSON.parse(httpExplicitResponse)).toMatchObject({
+			code: 'internal-server-error',
+			status: 500,
+			detail: 'explicit-operator-body'
+		})
+	})
+
+	// A 4xx is the client's fault and its detail is what tells them how to fix
+	// the request, so the sibling cookie error is untouched
+	it('keeps a built-in ElysiaError 4xx detail in production', async () => {
+		const { httpElysiaError4xx, wsElysiaError4xx } = await runProbe()
+
+		expect(httpElysiaError4xx).toContain('invalid cookie signature')
+		expect(JSON.parse(httpElysiaError4xx)).toMatchObject({
+			code: 'invalid-cookie',
+			status: 400,
+			detail: '"session" has invalid cookie signature'
+		})
+
+		expect(wsElysiaError4xx).toHaveLength(1)
+		expect(wsElysiaError4xx[0]).toBe(httpElysiaError4xx)
+	})
+
+	// The advice is the whole point of the error locally — masking it in
+	// development would trade a leak for an undebuggable 500
+	it('keeps the cookie.secrets advice during development', async () => {
+		const {
+			NODE_ENV,
+			httpElysiaError,
+			wsElysiaError,
+			wsReturnedElysiaError
+		} = await runProbe('development')
+		expect(NODE_ENV).toBe('development')
+
+		expect(httpElysiaError).toContain('cookie.secrets')
+		expect(JSON.parse(httpElysiaError).detail).toContain('anyone can forge')
+
+		expect(wsElysiaError).toHaveLength(1)
+		expect(wsElysiaError[0]).toBe(httpElysiaError)
+
+		expect(wsReturnedElysiaError[0]).toContain('anyone can forge')
 	})
 })

@@ -163,6 +163,15 @@ export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
 const useNodesBuffer: ChainNode[] = []
 const emptyHistory = Object.freeze([]) as readonly HistoryEntry[]
+
+/**
+ * Bumped by `#assertMutable`, which every mutating API funnels through, so it
+ * counts mutations across ALL instances. Sealing only freezes the app itself:
+ * a merged plugin stays mutable, and `composeRouteHook` reads its `error`
+ * chain live, so composed hooks can change without the owning app changing.
+ * The `routes`/`history` memos key on this
+ */
+let mutationEpoch = 0
 const extCallbackIndexes = new WeakMap<
 	unknown[],
 	{ indexedLength: number; seen: Set<unknown> }
@@ -301,7 +310,23 @@ export class Elysia<
 	private routeSources?: (string | undefined)[]
 	declare server?: Server
 
+	// Only exists in root
+	declare private cachedGeneration?: Generation
+	declare private cachedEpoch?: number
+	declare private cachedRoutes?: PublicRoute[]
+	declare private cachedHistory?: readonly HistoryEntry[]
+
 	get history(): readonly HistoryEntry[] {
+		const generation = this['~generation']
+
+		if (
+			this.#isCacheable &&
+			this.cachedGeneration === generation &&
+			this.cachedEpoch === mutationEpoch &&
+			this.cachedHistory !== undefined
+		)
+			return this.cachedHistory
+
 		if (this.declaredRoutes === undefined && this['~routeTable']?.length)
 			this.#materializeDeclaredRoutes()
 
@@ -324,7 +349,14 @@ export class Elysia<
 			})
 		}
 
-		return Object.freeze(history)
+		Object.freeze(history)
+
+		if (this.#isCacheable) {
+			this.#cacheRoutes(generation!)
+			this.cachedHistory = history
+		}
+
+		return history
 	}
 
 	get ['~routes'](): readonly InternalRoute[] {
@@ -471,6 +503,16 @@ export class Elysia<
 	}
 
 	get routes() {
+		const generation = this['~generation']
+
+		if (
+			this.#isCacheable &&
+			this.cachedGeneration === generation &&
+			this.cachedEpoch === mutationEpoch &&
+			this.cachedRoutes !== undefined
+		)
+			return this.cachedRoutes
+
 		if (this.declaredRoutes === undefined && this['~routeTable']?.length)
 			this.#materializeDeclaredRoutes()
 
@@ -516,6 +558,11 @@ export class Elysia<
 				} as PublicRoute
 			}
 		)
+
+		if (this.#isCacheable) {
+			this.#cacheRoutes(generation!)
+			this.cachedRoutes = routes
+		}
 
 		return routes
 	}
@@ -710,8 +757,7 @@ export class Elysia<
 		name: string,
 		value: unknown
 	): this {
-		if (this['~generation'] !== undefined)
-			this.#assertMutable(field === 'store' ? 'state' : 'decorate')
+		this.#assertMutable(field === 'store' ? 'state' : 'decorate')
 		const ext = this.ext
 		const fresh = !ext[field]
 		const target = (ext[field] ??= nullObject()) as Record<string, unknown>
@@ -973,8 +1019,7 @@ export class Elysia<
 		fn: UnwrapArray<AppHook[Event]>,
 		scope: EventScope = this['~config']?.as as EventScope
 	): this {
-		if (this['~generation'] !== undefined)
-			this.#assertMutable('on' + (type[0].toUpperCase() + type.slice(1)))
+		this.#assertMutable('on' + (type[0].toUpperCase() + type.slice(1)))
 
 		const added: Partial<AppHook> = nullObject()
 		;(added as any)[type] = fn
@@ -4409,7 +4454,7 @@ export class Elysia<
 
 	use(app: any): any {
 		if (!app) return this
-		if (this['~generation'] !== undefined) this.#assertMutable('use')
+		this.#assertMutable('use')
 
 		if (typeof app === 'function') return this.#useFn(app)
 
@@ -4482,7 +4527,8 @@ export class Elysia<
 					},
 					(err) => {
 						settled = true
-						if (beforeMacro) this.macroSnapshots?.delete(beforeMacro)
+						if (beforeMacro)
+							this.macroSnapshots?.delete(beforeMacro)
 						throw err
 					}
 				)
@@ -5154,7 +5200,7 @@ export class Elysia<
 
 		const appHook = this['~hookChain']
 
-		if (this['~generation'] !== undefined) this.#assertMutable('route')
+		this.#assertMutable('route')
 		;(this.declaredRoutes ?? this.#materializeDeclaredRoutes()).push(
 			(appHook
 				? [method, path, handler, this, hook, appHook]
@@ -5178,9 +5224,32 @@ export class Elysia<
 	}
 
 	#assertMutable(api: string) {
+		mutationEpoch++
+
 		if (this['~generation'] === undefined) return
 
 		throw new Error(`[Elysia] .${api}() called after the app was sealed`)
+	}
+
+	get #isCacheable() {
+		return (
+			this['~generation'] !== undefined &&
+			this.routerBuilt &&
+			!Capture.isCapturing()
+		)
+	}
+
+	#cacheRoutes(generation: Generation) {
+		if (
+			this.cachedGeneration === generation &&
+			this.cachedEpoch === mutationEpoch
+		)
+			return
+
+		this.cachedGeneration = generation
+		this.cachedEpoch = mutationEpoch
+		this.cachedRoutes = undefined
+		this.cachedHistory = undefined
 	}
 
 	#materializeDeclaredRoutes() {
@@ -5196,7 +5265,7 @@ export class Elysia<
 	}
 
 	#registerRoute(route: InternalRoute, source?: string) {
-		if (this['~generation'] !== undefined) this.#assertMutable('route')
+		this.#assertMutable('route')
 
 		const routes = this.declaredRoutes ?? this.#materializeDeclaredRoutes()
 		const sequence = routes.length

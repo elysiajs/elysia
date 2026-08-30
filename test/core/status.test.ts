@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 
-import Elysia, { t } from '../../src'
+import Elysia, { status, t } from '../../src'
 
 describe('Status', () => {
 	it('work', async () => {
@@ -119,5 +119,39 @@ describe('Status', () => {
 
 		expect(response.status).toBe(308)
 		await expect(response.text()).resolves.toBe('')
+	})
+
+	// The numeric field is `status`, not `code`: `code` is now the string
+	// token an error serves, and one module can't spell both with one word.
+	// A name is resolved on the way in, so the field is always the number
+	it('carry the resolved number on `status`', () => {
+		const named = status('Payment Required', 'nope')
+
+		expect(named.status).toBe(402)
+		expect(named.response).toBe('nope')
+		expect(named).not.toHaveProperty('code')
+
+		expect(status(201).status).toBe(201)
+		// an empty status still resolves, it only drops the body
+		expect(status(204).status).toBe(204)
+		expect(status(204).response).toBeUndefined()
+	})
+
+	// The rename cost `ElysiaStatus` its structural discriminator — `status` +
+	// `response` is a shape a handler may write by hand, so a type-only brand
+	// keeps a plain literal out of the status lane
+	it('serve a hand-written status-shaped object as a plain body', async () => {
+		const app = new Elysia().get(
+			'/',
+			() => ({ status: 401, response: 'c' }) as const
+		)
+
+		const response = await app.handle('/')
+
+		expect(response.status).toBe(200)
+		await expect(response.json()).resolves.toEqual({
+			status: 401,
+			response: 'c'
+		})
 	})
 })

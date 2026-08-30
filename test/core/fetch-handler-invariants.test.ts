@@ -11,6 +11,7 @@ describe('fetch handler', () => {
 		expect(res.status).toBe(404)
 		await expect(res.json()).resolves.toEqual({
 			type: 'not-found',
+			code: 'not-found',
 			title: 'Not Found',
 			status: 404
 		})

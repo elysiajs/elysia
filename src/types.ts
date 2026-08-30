@@ -1521,7 +1521,12 @@ type MergeResponseStatus<A> = {
 			? { [A in Status]: 1 }
 			: never
 		// @ts-ignore A is checked in key computation
-	>]: Extract<A, { code: status }>['response'] extends infer Value
+	>]: Extract<
+		A,
+		// `status` alone is a shape a handler may write by hand — the brand on
+		// `AnyElysiaStatus` is what keeps such a literal out of this lane
+		AnyElysiaStatus & { status: status }
+	>['response'] extends infer Value
 		? IsAny<Value> extends true
 			? // @ts-ignore status is always in StatusMapBack
 				StatusMapBack[status]
@@ -1946,12 +1951,23 @@ type ErrorProblemType<E> =
 		: 'about:blank'
 
 /**
+ * `code` extension member an error contributes — a class made by
+ * `HTTPError.id`, or a built-in `ElysiaError`. `type` may be widened to a URI
+ * by `HTTPError.typeBase`, `code` never is
+ */
+type ErrorProblemCode<E> = E extends { code: infer C extends string }
+	? string extends C
+		? {}
+		: { code: C }
+	: {}
+
+/**
  * Problem document served for a `detail` annotation. `detail` is carried
  * verbatim, objects included — it is never spread into the envelope
  */
 type ProblemOf<E, Detail> = ProblemResponseBody<
 	ErrorFallbackStatus<E>,
-	{ type: ErrorProblemType<E>; detail: Detail }
+	{ type: ErrorProblemType<E>; detail: Detail } & ErrorProblemCode<E>
 >
 
 /**
@@ -2221,7 +2237,7 @@ export type ExtractErrorFromHandle<in out Handle> = {
 		Handle,
 		AnyElysiaStatus
 	> as ErrorResponse extends AnyElysiaStatus
-		? ErrorResponse['code']
+		? ErrorResponse['status']
 		: // @ts-ignore
 			never]: Prettify<ErrorResponse['response']>
 }

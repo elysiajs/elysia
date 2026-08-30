@@ -70,8 +70,12 @@ export function adoptErrorType(result: any, error: any) {
 		return result
 
 	return new ElysiaStatus(
-		result.code,
-		{ ...body, type: error.type },
+		result.status,
+		{
+			...body,
+			type: error.type,
+			...(typeof error.code === 'string' ? { code: error.code } : {})
+		},
 		result.headers
 	)
 }
@@ -151,11 +155,19 @@ export function statusFallbackBody(error: any, status: unknown) {
 /**
  * RFC 9457 problem document carrying `detail` verbatim, mirroring `problem()`.
  */
-const problemOf = (self: any, detail: unknown, status: number) =>
+const problemOf = (
+	self: any,
+	detail: unknown,
+	status: number,
+	claimsProblem: boolean
+) =>
 	new ElysiaStatus(
 		status as any,
 		problemBody({
 			type: self.type ?? 'about:blank',
+			...(claimsProblem && typeof self.code === 'string'
+				? { code: self.code }
+				: {}),
 			detail: detail as string,
 			status
 		}),
@@ -277,7 +289,12 @@ function fallbackErrorResponse(
 		mergeHeaders()
 
 		return mapResponse(
-			problemOf(self, statusFallbackBody(error, served), served),
+			problemOf(
+				self,
+				statusFallbackBody(error, served),
+				served,
+				claimsProblem
+			),
 			context.set,
 			context
 		)
@@ -303,7 +320,7 @@ function fallbackErrorResponse(
 				mergeHeaders()
 
 				return mapResponse(
-					problemOf(self, resolved, served),
+					problemOf(self, resolved, served, claimsProblem),
 					context.set,
 					context
 				)
@@ -312,7 +329,7 @@ function fallbackErrorResponse(
 		mergeHeaders()
 
 		return mapResponse(
-			problemOf(self, detail, served),
+			problemOf(self, detail, served, claimsProblem),
 			context.set,
 			context
 		)

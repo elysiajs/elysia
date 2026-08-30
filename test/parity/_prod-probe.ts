@@ -2,6 +2,8 @@
 // Prints one JSON payload for its caller.
 
 import { Elysia, t } from '../../src'
+import { InternalServerError } from '../../src/error'
+import { InvalidCookie } from '../../src/cookie/error'
 import { websocket } from '../../src/plugin/websocket'
 
 async function main() {
@@ -15,6 +17,15 @@ async function main() {
 		})
 		.get('/obj', () => {
 			throw { password: 'secret-object' }
+		})
+		.get('/ce', () => {
+			throw InvalidCookie.secret('session')
+		})
+		.get('/c4', () => {
+			throw InvalidCookie.signature('session')
+		})
+		.get('/explicit', () => {
+			throw new InternalServerError('explicit-operator-body')
 		})
 
 	let r = await http.handle(
@@ -31,6 +42,12 @@ async function main() {
 	const httpThrowString = await r.text()
 	r = await http.handle(new Request('http://localhost/obj'))
 	const httpThrowObject = await r.text()
+	r = await http.handle(new Request('http://localhost/ce'))
+	const httpElysiaError = await r.text()
+	r = await http.handle(new Request('http://localhost/c4'))
+	const httpElysiaError4xx = await r.text()
+	r = await http.handle(new Request('http://localhost/explicit'))
+	const httpExplicitResponse = await r.text()
 
 	const app = new Elysia()
 		.use(websocket()).ws('/v', {
@@ -52,6 +69,23 @@ async function main() {
 		.use(websocket()).ws('/obj', {
 			message() {
 				throw { password: 'secret-object' }
+			}
+		})
+		.use(websocket()).ws('/ce', {
+			message() {
+				throw InvalidCookie.secret('session')
+			}
+		})
+		.use(websocket()).ws('/c4', {
+			message() {
+				throw InvalidCookie.signature('session')
+			}
+		})
+		// returned, not thrown: the frame is the instance serialized as data,
+		// so it never reaches the error lane's problem document
+		.use(websocket()).ws('/ret', {
+			message() {
+				return InvalidCookie.secret('session')
 			}
 		})
 		.listen(0)
@@ -94,6 +128,9 @@ async function main() {
 	const wsError = await probe('/e', 'x')
 	const wsThrowString = await probe('/str', 'x')
 	const wsThrowObject = await probe('/obj', 'x')
+	const wsElysiaError = await probe('/ce', 'x')
+	const wsElysiaError4xx = await probe('/c4', 'x')
+	const wsReturnedElysiaError = await probe('/ret', 'x')
 
 	app.stop()
 
@@ -104,10 +141,16 @@ async function main() {
 			httpError,
 			httpThrowString,
 			httpThrowObject,
+			httpElysiaError,
+			httpElysiaError4xx,
+			httpExplicitResponse,
 			wsValidation,
 			wsError,
 			wsThrowString,
-			wsThrowObject
+			wsThrowObject,
+			wsElysiaError,
+			wsElysiaError4xx,
+			wsReturnedElysiaError
 		})
 	)
 }

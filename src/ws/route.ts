@@ -46,6 +46,7 @@ import {
 	ElysiaError,
 	ElysiaStatus,
 	ValidationError,
+	elysiaErrorProblem,
 	internalServerErrorBodyString,
 	problemBody,
 	problemResponse
@@ -299,18 +300,7 @@ function wsErrorFrame(error: any): string | Promise<string> {
 			error.toResponse === ElysiaError.prototype.toResponse
 		)
 			try {
-				return JSON.stringify(
-					problemBody({
-						type: error.problemType,
-						title: error.problemTitle,
-						status: (error.status ?? 500) as any,
-						detail:
-							error.response !== undefined &&
-							error.response !== error.problemTitle
-								? (error.response as any)
-								: undefined
-					})
-				)
+				return JSON.stringify(problemBody(elysiaErrorProblem(error)))
 			} catch {}
 
 		try {
@@ -347,6 +337,7 @@ function wsProblemFrame(error: any): string | Promise<string> {
 		JSON.stringify(
 			problemBody({
 				type: error.type ?? 'about:blank',
+				...(typeof error.code === 'string' ? { code: error.code } : {}),
 				detail: detail as string,
 				status: served
 			})

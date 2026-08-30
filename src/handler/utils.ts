@@ -31,10 +31,14 @@ function cachedResponse(
 				})).clone() as Response)
 }
 
+// Preallocated twin of `new NotFound().toResponse()`. Serves the bare slug:
+// `HTTPError.typeBase` is set after this module is evaluated, so the fast path
+// cannot resolve `type` through it
 export const NOT_FOUND_BODY = JSON.stringify({
 	type: 'not-found',
-	title: 'Not Found',
-	status: 404
+	code: 'not-found',
+	status: 404,
+	title: 'Not Found'
 })
 
 export const getNotFound = cachedResponse(NOT_FOUND_BODY, 404, {

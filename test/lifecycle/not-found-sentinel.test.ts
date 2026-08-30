@@ -4,14 +4,18 @@ import { describe, expect, it } from 'bun:test'
 
 const NOT_FOUND_BODY = JSON.stringify({
 	type: 'not-found',
-	title: 'Not Found',
-	status: 404
+	code: 'not-found',
+	status: 404,
+	title: 'Not Found'
 })
 
 const expectNoSentinelLeak = (body: string) => {
 	// the sentinel is `{ code: 'NOT_FOUND' }` — a leak would surface as a
-	// bare code-record serialization instead of a problem+json Error body
+	// bare code-record serialization instead of a problem+json Error body.
+	// A problem body carries its own `code`, so the sentinel's *value* is what
+	// discriminates
 	expect(body).not.toContain('frameworkNotFound')
+	expect(body).not.toContain('NOT_FOUND')
 	expect(body).not.toContain('{"code"')
 }
 

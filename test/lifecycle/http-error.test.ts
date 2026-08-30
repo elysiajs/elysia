@@ -1,4 +1,15 @@
-import { Elysia, HTTPError, NotFound, problem, status, t } from '../../src'
+import {
+	Elysia,
+	HTTPError,
+	InternalServerError,
+	NotFound,
+	ParseError,
+	ValidationError,
+	problem,
+	status,
+	t
+} from '../../src'
+import { InvalidCookie } from '../../src/cookie/error'
 import { afterEach, describe, expect, it } from 'bun:test'
 
 class OutOfCredit extends HTTPError<'OUT_OF_CREDIT'> {
@@ -464,6 +475,7 @@ describe('HTTPError', () => {
 					expect(response.status).toBe(418)
 					await expect(response.json()).resolves.toEqual({
 						type: 'UNMATCHED',
+						code: 'UNMATCHED',
 						title: "I'm a teapot",
 						detail: 'short and stout',
 						status: 418
@@ -508,10 +520,40 @@ describe('HTTPError', () => {
 
 				await expect(
 					(await app.handle('/first')).json()
-				).resolves.toMatchObject({ type: 'first', detail: 'q' })
+				).resolves.toMatchObject({
+					type: 'first',
+					code: 'first',
+					detail: 'q'
+				})
 				await expect(
 					(await app.handle('/second')).json()
-				).resolves.toMatchObject({ type: 'second', detail: 'q' })
+				).resolves.toMatchObject({
+					type: 'second',
+					code: 'second',
+					detail: 'q'
+				})
+			})
+
+			// Why the tag is adopted as two members and not one: under a
+			// `typeBase` the adopted `type` is a URI, so the token a client
+			// dispatches on has to ride along or this lane loses it
+			it('adopts the code beside a widened type', async () => {
+				HTTPError.typeBase = 'https://example.com/errors'
+
+				try {
+					const app = new Elysia()
+						.error(First, () => problem(400, { detail: 'q' }))
+						.get('/', () => new First())
+
+					await expect(
+						(await app.handle('/')).json()
+					).resolves.toMatchObject({
+						type: 'https://example.com/errors/first',
+						code: 'first'
+					})
+				} finally {
+					HTTPError.typeBase = undefined
+				}
 			})
 
 			it('leaves an explicit type the handler set alone', async () => {
@@ -1010,6 +1052,7 @@ describe('HTTPError', () => {
 
 			await expect((await app.handle('/')).json()).resolves.toEqual({
 				type: 'ASYNC',
+				code: 'ASYNC',
 				title: 'Conflict',
 				detail: 'via hooks',
 				status: 409
@@ -1063,6 +1106,7 @@ describe('HTTPError', () => {
 			expect(response.status).toBe(402)
 			await expect(response.json()).resolves.toEqual({
 				type: 'OUT_OF_CREDIT',
+				code: 'OUT_OF_CREDIT',
 				title: 'Payment Required',
 				detail: 'no funds',
 				status: 402
@@ -1148,6 +1192,317 @@ describe('HTTPError', () => {
 			expect(response.status).toBe(418)
 			// `value` overrides the whole response, so no envelope here
 			await expect(response.json()).resolves.toEqual({ dynamic: true })
+		})
+
+		// The argument is the *code*: the stable token a client dispatches on.
+		// `type` is the RFC 9457 problem type, which an app may want to serve
+		// as a real URI — so the two are served separately and only `type`
+		// ever moves
+		describe('code', () => {
+			afterEach(() => {
+				HTTPError.typeBase = undefined
+			})
+
+			// Own and enumerable on purpose, matching how `err.code` is read
+			// on a Node error: it survives plain enumeration and a JSON
+			// round-trip of the error itself, not just of the response
+			it('expose the identifier as an own enumerable `code`', () => {
+				class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {}
+
+				const error = new OutOfCredit('no funds')
+
+				expect(error.code).toBe('OUT_OF_CREDIT')
+				expect(Object.hasOwn(error, 'code')).toBe(true)
+				expect(
+					Object.getOwnPropertyDescriptor(error, 'code')?.enumerable
+				).toBe(true)
+				expect(JSON.parse(JSON.stringify(error)).code).toBe(
+					'OUT_OF_CREDIT'
+				)
+			})
+
+			// Default behaviour is unchanged: every matcher written against
+			// `type` keeps matching the bare token
+			it('mirror `code` into `type` by default', async () => {
+				class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {}
+
+				expect(new OutOfCredit().type).toBe('OUT_OF_CREDIT')
+
+				const app = new Elysia().get('/', () => {
+					throw new OutOfCredit('no funds')
+				})
+
+				await expect((await app.handle('/')).json()).resolves.toEqual({
+					type: 'OUT_OF_CREDIT',
+					code: 'OUT_OF_CREDIT',
+					title: 'Payment Required',
+					detail: 'no funds',
+					status: 402
+				})
+			})
+
+			// `typeBase` is read per access, so a class declared at module
+			// scope still resolves through a base the app sets at boot
+			it('resolve `type` through `typeBase` while `code` stays the token', async () => {
+				class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {}
+
+				const error = new OutOfCredit('no funds')
+				expect(error.type).toBe('OUT_OF_CREDIT')
+
+				HTTPError.typeBase = 'https://example.com/errors'
+
+				expect(error.type).toBe(
+					'https://example.com/errors/OUT_OF_CREDIT'
+				)
+				expect(error.code).toBe('OUT_OF_CREDIT')
+
+				// a trailing slash on the base must not double up
+				HTTPError.typeBase = 'https://example.com/errors/'
+				expect(error.type).toBe(
+					'https://example.com/errors/OUT_OF_CREDIT'
+				)
+
+				const app = new Elysia().get('/', () => {
+					throw new OutOfCredit('no funds')
+				})
+
+				await expect((await app.handle('/')).json()).resolves.toEqual({
+					type: 'https://example.com/errors/OUT_OF_CREDIT',
+					code: 'OUT_OF_CREDIT',
+					title: 'Payment Required',
+					detail: 'no funds',
+					status: 402
+				})
+			})
+
+			// The reason `code` is assigned rather than annotated: an app
+			// builds its hierarchy by extending the factory result, and every
+			// descendant has to carry the token without restating it
+			it('carry both through a subclass of the factory result', async () => {
+				class AppError extends HTTPError.id('APP_ERROR', 409) {}
+				class Nested extends AppError {}
+
+				const error = new Nested('deep')
+
+				expect(error.code).toBe('APP_ERROR')
+				expect(error.type).toBe('APP_ERROR')
+				expect(Object.hasOwn(error, 'code')).toBe(true)
+
+				const app = new Elysia().get('/', () => {
+					throw new Nested('deep')
+				})
+
+				await expect((await app.handle('/')).json()).resolves.toEqual({
+					type: 'APP_ERROR',
+					code: 'APP_ERROR',
+					title: 'Conflict',
+					detail: 'deep',
+					status: 409
+				})
+			})
+
+			// `type` moved from a writable prototype field to an accessor, so
+			// an assignment that used to land an own property has to keep
+			// landing one instead of throwing on a getter-only property
+			it('let an instance assign over the mirrored `type`', () => {
+				class Renamed extends HTTPError.id('RENAMED', 409) {}
+
+				const error = new Renamed()
+				;(error as { type: string }).type = 'OVERRIDDEN'
+
+				expect(error.type).toBe('OVERRIDDEN')
+				expect(Object.hasOwn(error, 'type')).toBe(true)
+				// the token it was made with is untouched
+				expect(error.code).toBe('RENAMED')
+			})
+
+			// A hand-written subclass names its own `type` and never had a
+			// token to split out — `typeBase` does not touch it and no `code`
+			// is invented for it
+			it('serve no `code` for a subclass naming its own `type`', async () => {
+				HTTPError.typeBase = 'https://example.com/errors'
+
+				const app = new Elysia().get('/', () => {
+					throw new OutOfCredit()
+				})
+
+				const body = await (await app.handle('/')).json()
+
+				expect(body).not.toHaveProperty('code')
+				expect(body.type).toBe('OUT_OF_CREDIT')
+			})
+		})
+
+		// The built-ins used to carry their slug on a private `problemType`
+		// lane with a hand-written `problemTitle` beside it. Both are gone:
+		// they speak the same `code`/`type` contract as an `HTTPError.id`
+		// class, and `title` is derived from the status like every other
+		// problem body
+		describe('built-in errors', () => {
+			afterEach(() => {
+				HTTPError.typeBase = undefined
+			})
+
+			// `type` is a prototype accessor now, and `ValidationError` writes
+			// its own `type` (the validation scope, not a problem type) from a
+			// constructor parameter property. That write only survives because
+			// the accessor has a setter — a getter-only mirror would make every
+			// ValidationError construction throw in strict mode
+			it('let a subclass assign its own `type` over the mirror', () => {
+				const error = new ValidationError('body', {}, [])
+
+				expect(error.type).toBe('body')
+				expect(Object.hasOwn(error, 'type')).toBe(true)
+				// the scope field is not a problem code
+				expect(error.code).toBeUndefined()
+			})
+
+			// A subclass that renames its `code` must retag with it, in both
+			// lanes — the mirror reads the instance, not a captured argument
+			it('retag `type` when a subclass overrides `code`', () => {
+				class MyNotFound extends NotFound {
+					override readonly code = 'my-not-found'
+				}
+				class Tagged extends HTTPError.id('APP_ERROR', 409) {}
+				class Renamed extends Tagged {
+					override readonly code = 'RENAMED'
+				}
+
+				expect(new MyNotFound().type).toBe('my-not-found')
+				expect((new Renamed('x') as { type?: string }).type).toBe(
+					'RENAMED'
+				)
+			})
+
+			it('carry the slug as an own enumerable `code`', () => {
+				for (const error of [
+					new NotFound(),
+					new ParseError(),
+					new InternalServerError(),
+					InvalidCookie.signature('a')
+				]) {
+					expect(Object.hasOwn(error, 'code')).toBe(true)
+					expect(
+						Object.getOwnPropertyDescriptor(error, 'code')
+							?.enumerable
+					).toBe(true)
+					expect(error).not.toHaveProperty('problemType')
+					expect(error).not.toHaveProperty('problemTitle')
+				}
+
+				expect(new NotFound().code).toBe('not-found')
+				expect(new ParseError().code).toBe('parse')
+				expect(new InternalServerError().code).toBe(
+					'internal-server-error'
+				)
+				expect(InvalidCookie.signature('a').code).toBe('invalid-cookie')
+			})
+
+			// The one body a maintainer should look twice at: `InvalidCookie`
+			// is the only built-in whose `problemTitle` said something the
+			// status doesn't, so it is the only one whose `title` moved. This
+			// conforms it to the `HTTPError.id` lane, which has never had a
+			// title annotation — RFC 9457 would rather see 'Invalid Cookie'
+			// here, so restoring a per-type title is a separate ruling and
+			// would have to serve both lanes, not four resurrected fields
+			it('derive `title` from the status, identity moving to `code`', async () => {
+				await expect(
+					InvalidCookie.signature('a').toResponse().json()
+				).resolves.toEqual({
+					type: 'invalid-cookie',
+					code: 'invalid-cookie',
+					// was 'Invalid Cookie' while `problemTitle` existed
+					title: 'Bad Request',
+					detail: '"a" has invalid cookie signature',
+					status: 400
+				})
+
+				// the same class at a different status takes that status's
+				// title, which a fixed `problemTitle` could never do
+				await expect(
+					(InvalidCookie.secret('a') as InvalidCookie)
+						.toResponse()
+						.json()
+				).resolves.toMatchObject({
+					code: 'invalid-cookie',
+					title: 'Internal Server Error',
+					status: 500
+				})
+			})
+
+			it('serve `code` beside a `type` that mirrors it', async () => {
+				const app = new Elysia()
+					.get('/not-found', () => {
+						throw new NotFound()
+					})
+					.get('/parse', () => {
+						throw new ParseError(new Error('bad json'))
+					})
+
+				await expect(
+					(await app.handle('/not-found')).json()
+				).resolves.toEqual({
+					type: 'not-found',
+					code: 'not-found',
+					// derived from the status, not from a `problemTitle`
+					title: 'Not Found',
+					status: 404
+				})
+
+				await expect(
+					(await app.handle('/parse')).json()
+				).resolves.toEqual({
+					type: 'parse',
+					code: 'parse',
+					title: 'Bad Request',
+					detail: 'bad json',
+					status: 400
+				})
+			})
+
+			// The whole point of the unification: one knob widens `type` for
+			// both lanes, and neither loses the token underneath
+			it('resolve `type` through `typeBase`', async () => {
+				HTTPError.typeBase = 'https://example.com/errors'
+
+				const app = new Elysia().get('/', () => {
+					throw new NotFound()
+				})
+
+				expect(new NotFound().type).toBe(
+					'https://example.com/errors/not-found'
+				)
+
+				await expect((await app.handle('/')).json()).resolves.toEqual({
+					type: 'https://example.com/errors/not-found',
+					code: 'not-found',
+					title: 'Not Found',
+					status: 404
+				})
+			})
+
+			// A built-in now claims a problem type, so an error hook returning
+			// a bare `problem()` adopts the built-in's tag the same way an
+			// `HTTPError.id` class's is adopted
+			it('adopt the built-in tag onto a hook problem body', async () => {
+				const app = new Elysia()
+					.error(({ error }) =>
+						error instanceof NotFound
+							? problem(404, { detail: 'nope' })
+							: undefined
+					)
+					.get('/', () => {
+						throw new NotFound()
+					})
+
+				await expect(
+					(await app.handle('/')).json()
+				).resolves.toMatchObject({
+					type: 'not-found',
+					code: 'not-found',
+					detail: 'nope'
+				})
+			})
 		})
 	})
 
@@ -1362,6 +1717,7 @@ describe('error fallback lanes', () => {
 		expect(response.headers.get('x-brew')).toBe('tea')
 		await expect(response.json()).resolves.toEqual({
 			type: 'TEAPOT',
+			code: 'TEAPOT',
 			title: "I'm a teapot",
 			detail: 'short and stout',
 			status: 418

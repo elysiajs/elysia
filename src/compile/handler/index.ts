@@ -473,8 +473,7 @@ export function buildNativeStaticResponse(
 			: nullObject()
 	})
 
-	if (mapped instanceof Response)
-		return staticPrimitiveType(mapped, handler)
+	if (mapped instanceof Response) return staticPrimitiveType(mapped, handler)
 }
 
 function toArray(name: string, hook: any) {

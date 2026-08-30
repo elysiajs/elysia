@@ -446,8 +446,7 @@ describe('HTTP and WebSocket lifecycle', () => {
 	it('sends an ElysiaError frame before a queued close and matches HTTP', async () => {
 		class Teapot extends ElysiaError {
 			status = 418 as any
-			problemType = 'teapot'
-			problemTitle = 'I am a teapot'
+			readonly code = 'teapot'
 			constructor() {
 				super('short and stout')
 			}
@@ -480,9 +479,12 @@ describe('HTTP and WebSocket lifecycle', () => {
 
 		expect(frames).toHaveLength(1)
 		expect(frames[0]).toBe(httpText)
+		// `code` is the slug, `type` mirrors it, and `title` is derived from the
+		// status now that `problemTitle` is gone
 		expect(JSON.parse(frames[0])).toEqual({
 			type: 'teapot',
-			title: 'I am a teapot',
+			code: 'teapot',
+			title: "I'm a teapot",
 			status: 418
 		})
 	})

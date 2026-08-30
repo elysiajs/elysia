@@ -1012,7 +1012,7 @@ export function compileHandlerJit({
 
 				code +=
 					`if(_r instanceof es){\n` +
-					`const _vr=va.response[_r.code]\n` +
+					`const _vr=va.response[_r.status]\n` +
 					`if(_vr)_r.response=${awaitStr}${encodeStatus}\n` +
 					`}else if(!(_r instanceof Response)` +
 					`&&!(_r instanceof ReadableStream)` +

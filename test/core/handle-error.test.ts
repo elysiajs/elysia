@@ -12,6 +12,7 @@ describe('Handle Error', () => {
 
 		await expect(res.json()).resolves.toEqual({
 			type: 'not-found',
+			code: 'not-found',
 			title: 'Not Found',
 			status: 404
 		})
@@ -28,6 +29,7 @@ describe('Handle Error', () => {
 
 		await expect(res.json()).resolves.toEqual({
 			type: 'internal-server-error',
+			code: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500
 		})
@@ -239,6 +241,7 @@ describe('Handle Error', () => {
 		expect(response.status).toEqual(404)
 		await expect(response.json()).resolves.toEqual({
 			type: 'not-found',
+			code: 'not-found',
 			title: 'Not Found',
 			status: 404,
 			detail: 'foo'

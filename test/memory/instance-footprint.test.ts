@@ -3,17 +3,6 @@ import { heapStats } from 'bun:jsc'
 
 import { Elysia } from '../../src'
 
-/**
- * Pins the bare `new Elysia()` heap footprint against JSC's property-storage
- * cliffs. Class fields consume JSC property storage, so the class stays cheap
- * only while the own-property count stays inside the current butterfly bucket.
- *
- * The steps are discrete and silent: +1 field past the bucket edge costs
- * +96 B on EVERY instance, and crossing the allocation-profile cliff costs
- * +352 B. Measured baseline is ~386 B/instance; the threshold below also
- * catches restoring the removed ~64 B program-id allocation while tolerating
- * minor engine drift.
- */
 describe('Elysia instance footprint', () => {
 	it('uses each app as its inherited program identity', () => {
 		const app = new Elysia()
@@ -23,7 +12,50 @@ describe('Elysia instance footprint', () => {
 		expect(app['~programId']).not.toBe(other['~programId'])
 		expect('~programId' in app).toBe(true)
 		expect(Object.hasOwn(app, '~programId')).toBe(false)
-		// TypeScript-private fields are enumerable; pin the initialized surface.
+		expect(Object.getOwnPropertyNames(app)).toEqual([
+			'~Prefix',
+			'hasPlugin',
+			'hasGlobal',
+			'ready',
+			'_pending',
+			'_error',
+			'hash',
+			'childrenHash',
+			'scopeParent',
+			'pluginMacros',
+			'macroBaseline',
+			'macroSnapshots',
+			'declaredRoutes',
+			'routeSources',
+			'compiled',
+			'jitColdRemaining',
+			'jitTable',
+			'jitRoute',
+			'jitStatic',
+			'jitAliases',
+			'routerBuilt',
+			'fetchFn',
+			'_handle',
+			'~config',
+			'~ext',
+			'~hookChain',
+			'~wsConfig',
+			'server',
+			'~router',
+			'~map',
+			'~routeTable',
+			'~hasWS',
+			'~hasDynamicWS',
+			'~hasTrace',
+			'~finalizeError',
+			'~aotFingerprint',
+			'~compilerSession',
+			'~generation',
+			'~introspect',
+			'~scopeChild',
+			'~scopeChildren'
+		])
+
 		expect(JSON.stringify(app)).toBe('{"_pending":0,"routerBuilt":false}')
 	})
 

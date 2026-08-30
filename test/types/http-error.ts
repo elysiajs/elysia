@@ -312,6 +312,49 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	expectTypeOf(new OutOfCredit().status).toEqualTypeOf<402>()
 }
 
+// `HTTPError.id`'s argument is the *code*: served as its own member and carried
+// through a subclass of the factory result, which is how an app builds its
+// hierarchy. `type` mirrors it statically — only the runtime `typeBase` widens
+// it, which no static type can see.
+{
+	class AppError extends HTTPError.id('APP_ERROR', 402) {
+		detail() {
+			return 'denied'
+		}
+	}
+
+	class Nested extends AppError {}
+
+	expectTypeOf(new AppError().code).toEqualTypeOf<'APP_ERROR'>()
+	expectTypeOf(new Nested().code).toEqualTypeOf<'APP_ERROR'>()
+
+	const app = new Elysia().get('/', () => new Nested())
+
+	type Response = (typeof app)['~Routes']['get']['response']
+
+	expectTypeOf<Response[402]['code']>().toEqualTypeOf<'APP_ERROR'>()
+	expectTypeOf<Response[402]['type']>().toEqualTypeOf<'APP_ERROR'>()
+}
+
+// A hand-written subclass names its own `type` and carries no token, so the
+// document it serves has no `code` member to read.
+{
+	class Manual extends HTTPError<'MANUAL'> {
+		type = 'MANUAL' as const
+		override readonly status = 402
+
+		detail() {
+			return 'manual'
+		}
+	}
+
+	const app = new Elysia().get('/', () => new Manual())
+
+	type Response = (typeof app)['~Routes']['get']['response']
+
+	expectTypeOf<Response[402]>().not.toHaveProperty('code')
+}
+
 // `HTTPError.id`'s second argument accepts a status name and resolves it to the same
 // numeric literal, both on the class annotation and the response key.
 {

@@ -274,6 +274,7 @@ describe('WebSocket self-describing errors', () => {
 
 		expect(JSON.parse(String(data))).toEqual({
 			type: 'OUT_OF_CREDIT',
+			code: 'OUT_OF_CREDIT',
 			title: 'Payment Required',
 			detail: 'Out of credit',
 			status: 402

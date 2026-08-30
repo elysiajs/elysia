@@ -51,10 +51,18 @@ export class ElysiaError<
 	status?: Status
 	response?: Response
 
-	/** RFC 9457 problem `type` slug (overridden per subclass) */
-	problemType = 'about:blank'
-	/** RFC 9457 problem `title` (overridden per subclass) */
-	problemTitle?: string
+	/**
+	 * Stable machine-readable token served in the `code` member, the same
+	 * contract a {@link HTTPError.id} class speaks (set per subclass)
+	 */
+	declare readonly code?: string
+
+	/**
+	 * RFC 9457 problem type served in the `type` member. Mirrors `code`, or
+	 * resolves to `<typeBase>/<code>` once {@link HTTPError.typeBase} is set.
+	 * Defined on the prototype below
+	 */
+	declare type?: string
 
 	constructor(message: string, cause?: Error) {
 		super(message)
@@ -63,21 +71,69 @@ export class ElysiaError<
 	}
 
 	toResponse(headers?: Record<string, any>) {
-		return problemResponse(
-			{
-				type: this.problemType,
-				title: this.problemTitle,
-				status: this.status ?? 500,
-				detail:
-					this.response !== undefined &&
-					this.response !== this.problemTitle
-						? this.response
-						: undefined
-			},
-			headers
-		)
+		return problemResponse(elysiaErrorProblem(this), headers)
 	}
 }
+
+/**
+ * `type` an error slug resolves to: the slug verbatim, or `<typeBase>/<slug>`
+ * once {@link HTTPError.typeBase} is set. Shared by `ElysiaError` and every
+ * class {@link HTTPError.id} makes, so both lanes derive `type` identically
+ */
+function problemTypeOf(code: string | undefined) {
+	if (code === undefined) return
+
+	const base = HTTPError.typeBase
+	if (!base) return code
+
+	return (base.endsWith('/') ? base : base + '/') + code
+}
+
+/**
+ * Problem members an `ElysiaError` serves. `title` is left to `problemBody`,
+ * which derives it from the status — so `response` is only worth serving as
+ * `detail` when it says something the title doesn't
+ */
+export function elysiaErrorProblem(error: ElysiaError): Problem {
+	const status = error.status ?? 500
+
+	return {
+		type: error.type ?? 'about:blank',
+		code: error.code,
+		status,
+		detail:
+			error.response !== undefined &&
+			error.response !== (StatusMapBack as Record<number, string>)[status]
+				? error.response
+				: undefined
+	}
+}
+
+/**
+ * Install the `type` mirror on an error prototype. Reads `code` off the
+ * instance so a subclass that renames its own `code` retags with it, and keeps
+ * `type` assignable — a value written onto an instance lands as an own
+ * property instead of throwing against a getter-only slot
+ */
+function defineProblemType(prototype: object) {
+	Object.defineProperty(prototype, 'type', {
+		get(this: { code?: string }) {
+			return problemTypeOf(this.code)
+		},
+		set(this: object, value: string) {
+			Object.defineProperty(this, 'type', {
+				value,
+				writable: true,
+				enumerable: true,
+				configurable: true
+			})
+		},
+		enumerable: true,
+		configurable: true
+	})
+}
+
+defineProblemType(ElysiaError.prototype)
 
 /**
  * Wrap a string into a TypeBox `error` callback that overrides the default
@@ -92,8 +148,7 @@ export const validationDetail =
 
 export class InternalServerError extends ElysiaError {
 	status = 500 as const
-	problemType = 'internal-server-error'
-	problemTitle = 'Internal Server Error'
+	readonly code = 'internal-server-error'
 
 	constructor(
 		public response = 'Internal Server Error',
@@ -105,8 +160,7 @@ export class InternalServerError extends ElysiaError {
 
 export class NotFound extends ElysiaError {
 	status = 404 as const
-	problemType = 'not-found'
-	problemTitle = 'Not Found'
+	readonly code = 'not-found'
 
 	constructor(public response = 'Not Found') {
 		super(response)
@@ -116,8 +170,7 @@ export class NotFound extends ElysiaError {
 export class ParseError extends ElysiaError {
 	status = 400 as const
 	response = 'Bad Request'
-	problemType = 'parse'
-	problemTitle = 'Bad Request'
+	readonly code = 'parse'
 
 	constructor(cause?: Error) {
 		super('Bad Request', cause)
@@ -126,11 +179,11 @@ export class ParseError extends ElysiaError {
 	toResponse(headers?: Record<string, any>) {
 		const cause = this.cause as Error | undefined
 
+		// the parse cause is the detail, replacing the `response` the base
+		// would have served
 		return problemResponse(
 			{
-				type: this.problemType,
-				title: this.problemTitle,
-				status: 400,
+				...elysiaErrorProblem(this),
 				detail:
 					!isProduction() && cause?.message != null
 						? String(cause.message)
@@ -775,7 +828,16 @@ export class ElysiaStatus<
 		? StatusMap[Code]
 		: Code = Code extends keyof StatusMap ? StatusMap[Code] : Code
 > {
-	code: Status
+	/**
+	 * Type-only brand, erased at runtime.
+	 *
+	 * `status` + `response` is a shape a handler may write by hand, so without
+	 * a nominal marker a plain `{ status, response }` literal would be
+	 * absorbed as a status box by response inference
+	 */
+	declare readonly ['~status']: true
+
+	status: Status
 	response!: T
 	headers?: Record<string, string>
 
@@ -786,16 +848,12 @@ export class ElysiaStatus<
 				? StatusMapBack[code as keyof StatusMapBack]
 				: code)
 
-		this.code = (StatusMap[code as keyof StatusMap] as Status) ?? code
+		this.status = (StatusMap[code as keyof StatusMap] as Status) ?? code
 
-		if (!emptyHttpStatus.has(this.code as number))
+		if (!emptyHttpStatus.has(this.status as number))
 			this.response = response as T
 
 		this.headers = headers
-	}
-
-	get status() {
-		return this.code as unknown as number
 	}
 }
 
@@ -822,6 +880,14 @@ export type Problem<
 > = {
 	/** URI (or slug) identifying the problem type. @default 'about:blank' */
 	type?: string
+
+	/**
+	 * Extension member carrying a stable machine-readable token.
+	 *
+	 * `type` may be widened to a URI by {@link HTTPError.typeBase}, `code`
+	 * never is
+	 */
+	code?: string
 
 	/** Short, human-readable summary of the problem type */
 	title?: string
@@ -1028,7 +1094,7 @@ export type TaggedHTTPError<Type extends string, Annotation = {}> = {
 	new (
 		message?: string,
 		options?: ErrorOptions
-	): HTTPError<Type> & { type: Type } & Annotation
+	): HTTPError<Type> & { type: Type; readonly code: Type } & Annotation
 	prototype: HTTPError<Type>
 }
 
@@ -1095,8 +1161,41 @@ export abstract class HTTPError<
 	/**
 	 * RFC 9457 problem type served in the `type` member, a URI or a slug.
 	 * Doubles as the tag that discriminates one error class from another
+	 *
+	 * On a {@link HTTPError.id} class this mirrors `code`, or resolves to
+	 * `<typeBase>/<code>` once {@link HTTPError.typeBase} is set
 	 */
 	abstract type: T
+
+	/**
+	 * Stable machine-readable token served in the `code` member, set by
+	 * {@link HTTPError.id} to its first argument
+	 *
+	 * Unlike `type` it is never widened to a URI, so it stays the value to
+	 * dispatch on
+	 */
+	declare readonly code?: string
+
+	/**
+	 * Absolute base for the RFC 9457 `type` URI, applied to every class made
+	 * by {@link HTTPError.id} and to every built-in `ElysiaError`
+	 * (`NotFound`, `ParseError`, …) — both derive `type` from the same slug
+	 *
+	 * Unset, `type` mirrors `code` verbatim. Set, `type` resolves to
+	 * `<typeBase>/<code>` with the code carried through as written — no
+	 * casing or separator rewrite — while `code` keeps serving the bare token
+	 *
+	 * @example
+	 * ```ts
+	 * HTTPError.typeBase = 'https://example.com/errors'
+	 *
+	 * class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {}
+	 * // → { type: 'https://example.com/errors/OUT_OF_CREDIT',
+	 * //     code: 'OUT_OF_CREDIT', … }
+	 * ```
+	 */
+	// eslint-disable-next-line sonarjs/public-static-readonly -- the knob is set by the app at boot
+	static typeBase?: string
 
 	/**
 	 * HTTP status served when the error reaches the error pipeline,
@@ -1123,9 +1222,10 @@ export abstract class HTTPError<
 	detail?(): MaybePromise<unknown>
 
 	/**
-	 * Create a concrete `HTTPError` subclass carrying `type`
+	 * Create a concrete `HTTPError` subclass carrying `code`, mirrored into
+	 * `type` unless {@link HTTPError.typeBase} is set
 	 *
-	 * `type` carries no status annotation, annotate `status` in the subclass
+	 * `code` carries no status annotation, annotate `status` in the subclass
 	 * body as a number or a status name
 	 *
 	 * @example
@@ -1137,10 +1237,10 @@ export abstract class HTTPError<
 	 * }
 	 * ```
 	 */
-	static id<const Type extends string>(type: Type): TaggedHTTPError<Type>
+	static id<const Type extends string>(code: Type): TaggedHTTPError<Type>
 
 	/**
-	 * Create a concrete `HTTPError` subclass carrying `type`, annotated with
+	 * Create a concrete `HTTPError` subclass carrying `code`, annotated with
 	 * `status` as a number or a status name
 	 *
 	 * Annotate what is served with `detail()` (problem `detail` member) or
@@ -1149,7 +1249,7 @@ export abstract class HTTPError<
 	 * @example
 	 * ```ts
 	 * class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {}
-	 * class Denied extends HTTPError.id('https://example.com/denied', 'Payment Required') {
+	 * class Denied extends HTTPError.id('DENIED', 'Payment Required') {
 	 *     async detail() {
 	 *         return await describeBalance()
 	 *     }
@@ -1160,7 +1260,7 @@ export abstract class HTTPError<
 		const Type extends string,
 		const S extends number | keyof StatusMap
 	>(
-		type: Type,
+		code: Type,
 		status: S
 	): TaggedHTTPError<
 		Type,
@@ -1168,20 +1268,25 @@ export abstract class HTTPError<
 	>
 
 	static id<const Type extends string>(
-		type: Type,
+		code: Type,
 		status?: number | keyof StatusMap
 	): TaggedHTTPError<Type> {
 		const Tagged = class extends HTTPError<string> {
 			declare type: Type
 			declare status?: number
 			declare readonly headers?: Record<string, string>
+
+			// own + enumerable, so `code` survives plain enumeration and
+			// `JSON.stringify` of the instance the way `err.code` is expected to
+			readonly code = code
 		}
 
-		Tagged.prototype.type = type
-		Tagged.prototype.name = type
+		defineProblemType(Tagged.prototype)
+
+		Tagged.prototype.name = code
 
 		Object.defineProperty(Tagged, 'name', {
-			value: type,
+			value: code,
 			configurable: true
 		})
 
