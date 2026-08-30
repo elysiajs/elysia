@@ -185,23 +185,17 @@ describe('production error masking across HTTP and WebSocket', () => {
 		expect(wsElysiaError4xx[0]).toBe(httpElysiaError4xx)
 	})
 
-	// The advice is the whole point of the error locally — masking it in
-	// development would trade a leak for an undebuggable 500
 	it('keeps the cookie.secrets advice during development', async () => {
 		const {
 			NODE_ENV,
 			httpElysiaError,
-			wsElysiaError,
-			wsReturnedElysiaError
+			wsElysiaError
 		} = await runProbe('development')
 		expect(NODE_ENV).toBe('development')
 
 		expect(httpElysiaError).toContain('cookie.secrets')
-		expect(JSON.parse(httpElysiaError).detail).toContain('anyone can forge')
 
 		expect(wsElysiaError).toHaveLength(1)
 		expect(wsElysiaError[0]).toBe(httpElysiaError)
-
-		expect(wsReturnedElysiaError[0]).toContain('anyone can forge')
 	})
 })

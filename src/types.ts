@@ -1951,7 +1951,7 @@ type ErrorProblemType<E> =
 		: 'about:blank'
 
 /**
- * `code` extension member an error contributes — a class made by
+ * `code` extension member an error contributes a class made by
  * `HTTPError.id`, or a built-in `ElysiaError`. `type` may be widened to a URI
  * by `HTTPError.typeBase`, `code` never is
  */
