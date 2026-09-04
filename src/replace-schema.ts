@@ -217,6 +217,49 @@ export const queryCoercions = () => {
 				from: t.Array(t.Any()),
 				to: (schema) => t.ArrayQuery(schema.items ?? t.Any(), schema),
 			},
+			{
+				// A union mixing an array variant with a plain string variant
+				// (e.g. `t.Union([t.Array(t.String()), t.String()])` in a query)
+				// must keep scalar values as strings. After the array→ArrayQuery
+				// replacement above, the ArrayQuery transform sits FIRST and its
+				// Check matches scalars too, so Union.Decode never reaches the
+				// string variant and wraps every scalar into a 1-element array
+				// (#1028). Reorder so the string variant is checked first; arrays
+				// still fall through to the ArrayQuery branch. Unions without an
+				// (already-replaced) ArrayQuery + String shape are returned as-is.
+				// `from` needs Kind 'Union' to match union nodes. NOTE: TypeBox
+				// collapses single-member unions to the member itself (Kind
+				// 'String'), so the probe union needs 2 members to survive as
+				// Kind 'Union'; the shape check happens in `to`.
+				from: t.Union([t.String(), t.Number()]),
+				to: (schema) => {
+					const variants = (schema as { anyOf?: TSchema[] }).anyOf;
+					if (!variants || variants.length < 2) return schema;
+
+					const arrayIndex = variants.findIndex((v) => v.elysiaMeta === "ArrayQuery");
+					if (arrayIndex === -1) return schema;
+
+					const stringIndex = variants.findIndex(
+						(v, i) => i !== arrayIndex && (v as { type?: string }).type === "string" && !v.elysiaMeta,
+					);
+					if (stringIndex === -1) return schema;
+
+					// Only reorder when the ArrayQuery variant sits BEFORE the
+					// string variant — the shape that makes Union.Decode take the
+					// transform and wrap scalars. If the user already declared the
+					// string variant first, leave the order alone: swapping would
+					// REGRESS that shape by moving the transform in front
+					// (CodeRabbit caught this on #1988).
+					if (arrayIndex < stringIndex) {
+						const reordered = [...variants];
+						reordered[arrayIndex] = variants[stringIndex];
+						reordered[stringIndex] = variants[arrayIndex];
+						return { ...schema, anyOf: reordered };
+					}
+
+					return schema;
+				},
+			},
 		] satisfies ReplaceSchemaTypeOptions[];
 	}
 
