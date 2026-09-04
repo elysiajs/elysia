@@ -1,55 +1,53 @@
-import { Elysia, InternalServerError, NotFoundError, status, t } from '../../src'
+import { Elysia, InternalServerError, NotFound, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
-
-const request = new Request('http://localhost:8080')
 
 describe('Handle Error', () => {
 	it('handle NOT_FOUND', async () => {
 		const res = await new Elysia()
-			.get('/', () => 'Hi')
-			// @ts-expect-error private
-			.handleError(
-				{
-					request,
-					set: {
-						headers: {}
-					}
-				},
-				new NotFoundError()
-			)
+			.get('/', () => {
+				throw new NotFound()
+			})
+			.handle('/')
 
-		expect(await res.text()).toBe('NOT_FOUND')
+		await expect(res.json()).resolves.toEqual({
+			type: 'not-found',
+			code: 'not-found',
+			title: 'Not Found',
+			status: 404
+		})
 		expect(res.status).toBe(404)
+		expect(res.headers.get('content-type')).toBe('application/problem+json')
 	})
 
 	it('handle INTERNAL_SERVER_ERROR', async () => {
 		const res = await new Elysia()
-			.get('/', () => 'Hi')
-			// @ts-expect-error private
-			.handleError(
-				{
-					request,
-					set: {
-						headers: {}
-					}
-				},
-				new InternalServerError()
-			)
+			.get('/', () => {
+				throw new InternalServerError()
+			})
+			.handle('/')
 
-		expect(await res.text()).toBe('INTERNAL_SERVER_ERROR')
+		await expect(res.json()).resolves.toEqual({
+			type: 'internal-server-error',
+			code: 'internal-server-error',
+			title: 'Internal Server Error',
+			status: 500
+		})
 		expect(res.status).toBe(500)
 	})
 
 	it('handle VALIDATION', async () => {
 		const res = await new Elysia()
-			.get('/', () => 'Hi', {
-				query: t.Object({
-					name: t.String()
-				})
-			})
-			.handle(req('/'))
+			.get(
+				'/',
+				{
+					query: t.Object({
+						name: t.String()
+					})
+				},
+				() => 'Hi'
+			)
+			.handle('/')
 
 		expect(res.status).toBe(422)
 	})
@@ -57,28 +55,28 @@ describe('Handle Error', () => {
 	it('use custom error', async () => {
 		const res = await new Elysia()
 			.get('/', () => 'Hi')
-			.onError(({ code }) => {
-				if (code === 'NOT_FOUND')
+			.error(({ error }) => {
+				if (error instanceof NotFound)
 					return new Response("I'm a teapot", {
 						status: 418
 					})
 			})
-			.handle(req('/not-found'))
+			.handle('/not-found')
 
-		expect(await res.text()).toBe("I'm a teapot")
+		await expect(res.text()).resolves.toBe("I'm a teapot")
 		expect(res.status).toBe(418)
 	})
 
 	it('inject headers to error', async () => {
 		const app = new Elysia()
-			.onRequest(({ set }) => {
+			.request(({ set }) => {
 				set.headers['Access-Control-Allow-Origin'] = '*'
 			})
 			.get('/', () => {
-				throw new NotFoundError()
+				throw new NotFound()
 			})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*')
 		expect(res.status).toBe(404)
@@ -86,18 +84,18 @@ describe('Handle Error', () => {
 
 	it('transform any to error', async () => {
 		const app = new Elysia()
-			.onError(async ({ set }) => {
+			.error(async ({ set }) => {
 				set.status = 418
 
 				return 'aw man'
 			})
 			.get('/', () => {
-				throw new NotFoundError()
+				throw new NotFound()
 			})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
-		expect(await res.text()).toBe('aw man')
+		await expect(res.text()).resolves.toBe('aw man')
 		expect(res.status).toBe(418)
 	})
 
@@ -107,16 +105,16 @@ describe('Handle Error', () => {
 				.get('/inner', () => {
 					throw new Error('A')
 				})
-				.onError(() => {
+				.error(() => {
 					return 'handled'
 				})
 		)
 
 		const app = new Elysia().use(authenticate)
 
-		const response = await app.handle(req('/group/inner'))
+		const response = await app.handle('/group/inner')
 
-		expect(await response.text()).toEqual('handled')
+		await expect(response.text()).resolves.toEqual('handled')
 		expect(response.status).toEqual(500)
 	})
 
@@ -128,16 +126,16 @@ describe('Handle Error', () => {
 
 					throw new Error('A')
 				})
-				.onError(() => {
+				.error(() => {
 					return 'handled'
 				})
 		)
 
 		const app = new Elysia().use(authenticate)
 
-		const response = await app.handle(req('/group/inner'))
+		const response = await app.handle('/group/inner')
 
-		expect(await response.text()).toEqual('handled')
+		await expect(response.text()).resolves.toEqual('handled')
 		expect(response.status).toEqual(418)
 	})
 
@@ -146,9 +144,9 @@ describe('Handle Error', () => {
 			throw status(404, 'Not Found :(')
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
-		expect(await response.text()).toEqual('Not Found :(')
+		await expect(response.text()).resolves.toEqual('Not Found :(')
 		expect(response.status).toEqual(404)
 	})
 
@@ -157,9 +155,9 @@ describe('Handle Error', () => {
 			throw status(404, 'Not Found :(')
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
-		expect(await response.text()).toEqual('Not Found :(')
+		await expect(response.text()).resolves.toEqual('Not Found :(')
 		expect(response.status).toEqual(404)
 	})
 
@@ -184,21 +182,21 @@ describe('Handle Error', () => {
 			}
 		}
 
-		const errors = new Elysia()
-			.error({ APIError })
-			.onError({ as: 'global' }, ({ code }) => {
-				return code
-			})
+		const errors = new Elysia().error(
+			'global',
+			APIError,
+			({ error }) => error.name
+		)
 
 		const requestHandler = new Elysia()
-			.onTransform(() => {
+			.transform(() => {
 				throw new APIError(403, 'Not authorized')
 			})
 			.get('/', () => 'a')
 
 		const app = new Elysia().use(errors).use(requestHandler)
 
-		expect(await app.handle(req('/')).then((req) => req.text())).toBe(
+		await expect(app.handle('/').then((req) => req.text())).resolves.toBe(
 			'APIError'
 		)
 	})
@@ -223,52 +221,43 @@ describe('Handle Error', () => {
 	})
 
 	it('handle error in Transform', async () => {
-		const route = new Elysia().get('/', ({ query: { aid } }) => aid, {
-			query: t.Object({
-				aid: t
-					.Transform(t.String())
-					.Decode((value) => {
-						throw new NotFoundError('foo')
-					})
-					.Encode((value) => `1`)
-			})
+		const route = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					aid: t
+						.Codec(t.String())
+						.Decode((value) => {
+							throw new NotFound('foo')
+						})
+						.Encode((value) => `1`)
+				})
+			},
+			({ query: { aid } }) => aid
+		)
+
+		const response = await new Elysia().use(route).handle('/?aid=a')
+
+		expect(response.status).toEqual(404)
+		await expect(response.json()).resolves.toEqual({
+			type: 'not-found',
+			code: 'not-found',
+			title: 'Not Found',
+			status: 404,
+			detail: 'foo'
 		})
-
-		let response = await new Elysia({ aot: false })
-			.use(route)
-			.handle(req('/?aid=a'))
-
-		expect(response.status).toEqual(404)
-		expect(await response.text()).toEqual('foo')
-
-		response = await new Elysia({ aot: true })
-			.use(route)
-			.handle(req('/?aid=a'))
-		expect(response.status).toEqual(404)
-		expect(await response.text()).toEqual('foo')
 	})
 
 	it('map status error to response', async () => {
 		const value = { message: 'meow!' }
 
-		const response: Response = await new Elysia()
-			.get('/', () => 'Hello', {
-				beforeHandle({ status }) {
-					throw status("I'm a teapot", { message: 'meow!' })
-				}
+		const response = await new Elysia()
+			.get('/', ({ status }) => {
+				throw status(422, value)
 			})
-			// @ts-expect-error private property
-			.handleError(
-				{
-					request: new Request('http://localhost/'),
-					set: {
-						headers: {}
-					}
-				},
-				status(422, value) as any
-			)
+			.handle('/')
 
-		expect(await response.json()).toEqual(value)
+		await expect(response.json()).resolves.toEqual(value)
 		expect(response.headers.get('content-type')).toStartWith(
 			'application/json'
 		)
@@ -278,7 +267,7 @@ describe('Handle Error', () => {
 	it('map status error with custom mapResponse', async () => {
 		const value = { message: 'meow!' }
 
-		const response: Response = await new Elysia()
+		const response = await new Elysia()
 			.mapResponse(({ responseValue }) => {
 				if (typeof responseValue === 'object')
 					return new Response('Don Quixote', {
@@ -287,43 +276,30 @@ describe('Handle Error', () => {
 						}
 					})
 			})
-			.get('/', () => 'Hello', {
-				beforeHandle({ status }) {
-					throw status("I'm a teapot", { message: 'meow!' })
-				}
+			.get('/', ({ status }) => {
+				throw status(422, value)
 			})
-			// @ts-expect-error private property
-			.handleError(
-				{
-					request: new Request('http://localhost/'),
-					set: {
-						headers: {}
-					}
-				},
-				status(422, value) as any
-			)
+			.handle('/')
 
-		expect(await response.text()).toBe('Don Quixote')
+		await expect(response.text()).resolves.toBe('Don Quixote')
 		expect(response.headers.get('content-type')).toStartWith('text/plain')
 		expect(response.status).toEqual(422)
 	})
 
 	it('handle generic error', async () => {
 		const res = await new Elysia()
-			.get('/', () => 'Hi')
-			// @ts-expect-error private
-			.handleError(
-				{
-					request,
-					set: {
-						headers: {}
-					}
-				},
+			.get('/', () => {
 				// https://youtube.com/shorts/PbIWVPKHfrQ
-				new Error('a')
-			)
+				throw new Error('a')
+			})
+			.handle('/')
 
-		expect(await res.text()).toBe('a')
+		await expect(res.json()).resolves.toMatchObject({
+			type: 'internal-server-error',
+			title: 'Internal Server Error',
+			status: 500,
+			detail: 'a'
+		})
 		expect(res.status).toBe(500)
 	})
 
@@ -332,9 +308,14 @@ describe('Handle Error', () => {
 			throw new Error('a')
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
-		expect(await res.text()).toBe('a')
+		await expect(res.json()).resolves.toMatchObject({
+			type: 'internal-server-error',
+			title: 'Internal Server Error',
+			status: 500,
+			detail: 'a'
+		})
 		expect(res.status).toBe(500)
 	})
 
@@ -349,9 +330,9 @@ describe('Handle Error', () => {
 			return new ErrorA()
 		})
 
-		const res = await app.handle(req('/A'))
+		const res = await app.handle('/A')
 
-		expect(await res.json()).toEqual({ error: 'hello' })
+		await expect(res.json()).resolves.toEqual({ error: 'hello' })
 		expect(res.status).toBe(418)
 	})
 
@@ -366,10 +347,32 @@ describe('Handle Error', () => {
 			throw new ErrorA()
 		})
 
-		const res = await app.handle(req('/A'))
+		const res = await app.handle('/A')
 
-		expect(await res.json()).toEqual({ error: 'hello' })
+		await expect(res.json()).resolves.toEqual({ error: 'hello' })
 		expect(res.status).toBe(418)
+	})
+
+	it('passes through a matching toResponse() Response by reference', async () => {
+		const original = Response.json({ error: 'hello' }, { status: 418 })
+
+		class ErrorA extends Error {
+			status = 418
+
+			toResponse() {
+				return original
+			}
+		}
+
+		const app = new Elysia().get('/', () => {
+			throw new ErrorA()
+		})
+
+		const res = await app.handle('/')
+
+		expect(res).toBe(original)
+		expect(res.status).toBe(418)
+		await expect(res.json()).resolves.toEqual({ error: 'hello' })
 	})
 
 	it('handle non-Error with toResponse() when returned', async () => {
@@ -383,9 +386,9 @@ describe('Handle Error', () => {
 			return new ErrorB()
 		})
 
-		const res = await app.handle(req('/B'))
+		const res = await app.handle('/B')
 
-		expect(await res.json()).toEqual({ error: 'hello' })
+		await expect(res.json()).resolves.toEqual({ error: 'hello' })
 		expect(res.status).toBe(418)
 	})
 
@@ -400,9 +403,9 @@ describe('Handle Error', () => {
 			throw new ErrorB()
 		})
 
-		const res = await app.handle(req('/B'))
+		const res = await app.handle('/B')
 
-		expect(await res.json()).toEqual({ error: 'hello' })
+		await expect(res.json()).resolves.toEqual({ error: 'hello' })
 		expect(res.status).toBe(418)
 	})
 
@@ -426,9 +429,9 @@ describe('Handle Error', () => {
 			throw new ErrorWithHeaders()
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
-		expect(await res.json()).toEqual({ error: 'custom error' })
+		await expect(res.json()).resolves.toEqual({ error: 'custom error' })
 		expect(res.status).toBe(418)
 		expect(res.headers.get('X-Custom-Header')).toBe('custom-value')
 	})
@@ -437,7 +440,7 @@ describe('Handle Error', () => {
 		class AsyncError extends Error {
 			async toResponse() {
 				// Simulate async operation
-				await new Promise(resolve => setTimeout(resolve, 10))
+				await new Promise((resolve) => setTimeout(resolve, 10))
 				return Response.json({ error: 'async error' }, { status: 418 })
 			}
 		}
@@ -446,9 +449,9 @@ describe('Handle Error', () => {
 			throw new AsyncError()
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
-		expect(await res.json()).toEqual({ error: 'async error' })
+		await expect(res.json()).resolves.toEqual({ error: 'async error' })
 		expect(res.status).toBe(418)
 	})
 
@@ -456,7 +459,7 @@ describe('Handle Error', () => {
 		class AsyncError extends Error {
 			async toResponse() {
 				// Simulate async operation
-				await new Promise(resolve => setTimeout(resolve, 10))
+				await new Promise((resolve) => setTimeout(resolve, 10))
 				return Response.json({ error: 'async error' }, { status: 418 })
 			}
 		}
@@ -465,16 +468,16 @@ describe('Handle Error', () => {
 			return new AsyncError()
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
-		expect(await res.json()).toEqual({ error: 'async error' })
+		await expect(res.json()).resolves.toEqual({ error: 'async error' })
 		expect(res.status).toBe(418)
 	})
 
 	it('handle async toResponse() with custom headers', async () => {
 		class AsyncErrorWithHeaders extends Error {
 			async toResponse() {
-				await new Promise(resolve => setTimeout(resolve, 10))
+				await new Promise((resolve) => setTimeout(resolve, 10))
 				return Response.json(
 					{ error: 'async with headers' },
 					{
@@ -491,9 +494,11 @@ describe('Handle Error', () => {
 			throw new AsyncErrorWithHeaders()
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
-		expect(await res.json()).toEqual({ error: 'async with headers' })
+		await expect(res.json()).resolves.toEqual({
+			error: 'async with headers'
+		})
 		expect(res.status).toBe(419)
 		expect(res.headers.get('X-Async-Header')).toBe('async-value')
 	})
@@ -501,8 +506,11 @@ describe('Handle Error', () => {
 	it('handle non-Error with async toResponse()', async () => {
 		class AsyncNonError {
 			async toResponse() {
-				await new Promise(resolve => setTimeout(resolve, 10))
-				return Response.json({ error: 'non-error async' }, { status: 418 })
+				await new Promise((resolve) => setTimeout(resolve, 10))
+				return Response.json(
+					{ error: 'non-error async' },
+					{ status: 418 }
+				)
 			}
 		}
 
@@ -510,9 +518,9 @@ describe('Handle Error', () => {
 			throw new AsyncNonError()
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
-		expect(await res.json()).toEqual({ error: 'non-error async' })
+		await expect(res.json()).resolves.toEqual({ error: 'non-error async' })
 		expect(res.status).toBe(418)
 	})
 
@@ -527,10 +535,15 @@ describe('Handle Error', () => {
 			throw new BrokenError('original error')
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(500)
-		expect(await res.text()).toBe('original error')
+		await expect(res.json()).resolves.toMatchObject({
+			type: 'internal-server-error',
+			title: 'Internal Server Error',
+			status: 500,
+			detail: 'original error'
+		})
 	})
 
 	it('handle async toResponse() that throws an error', async () => {
@@ -544,10 +557,82 @@ describe('Handle Error', () => {
 			throw new BrokenAsyncError('original error')
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(500)
-		expect(await res.text()).toBe('original error')
+		await expect(res.json()).resolves.toMatchObject({
+			type: 'internal-server-error',
+			title: 'Internal Server Error',
+			status: 500,
+			detail: 'original error'
+		})
+	})
+
+	it('compiled tail awaits async toResponse() when thrown', async () => {
+		class AsyncError extends Error {
+			status = 503
+
+			async toResponse() {
+				await new Promise((resolve) => setTimeout(resolve, 10))
+				return new Response('custom', { status: 503 })
+			}
+		}
+
+		const app = new Elysia()
+			.error(() => {})
+			.get('/', () => {
+				throw new AsyncError('boom')
+			})
+
+		const res = await app.handle('/')
+
+		expect(res.status).toBe(503)
+		await expect(res.text()).resolves.toBe('custom')
+	})
+
+	it('compiled tail keeps sync toResponse() Response fast path', async () => {
+		class SyncError extends Error {
+			status = 502
+
+			toResponse() {
+				return new Response('custom-sync', { status: 502 })
+			}
+		}
+
+		const app = new Elysia()
+			.error(() => {})
+			.get('/', () => {
+				throw new SyncError('boom')
+			})
+
+		const res = await app.handle('/')
+
+		expect(res.status).toBe(502)
+		await expect(res.text()).resolves.toBe('custom-sync')
+	})
+
+	it('compiled tail falls back when async toResponse() rejects', async () => {
+		class BrokenAsyncError extends Error {
+			async toResponse() {
+				throw new Error('async toResponse failed')
+			}
+		}
+
+		const app = new Elysia()
+			.error(() => {})
+			.get('/', () => {
+				throw new BrokenAsyncError('original error')
+			})
+
+		const res = await app.handle('/')
+
+		expect(res.status).toBe(500)
+		await expect(res.json()).resolves.toMatchObject({
+			type: 'internal-server-error',
+			title: 'Internal Server Error',
+			status: 500,
+			detail: 'original error'
+		})
 	})
 
 	it('send set-cookie header when error is thrown', async () => {
@@ -556,29 +641,38 @@ describe('Handle Error', () => {
 			throw new Error('test error')
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(500)
-		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
+		expect(res.headers.get('set-cookie')).toContain(
+			'session=test-session-id'
+		)
 	})
 
 	it('send set-cookie header when response validation error occurs', async () => {
-		const app = new Elysia().get('/', ({ cookie }) => {
-			cookie.session.value = 'test-session-id'
-			return 'invalid response'
-		}, {
-			response: t.Number()
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				response: t.Number()
+			},
+			// @ts-expect-error response is intentionally invalid
+			({ cookie }) => {
+				cookie.session.value = 'test-session-id'
+				return 'invalid response'
+			}
+		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
-		expect(res.status).toBe(422)
-		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
+		expect(res.status).toBe(500)
+		expect(res.headers.get('set-cookie')).toContain(
+			'session=test-session-id'
+		)
 	})
 
 	it('send set-cookie header when error is thrown with onError hook', async () => {
 		const app = new Elysia()
-			.onError(({ error }) => {
+			.error(({ error }) => {
 				return error.message
 			})
 			.get('/', ({ cookie }) => {
@@ -586,23 +680,27 @@ describe('Handle Error', () => {
 				throw new Error('custom error')
 			})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(500)
-		expect(await res.text()).toBe('custom error')
-		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
+		await expect(res.text()).resolves.toBe('custom error')
+		expect(res.headers.get('set-cookie')).toContain(
+			'session=test-session-id'
+		)
 	})
 
 	it('send set-cookie header when NotFoundError is thrown', async () => {
 		const app = new Elysia().get('/', ({ cookie }) => {
 			cookie.session.value = 'test-session-id'
-			throw new NotFoundError()
+			throw new NotFound()
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(404)
-		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
+		expect(res.headers.get('set-cookie')).toContain(
+			'session=test-session-id'
+		)
 	})
 
 	it('send set-cookie header when InternalServerError is thrown', async () => {
@@ -611,22 +709,12 @@ describe('Handle Error', () => {
 			throw new InternalServerError()
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(500)
-		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
-	})
-
-	it('send set-cookie header in AOT mode when error is thrown', async () => {
-		const app = new Elysia({ aot: true }).get('/', ({ cookie }) => {
-			cookie.session.value = 'test-session-id'
-			throw new Error('test error')
-		})
-
-		const res = await app.handle(req('/'))
-
-		expect(res.status).toBe(500)
-		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
+		expect(res.headers.get('set-cookie')).toContain(
+			'session=test-session-id'
+		)
 	})
 
 	it('preserve multiple cookies when error is thrown', async () => {
@@ -636,7 +724,7 @@ describe('Handle Error', () => {
 			throw new Error('test error')
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(500)
 		const setCookie = res.headers.get('set-cookie')
@@ -651,9 +739,57 @@ describe('Handle Error', () => {
 			throw new Error('test error')
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
-		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
+		expect(res.headers.get('set-cookie')).toContain(
+			'session=test-session-id'
+		)
 		expect(res.headers.get('x-custom')).toBe('value')
+	})
+
+	// Nullish thrown values must reach the generic 500 response.
+	it('handle thrown nullish value', async () => {
+		const logged: unknown[] = []
+		const error = console.error
+		console.error = (...parameter: unknown[]) => {
+			logged.push(parameter[0])
+		}
+
+		try {
+			for (const thrown of [null, undefined])
+				for (const withHook of [false, true]) {
+					let app = new Elysia()
+
+					if (withHook)
+						app = app.error(({ set }) => {
+							set.headers['x-error-hook'] = 'declined'
+						}) as typeof app
+
+					const res = await app
+						.get('/', () => {
+							throw thrown
+						})
+						.handle('/')
+
+					expect(res.status).toBe(500)
+					expect(res.headers.get('content-type')).toBe(
+						'application/problem+json'
+					)
+					await expect(res.json()).resolves.toEqual({
+						type: 'internal-server-error',
+						code: 'internal-server-error',
+						title: 'Internal Server Error',
+						status: 500
+					})
+
+					if (withHook)
+						expect(res.headers.get('x-error-hook')).toBe('declined')
+				}
+		} finally {
+			console.error = error
+		}
+
+		// No fallback error was logged.
+		expect(logged).toEqual([])
 	})
 })

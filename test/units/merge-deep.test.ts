@@ -2,7 +2,6 @@ import { describe, expect, it } from 'bun:test'
 
 import { Elysia } from '../../src'
 import { mergeDeep } from '../../src/utils'
-import { req } from '../utils'
 
 describe('mergeDeep', () => {
 	it('merge empty object', () => {
@@ -14,6 +13,18 @@ describe('mergeDeep', () => {
 		const result = mergeDeep({ key1: 'value1' }, { key2: 'value2' })
 
 		expect(result).toEqual({ key1: 'value1', key2: 'value2' })
+	})
+
+	it('merges arrays target-first without leaking into a shared source', () => {
+		// Route macros may reuse the same source object.
+		const source = { lifecycle: ['plugin', 'route'] }
+
+		const a = mergeDeep({ lifecycle: ['a'] }, source, undefined, true, true)
+		const b = mergeDeep({ lifecycle: ['b'] }, source, undefined, true, true)
+
+		expect(a.lifecycle).toEqual(['a', 'plugin', 'route'])
+		expect(b.lifecycle).toEqual(['b', 'plugin', 'route'])
+		expect(source.lifecycle).toEqual(['plugin', 'route'])
 	})
 
 	it('merge overlapping key', () => {
@@ -76,7 +87,7 @@ describe('mergeDeep', () => {
 			.use(userRoutes)
 			.get('/health', ({ db }) => db.health())
 
-		const response = await app.handle(req('/health')).then((x) => x.text())
+		const response = await app.handle('/health').then((x) => x.text())
 
 		expect(response).toBe('ok')
 	})
@@ -136,7 +147,7 @@ describe('mergeDeep', () => {
 
 		const Plugin = new Elysia({ name: 'Plugin', seed: 'seed' })
 			.decorate('dep', complex)
-			.as('scoped')
+			.as('plugin')
 
 		const ModuleA = new Elysia({ name: 'ModuleA' })
 			.use(Plugin)
@@ -150,14 +161,44 @@ describe('mergeDeep', () => {
 
 		const app = new Elysia().use(ModuleA).use(ModuleB)
 
-		const resA = await app.handle(req('/moda/a')).then((x) => x.text())
-		const resB = await app.handle(req('/modb/a')).then((x) => x.text())
-		const resC = await app.handle(req('/moda/b')).then((x) => x.text())
-		const resD = await app.handle(req('/modb/b')).then((x) => x.text())
+		const resA = await app.handle('/moda/a').then((x) => x.text())
+		const resB = await app.handle('/modb/a').then((x) => x.text())
+		const resC = await app.handle('/moda/b').then((x) => x.text())
+		const resD = await app.handle('/modb/b').then((x) => x.text())
 
 		expect(resA).toBe('1')
 		expect(resB).toBe('1')
 		expect(resC).toBe('2')
 		expect(resD).toBe('2')
+	})
+
+	it('ignores an override for a getter-only property', () => {
+		const target: Record<string, unknown> = {}
+		Object.defineProperty(target, 'sameKey', {
+			get: () => 1,
+			enumerable: true,
+			configurable: false
+		})
+
+		expect(() =>
+			mergeDeep(target, { sameKey: 2 }, undefined, true)
+		).not.toThrow()
+		expect(target.sameKey).toBe(1)
+	})
+
+	it('merges through a non-writable object property', () => {
+		const inner = { a: 1 }
+		const target: Record<string, unknown> = {}
+		Object.defineProperty(target, 'cfg', {
+			value: inner,
+			writable: false,
+			enumerable: true,
+			configurable: false
+		})
+
+		expect(() =>
+			mergeDeep(target, { cfg: { b: 2 } }, undefined, true)
+		).not.toThrow()
+		expect(inner).toEqual({ a: 1, b: 2 })
 	})
 })

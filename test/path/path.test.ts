@@ -1,42 +1,42 @@
-import { Elysia, t } from '../../src'
+import { Elysia, NotFound, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { post, req } from '../utils'
+import { post, json } from '../utils'
 
 describe('Path', () => {
 	it('handle root', async () => {
 		const app = new Elysia().get('/', () => 'Hi')
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
-		expect(await res.text()).toBe('Hi')
+		await expect(res.text()).resolves.toBe('Hi')
 	})
 
 	it('handle multiple level', async () => {
 		const app = new Elysia().get('/this/is/my/deep/nested/root', () => 'Ok')
-		const res = await app.handle(req('/this/is/my/deep/nested/root'))
+		const res = await app.handle('/this/is/my/deep/nested/root')
 
-		expect(await res.text()).toBe('Ok')
+		await expect(res.text()).resolves.toBe('Ok')
 	})
 
 	it('return boolean', async () => {
 		const app = new Elysia().get('/', () => true)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
-		expect(await res.text()).toBe('true')
+		await expect(res.text()).resolves.toBe('true')
 	})
 
 	it('return number', async () => {
 		const app = new Elysia().get('/', () => 617)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
-		expect(await res.text()).toBe('617')
+		await expect(res.text()).resolves.toBe('617')
 	})
 
 	it('return json', async () => {
 		const app = new Elysia().get('/', () => ({
 			name: 'takodachi'
 		}))
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(JSON.stringify(await res.json())).toBe(
 			JSON.stringify({
@@ -57,18 +57,30 @@ describe('Path', () => {
 					status: 418
 				})
 		)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
-		expect(await res.text()).toBe('Shuba Shuba')
+		await expect(res.text()).resolves.toBe('Shuba Shuba')
 		expect(res.status).toBe(418)
 		expect(res.headers.get('duck')).toBe('shuba duck')
 	})
 
 	it('parse single param', async () => {
 		const app = new Elysia().get('/id/:id', ({ params: { id } }) => id)
-		const res = await app.handle(req('/id/123'))
+		const res = await app.handle('/id/123')
 
-		expect(await res.text()).toBe('123')
+		await expect(res.text()).resolves.toBe('123')
+	})
+
+	it('decode percent-encoded param', async () => {
+		const app = new Elysia().get('/user/:id', ({ params: { id } }) => id)
+
+		const [encoded, plain] = await Promise.all([
+			app.handle('/user/hello%20world').then((x) => x.text()),
+			app.handle('/user/plain').then((x) => x.text())
+		])
+
+		expect(encoded).toBe('hello world')
+		expect(plain).toBe('plain')
 	})
 
 	it('parse multiple params', async () => {
@@ -76,17 +88,17 @@ describe('Path', () => {
 			'/id/:id/:name',
 			({ params: { id, name } }) => `${id}/${name}`
 		)
-		const res = await app.handle(req('/id/fubuki/Elysia'))
+		const res = await app.handle('/id/fubuki/Elysia')
 
-		expect(await res.text()).toBe('fubuki/Elysia')
+		await expect(res.text()).resolves.toBe('fubuki/Elysia')
 	})
 
 	it('parse optional params', async () => {
 		const app = new Elysia().get('/id/:id?', ({ params: { id } }) => id)
 
 		const res = await Promise.all([
-			app.handle(req('/id')).then((x) => x.text()),
-			app.handle(req('/id/fubuki')).then((x) => x.text())
+			app.handle('/id').then((x) => x.text()),
+			app.handle('/id/fubuki').then((x) => x.text())
 		])
 
 		expect(res).toEqual(['', 'fubuki'])
@@ -99,9 +111,9 @@ describe('Path', () => {
 		)
 
 		const res = await Promise.all([
-			app.handle(req('/id')).then((x) => x.text()),
-			app.handle(req('/id/fubuki')).then((x) => x.text()),
-			app.handle(req('/id/fubuki/shirakami')).then((x) => x.text())
+			app.handle('/id').then((x) => x.text()),
+			app.handle('/id/fubuki').then((x) => x.text()),
+			app.handle('/id/fubuki/shirakami').then((x) => x.text())
 		])
 
 		expect(res).toEqual(['/', 'fubuki/', 'fubuki/shirakami'])
@@ -110,59 +122,63 @@ describe('Path', () => {
 	it('accept wildcard', async () => {
 		const app = new Elysia().get('/wildcard/*', () => 'Wildcard')
 
-		const res = await app.handle(req('/wildcard/okayu'))
+		const res = await app.handle('/wildcard/okayu')
 
-		expect(await res.text()).toBe('Wildcard')
+		await expect(res.text()).resolves.toBe('Wildcard')
 	})
 
 	it('custom error', async () => {
-		const app = new Elysia().onError((error) => {
-			if (error.code === 'NOT_FOUND')
+		const app = new Elysia().error(({ error }) => {
+			if (error instanceof NotFound)
 				return new Response('Not Stonk :(', {
 					status: 404
 				})
 		})
 
-		const res = await app.handle(req('/wildcard/okayu'))
+		const res = await app.handle('/wildcard/okayu')
 
-		expect(await res.text()).toBe('Not Stonk :(')
+		await expect(res.text()).resolves.toBe('Not Stonk :(')
 		expect(res.status).toBe(404)
 	})
 
 	it('parse a querystring', async () => {
 		const app = new Elysia().get('/', ({ query: { id } }) => id)
-		const res = await app.handle(req('/?id=123'))
+		const res = await app.handle('/?id=123')
 
-		expect(await res.text()).toBe('123')
+		await expect(res.text()).resolves.toBe('123')
 	})
 
 	it('parse multiple querystrings', async () => {
 		const app = new Elysia().get(
 			'/',
-			({ query: { first, last } }) => `${last} ${first}`,
 			{
 				query: t.Object({
 					first: t.String(),
 					last: t.String()
 				})
-			}
+			},
+			({ query: { first, last } }) => `${last} ${first}`
 		)
-		const res = await app.handle(req('/?first=Fubuki&last=Shirakami'))
+		const res = await app.handle('/?first=Fubuki&last=Shirakami')
 
-		expect(await res.text()).toBe('Shirakami Fubuki')
+		await expect(res.text()).resolves.toBe('Shirakami Fubuki')
 	})
 
 	it('parse a querystring with a space', async () => {
 		const app = new Elysia().get('/', ({ query: { id } }) => id)
-		const res = await app.handle(req('/?id=test+123%2B'))
+		const res = await app.handle('/?id=test+123%2B')
 
-		expect(await res.text()).toBe('test 123+')
+		await expect(res.text()).resolves.toBe('test 123+')
 	})
 
 	it('handle body', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.String()
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.String()
+			},
+			({ body }) => body
+		)
 
 		const body = 'Botan'
 
@@ -177,7 +193,7 @@ describe('Path', () => {
 			})
 		)
 
-		expect(await res.text()).toBe('Botan')
+		await expect(res.text()).resolves.toBe('Botan')
 	})
 
 	it('parse JSON body', async () => {
@@ -185,11 +201,15 @@ describe('Path', () => {
 			name: 'Okayu'
 		})
 
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({
-				name: t.String()
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					name: t.String()
+				})
+			},
+			({ body }) => body
+		)
 		const res = await app.handle(
 			new Request('http://localhost/', {
 				method: 'POST',
@@ -217,7 +237,7 @@ describe('Path', () => {
 			})
 		)
 
-		expect(await res.text()).toBe('Elysia')
+		await expect(res.text()).resolves.toBe('Elysia')
 	})
 
 	it('handle group', async () => {
@@ -225,18 +245,18 @@ describe('Path', () => {
 			app.get('/korone', () => 'Yubi Yubi!')
 		)
 
-		const res = await app.handle(req('/gamer/korone')).then((r) => r.text())
+		const res = await app.handle('/gamer/korone').then((r) => r.text())
 
-		expect(await res).toBe('Yubi Yubi!')
+		expect(res).toBe('Yubi Yubi!')
 	})
 
 	it('handle plugin', async () => {
 		const plugin = (app: Elysia) => app.get('/korone', () => 'Yubi Yubi!')
 		const app = new Elysia().use(plugin)
 
-		const res = await app.handle(req('/korone'))
+		const res = await app.handle('/korone')
 
-		expect(await res.text()).toBe('Yubi Yubi!')
+		await expect(res.text()).resolves.toBe('Yubi Yubi!')
 	})
 
 	it('handle error', async () => {
@@ -246,12 +266,16 @@ describe('Path', () => {
 			app.get('/error', () => new Error(error))
 		const app = new Elysia().use(plugin)
 
-		const res = await app.handle(req('/error'))
-		const { message } = (await res.json()) as unknown as {
-			message: string
-		}
+		const res = await app.handle('/error')
 
-		expect(message).toBe(error)
+		expect(res.status).toBe(500)
+		// returned Error → RFC 9457 problem+json 500 (message surfaced as detail)
+		await expect(res.json()).resolves.toMatchObject({
+			type: 'internal-server-error',
+			title: 'Internal Server Error',
+			status: 500,
+			detail: error
+		})
 	})
 
 	it('handle async', async () => {
@@ -265,15 +289,15 @@ describe('Path', () => {
 			return 'Hi'
 		})
 
-		const res = await app.handle(req('/async'))
-		expect(await res.text()).toBe('Hi')
+		const res = await app.handle('/async')
+		await expect(res.text()).resolves.toBe('Hi')
 	})
 
 	it('handle absolute path', async () => {
 		const app = new Elysia().get('/', () => 'Hi')
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
-		expect(await res.text()).toBe('Hi')
+		await expect(res.text()).resolves.toBe('Hi')
 	})
 
 	it('handle route which start with same letter', async () => {
@@ -281,17 +305,7 @@ describe('Path', () => {
 			.get('/aa', () => 'route 1')
 			.get('/ab', () => 'route 2')
 
-		const response = await app.handle(req('/ab'))
-		const text = await response.text()
-		expect(text).toBe('route 2')
-	})
-
-	it('handle route which start with same letter', async () => {
-		const app = new Elysia()
-			.get('/aa', () => 'route 1')
-			.get('/ab', () => 'route 2')
-
-		const response = await app.handle(req('/ab'))
+		const response = await app.handle('/ab')
 		const text = await response.text()
 		expect(text).toBe('route 2')
 	})
@@ -302,7 +316,7 @@ describe('Path', () => {
 
 			return Bun.file('./example/takodachi.png')
 		})
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect((await res.text()).length).toBe(
 			(await Bun.file('./example/takodachi.png').text()).length
@@ -310,23 +324,25 @@ describe('Path', () => {
 		expect(res.headers.get('Server')).toBe('Elysia')
 	})
 
-	it('return web api\'s File', async () => {
-		const app = new Elysia().get('/', () => new File(['Hello'], 'hello.txt', { type: 'text/plain' }))
-		const res = await app.handle(req('/'))
+	it("return web api's File", async () => {
+		const app = new Elysia().get(
+			'/',
+			() => new File(['Hello'], 'hello.txt', { type: 'text/plain' })
+		)
+		const res = await app.handle('/')
 
 		expect(res.headers.get('content-type')).toBe('text/plain;charset=utf-8')
-		expect(await res.text()).toBe('Hello')
+		await expect(res.text()).resolves.toBe('Hello')
 		expect(res.status).toBe(200)
 		expect(res.headers.get('accept-ranges')).toBe('bytes')
 		expect(res.headers.get('content-range')).toBe('bytes 0-4/5')
-
 	})
 
 	it('handle *', async () => {
 		const app = new Elysia().get('/*', () => 'Hi')
-		const get = await app.handle(req('/')).then((r) => r.text())
+		const get = await app.handle('/').then((r) => r.text())
 		const post = await app
-			.handle(req('/anything/should/match'))
+			.handle('/anything/should/match')
 			.then((r) => r.text())
 
 		expect(get).toBe('Hi')
@@ -338,7 +354,7 @@ describe('Path', () => {
 			.get('/part', () => 'Part')
 			.options('*', () => 'Hi')
 
-		const get = await app.handle(req('/part')).then((r) => r.text())
+		const get = await app.handle('/part').then((r) => r.text())
 		const options = await app
 			.handle(
 				new Request('http://localhost/part', {
@@ -355,7 +371,7 @@ describe('Path', () => {
 		const app = new Elysia().get('/', ({ query }) => query)
 
 		const res = await app
-			.handle(req('/?name=a%20b&c=d%20e'))
+			.handle('/?name=a%20b&c=d%20e')
 			.then((r) => r.json())
 
 		expect(res).toEqual({
@@ -366,8 +382,8 @@ describe('Path', () => {
 
 	it('handle all method', async () => {
 		const app = new Elysia().all('/', () => 'Hi')
-		const res1 = await app.handle(req('/')).then((res) => res.text())
-		const res2 = await app.handle(post('/', {})).then((res) => res.text())
+		const res1 = await app.handle('/').then((res) => res.text())
+		const res2 = await app.handle('/', json({})).then((res) => res.text())
 
 		expect(res1).toBe('Hi')
 		expect(res2).toBe('Hi')
@@ -375,198 +391,163 @@ describe('Path', () => {
 
 	it('add path if onRequest is used', async () => {
 		const app = new Elysia()
-			.onRequest(() => {})
-			.onAfterHandle(({ path }) => {
+			.request(() => {})
+			.afterHandle(({ path }) => {
 				return path
 			})
 			.get('/', () => 'Hi')
 
-		const res = await app.handle(req('/')).then((res) => res.text())
+		const res = await app.handle('/').then((res) => res.text())
 
 		expect(res).toBe('/')
 	})
 
-	// it('handle array route - GET', async () => {
-	// 	const paths = ['/', '/test', '/other/nested']
-	// 	const app = new Elysia().get(paths, ({ path }) => {
-	// 		return path
-	// 	})
+	it('does not grow the route map on distinct request paths', async () => {
+		const app = new Elysia().get('/foo', () => 'hi')
+		await app.handle('/foo')
 
-	// 	for (const path of paths) {
-	// 		const res = await app.handle(req(path))
-	// 		expect(await res.text()).toBe(path)
-	// 	}
-	// })
+		const map = (app as any)['~map'].GET as Record<string, unknown>
+		const before = Object.keys(map).length
 
-	// it('handle array route - POST', async () => {
-	// 	const paths = ['/', '/test', '/other/nested']
-	// 	const app = new Elysia().post(paths, ({ path }) => {
-	// 		return path
-	// 	})
+		for (let i = 0; i < 1000; i++) await app.handle(`/missing/${i}`)
+		for (let i = 0; i < 200; i++) await app.handle(`/%66oo${i}`)
 
-	// 	for (const path of paths) {
-	// 		const res = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'POST'
-	// 			})
-	// 		)
-	// 		expect(await res.text()).toBe(path)
-	// 	}
-	// })
+		expect(Object.keys(map).length).toBe(before)
 
-	// it('handle array route - PUT', async () => {
-	// 	const paths = ['/', '/test', '/other/nested']
-	// 	const app = new Elysia().put(paths, ({ path }) => {
-	// 		return path
-	// 	})
+		await expect(app.handle('/foo').then((r) => r.text())).resolves.toBe(
+			'hi'
+		)
+	})
 
-	// 	for (const path of paths) {
-	// 		const res = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'PUT'
-	// 			})
-	// 		)
-	// 		expect(await res.text()).toBe(path)
-	// 	}
-	// })
+	it('matches a non-ASCII route by its encoded and literal form', async () => {
+		const app = new Elysia().get('/menu/café', () => 'coffee')
+		await app.handle('/menu/café')
 
-	// it('handle array route - DELETE', async () => {
-	// 	const paths = ['/', '/test', '/other/nested']
-	// 	const app = new Elysia().delete(paths, ({ path }) => {
-	// 		return path
-	// 	})
+		const map = (app as any)['~map'].GET as Record<string, unknown>
+		const keys = Object.keys(map).length
 
-	// 	for (const path of paths) {
-	// 		const res = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'DELETE'
-	// 			})
-	// 		)
-	// 		expect(await res.text()).toBe(path)
-	// 	}
-	// })
+		await expect(
+			app.handle('/menu/café').then((r) => r.text())
+		).resolves.toBe('coffee')
+		await expect(
+			app.handle('/menu/caf%C3%A9').then((r) => r.text())
+		).resolves.toBe('coffee')
+		await expect(
+			app.handle('/menu/caf%C3%A9/').then((r) => r.text())
+		).resolves.toBe('coffee')
 
-	// it('handle array route - PATCH', async () => {
-	// 	const paths = ['/', '/test', '/other/nested']
-	// 	const app = new Elysia().patch(paths, ({ path }) => {
-	// 		return path
-	// 	})
+		expect(Object.keys(map).length).toBe(keys)
+	})
 
-	// 	for (const path of paths) {
-	// 		const res = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'PATCH'
-	// 			})
-	// 		)
-	// 		expect(await res.text()).toBe(path)
-	// 	}
-	// })
+	it('static route matches a trailing slash without retaining a loose key', async () => {
+		const app = new Elysia().get('/x', () => 'x')
+		app.compile()
 
-	// it('handle array route - HEAD', async () => {
-	// 	const paths = ['/', '/test', '/other/nested']
-	// 	const app = new Elysia().head(paths, ({ path }) => {
-	// 		return path
-	// 	})
+		const map = (app as any)['~map'].GET as Record<string, unknown>
+		expect('/x' in map).toBe(true)
+		expect('/x/' in map).toBe(false)
 
-	// 	for (const path of paths) {
-	// 		const res = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'HEAD'
-	// 			})
-	// 		)
-	// 		expect(await res.text()).toBe(path)
-	// 	}
-	// })
+		await expect(app.handle('/x').then((r) => r.text())).resolves.toBe('x')
+		await expect(app.handle('/x/').then((r) => r.text())).resolves.toBe('x')
+	})
 
-	// it('handle array route - OPTIONS', async () => {
-	// 	const paths = ['/', '/test', '/other/nested']
-	// 	const app = new Elysia().options(paths, ({ path }) => {
-	// 		return path
-	// 	})
+	it('strictPath does not pre-register a static loose variant', async () => {
+		const app = new Elysia({ strictPath: true }).get('/x', () => 'x')
+		app.compile()
 
-	// 	for (const path of paths) {
-	// 		const res = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'OPTIONS'
-	// 			})
-	// 		)
-	// 		expect(await res.text()).toBe(path)
-	// 	}
-	// })
+		const map = (app as any)['~map'].GET as Record<string, unknown>
+		expect('/x/' in map).toBe(false)
+		await expect(app.handle('/x/').then((r) => r.status)).resolves.toBe(404)
+	})
 
-	// it('handle array route - CONNECT', async () => {
-	// 	const paths = ['/', '/test', '/other/nested']
-	// 	const app = new Elysia().connect(paths, ({ path }) => {
-	// 		return path
-	// 	})
+	it('static loose miss still wins before a dynamic route', async () => {
+		const app = new Elysia()
+			.get('/users/1', () => 'static')
+			.get('/users/:id', ({ params: { id } }) => `dynamic:${id}`)
 
-	// 	for (const path of paths) {
-	// 		const res = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'CONNECT'
-	// 			})
-	// 		)
-	// 		expect(await res.text()).toBe(path)
-	// 	}
-	// })
+		await expect(
+			app.handle('/users/1/').then((r) => r.text())
+		).resolves.toBe('static')
+	})
 
-	// it('handle array route - all', async () => {
-	// 	const paths = ['/', '/test', '/other/nested'] as const
-	// 	const app = new Elysia().all(paths, ({ path }) => {
-	// 		return path
-	// 	})
+	it('method loose match wins before all-method exact match', async () => {
+		const app = new Elysia()
+			.get('/x', () => 'get loose')
+			.all('/x/', () => 'all exact')
 
-	// 	for (const path of paths) {
-	// 		const getRes = await app.handle(req(path))
-	// 		const postRes = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'POST'
-	// 			})
-	// 		)
-	// 		const putRes = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'PUT'
-	// 			})
-	// 		)
-	// 		const deleteRes = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'DELETE'
-	// 			})
-	// 		)
-	// 		const patchRes = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'PATCH'
-	// 			})
-	// 		)
-	// 		const headRes = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'HEAD'
-	// 			})
-	// 		)
+		await expect(app.handle('/x/').then((r) => r.text())).resolves.toBe(
+			'get loose'
+		)
+	})
 
-	// 		expect(await getRes.text()).toBe(path)
-	// 		expect(await postRes.text()).toBe(path)
-	// 		expect(await putRes.text()).toBe(path)
-	// 		expect(await deleteRes.text()).toBe(path)
-	// 		expect(await patchRes.text()).toBe(path)
-	// 		expect(await headRes.text()).toBe(path)
-	// 	}
-	// })
+	it('static route registered with trailing slash still matches without it', async () => {
+		const app = new Elysia().get('/x/', () => 'x')
+		app.compile()
 
-	// it('handle array route - custom method', async () => {
-	// 	const paths = ['/', '/test', '/other/nested'] as const
-	// 	// @ts-ignore
-	// 	const app = new Elysia().route('NOTIFY', paths, ({ path }) => {
-	// 		return path
-	// 	})
+		const map = (app as any)['~map'].GET as Record<string, unknown>
+		expect('/x/' in map).toBe(true)
+		expect('/x' in map).toBe(true)
 
-	// 	for (const path of paths) {
-	// 		const res = await app.handle(
-	// 			new Request('http://localhost' + path, {
-	// 				method: 'NOTIFY'
-	// 			})
-	// 		)
-	// 		expect(await res.text()).toBe(path)
-	// 	}
-	// })
+		await expect(app.handle('/x').then((r) => r.text())).resolves.toBe('x')
+	})
+
+	it('dynamic route matches a trailing slash when not strict', async () => {
+		const app = new Elysia().get(
+			'/users/:id',
+			({ params: { id } }) => `user:${id}`
+		)
+		app.compile()
+
+		const router = (app as any)['~router']
+		expect(router.loosePath).toBe(true)
+
+		await expect(
+			app.handle('/users/1').then((r) => r.text())
+		).resolves.toBe('user:1')
+		await expect(
+			app.handle('/users/1/').then((r) => r.text())
+		).resolves.toBe('user:1')
+	})
+
+	it('dynamic route registered with trailing slash matches without retaining a loose entry', async () => {
+		const app = new Elysia().get(
+			'/users/:id/',
+			({ params: { id } }) => `user:${id}`
+		)
+		app.compile()
+
+		const router = (app as any)['~router']
+		expect(router.loosePath).toBe(true)
+
+		await expect(
+			app.handle('/users/1').then((r) => r.text())
+		).resolves.toBe('user:1')
+		await expect(
+			app.handle('/users/1/').then((r) => r.text())
+		).resolves.toBe('user:1')
+	})
+
+	it('strictPath still rejects a trailing slash on dynamic routes', async () => {
+		const app = new Elysia({ strictPath: true }).get(
+			'/users/:id',
+			({ params: { id } }) => `user:${id}`
+		)
+		app.compile()
+
+		expect((app as any)['~router'].loosePath).toBe(false)
+
+		await expect(
+			app.handle('/users/1/').then((r) => r.status)
+		).resolves.toBe(404)
+	})
+
+	it('dynamic method loose match wins before all-method exact match', async () => {
+		const app = new Elysia()
+			.get('/dynamic/:id', ({ params: { id } }) => `get:${id}`)
+			.all('/dynamic/:id/', ({ params: { id } }) => `all:${id}`)
+
+		await expect(
+			app.handle('/dynamic/1/').then((r) => r.text())
+		).resolves.toBe('get:1')
+	})
 })

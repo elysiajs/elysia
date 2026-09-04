@@ -8,13 +8,6 @@ const app = new Elysia({
 })
 	.get(
 		'/council',
-		({ cookie: { council } }) =>
-			(council.value = [
-				{
-					name: 'Rin',
-					affilation: 'Administration'
-				}
-			]),
 		{
 			cookie: t.Cookie({
 				council: t.Array(
@@ -24,22 +17,29 @@ const app = new Elysia({
 					})
 				)
 			})
-		}
+		},
+		({ cookie: { council } }) =>
+			(council.value = [
+				{
+					name: 'Rin',
+					affilation: 'Administration'
+				}
+			])
 	)
 	.get('/create', ({ cookie: { name } }) => (name.value = 'Himari'))
 	.get(
 		'/update',
+		{
+			cookie: t.Cookie({
+				name: t.Optional(t.String())
+			})
+		},
 		({ cookie: { name } }) => {
 			name.value = 'seminar: Rio'
 			name.value = 'seminar: Himari'
 			name.maxAge = 86400
 
 			return name.value
-		},
-		{
-			cookie: t.Cookie({
-				name: t.Optional(t.String())
-			})
 		}
 	)
 	.listen(3000)

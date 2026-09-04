@@ -8,7 +8,7 @@ describe('Integration', () => {
 				cmd: [
 					'bun',
 					'-e',
-					"import { Elysia } from './src'; new Elysia().onBeforeHandle(() => { });"
+					"import { Elysia } from './src'; new Elysia().beforeHandle(() => { });"
 				]
 			})
 

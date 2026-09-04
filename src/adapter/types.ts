@@ -1,170 +1,88 @@
-import type { Serve, ListenCallback } from '../universal/server'
+import type { AnyElysia } from '../base'
+import type { Serve, ListenCallback } from '../universal'
 
-import type { AnyElysia } from '..'
 import type { Context } from '../context'
-import type { Sucrose } from '../sucrose'
+import type { MaybePromise } from '../types'
 
-import type { Prettify, AnyLocalHook, MaybePromise } from '../types'
-import type { AnyWSLocalHook } from '../ws/types'
-
-export interface ElysiaAdapter {
+/**
+ * Elysia adapter 2
+ *
+ * @since 2.0.0
+ */
+export interface ElysiaAdapterOptions<App extends AnyElysia | void = void> {
+	/**
+	 * Name of the adapter, preferably runtime
+	 */
 	name: string
-	listen(
-		app: AnyElysia
-	): (
+	/**
+	 *
+	 * @param app
+	 */
+	runtime:
+		| 'node'
+		| 'deno'
+		| 'bun'
+		| 'cloudflare-worker'
+		| 'browser'
+		| 'vercel'
+		| 'netlify'
+		| 'lambda'
+		| 'fastly'
+		| 'edge'
+		| 'unknown'
+		| (string & {})
+
+	/**
+	 * Whether this adapter is web standard
+	 */
+	isWebStandard: boolean
+
+	/**
+	 * Whether this adapter supports WebSocket.
+	 *
+	 * `.ws()` throws on non-Bun runtimes unless this is set.
+	 */
+	websocket?: boolean
+
+	listen?(
+		app: AnyElysia,
 		options: string | number | Partial<Serve>,
 		callback?: ListenCallback
-	) => void
-	/**
-	 * Stop server from serving
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * app.stop()
-	 * ```
-	 *
-	 * @example
-	 * ```typescript
-	 * app.stop(true) // Abruptly any requests inflight
-	 * ```
-	 */
-	stop?(app: AnyElysia, closeActiveConnections?: boolean): Promise<void>
-	isWebStandard?: boolean
-	handler: {
+	): void
+
+	parse: {
+		json: (
+			context: Context
+		) => MaybePromise<Record<keyof any, undefined> | unknown[]>
+		text: (context: Context) => MaybePromise<string>
+		urlencoded: (
+			context: Context
+		) => MaybePromise<Record<string, string | string[]>>
+		arrayBuffer: (context: Context) => MaybePromise<ArrayBuffer>
+		formData: (context: Context) => MaybePromise<Record<string, unknown>>
+		default: (
+			context: Context,
+			contentType: string,
+			normalized?: boolean
+		) => MaybePromise<any>
+	}
+	response: {
 		/**
 		 * Map return response on every case
 		 */
-		mapResponse(
+		map(
 			response: unknown,
 			set: Context['set'],
 			...params: unknown[]
 		): unknown
-		/**
-		 * Map response on truthy value
-		 */
-		mapEarlyResponse(
-			response: unknown,
-			set: Context['set'],
-			...params: unknown[]
-		): unknown
+		/** Support immutable shared default headers. */
+		supportsDefaultHeaderSink?: true
 		/**
 		 * Map response without cookie, status or headers
 		 */
-		mapCompactResponse(response: unknown, ...params: unknown[]): unknown
-		/**
-		 * Compile inline to value
-		 *
-		 * @example
-		 * ```ts
-		 * Elysia().get('/', 'static')
-		 * ```
-		 */
-		createStaticHandler?(
-			handle: unknown,
-			hooks: AnyLocalHook,
-			setHeaders?: Context['set']['headers'],
-			...params: unknown[]
-		): (() => unknown) | undefined
-		/**
-		 * If the runtime support cloning response
-		 *
-		 * eg. Bun.serve({ static })
-		 */
-		createNativeStaticHandler?(
-			handle: unknown,
-			hooks: AnyLocalHook,
-			set?: Context['set']
-		): (() => MaybePromise<Response>) | undefined
+		compact?(response: unknown, ...params: unknown[]): unknown
 	}
-	composeHandler: {
-		mapResponseContext?: string
-		/**
-		 * Declare any variable that will be used in the general handler
-		 */
-		declare?(inference: Sucrose.Inference): string | undefined
-		/**
-		 * Inject variable to the general handler
-		 */
-		inject?: Record<string, unknown>
-		/**
-		 * Whether retriving headers should be using webstandard headers
-		 *
-		 * @default false
-		 */
-		preferWebstandardHeaders?: boolean
-		/**
-		 * fnLiteral for parsing request headers
-		 *
-		 * @declaration
-		 * c.headers: Context headers
-		 */
-		headers: string
-		/**
-		 * fnLiteral for parsing the request body
-		 *
-		 * @declaration
-		 * c.body: Context body
-		 */
-		parser: Prettify<
-			Record<
-				'json' | 'text' | 'urlencoded' | 'arrayBuffer' | 'formData',
-				(isOptional: boolean) => string
-			> & {
-				declare?: string
-			}
-		>
-	}
-	composeGeneralHandler: {
-		parameters?: string
-		error404(
-			hasEventHook: boolean,
-			hasErrorHook: boolean,
-			afterResponseHandler?: string
-		): {
-			declare: string
-			code: string
-		}
-		/**
-		 * fnLiteral of the general handler
-		 *
-		 * @declaration
-		 * c: Context
-		 * p: pathname
-		 */
-		createContext(app: AnyElysia): string
-		/**
-		 * Inject variable to the general handler
-		 */
-		inject?: Record<string, unknown>
-	}
-	composeError: {
-		declare?: string
-		inject?: Record<string, unknown>
-		mapResponseContext: string
-		validationError: string
-		/**
-		 * Handle thrown error which is instance of Error
-		 *
-		 * Despite its name of `unknownError`, it also handle named error like `NOT_FOUND`, `VALIDATION_ERROR`
-		 * It's named `unknownError` because it also catch unknown error
-		 */
-		unknownError: string
-	}
-	ws?(app: AnyElysia, path: string, handler: AnyWSLocalHook): unknown
-	/**
-	 * Whether or not the runtime or framework the is built on top on has a router
-	 * eg. Bun.serve.routes, uWebSocket
-	 **/
-	createSystemRouterHandler?(
-		method: string,
-		path: string,
-		hook: AnyLocalHook,
-		app: AnyElysia
-	): void
 
-	/**
-	 * Call thing before compile
-	 */
-	beforeCompile?(app: AnyElysia): void
+	// basically to Elysia.use(app => app)
+	setup?(app: AnyElysia): App
 }
