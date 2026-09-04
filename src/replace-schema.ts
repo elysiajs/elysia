@@ -244,11 +244,20 @@ export const queryCoercions = () => {
 					);
 					if (stringIndex === -1) return schema;
 
-					const reordered = [...variants];
-					reordered[arrayIndex] = variants[stringIndex];
-					reordered[stringIndex] = variants[arrayIndex];
+					// Only reorder when the ArrayQuery variant sits BEFORE the
+					// string variant — the shape that makes Union.Decode take the
+					// transform and wrap scalars. If the user already declared the
+					// string variant first, leave the order alone: swapping would
+					// REGRESS that shape by moving the transform in front
+					// (CodeRabbit caught this on #1988).
+					if (arrayIndex < stringIndex) {
+						const reordered = [...variants];
+						reordered[arrayIndex] = variants[stringIndex];
+						reordered[stringIndex] = variants[arrayIndex];
+						return { ...schema, anyOf: reordered };
+					}
 
-					return { ...schema, anyOf: reordered };
+					return schema;
 				},
 			},
 		] satisfies ReplaceSchemaTypeOptions[];
