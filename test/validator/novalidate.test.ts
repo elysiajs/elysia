@@ -213,7 +213,7 @@ describe('ElysiaType.NoValidate', () => {
 
 		const res = await app.handle('/')
 
-		expect(res.status).toBe(422)
+		expect(res.status).toBe(500)
 	})
 
 	it('should work with NoValidate on nested object properties', async () => {
@@ -257,7 +257,7 @@ describe('ElysiaType.NoValidate', () => {
 
 		const res = await app.handle('/')
 
-		expect(res.status).toBe(422)
+		expect(res.status).toBe(500)
 	})
 
 	it('should validate normally with strict object schemas', async () => {
@@ -275,7 +275,7 @@ describe('ElysiaType.NoValidate', () => {
 
 		const res = await app.handle('/')
 
-		expect(res.status).toBe(422)
+		expect(res.status).toBe(500)
 	})
 
 	it('should handle null values with NoValidate', async () => {

@@ -37,6 +37,9 @@ function load() {
 	injectTypebox(resolveNamespaces())
 }
 
+// Load every TypeBox namespace before the first validated request.
+export { load as warmTypebox }
+
 function resolveNamespaces(): TypeboxNamespaces {
 	const meta = import.meta as ImportMeta & {
 		require?: (specifier: string) => any

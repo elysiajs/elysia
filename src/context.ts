@@ -1,6 +1,5 @@
 import { status, type SelectiveStatus } from './error'
-import { flattenChain, isNotEmpty, nullObject, redirect } from './utils'
-import { isProduction } from './universal/is-production'
+import { isNotEmpty, nullObject, redirect } from './utils'
 
 import { defaultHeaders } from './adapter/default-headers'
 import type { AnyElysia } from './base'
@@ -75,32 +74,8 @@ export function clearContextCache(app?: AnyElysia) {
 	sharedEmptyContext = null
 }
 
-function buildEmptyContext(
-	Base: any,
-	headers: object | null = null,
-	warnPathMutation = false
-) {
+function buildEmptyContext(Base: any, headers: object | null = null) {
 	const immutableHeaders = headers !== null && Object.isFrozen(headers)
-	let warnedPathMutation = false
-	const pathDescriptor: PropertyDescriptor | undefined = warnPathMutation
-		? {
-				enumerable: true,
-				configurable: true,
-				get(this: any) {
-					return this['~path']
-				},
-				set(this: any, value: string) {
-					if ('~path' in this && !warnedPathMutation) {
-						warnedPathMutation = true
-						console.warn(
-							'[elysia] context.path is readonly; request-hook rerouting will stop working in a future release.'
-						)
-					}
-
-					this['~path'] = value
-				}
-			}
-		: undefined
 
 	class Context extends Base {
 		declare params?: Record<string, string>
@@ -118,9 +93,6 @@ function buildEmptyContext(
 
 		constructor(public request: Request) {
 			super()
-
-			if (pathDescriptor)
-				Object.defineProperty(this, 'path', pathDescriptor)
 
 			if (immutableHeaders)
 				this.set = {
@@ -151,8 +123,6 @@ export function createContext(
 
 	const ext = app['~ext']
 	const adapter = app['~config']?.adapter
-	const warnPathMutation =
-		!isProduction() && !!flattenChain(app['~hookChain'])?.request?.length
 	const headers =
 		ext?.headers && isNotEmpty(ext.headers)
 			? Object.assign(nullObject(), ext.headers)
@@ -165,19 +135,14 @@ export function createContext(
 
 	if (headers === null && !ext?.decorator && !ext?.store) {
 		sharedEmptyDecorator ??= buildEmptyDecorator()
-		const context = warnPathMutation
-			? buildEmptyContext(sharedEmptyDecorator, null, true)
-			: (sharedEmptyContext ??= buildEmptyContext(sharedEmptyDecorator))
+		const context = (sharedEmptyContext ??=
+			buildEmptyContext(sharedEmptyDecorator))
 		contextCache.set(app, context)
 
 		return context
 	}
 
-	const context = buildEmptyContext(
-		createBaseContext(app),
-		headers,
-		warnPathMutation
-	) as any
+	const context = buildEmptyContext(createBaseContext(app), headers) as any
 
 	contextCache.set(app, context)
 	return context

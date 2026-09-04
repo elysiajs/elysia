@@ -7,6 +7,8 @@ import { Compiled } from '../../src/compile/aot'
 import { Validator } from '../../src/validator'
 
 afterEach(() => {
+	// Failed startup sets exitCode; reset it between tests.
+	process.exitCode = 0
 	Compiled.clear()
 	Validator.clear()
 })

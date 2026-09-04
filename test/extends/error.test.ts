@@ -86,7 +86,7 @@ describe('Error extends', () => {
 
 		const response = await app.handle('/')
 
-		expect(response.status).toBe(422)
+		expect(response.status).toBe(500)
 		expect(response.headers.get('content-type')).toBe(
 			'application/problem+json'
 		)

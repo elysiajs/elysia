@@ -81,7 +81,7 @@ describe('cookie signing configuration', () => {
 				cookie: { sign: true, secrets: null }
 			}).get('/', ({ cookie }) => ({ token: cookie.token.value }))
 		} catch {
-			expect(true).toBe(true)
+			// Throwing at construction is itself "never accepts a forged cookie"
 			return
 		}
 
@@ -96,7 +96,7 @@ describe('cookie signing configuration', () => {
 			status = response.status
 			body = await response.text()
 		} catch {
-			expect(true).toBe(true)
+			// Throwing while handling is itself "never accepts a forged cookie"
 			return
 		}
 

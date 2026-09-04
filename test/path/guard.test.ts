@@ -158,7 +158,7 @@ describe('guard', () => {
 		const correct = await app.handle('/correct')
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(422)
+		expect(error.status).toBe(500)
 	})
 
 	it('apply guard globally', async () => {
@@ -175,7 +175,7 @@ describe('guard', () => {
 		const correct = await app.handle('/correct')
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(422)
+		expect(error.status).toBe(500)
 	})
 
 	it('inherits singleton / definitions and re-meregd on main', async () => {
@@ -232,7 +232,7 @@ describe('guard', () => {
 		])
 
 		expect(called).toBe(3)
-		expect(response).toEqual([422, 422, 422])
+		expect(response).toEqual([500, 500, 500])
 	})
 
 	it('nearer guard overrides inherited response', async () => {
@@ -268,7 +268,7 @@ describe('guard', () => {
 		])
 
 		expect(called).toBe(4)
-		expect(response).toEqual([422, 200, 422])
+		expect(response).toEqual([500, 200, 500])
 	})
 
 	it('nearer plugin-scope guard overrides inherited response', async () => {
@@ -303,7 +303,7 @@ describe('guard', () => {
 		])
 
 		expect(called).toBe(5)
-		expect(response).toEqual([422, 200, 200])
+		expect(response).toEqual([500, 200, 200])
 	})
 
 	it('handle as scoped', async () => {
@@ -333,7 +333,7 @@ describe('guard', () => {
 		])
 
 		expect(called).toBe(2)
-		expect(response).toEqual([422, 422, 200])
+		expect(response).toEqual([500, 500, 200])
 	})
 
 	it('handle as local', async () => {
@@ -360,7 +360,7 @@ describe('guard', () => {
 		])
 
 		expect(called).toBe(1)
-		expect(response).toEqual([422, 200, 200])
+		expect(response).toEqual([500, 200, 200])
 	})
 
 	it('only cast guard', async () => {
@@ -387,7 +387,7 @@ describe('guard', () => {
 		])
 
 		expect(called).toBe(3)
-		expect(response).toEqual([422, 200])
+		expect(response).toEqual([500, 200])
 	})
 
 	it('handle merge guard and hook on non-specified responses status', () => {

@@ -53,10 +53,22 @@ Breaking Change:
 - remove `.macro(fn)`, use functional macro must be named via the object form `.macro({ name: fn })`
 - remove `.macro(name, definition)`, use `.macro({ [name]: definition })`
 - recommended minimum TypeScript version is 5.7
+- `ElysiaError.problemType` / `problemTitle` removed in favour of `code` plus a `type` accessor
+- `ElysiaStatus.code` renamed to `.status`
 
 Behavior Change:
 
-- `context.path` is now readonly
+- the 1.x `(path, handler, hook)` argument order now throws at registration instead of serving the hook object as the response
+- `.macro(name, definition)` and `.macro(fn)` now throw at registration instead of silently registering nothing
+- writing `set.redirect` now throws in development — production is unchanged, so a 1.x auth-redirect guard still serves the body it was protecting
+- a non-schema value in a `body` / `query` / `params` / `headers` / `cookie` / `response` slot now throws at registration instead of failing per request
+- a response schema violation now answers `500` `internal-server-error` in both development and production — v1 answered `422`, blaming the client for a server-side mistake
+- `app.routes` is frozen, and a sealed app no longer re-caches it under `NODE_ENV=production` (two reads return equal but distinct arrays)
+- `HTTPError.typeBase` now applies to the router-miss `404` and the generic `500`, and every problem document carries `code`
+- `afterResponse` now fires exactly once, and after `error`, when a generator throws before its first yield
+- a throwing `afterResponse` / `defer` on the JIT lane and a rejected async `trace` callback are now reported with `console.error` instead of being swallowed
+- `stop(true)` no longer waits on an async plugin that never settles
+- `context.path` is now readonly, and its notice now fires only when a request hook actually changes the value
 - Validation error `payload.expected` values are shared and deeply froze
 - Schemas are cloned on first registration and reused by identity
 - Signed-cookie verification now defaults to `verify: 'lazy'`
@@ -87,6 +99,7 @@ Improvement:
 - shared schema reference
 - Cookie schema field
 - plain `t.File()` / `t.Files()` (no `type` option) no longer force the async validation path
+- an `.error()` hook no longer disqualifies static-literal `GET` routes from Bun native static promotion: those routes are now promoted even when a global or route-local `.error()` hook exists, because no user code runs on a promoted route and the hook can therefore never fire for it. `afterResponse`, `mapResponse`, `parse`, `transform`, schemas, `trace` and every other hook still keep the route on the JS lane. Since Bun's native static table now serves more routes, be aware that a promoted route answers `HEAD` (200) and conditional `GET` (`If-None-Match` matching Bun's `etag` -> 304) natively, without reaching the JS lane or your `.error()` hook (see Known issue)
 
 Bug fix:
 - return 415 when unsure about content-type
@@ -109,6 +122,15 @@ Bug fix:
 - Bun native static routes were never installed when every static response was synchronous
 - error-path `mapResponse` codegen assigned an undeclared `tmp`, leaking the mapped response onto `globalThis`
 - schema-less body routes now treat `Transfer-Encoding` as body-present before touching `request.body`, preserving the fast framing-header path for chunked/proxy-framed requests without `Content-Length`
+
+Chore:
+- declare the minimum supported Node.js version (`engines.node`) and test it in CI
+- `build()` loads the TypeBox graph once when any route carries a TypeBox schema (~100 ms at boot, flat in route count), so the first schema-bearing request no longer stalls the event loop; schema-less, Standard-Schema-only and AOT apps are unaffected
+- a `listen()` boot that fails after the server bound (rejected async plugin, `setup()` or `build()` throw) is rolled back, logged once as `[Elysia] listen() failed:` and sets `process.exitCode = 1`
+
+Known issue:
+- `t.ObjectString` with an optional or coercing inner field drops those fields on the default `normalize`, use `normalize: 'typebox'` until the next `exact-mirror` release
+- routes served by Bun native static promotion (static-literal `GET` handlers with no hooks other than `error`) answer `HEAD` natively (200) and honour `If-None-Match` against Bun's own `etag` (304), while non-promoted routes answer `HEAD` only when `autoHead` is enabled (404 otherwise) and never send an `etag`. Accepted for 2.0; both divergences are pinned in `test/adapter/bun/native-head-policy.test.ts`
 
 # 1.4.28 - 17 Mar 2025
 

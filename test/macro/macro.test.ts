@@ -1834,3 +1834,66 @@ describe('Macro', () => {
 		})
 	})
 })
+
+describe('Macro removed forms', () => {
+	// The removed string form used to fail silently.
+	it('throws on the removed .macro(name, definition) form', () => {
+		expect(() =>
+			(new Elysia() as any).macro('isAuth', {
+				beforeHandle() {
+					return 'unauthorized'
+				}
+			})
+		).toThrow(
+			'[Elysia] .macro(name, definition) was removed in 2.0 — use .macro({ [name]: definition })'
+		)
+	})
+
+	it('throws on a bare string macro name', () => {
+		expect(() => (new Elysia() as any).macro('isAuth')).toThrow(
+			'[Elysia] .macro(name, definition) was removed in 2.0 — use .macro({ [name]: definition })'
+		)
+	})
+
+	it('keeps the .macro(fn) message', () => {
+		expect(() => (new Elysia() as any).macro(() => ({}))).toThrow(
+			'use `.macro({ name: fn })` instead of `.macro(fn)`'
+		)
+	})
+
+	it('leaves the object form untouched', async () => {
+		const app = new Elysia()
+			.macro({
+				isAuth: {
+					beforeHandle() {
+						return 'unauthorized'
+					}
+				}
+			})
+			.get('/', { isAuth: true }, () => 'ok')
+
+		expect(await (await app.handle('/')).text()).toBe('unauthorized')
+	})
+
+	// A nullish second argument still uses the object form.
+	for (const [label, second] of [
+		['undefined', undefined],
+		['null', null]
+	] as const)
+		it(`registers .macro(definitions, ${label})`, async () => {
+			const app = (new Elysia() as any)
+				.macro(
+					{
+						isAuth: {
+							beforeHandle() {
+								return 'unauthorized'
+							}
+						}
+					},
+					second
+				)
+				.get('/', { isAuth: true }, () => 'ok')
+
+			expect(await (await app.handle('/')).text()).toBe('unauthorized')
+		})
+})

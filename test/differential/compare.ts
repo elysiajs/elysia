@@ -6,6 +6,8 @@ export interface ResponseSnapshot {
 	headers: Array<[string, string]>
 	setCookie: string[]
 	body: Uint8Array
+	// Error returned while reading a response stream.
+	bodyError?: string
 }
 
 const STRIPPED_HEADERS = new Set([
@@ -39,9 +41,16 @@ export async function snapshot(res: Response): Promise<ResponseSnapshot> {
 						: 0
 	)
 
-	const body = new Uint8Array(await res.arrayBuffer())
+	let body: Uint8Array
+	let bodyError: string | undefined
+	try {
+		body = new Uint8Array(await res.arrayBuffer())
+	} catch (error) {
+		body = new Uint8Array(0)
+		bodyError = String(error)
+	}
 
-	return { status: res.status, headers, setCookie, body }
+	return { status: res.status, headers, setCookie, body, bodyError }
 }
 
 export type DivergentComponent =
@@ -136,6 +145,16 @@ export function compareResponses(
 			component: 'set-cookie',
 			oracle: truncate(JSON.stringify(oracle.setCookie)),
 			candidate: truncate(JSON.stringify(candidate.setCookie))
+		}
+
+	if (oracle.bodyError !== candidate.bodyError)
+		return {
+			...ctx,
+			component: 'body',
+			oracle: truncate(oracle.bodyError ?? renderBody(oracle.body)),
+			candidate: truncate(
+				candidate.bodyError ?? renderBody(candidate.body)
+			)
 		}
 
 	if (!bytesEqual(oracle.body, candidate.body))

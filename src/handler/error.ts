@@ -213,8 +213,9 @@ function fallbackErrorResponse(
 	// Self-describing error, `status` is already applied by applyErrorStatus.
 	// A foreign error that merely looks self-describing (undici, node-fetch)
 	// keeps the production mask below, only an owned HTTPError bypasses it.
-	// A malformed status (NaN, 0, negative) is not a claim of self-description
-	const self = error as HTTPError & {
+	// A malformed status (NaN, 0, negative) is not a claim of self-description.
+	// Thrown values can also be null or undefined.
+	const self = (error ?? {}) as HTTPError & {
 		readonly value?: unknown
 		readonly detail?: unknown
 	}

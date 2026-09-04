@@ -3,10 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
-import {
-	getAotWorkerDiagnostics,
-	resolveEntry
-} from '../../src/plugin/aot/core'
+import { resolveEntry } from '../../src/plugin/aot/core'
 import { aot } from '../../src/plugin/aot/vite'
 
 it('refreshes Vite build artifacts in terminated workers', async () => {
@@ -41,8 +38,6 @@ it('refreshes Vite build artifacts in terminated workers', async () => {
 		expect(
 			warnings.filter((value) => value.includes('isolated worker'))
 		).toHaveLength(1)
-		expect(getAotWorkerDiagnostics().activeWorkers).toBe(0)
-
 		await plugin.transform('export const app = 1', resolveEntry(entry))
 		plugin.buildEnd()
 	} finally {

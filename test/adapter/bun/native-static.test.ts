@@ -190,7 +190,7 @@ describe('Bun native static promotion', () => {
 		}
 	})
 
-	it('keeps routes with an error hook on the JS lane', async () => {
+	it('promotes routes with an error hook — no user code runs, so it can never fire', async () => {
 		let fired = 0
 		const app = new Elysia()
 			.error(() => {
@@ -198,7 +198,9 @@ describe('Bun native static promotion', () => {
 			})
 			.get('/health', 'ok')
 
-		expect(collectStaticRoutes(app as any)).toBeUndefined()
+		expect(collectStaticRoutes(app as any)?.['/health']?.GET).toBeInstanceOf(
+			Response
+		)
 
 		app.listen(0)
 		await Bun.sleep(50)

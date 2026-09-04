@@ -46,6 +46,7 @@ interface TypeboxModule {
 	Ref: typeof RefType
 	Clone: typeof CloneType
 	Check: typeof CheckType
+	warmTypebox: () => void
 }
 
 let live: TypeboxModule | undefined
@@ -101,15 +102,12 @@ export let coerceBody: typeof coerceBodyType = stub('coerceBody')
 export let hasTypes: typeof hasTypesType = stub('hasTypes')
 export let mayHaveFileType: typeof mayHaveFileTypeType = stub('mayHaveFileType')
 export let HasCodec: typeof HasCodecType = stub('HasCodec')
-
 export let Intersect: typeof IntersectType = stub('Intersect')
 export let Default: typeof DefaultType = stub('Default')
-
 export let Ref: typeof RefType = stub('Ref')
-
 export let Clone: typeof CloneType = stub('Clone')
-
 export let Check: typeof CheckType = stub('Check')
+export let warmTypebox: () => void = stub('warmTypebox')
 
 export const isBridgeLive = () => live !== undefined
 
@@ -135,4 +133,5 @@ export function useTypebox(mod: TypeboxModule) {
 	Ref = mod.Ref
 	Clone = mod.Clone
 	Check = mod.Check
+	warmTypebox = mod.warmTypebox
 }

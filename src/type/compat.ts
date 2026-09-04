@@ -14,6 +14,7 @@ import {
 	Clone,
 	Check,
 	injectTypebox,
+	warmTypebox,
 	type TypeboxNamespaces
 } from './typebox-value'
 
@@ -99,6 +100,7 @@ export function setupTypebox(options?: {
 		Default,
 		Ref,
 		Clone,
-		Check
+		Check,
+		warmTypebox
 	})
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it, spyOn } from 'bun:test'
+import { afterEach, describe, expect, it, spyOn } from 'bun:test'
 import { resolve } from 'node:path'
 
 import { Elysia } from '../../../src'
@@ -6,6 +6,11 @@ import { websocket } from '../../../src/plugin/websocket'
 import { trackWSSettling } from '../../../src/ws/context'
 
 describe('Bun transactional startup', () => {
+	// Failed startup sets exitCode; reset it between tests.
+	afterEach(() => {
+		process.exitCode = 0
+	})
+
 	const noopSetup = () => {}
 	const entry = resolve(import.meta.dir, '../../../src/index.ts')
 	const withServer = async (

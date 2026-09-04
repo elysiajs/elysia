@@ -7,8 +7,7 @@ import { Compiled, type ProgramId } from '../../src/compile/aot'
 import {
 	beginValidatorCapture,
 	endValidatorCapture,
-	endHandlerCapture,
-	resetCompactErrorWarnings
+	endHandlerCapture
 } from '../../src/compile/aot-capture'
 import { RouteValidator } from '../../src/validator/route'
 import { buildFrozenRouteValidator } from '../../src/compile/handler/frozen-validator'
@@ -26,7 +25,6 @@ const PATH = '/x'
 function freeze(schema: any): { warns: string[] } {
 	process.env.ELYSIA_AOT_BUILD = '1'
 	process.env.ELYSIA_AOT_VERBOSE = '1'
-	resetCompactErrorWarnings()
 
 	const warns: string[] = []
 	const original = console.warn
@@ -181,7 +179,6 @@ describe('sealed codec errors remain visible', () => {
 	it('warns once per slot within a build', () => {
 		process.env.ELYSIA_AOT_BUILD = '1'
 		process.env.ELYSIA_AOT_VERBOSE = '1'
-		resetCompactErrorWarnings()
 
 		const warns: string[] = []
 		const original = console.warn

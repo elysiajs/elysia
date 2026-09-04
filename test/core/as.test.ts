@@ -103,7 +103,7 @@ describe('as', () => {
 		])
 
 		expect(called).toBe(3)
-		expect(response).toEqual([422, 422, 422])
+		expect(response).toEqual([500, 500, 500])
 	})
 
 	it('handle as global with local override', async () => {
@@ -140,7 +140,7 @@ describe('as', () => {
 		])
 
 		expect(called).toBe(4)
-		expect(response).toEqual([422, 200, 422])
+		expect(response).toEqual([500, 200, 500])
 	})
 
 	it('handle as global with scoped override', async () => {
@@ -176,7 +176,7 @@ describe('as', () => {
 		])
 
 		expect(called).toBe(5)
-		expect(response).toEqual([422, 200, 200])
+		expect(response).toEqual([500, 200, 200])
 	})
 
 	it('handle as scoped', async () => {
@@ -207,7 +207,7 @@ describe('as', () => {
 		])
 
 		expect(called).toBe(2)
-		expect(response).toEqual([422, 422, 200])
+		expect(response).toEqual([500, 500, 200])
 	})
 
 	it('handle as scoped twice', async () => {
@@ -240,6 +240,6 @@ describe('as', () => {
 		])
 
 		expect(called).toBe(3)
-		expect(response).toEqual([422, 422, 422])
+		expect(response).toEqual([500, 500, 500])
 	})
 })

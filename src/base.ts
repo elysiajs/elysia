@@ -2,6 +2,7 @@ import Memoirist from 'memoirist'
 
 import { applyHoc, createFetchHandler } from './handler'
 import {
+	chainResolver,
 	compileHandler,
 	composeRouteHook,
 	localMacroRoot,
@@ -68,7 +69,7 @@ import {
 	throwLifecycleErrors
 } from './utils'
 
-import { Ref as tRef } from './type/bridge'
+import { Ref as tRef, warmTypebox } from './type/bridge'
 import { snapshotHookSchemas, snapshotSchema } from './schema-snapshot'
 
 import type { TRef, TSchema } from 'typebox'
@@ -203,6 +204,74 @@ const mergeExtCallbacks = <T>(target: T[], incoming: T[]) => {
 
 const canRegisterLoose = (path: string, isDynamic: boolean) =>
 	!isDynamic && (path.length === 0 || path.charCodeAt(path.length - 1) === 47)
+
+// Match the schema forms accepted by Validator.create. Raw t.Unsafe schemas
+// have no supported marker and must be rejected.
+const isSchemaValue = (value: unknown) => {
+	if (value == null || typeof value === 'string') return true
+	// A Standard Schema can also be a function.
+	if (typeof value !== 'object' && typeof value !== 'function') return false
+
+	return (
+		'~kind' in value ||
+		'~standard' in value ||
+		'~elyAcl' in value ||
+		typeof (value as { Check?: unknown }).Check === 'function'
+	)
+}
+
+// Runtime hook keys plus legacy Swagger metadata.
+const hookKeys = new Set([
+	...schemaProperties,
+	...eventProperties,
+	'detail',
+	'tags'
+])
+
+const hasHookKeys = (value: object) => {
+	for (const key in value) if (hookKeys.has(key)) return true
+
+	return false
+}
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+	if (!value || typeof value !== 'object' || Array.isArray(value))
+		return false
+
+	const proto = Object.getPrototypeOf(value)
+
+	return proto === Object.prototype || proto === null
+}
+
+// Reject invalid schemas during registration. Responses may be keyed by status;
+// "default" remains valid for model-reference checks.
+const assertSchemaShape = (hook: Record<string, unknown>, where: string) => {
+	for (const key in hook) {
+		if (!schemaProperties.has(key)) continue
+
+		const value = hook[key] as Record<string, unknown>
+		if (isSchemaValue(value)) continue
+
+		if (key === 'response' && isPlainObject(value)) {
+			let isStatusMap = true
+
+			for (const status in value)
+				if (
+					(status !== 'default' && isNaN(+status)) ||
+					!isSchemaValue(value[status])
+				) {
+					isStatusMap = false
+					break
+				}
+
+			if (isStatusMap) continue
+		}
+
+		throw new Error(
+			`[Elysia] ${where}: "${key}" is not a schema — use t.Object({ ... })`
+		)
+	}
+}
 
 /**
  * Every key a single route must answer to, in registration order.
@@ -502,6 +571,11 @@ export class Elysia<
 		} else this['~Prefix'] = undefined as any
 	}
 
+	/**
+	 * Every registered route with its merged hooks.
+	 * Development shares a frozen cache. Production rebuilds the list so its
+	 * metadata can be released after startup.
+	 */
 	get routes() {
 		const generation = this['~generation']
 
@@ -559,7 +633,9 @@ export class Elysia<
 			}
 		)
 
-		if (this.#isCacheable) {
+		if (this.#isCacheable && !isProduction()) {
+			// Later readers share this array.
+			Object.freeze(routes)
 			this.#cacheRoutes(generation!)
 			this.cachedRoutes = routes
 		}
@@ -3461,6 +3537,9 @@ export class Elysia<
 	}
 
 	#guard(scope: EventScope, hook: Partial<AnyLocalHook>): this {
+		// Invalid guard schemas would disable every nested route.
+		if (hook) assertSchemaShape(hook as Record<string, unknown>, '.guard()')
+
 		hook = snapshotHookSchemas(hook)
 		hookToGuard(hook as any)
 
@@ -3973,11 +4052,15 @@ export class Elysia<
 		Volatile
 	>
 
-	macro(macro: Macro) {
+	macro(macro: Macro, definition?: unknown) {
 		this.#assertMutable('macro')
 		if (typeof macro === 'function')
 			throw new Error(
 				'use `.macro({ name: fn })` instead of `.macro(fn)`'
+			)
+		if (definition != null || typeof macro === 'string')
+			throw new Error(
+				'[Elysia] .macro(name, definition) was removed in 2.0 — use .macro({ [name]: definition })'
 			)
 
 		const m = this.#ensureMacroTable() as any
@@ -3985,8 +4068,16 @@ export class Elysia<
 		const baseline = this.macroBaseline
 
 		for (const key in macro) {
-			if (typeof macro[key] === 'object')
+			if (typeof macro[key] === 'object') {
+				// Function macros produce schemas later, so check only objects here.
+				if (macro[key])
+					assertSchemaShape(
+						macro[key] as Record<string, unknown>,
+						`.macro(${key})`
+					)
+
 				macro[key] = hookToGuard(macro[key] as any) as any
+			}
 
 			if (this.hash !== undefined && !macroOrigin.has(macro[key] as any))
 				macroOrigin.set(macro[key] as any, this.hash)
@@ -5192,6 +5283,24 @@ export class Elysia<
 	) {
 		if (this['~Prefix']) path = joinPath(this['~Prefix'], path)
 		else if (path && path.charCodeAt(0) !== 47) path = '/' + path
+
+		// Only flag the old order when a plain handler is followed by hook data;
+		// both positions otherwise accept several kinds of value.
+		if (
+			typeof hookOrFn === 'function' &&
+			!hasHookKeys(hookOrFn) &&
+			isPlainObject(fn) &&
+			hasHookKeys(fn)
+		)
+			throw new Error(
+				`[Elysia] .${method === '*' ? 'all' : method.toLowerCase()}('${path}', handler, hook) is the 1.x order; Elysia 2 takes (path, hook, handler) — see the 2.0 migration guide`
+			)
+
+		if (hasHook && hookOrFn)
+			assertSchemaShape(
+				hookOrFn as Record<string, unknown>,
+				`${method} ${path}`
+			)
 
 		const handler = hasHook ? fn : hookOrFn
 		const hook = hasHook
@@ -7158,6 +7267,133 @@ export class Elysia<
 		return false
 	}
 
+	// Mirror Validator.create: Standard Schema does not load TypeBox.
+	static #slotHasTypeBox(
+		value: unknown,
+		models: Record<string, unknown> | undefined,
+		// Only responses may contain one level of status-keyed schemas.
+		record?: boolean
+	): boolean {
+		if (typeof value === 'string') value = models?.[value]
+		if (!value || typeof value !== 'object') return false
+		if ('~kind' in value || '~elyAcl' in value) return true
+		if (!record || '~standard' in value) return false
+
+		for (const status in value)
+			if (
+				Elysia.#slotHasTypeBox(
+					(value as Record<string, unknown>)[status],
+					models
+				)
+			)
+				return true
+
+		return false
+	}
+
+	static #hookHasTypeBox(
+		h: Record<string, unknown> | undefined,
+		models: Record<string, unknown> | undefined
+	): boolean {
+		if (!h || typeof h !== 'object') return false
+
+		for (const key in h) {
+			// Merged guards and macros store their schema slots here.
+			if (key === 'schemas') {
+				const schemas = h[key]
+				if (Array.isArray(schemas))
+					for (let s = 0; s < schemas.length; s++)
+						if (Elysia.#hookHasTypeBox(schemas[s], models))
+							return true
+
+				continue
+			}
+
+			if (
+				schemaProperties.has(key) &&
+				Elysia.#slotHasTypeBox(h[key], models, key === 'response')
+			)
+				return true
+		}
+
+		return false
+	}
+
+	static #chainHasTypeBox(
+		node: ChainNode | undefined,
+		models: Record<string, unknown> | undefined,
+		seen: Set<ChainNode>,
+		// Resolve guard macros the same way as composeRouteHook.
+		resolve: ((node: ChainNode) => Partial<AppHook> | undefined) | undefined
+	): boolean {
+		while (node) {
+			if (seen.has(node)) return false
+			seen.add(node)
+
+			if ('added' in node) {
+				if (
+					Elysia.#hookHasTypeBox(
+						(resolve ? resolve(node) : node.added) as Record<
+							string,
+							unknown
+						>,
+						models
+					)
+				)
+					return true
+
+				node = node.parent
+			} else {
+				if (
+					Elysia.#chainHasTypeBox(node.combine, models, seen, resolve)
+				)
+					return true
+
+				node = node.over
+			}
+		}
+
+		return false
+	}
+
+	/**
+	 * Scan each route and its inherited hooks for TypeBox schemas.
+	 * This may warm TypeBox after a closer schema overrides it, avoiding a full
+	 * hook merge during build.
+	 */
+	#hasTypeBoxSchema(table: RouteTable): boolean {
+		const models = this['~ext']?.models as
+			| Record<string, unknown>
+			| undefined
+
+		const resolve = chainResolver(this as unknown as AnyElysia)
+		const rootChain = this['~hookChain']
+		const seen = new Set<ChainNode>()
+
+		const { localHook, appHook, inheritedChain, owner } = table
+
+		for (let i = 0; i < table.length; i++)
+			if (
+				Elysia.#hookHasTypeBox(
+					localHook[i] as Record<string, unknown>,
+					models
+				) ||
+				Elysia.#chainHasTypeBox(appHook[i], models, seen, resolve) ||
+				Elysia.#chainHasTypeBox(
+					inheritedChain[i],
+					models,
+					seen,
+					resolve
+				) ||
+				// The root chain applies only to routes owned by another instance.
+				(owner[i] !== (this as unknown as AnyElysia) &&
+					Elysia.#chainHasTypeBox(rootChain, models, seen, resolve))
+			)
+				return true
+
+		return false
+	}
+
 	#routeMayHaveModelRef(table: RouteTable, i: number): boolean {
 		const macroScope = table.macroScope?.get(i) // route[7]
 		const owner = table.owner[i] // route[3]
@@ -7419,6 +7655,15 @@ export class Elysia<
 				if (this.#routeMayHaveModelRef(table, i))
 					this.#assertRouteModelRefs(routeRow(table, i), method[i])
 
+		// Load TypeBox before serving to avoid blocking the first validated request.
+		// The scan preserves fast startup for apps that do not use TypeBox.
+		if (length && this.#hasTypeBoxSchema(table))
+			try {
+				warmTypebox()
+			} catch {
+				// Warm-up must not add a new failure path.
+			}
+
 		let markDuplicates = false
 
 		if (length) {
@@ -7641,7 +7886,14 @@ export class Elysia<
 			this['~config']?.adapter ?? (isBun ? BunAdapter : undefined)
 		)?.listen
 
-		if (!listen) throw new Error('No adapter provided for listen()')
+		if (!listen) {
+			// @ts-ignore
+			const deno = typeof Deno !== 'undefined'
+
+			throw new Error(
+				`[Elysia] listen() requires an adapter on ${deno ? 'Deno' : typeof process === 'undefined' ? 'this runtime' : 'Node.js'} — https://elysiajs.com/integrations/${deno ? 'deno' : 'node'}`
+			)
+		}
 
 		if (!Capture.isAotBuildEnv()) listen(this, options, callback)
 

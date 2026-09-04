@@ -3,8 +3,15 @@ import { describe, it, expect, afterEach } from 'bun:test'
 import { createContext, Elysia, t } from '../../src'
 import { websocket } from '../../src/plugin/websocket'
 import { Compiled, createAotFingerprint } from '../../src/compile/aot'
-import { abortCapture, installCaptureImpl } from '../../src/compile/aot-capture'
+import { abortCapture } from '../../src/compile/aot-capture'
 import { buildRouteTable, RouteFlag } from '../../src/route-table'
+
+// Passes route registration but fails validator compilation.
+const BAD_HEADERS = {
+	'~kind': 'Object',
+	type: 'object',
+	properties: null
+} as any
 
 const PROBE_PATH = '/__p5-probe'
 
@@ -155,7 +162,7 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 				.post('/same', () => 'post')
 				.get(
 					'/bad',
-					{ headers: { 'x-a': '1' } } as any,
+					{ headers: BAD_HEADERS } as any,
 					'invalid loser' as any
 				)
 				.get('/bad', () => 'valid winner')
@@ -719,7 +726,6 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 		await withEnv(
 			{ NODE_ENV: 'production', ELYSIA_AOT_BUILD: '1' },
 			async () => {
-				installCaptureImpl()
 				try {
 					registerProbeManifest()
 

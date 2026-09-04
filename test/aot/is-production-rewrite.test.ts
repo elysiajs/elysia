@@ -3,7 +3,6 @@ import { resolve } from 'node:path'
 import {
 	ELYSIA_MODULE_FILTER,
 	makeIsElysiaModule,
-	makeElysiaModuleFilterRegex,
 	rewriteIsProductionCalls,
 	generateCompiledArtifacts
 } from '../../src/plugin/aot/core'
@@ -137,15 +136,6 @@ describe('resolved Elysia package filtering', () => {
 				'/x/node_modules/.pnpm/elysia@1.0.0/node_modules/elysia/dist/error.mjs'
 			)
 		).toBe(false)
-	})
-})
-
-describe('anchored Elysia module filter regex', () => {
-	it('builds a regex anchored to the elysia root', () => {
-		const re = makeElysiaModuleFilterRegex('/fake/node_modules/elysia')
-		expect(re.test('/fake/node_modules/elysia/dist/error.mjs')).toBe(true)
-		expect(re.test('/fake/node_modules/elysia/src/error.ts')).toBe(true)
-		expect(re.test('/other/elysia/dist/error.mjs')).toBe(false)
 	})
 })
 

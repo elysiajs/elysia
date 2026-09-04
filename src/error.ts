@@ -80,7 +80,7 @@ export class ElysiaError<
  * once {@link HTTPError.typeBase} is set. Shared by `ElysiaError` and every
  * class {@link HTTPError.id} makes, so both lanes derive `type` identically
  */
-function problemTypeOf(code: string | undefined) {
+export function problemTypeOf(code: string | undefined) {
 	if (code === undefined) return
 
 	const base = HTTPError.typeBase
@@ -432,7 +432,8 @@ function scopeIssues(errors: any[]) {
 }
 
 export class ValidationError extends ElysiaError {
-	status = 422 as const
+	/** Response validation is a server error; other validation is a client error. */
+	status: 422 | 500 = 422
 
 	schema?: unknown
 	declare message: string
@@ -455,6 +456,8 @@ export class ValidationError extends ElysiaError {
 		) => { instancePath: string; error: unknown } | undefined
 	) {
 		super(undefined as any)
+
+		if (type === 'response') this.status = 500
 
 		this.schema = schema
 		this.#thunk =
@@ -693,13 +696,12 @@ export class ValidationError extends ElysiaError {
 	}
 
 	get payload() {
+		// Response validation always reports a server error.
+		const server = this.type === 'response'
+
 		if (this.#productionDetail) {
-			if (this.type === 'response')
-				return {
-					type: 'internal-server-error',
-					title: 'Internal Server Error',
-					status: 500
-				}
+			// Keep response validation identical to other 500 errors.
+			if (server) return internalServerErrorProblem()
 
 			const first = (this.errors ?? []).find(Boolean)
 
@@ -761,9 +763,13 @@ export class ValidationError extends ElysiaError {
 			}
 
 		return {
-			type: 'validation',
-			title: 'Validation Error',
-			status: 422,
+			...(server
+				? internalServerErrorProblem()
+				: {
+						type: 'validation',
+						title: 'Validation Error',
+						status: 422 as const
+					}),
 			detail,
 			on: this.type,
 			property,
@@ -785,7 +791,8 @@ export class ValidationError extends ElysiaError {
 					? (this.customError as string)
 					: JSON.stringify(this.customError),
 				{
-					status: this.status ?? 422,
+					status:
+						this.type === 'response' ? 500 : (this.status ?? 422),
 					headers: {
 						...headers,
 						'content-type': isString
@@ -820,13 +827,15 @@ Object.defineProperty(ValidationError.prototype, 'message', {
 
 const emptyHttpStatus = new Set([101, 204, 205, 304, 307, 308])
 
+/** Default body for a status with no response. Named to keep emitted types small. */
+export type StatusResponse<Code extends number | keyof StatusMap> =
+	Code extends keyof StatusMapBack ? StatusMapBack[Code] : Code
+
 export class ElysiaStatus<
 	const in out Code extends number | keyof StatusMap,
 	// no in out here so the response can be sub type of return type
-	T = Code extends keyof StatusMapBack ? StatusMapBack[Code] : Code,
-	const in out Status extends Code extends keyof StatusMap
-		? StatusMap[Code]
-		: Code = Code extends keyof StatusMap ? StatusMap[Code] : Code
+	T = StatusResponse<Code>,
+	const in out Status extends NumericStatus<Code> = NumericStatus<Code>
 > {
 	/**
 	 * Type-only brand, erased at runtime.
@@ -861,7 +870,7 @@ Object.defineProperty(ElysiaStatus, 'name', { value: 'ElysiaStatus' })
 
 export const status = <
 	const Code extends number | keyof StatusMap,
-	const T = Code extends keyof StatusMapBack ? StatusMapBack[Code] : Code
+	const T = StatusResponse<Code>
 >(
 	code: Code,
 	response?: T
@@ -902,7 +911,8 @@ export type Problem<
 	instance?: string
 } & Extension
 
-type NumericStatus<Code extends number | keyof StatusMap> =
+/** Numeric form of a status name or code. */
+export type NumericStatus<Code extends number | keyof StatusMap> =
 	Code extends keyof StatusMap ? StatusMap[Code] : Code
 
 type ProblemStatus<P> = P extends {
@@ -910,6 +920,18 @@ type ProblemStatus<P> = P extends {
 }
 	? NumericStatus<S>
 	: 500
+
+/** Request validation problem. Diagnostic fields are development-only. */
+export type ValidationErrorResponse = {
+	type: 'validation'
+	title: 'Validation Error'
+	status: 422
+	detail?: string
+	on: string
+	found?: unknown
+	property?: string
+	expected?: string
+}
 
 export type ProblemResponseBody<Status extends number, P> = Omit<
 	{
@@ -953,12 +975,16 @@ export function problemResponse(p: Problem, headers?: Record<string, any>) {
 	return response
 }
 
+// Read typeBase on every call because it can change.
+const internalServerErrorProblem = () => ({
+	type: problemTypeOf('internal-server-error'),
+	code: 'internal-server-error',
+	title: 'Internal Server Error',
+	status: 500
+})
+
 export function internalServerErrorBody(error: any) {
-	const body: Record<string, unknown> = {
-		type: 'internal-server-error',
-		title: 'Internal Server Error',
-		status: 500
-	}
+	const body: Record<string, unknown> = internalServerErrorProblem()
 
 	if (!isProduction()) {
 		if (error?.message != null) body.detail = error.message
@@ -979,11 +1005,7 @@ export function internalServerErrorBodyString(error: any): string {
 			delete safe.cause
 			return JSON.stringify(safe)
 		} catch {
-			return JSON.stringify({
-				type: 'internal-server-error',
-				title: 'Internal Server Error',
-				status: 500
-			})
+			return JSON.stringify(internalServerErrorProblem())
 		}
 	}
 }
@@ -1179,11 +1201,7 @@ export abstract class HTTPError<
 	/**
 	 * Absolute base for the RFC 9457 `type` URI, applied to every class made
 	 * by {@link HTTPError.id} and to every built-in `ElysiaError`
-	 * (`NotFound`, `ParseError`, …) — both derive `type` from the same slug
-	 *
-	 * Unset, `type` mirrors `code` verbatim. Set, `type` resolves to
-	 * `<typeBase>/<code>` with the code carried through as written — no
-	 * casing or separator rewrite — while `code` keeps serving the bare token
+	 * (`NotFound`, `ParseError`, …) both derive `type` from the same slug
 	 *
 	 * @example
 	 * ```ts

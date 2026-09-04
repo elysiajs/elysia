@@ -225,4 +225,4 @@ export function buildCoercedFromPlan(
 	return out
 }
 
-export { clearCoerceLeafCache, coerceLeafCacheSize } from './shared'
+export { clearCoerceLeafCache } from './shared'

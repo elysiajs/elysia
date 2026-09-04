@@ -6,7 +6,7 @@ import type { AnyElysia } from '../base'
 import {
 	getAsyncIndexes,
 	emptyResponse,
-	NOT_FOUND_BODY,
+	getNotFoundBody,
 	getNotFound
 } from './utils'
 
@@ -47,7 +47,7 @@ function notFound(context: Context): Response {
 		if (!(set.headers as any)['content-type'])
 			(materializeSetHeaders(set) as any)['content-type'] = PROBLEM_JSON
 
-		return new Response(NOT_FOUND_BODY, {
+		return new Response(getNotFoundBody(), {
 			status: 404,
 			headers: set.headers as any
 		})
@@ -67,6 +67,18 @@ function decodeParams(params: Record<string, string>) {
 }
 
 const notFoundBody = Object.freeze({ code: 'NOT_FOUND' })
+
+// Warn once per app, even when its fetch handler is rebuilt.
+const warnedPathMutation = new WeakSet<AnyElysia>()
+
+function warnPathMutation(app: AnyElysia) {
+	if (warnedPathMutation.has(app)) return
+	warnedPathMutation.add(app)
+
+	console.warn(
+		'[elysia] context.path is readonly; request-hook rerouting will stop working in a future release.'
+	)
+}
 
 function finalizeError(
 	context: Context,
@@ -248,6 +260,7 @@ export function createFetchHandler(
 	const hasError = !!hook?.error
 
 	const abortSignal = app['~config']?.abortSignal !== false
+	const watchPath = !isProduction()
 
 	/**
 	 * Arm `context['~sig']` unless this request is provably the untouched
@@ -455,7 +468,7 @@ export function createFetchHandler(
 			if (armEager(request, context))
 				return emptyResponse.clone() as Response
 
-			extractPath(request.url, context)
+			const path = extractPath(request.url, context)
 			// @ts-expect-error
 			context.server = server ?? null
 
@@ -498,6 +511,9 @@ export function createFetchHandler(
 						? await onRequests[i](context as any)
 						: onRequests[i](context as any)
 
+					if (watchPath && context.path !== path)
+						warnPathMutation(app)
+
 					for (let i = 0; i < traceLength; i++) endReports[i]?.()
 
 					if (armedAbort(request, context)) {
@@ -517,6 +533,7 @@ export function createFetchHandler(
 							context
 						)) as Response
 
+						// eslint-disable-next-line sonarjs/no-use-of-empty-return-value -- optional call, result unused
 						afterResponse?.(context)
 						return response
 					}
@@ -565,7 +582,7 @@ export function createFetchHandler(
 				if (armEager(request, context))
 					return emptyResponse.clone() as Response
 
-				extractPath(request.url, context)
+				const path = extractPath(request.url, context)
 				// @ts-expect-error
 				context.server = server ?? null
 
@@ -577,6 +594,9 @@ export function createFetchHandler(
 
 						if (result instanceof Promise) result = await result
 
+						if (watchPath && context.path !== path)
+							warnPathMutation(app)
+
 						if (armedAbort(request, context))
 							return emptyResponse.clone() as Response
 
@@ -587,6 +607,7 @@ export function createFetchHandler(
 								context
 							)) as Response
 
+							// eslint-disable-next-line sonarjs/no-use-of-empty-return-value -- optional call, result unused
 							afterResponse?.(context)
 							return response
 						}
@@ -620,13 +641,16 @@ export function createFetchHandler(
 			if (armEager(request, context))
 				return emptyResponse.clone() as Response
 
-			extractPath(request.url, context)
+			const path = extractPath(request.url, context)
 			// @ts-expect-error
 			context.server = server ?? null
 
 			try {
 				for (let i = 0; i < onRequests.length; i++) {
 					const result = onRequests[i](context)
+					if (watchPath && context.path !== path)
+						warnPathMutation(app)
+
 					if (abortSignal && (context as any)['~sig']?.aborted)
 						return emptyResponse.clone() as Response
 
@@ -640,12 +664,14 @@ export function createFetchHandler(
 						if (response instanceof Promise)
 							return response.then(
 								(response) => {
+									// eslint-disable-next-line sonarjs/no-use-of-empty-return-value -- optional call, result unused
 									afterResponse?.(context)
 									return response
 								},
 								catchError(context, handleError, afterResponse)
 							)
 
+						// eslint-disable-next-line sonarjs/no-use-of-empty-return-value -- optional call, result unused
 						afterResponse?.(context)
 						return response
 					}

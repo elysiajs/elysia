@@ -114,9 +114,18 @@ describe('typebox-value', () => {
 		expect(Object.keys(live).sort()).toEqual(Object.keys(ops).sort())
 
 		for (const key of Object.keys(live) as (keyof typeof live)[]) {
-			if (key === 'injectTypebox') continue
+			// The live module already loaded TypeBox, so its loaders are no-ops.
+			if (key === 'injectTypebox' || key === 'warmTypebox') continue
 
 			expect(ops[key]).toBe(live[key])
 		}
+	})
+
+	it('typebox-value-live warmTypebox is inert', async () => {
+		const live = await import('../../src/type/typebox-value-live')
+
+		const before = live.HasCodec
+		expect(live.warmTypebox()).toBeUndefined()
+		expect(live.HasCodec).toBe(before)
 	})
 })

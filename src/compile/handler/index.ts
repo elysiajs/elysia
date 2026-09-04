@@ -370,7 +370,7 @@ function resolveChainNode(
 	return resolved
 }
 
-function chainResolver(root: AnyElysia) {
+export function chainResolver(root: AnyElysia) {
 	const frozenRoot = frozenRootOf(root)
 	return frozenRoot['~ext']?.macro || frozenRoot['~scopeChildren']
 		? (node: ChainNode) => resolveChainNode(root, node)

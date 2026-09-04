@@ -113,6 +113,7 @@ describe('NotFound miss sentinel', () => {
 		expect(body).toBe(
 			JSON.stringify({
 				type: 'internal-server-error',
+				code: 'internal-server-error',
 				title: 'Internal Server Error',
 				status: 500,
 				detail: 'Not Found',

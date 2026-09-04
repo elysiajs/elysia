@@ -141,7 +141,7 @@ describe('group', () => {
 		const correct = await app.handle('/v1/correct')
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(422)
+		expect(error.status).toBe(500)
 	})
 
 	it('validate request with prefix', async () => {

@@ -457,13 +457,6 @@ export function makeIsElysiaModule(elysiaRoot: string) {
 	}
 }
 
-export function makeElysiaModuleFilterRegex(elysiaRoot: string) {
-	const escaped = elysiaRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-	return new RegExp(
-		'^' + escaped + '[\\\\/](dist|src)[\\\\/].+\\.(m?js|ts)x?$'
-	)
-}
-
 export const rewriteIsProductionCalls = (code: string) =>
 	code.replace(/(?<![.?])\bisProduction\(\)/g, 'true')
 
@@ -503,7 +496,7 @@ export const STUB_SOURCES: Record<
 				`export function isEmptyPipelineHook(hook){\n` +
 				`	if(!hook)return true\n` +
 				`	for(const key in hook){\n` +
-				`		if(key==='detail'||key==='tags')continue\n` +
+				`		if(key==='detail'||key==='tags'||key==='error')continue\n` +
 				`		const value=hook[key]\n` +
 				`		if(value!==undefined&&value!==false&&(!Array.isArray(value)||value.length))return false\n` +
 				`	}\n` +
@@ -538,7 +531,6 @@ export const STUB_SOURCES: Record<
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a route used cookies. Rebuild with strip:false.")}\n` +
 				`export const hasSyncHmac=false\n` +
-				`export function parseCookie(){return e()}\n` +
 				`export function parseCookieRaw(){return e()}\n` +
 				`export function parseCookieRawSync(){return e()}\n` +
 				`export function parseCookieRawSigned(){return e()}\n` +
@@ -770,15 +762,6 @@ type IsolatedGenerationResult =
 			error: { name: string; message: string; stack?: string }
 	  }
 
-let activeGenerationWorkers = 0
-let lastGenerationWorkerExit: Promise<number> | undefined
-
-/** @internal Test diagnostic for deterministic worker cleanup. */
-export const getAotWorkerDiagnostics = () => ({
-	activeWorkers: activeGenerationWorkers,
-	lastExit: lastGenerationWorkerExit
-})
-
 /**
  * Extension mirroring the running module's own build output, so a sibling
  * source file can be resolved from `import.meta.url` in `.mjs`/`.js`/`.ts`
@@ -816,10 +799,8 @@ export async function generateCompiledArtifactsIsolated(
 	const worker = new Worker(workerUrl(), {
 		workerData: { file: entry, options, moduleCondition }
 	})
-	activeGenerationWorkers++
 
 	const exit = new Promise<number>((resolve) => worker.once('exit', resolve))
-	lastGenerationWorkerExit = exit
 
 	try {
 		return await new Promise<CompiledArtifacts>((resolve, reject) => {
@@ -852,7 +833,6 @@ export async function generateCompiledArtifactsIsolated(
 			await worker.terminate()
 		} finally {
 			await exit
-			activeGenerationWorkers--
 		}
 	}
 }

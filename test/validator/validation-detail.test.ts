@@ -141,7 +141,7 @@ describe('validation detail', () => {
 		it('restores response details when allowUnsafeValidationDetails is enabled', async () => {
 			const r = await run('production')
 
-			expect(r.unsafeResponse.status).toBe(422)
+			expect(r.unsafeResponse.status).toBe(500)
 			expect(r.unsafeResponse.body.on).toBe('response')
 		})
 
@@ -198,7 +198,7 @@ describe('validation detail', () => {
 
 			expect(r.maskedRequest.body.property).toBeDefined()
 			expect(r.maskedRequest.body.errors).toBeArray()
-			expect(r.maskedResponse.status).toBe(422)
+			expect(r.maskedResponse.status).toBe(500)
 			expect(r.maskedResponse.body.on).toBe('response')
 			expect(r.maskedResponse.body.errors).toBeArray()
 		})
@@ -225,6 +225,32 @@ describe('validation detail', () => {
 			expect(r.patternFailure.status).toBe(422)
 			expect(r.patternFailure.body.errors).toBeArray()
 			expect(r.patternFailure.body.detail).toContain('pattern')
+		})
+	})
+
+	describe('response violation status', () => {
+		// Response violations are server errors in every environment.
+		it('blames the server in both environments', async () => {
+			const [dev, prod] = await Promise.all([
+				run('development'),
+				run('production')
+			])
+
+			expect(dev.maskedResponse.status).toBe(500)
+			expect(prod.maskedResponse.status).toBe(dev.maskedResponse.status)
+			expect(prod.maskedResponse.body.type).toBe(
+				dev.maskedResponse.body.type
+			)
+			expect(prod.maskedResponse.body.status).toBe(
+				dev.maskedResponse.body.status
+			)
+
+			expect(dev.maskedResponse.body.on).toBe('response')
+			expect(dev.maskedResponse.body.errors).toBeArray()
+			expect(prod.maskedResponse.body.errors).toBeUndefined()
+
+			expect(dev.maskedRequest.status).toBe(422)
+			expect(prod.maskedRequest.status).toBe(422)
 		})
 	})
 })

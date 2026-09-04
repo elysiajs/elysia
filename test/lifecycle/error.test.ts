@@ -13,9 +13,9 @@ import { describe, expect, it, spyOn } from 'bun:test'
 import { post, json } from '../utils'
 import * as z from 'zod'
 
-import { MAX_ERRORS } from '../../src/error'
-
 import { TypeBoxValidator } from '../../src/type/validator'
+
+const ERROR_LIMIT = 64
 
 describe('Error lifecycle', () => {
 	it('use custom 404', async () => {
@@ -808,23 +808,21 @@ describe('Validation error payload echo limits', () => {
 	// never had any bound at all. Capping where every producer's issues
 	// collapse makes the limit Elysia's own, so one bad element per array
 	// entry can no longer turn a small request into a huge response. What is
-	// pinned is that the list is constant in the size of the request — the
-	// constant itself is a compatibility choice, so it is read from the
-	// source rather than restated here
+	// pinned is that the list is constant in the size of the request
 	it('caps the number of enumerated errors regardless of the producer', () => {
 		const err = new ValidationError(
 			'body',
 			{ id: 'bad' },
-			Array.from({ length: MAX_ERRORS * 100 }, () => ({
+			Array.from({ length: ERROR_LIMIT * 100 }, () => ({
 				instancePath: '/id',
 				message: 'must be number'
 			}))
 		)
 
-		expect(err.errors).toHaveLength(MAX_ERRORS)
-		expect(err.all).toHaveLength(MAX_ERRORS)
+		expect(err.errors).toHaveLength(ERROR_LIMIT)
+		expect(err.all).toHaveLength(ERROR_LIMIT)
 		expect((err.payload as any).errors.length).toBeLessThanOrEqual(
-			MAX_ERRORS
+			ERROR_LIMIT
 		)
 	})
 
@@ -885,7 +883,7 @@ describe('Validation error payload echo limits', () => {
 
 		expect(large).toBe(small)
 		// flat in `n` is the property; the absolute bound just pins that
-		// MAX_ERRORS issues still cost ~12KB rather than an order more
+		// ERROR_LIMIT issues still cost ~12KB rather than an order more
 		expect(large).toBeLessThan(12_288)
 	})
 
@@ -925,7 +923,7 @@ describe('Validation error payload echo limits', () => {
 	// `params` at all: zod reports the excess keys as its own `keys` member
 	// *and* interpolates them into `message`, which `payload.detail` reads.
 	// Bounding only `params` would leave the two backends with contradictory
-	// limits, the same inconsistency MAX_ERRORS exists to remove
+	// limits, the same inconsistency the error count limit exists to remove
 	it('bounds the value-derived members of a Standard Schema issue', async () => {
 		const app = new Elysia().post(
 			'/',
@@ -948,7 +946,7 @@ describe('Validation error payload echo limits', () => {
 	})
 
 	// The budget is shared across issues rather than spent per issue.
-	// MAX_ERRORS admits 64, so a per-issue 8192 would still admit ~512KB —
+	// ERROR_LIMIT admits 64, so a per-issue 8192 would still admit ~512KB —
 	// sixty-four times what the response already decided one echo of a
 	// value is worth. Each issue below fits 8192 on its own and only the
 	// shared budget stops the total
@@ -958,7 +956,7 @@ describe('Validation error payload echo limits', () => {
 		const err = new ValidationError(
 			'body',
 			{},
-			Array.from({ length: MAX_ERRORS }, () => ({
+			Array.from({ length: ERROR_LIMIT }, () => ({
 				keyword: 'additionalProperties',
 				schemaPath: '#',
 				instancePath: '',
@@ -967,7 +965,7 @@ describe('Validation error payload echo limits', () => {
 			}))
 		)
 
-		expect(err.errors).toHaveLength(MAX_ERRORS)
+		expect(err.errors).toHaveLength(ERROR_LIMIT)
 		// measured: 17KB sharing the budget, 331KB spending it per issue
 		expect(JSON.stringify(err.payload).length).toBeLessThan(32_000)
 	})

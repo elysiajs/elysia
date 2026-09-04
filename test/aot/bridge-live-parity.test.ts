@@ -88,6 +88,28 @@ describe('statically wired TypeBox bridge', () => {
 		expect(live.isBridgeLive()).toBe(true)
 	})
 
+	// The live bridge already loaded TypeBox, so warming it is a no-op.
+	it('exports warmTypebox from both modules, inert in the mirror', async () => {
+		const { setupTypebox } = await import('../../src/type/compat')
+		setupTypebox()
+
+		const bridge = (await import('../../src/type/bridge')) as Record<
+			string,
+			any
+		>
+		const live = (await import('../../src/type/bridge-live')) as Record<
+			string,
+			any
+		>
+
+		expect(typeof bridge.warmTypebox).toBe('function')
+		expect(typeof live.warmTypebox).toBe('function')
+
+		const before = live.Compile
+		expect(live.warmTypebox()).toBeUndefined()
+		expect(live.Compile).toBe(before)
+	})
+
 	it('keeps useTypebox idempotent', async () => {
 		const { setupTypebox } = await import('../../src/type/compat')
 		setupTypebox()

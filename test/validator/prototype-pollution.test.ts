@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
 import { Elysia, t } from '../../src'
-import { extractDeriveKeys } from '../../src/compile/handler/utils'
 import { TypeBoxValidator } from '../../src/type/validator'
 import { Validator } from '../../src/validator'
 
@@ -255,17 +254,9 @@ describe('attacker-supplied prototypes', () => {
 		expect(({} as any).isAdmin).toBeUndefined()
 	})
 
-	// The derives above are unscannable, so they take the guarded merge. When
-	// `extractDeriveKeys` *can* read the literal, the codegen stores key by
-	// key instead — and in `{ __proto__: body }` the key is prototype-setter
-	// syntax, so `tmp` carries no own `__proto__` for `Object.hasOwn` to catch.
-	// The store then read the inherited getter and wrote through the inherited
-	// setter, reparenting the live context on the one lane the guard missed.
+	// In an object literal, `__proto__` is setter syntax rather than an own key.
 	it('does not let a scanned __proto__ key reparent the context', async () => {
 		const derive = ({ body }: any) => ({ __proto__: body, tag: 1 }) as any
-
-		// pins the lane: this literal is scannable, so it is the key-wise path
-		expect(extractDeriveKeys(derive)).toEqual(['__proto__', 'tag'])
 
 		const app = new Elysia().derive(derive).post('/', (context: any) => ({
 			isAdmin: context.isAdmin ?? null,

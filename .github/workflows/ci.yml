@@ -44,6 +44,53 @@ jobs:
               if: github.event_name == 'pull_request'
               run: bunx pkg-pr-new publish
 
+    lint:
+        name: Lint
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup bun
+              uses: oven-sh/setup-bun@v1
+              with:
+                  bun-version: latest
+
+            - name: Install packages
+              run: bun install
+
+            - name: Lint
+              run: bun run lint
+
+    node:
+        name: Test (Node ${{ matrix.node-version }})
+        runs-on: ubuntu-latest
+
+        strategy:
+            matrix:
+                node-version: ['20.19', '22.12', '24.x']
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup bun
+              uses: oven-sh/setup-bun@v1
+              with:
+                  bun-version: latest
+
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: ${{ matrix.node-version }}
+
+            - name: Install packages
+              run: bun install
+
+            - name: Test (Node)
+              run: bun run test:node
+
     benchmark:
         name: Benchmark
         runs-on: ubuntu-latest

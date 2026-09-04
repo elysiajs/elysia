@@ -116,7 +116,7 @@ describe('Standard Schema Validate', () => {
 		const nonExists = await app.handle('/lilith')
 
 		expect(exists.status).toBe(200)
-		expect(nonExists.status).toBe(422)
+		expect(nonExists.status).toBe(500)
 	})
 
 	it('validate multiple response', async () => {
@@ -141,7 +141,7 @@ describe('Standard Schema Validate', () => {
 		expect(nonExists.status).toBe(404)
 
 		const invalid = await app.handle('/unknown')
-		expect(invalid.status).toBe(422)
+		expect(invalid.status).toBe(500)
 	})
 
 	it('validate multiple schema together', async () => {

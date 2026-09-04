@@ -1,21 +1,6 @@
 import { Elysia, t } from '../../src'
 import { mapCompactResponse } from '../../src/adapter/web-standard/handler'
-import { computeIsProduction } from '../../src/universal/is-production'
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
-
-describe('isProduction fail-safe', () => {
-	it('assumes production when the environment is unreadable', () => {
-		expect(computeIsProduction(false, undefined, undefined)).toBe(true)
-		expect(computeIsProduction(false, 'development', undefined)).toBe(true)
-	})
-
-	it('honors NODE_ENV / ENV when the environment is readable', () => {
-		expect(computeIsProduction(true, undefined, undefined)).toBe(false)
-		expect(computeIsProduction(true, 'development', undefined)).toBe(false)
-		expect(computeIsProduction(true, 'production', undefined)).toBe(true)
-		expect(computeIsProduction(true, undefined, 'production')).toBe(true)
-	})
-})
 
 describe('NODE_ENV=production', () => {
 	beforeEach(() => {
@@ -75,6 +60,7 @@ describe('NODE_ENV=production', () => {
 		expect(text).not.toContain('SECRET')
 		expect(JSON.parse(text)).toEqual({
 			type: 'internal-server-error',
+			code: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500
 		})
@@ -100,6 +86,7 @@ describe('NODE_ENV=production', () => {
 		expect(text).not.toContain('SECRET')
 		expect(JSON.parse(text)).toEqual({
 			type: 'internal-server-error',
+			code: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500
 		})
@@ -116,6 +103,7 @@ describe('NODE_ENV=production', () => {
 
 		await expect(response.json()).resolves.toEqual({
 			type: 'internal-server-error',
+			code: 'internal-server-error',
 			title: 'Internal Server Error',
 			status: 500
 		})

@@ -489,7 +489,7 @@ describe('AOT sealing with mixed response schemas', () => {
 				body: JSON.stringify({ name: 'a', age: 5 })
 			})
 		)
-		expect(badResponse.status).toBe(422)
+		expect(badResponse.status).toBe(500)
 	})
 })
 
@@ -526,7 +526,7 @@ describe('AOT sealing with multiple TypeBox responses', () => {
 		const invalid = await app.handle(
 			new Request('http://localhost/u?mode=invalid-400')
 		)
-		expect(invalid.status).toBe(422)
+		expect(invalid.status).toBe(500)
 
 		const plain = await app.handle(new Request('http://localhost/plain'))
 		expect(plain.status).toBe(200)
@@ -541,7 +541,7 @@ describe('AOT sealing with multiple TypeBox responses', () => {
 		const invalidStandard = await app.handle(
 			new Request('http://localhost/standard?bad=1')
 		)
-		expect(invalidStandard.status).toBe(422)
+		expect(invalidStandard.status).toBe(500)
 	})
 })
 

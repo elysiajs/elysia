@@ -423,11 +423,6 @@ const compactErrorWarned = new Set<string>()
 
 const isVerboseAotWarnings = () => !!env.ELYSIA_AOT_VERBOSE
 
-// @internal test isolation
-export function resetCompactErrorWarnings() {
-	compactErrorWarned.clear()
-}
-
 function warnCompactErrorLoss(
 	aot: { method: string; path: string },
 	slot: ValidatorSlot
@@ -458,7 +453,7 @@ function flushCompactErrorWarnings() {
 		)
 	}
 
-	resetCompactErrorWarnings()
+	compactErrorWarned.clear()
 }
 
 function captureBridgeFree(
@@ -490,9 +485,6 @@ function captureBridgeFree(
 	}
 }
 
-// The rest are for build/test-only
-
-// @internal test isolation
 export function beginValidatorCapture() {
 	if (captureImpl === undefined) throw aotActivationError()
 
@@ -541,7 +533,6 @@ function endCaptureSession(session: CompilerSession) {
 	}
 }
 
-// @internal test isolation
 export function endValidatorCapture() {
 	const session = CompilerState.session
 	const captured = session?.capture ? [...session.capture.values()] : []
@@ -569,19 +560,6 @@ export function endHandlerCapture(): CapturedHandler[] {
 	return captured
 }
 
-/** @internal deterministic session/capture assertions. */
-export const getCompilerSessionDiagnostics = () => {
-	const session = CompilerState.session
-
-	return {
-		active: session !== undefined,
-		appAttached: session?.app !== undefined,
-		validators: session?.capture?.size ?? 0,
-		handlers: session?.handlerCapture?.size ?? 0,
-		sucrose: session?.sucroseCache.size ?? 0
-	}
-}
-
 /** @internal preserve registry around in-process AOT analysis */
 export const snapshotCompiled = (): CompiledSnapshot => CompilerState.registry
 
@@ -590,21 +568,11 @@ export function restoreCompiled(snapshot: CompiledSnapshot) {
 	CompilerState.registry = snapshot
 }
 
-const impl: CaptureImpl = {
+setCaptureImpl({
 	sourceOnlyValidator,
 	maybeCapture,
 	captureMirror,
 	captureCodecMirror,
 	captureBridgeFree
-}
-
-export function installCaptureImpl() {
-	setCaptureImpl(impl)
-	// capture consumes the reconstruction table (`isCapturedBridgeFree`,
-	// frozen replay), so wiring one without the other is never valid
-	installReconstructImpl()
-}
-
-installCaptureImpl()
-
-export { impl as captureImplementation }
+} satisfies CaptureImpl)
+installReconstructImpl()

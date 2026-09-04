@@ -87,7 +87,7 @@ describe('TypeSystem - Form', () => {
 		expect(res1.status).toBe(200)
 
 		const res2 = await app.handle('/form/felis')
-		expect(res2.status).toBe(422)
+		expect(res2.status).toBe(500)
 
 		const res3 = await app.handle('/file')
 		expect(res3.status).toBe(200)

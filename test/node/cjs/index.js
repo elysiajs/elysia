@@ -8,6 +8,7 @@ setTimeout(() => {
 const { Elysia, file, t } = require('elysia')
 const adapterUtils = require('elysia/adapter/utils')
 const compiled = require('elysia/compiled')
+const assertListenError = require('../assert-listen-error.cjs')
 const { mkdtemp, readFile, rm, writeFile } = require('node:fs/promises')
 const { tmpdir } = require('node:os')
 const { join, resolve } = require('node:path')
@@ -20,6 +21,8 @@ if (
 
 if (!('validators' in compiled) || !('handlers' in compiled))
 	throw new Error('❌ CommonJS Node.js compiled subpath failed')
+
+assertListenError(Elysia, 'CommonJS')
 
 const app = new Elysia().get(
 	'/',

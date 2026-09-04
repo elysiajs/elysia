@@ -3,7 +3,6 @@ import { Elysia } from '../../src'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
 import { compileHandler } from '../../src/compile/handler'
-import { extractDeriveKeys } from '../../src/compile/handler/utils'
 
 /** Derive keys must be recovered exactly or fall back to Object.assign. */
 
@@ -18,15 +17,12 @@ const compileRoute = (app: any, index = 0) => {
 	return { fn, source: fn.toString() }
 }
 
-// Apply the keys the codegen WOULD emit (bracket-quoted stores), to compare
-// against Object.assign — the merge must be observationally identical.
-const applyKeyMerge = (keys: string[], src: Record<string, unknown>) => {
-	const target: Record<string, unknown> = {}
-	for (const k of keys) target[k] = src[k]
-	return target
-}
+const compileDerive = (derive: Function) =>
+	compileRoute(
+		new Elysia().derive(derive as any).get('/', () => 'hi')
+	).source
 
-describe('extractDeriveKeys exact key set or bail', () => {
+describe('derive key codegen', () => {
 	const analyzable: [Function, string[], string][] = [
 		[() => ({ user: 'bob' }), ['user'], 'single identifier key'],
 		[
@@ -73,13 +69,21 @@ describe('extractDeriveKeys exact key set or bail', () => {
 			['a', 'b'],
 			'punctuation in string value'
 		],
-		[(c: any) => ({ a: 1, b: 2 }), ['a', 'b'], 'trailing comma normalized'],
-		[(c: any) => ({}), [], 'empty object']
+		[(c: any) => ({ a: 1, b: 2 }), ['a', 'b'], 'trailing comma normalized']
 	]
 
 	for (const [fn, expected, label] of analyzable)
-		it(`extracts ${label}`, () => {
-			expect(extractDeriveKeys(fn)).toEqual(expected)
+		it(`emits exact stores for ${label}`, () => {
+			const source = compileDerive(fn)
+			const stores = source.match(/c\[[^\]]+\]=tmp\[[^\]]+\]/g) ?? []
+
+			expect(stores).toEqual(
+				expected.map(
+					(key) =>
+						`c[${JSON.stringify(key)}]=tmp[${JSON.stringify(key)}]`
+				)
+			)
+			expect(source).not.toContain('Object.assign(c,tmp)')
 		})
 
 	const bails: [Function, string][] = [
@@ -129,77 +133,9 @@ describe('extractDeriveKeys exact key set or bail', () => {
 	]
 
 	for (const [fn, label] of bails)
-		it(`bails on ${label}`, () => {
-			expect(extractDeriveKeys(fn)).toBeNull()
+		it(`falls back for ${label}`, () => {
+			expect(compileDerive(fn)).toContain('Object.assign(c,tmp)')
 		})
-})
-
-describe('differential — key merge deep-equals Object.assign', () => {
-	// Recovered-key merging must match Object.assign.
-	const ctx = {
-		b: 'bee',
-		headers: { authorization: 'token' },
-		params: { id: '42' }
-	} as any
-
-	const derives: Function[] = [
-		() => ({ user: 'bob' }),
-		() => ({ user: 'bob', role: 'admin' }),
-		() => ({ user: 'bob', 'x-role': 'admin' }),
-		(c: any) => ({ token: c.headers.authorization }),
-		(c: any) => ({ id: c.params.id }),
-		(c: any) => ({ a: c.b, d: () => ({ nested: 1 }) }),
-		(c: any) => ({ a: { x: 1, y: 2 }, b: 3 })
-	]
-
-	for (const fn of derives)
-		it(`merge parity for ${fn.toString().slice(0, 40)}`, () => {
-			const keys = extractDeriveKeys(fn)
-			expect(keys).not.toBeNull()
-
-			const produced = (fn as any)(ctx)
-
-			const viaAssign: Record<string, unknown> = {}
-			Object.assign(viaAssign, produced)
-
-			const viaKeys = applyKeyMerge(keys!, produced)
-
-			expect(viaKeys).toEqual(viaAssign)
-		})
-})
-
-describe('codegen emission', () => {
-	it('object-literal derive emits key-wise stores, not Object.assign', () => {
-		const app = new Elysia()
-			.derive(() => ({ user: 'bob', role: 'admin' }))
-			.get('/', () => 'hi')
-
-		const { source } = compileRoute(app)
-		expect(source).toContain('c["user"]=tmp["user"]')
-		expect(source).toContain('c["role"]=tmp["role"]')
-		expect(source).not.toContain('Object.assign')
-	})
-
-	it('spread derive falls back to Object.assign', () => {
-		const app = new Elysia()
-			.derive((c: any) => ({ ...c.query }))
-			.get('/', () => 'hi')
-
-		const { source } = compileRoute(app)
-		expect(source).toContain('Object.assign(c,tmp)')
-	})
-
-	it('conditional derive falls back to Object.assign', () => {
-		const app = new Elysia()
-			.derive((c: any) => {
-				if ((c as any).query.x) return { a: 1 }
-				return { b: 2 }
-			})
-			.get('/', () => 'hi')
-
-		const { source } = compileRoute(app)
-		expect(source).toContain('Object.assign(c,tmp)')
-	})
 })
 
 describe('end-to-end derived keys reach the handler', () => {

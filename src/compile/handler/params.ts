@@ -56,8 +56,7 @@ type Resolver = (c: HandlerParamContext) => unknown
 // non-AOT apps never pay for the 47 resolver closures
 let _handlerParams: Record<string, Resolver> | undefined
 
-/** @internal exported for test/aot/param-descriptor.test.ts */
-export const handlerParams = (): Record<string, Resolver> =>
+const handlerParams = (): Record<string, Resolver> =>
 	(_handlerParams ??= {
 	// parse adapter
 	pf: (c) => c.parse.formData,

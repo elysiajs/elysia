@@ -7,8 +7,7 @@ import { Compiled } from '../../src/compile/aot'
 import {
 	beginValidatorCapture,
 	endValidatorCapture,
-	endHandlerCapture,
-	resetCompactErrorWarnings
+	endHandlerCapture
 } from '../../src/compile/aot-capture'
 
 /** Many coerced-query routes must collapse into a bounded number of warn lines. */
@@ -23,7 +22,6 @@ afterEach(() => {
 function captureRouteCount(count: number, verbose = false): string[] {
 	process.env.ELYSIA_AOT_BUILD = '1'
 	if (verbose) process.env.ELYSIA_AOT_VERBOSE = '1'
-	resetCompactErrorWarnings()
 
 	const warns: string[] = []
 	const original = console.warn

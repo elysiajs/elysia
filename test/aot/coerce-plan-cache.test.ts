@@ -7,7 +7,6 @@ import {
 	buildCoercedFromPlan,
 	clearCoerceLeafCache,
 	COERCE_LEAF_CACHE_LIMIT,
-	coerceLeafCacheSize,
 	type CoercePlan
 } from '../../src/type/coerce-plan'
 import { Validator } from '../../src/validator'
@@ -29,9 +28,10 @@ afterEach(clearCoerceLeafCache)
 
 describe('coercion leaf cache policy', () => {
 	it('bounds unique constraint leaves', () => {
-		for (let i = 0; i < COERCE_LEAF_CACHE_LIMIT * 2; i++) rebuild(i)
+		const first = rebuild(0).properties.value
+		for (let i = 1; i < COERCE_LEAF_CACHE_LIMIT * 2; i++) rebuild(i)
 
-		expect(coerceLeafCacheSize()).toBe(COERCE_LEAF_CACHE_LIMIT)
+		expect(rebuild(0).properties.value).not.toBe(first)
 	})
 
 	it('reuses an identical resident leaf', () => {
@@ -55,17 +55,17 @@ describe('coercion leaf cache policy', () => {
 	})
 
 	it('clears through Validator.clear()', () => {
-		rebuild(1)
+		const cached = rebuild(1).properties.value
 		Validator.clear()
 
-		expect(coerceLeafCacheSize()).toBe(0)
+		expect(rebuild(1).properties.value).not.toBe(cached)
 	})
 
 	it('clears through public flushMemory()', () => {
-		rebuild(1)
+		const cached = rebuild(1).properties.value
 		flushMemory()
 
-		expect(coerceLeafCacheSize()).toBe(0)
+		expect(rebuild(1).properties.value).not.toBe(cached)
 	})
 
 	it('still enforces constraints after clearing', () => {

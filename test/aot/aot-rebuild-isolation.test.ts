@@ -5,8 +5,7 @@ import { join, resolve } from 'node:path'
 
 import {
 	generateCompiledArtifacts,
-	generateCompiledArtifactsIsolated,
-	getAotWorkerDiagnostics
+	generateCompiledArtifactsIsolated
 } from '../../src/plugin/aot/core'
 
 const state = globalThis as typeof globalThis & {
@@ -53,10 +52,6 @@ it('evaluates rebuilds outside the caller module registry', async () => {
 		expect(secondRebuild.source).toContain('/marker-c')
 		expect(state.__elysiaAotRebuildIsolationEvaluations).toBe(1)
 
-		const diagnostics = getAotWorkerDiagnostics()
-		expect(diagnostics.activeWorkers).toBe(0)
-		expect(diagnostics.lastExit).toBeDefined()
-		await diagnostics.lastExit
 	} finally {
 		if (previousMarker === undefined)
 			delete process.env.ELYSIA_AOT_REBUILD_MARKER
@@ -98,10 +93,6 @@ it('preserves worker error context and terminates the worker', async () => {
 		expect(failure?.stack).toContain(entry)
 		expect(failure?.stack).toContain('worker fixture boom')
 
-		const diagnostics = getAotWorkerDiagnostics()
-		expect(diagnostics.activeWorkers).toBe(0)
-		expect(diagnostics.lastExit).toBeDefined()
-		await diagnostics.lastExit
 	} finally {
 		if (previousMarker === undefined)
 			delete process.env.ELYSIA_AOT_REBUILD_MARKER

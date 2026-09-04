@@ -19,12 +19,25 @@ const seal = (app: Elysia<any, any, any, any, any, any, any, any>) => {
 	return app
 }
 
-const shape = (app: any) =>
-	app.routes.map((route: any) => ({
+const shapeOf = (routes: any[]) =>
+	routes.map((route: any) => ({
 		method: route.method,
 		path: route.path,
 		hooks: Object.keys(route.hooks ?? {}).sort()
 	}))
+
+const shape = (app: any) => shapeOf(app.routes)
+
+const memoizes = () => process.env.NODE_ENV !== 'production'
+
+const expectFreshButEqual = (app: any) => {
+	const first = app.routes
+	const second = app.routes
+
+	expect(second).not.toBe(first)
+	expect(Object.isFrozen(first)).toBe(false)
+	expect(shapeOf(second)).toEqual(shapeOf(first))
+}
 
 describe('route introspection cache', () => {
 	it('sealing does not change composed content', () => {
@@ -48,8 +61,12 @@ describe('route introspection cache', () => {
 
 		const sealed = seal(build())
 
-		expect(sealed.routes).toBe(sealed.routes)
-		expect(sealed.routes[0].hooks).toBe(sealed.routes[0].hooks)
+		if (memoizes()) {
+			expect(sealed.routes).toBe(sealed.routes)
+			expect(sealed.routes[0].hooks).toBe(sealed.routes[0].hooks)
+		} else expectFreshButEqual(sealed)
+
+		// History is cached in every environment.
 		expect(sealed.history).toBe(sealed.history)
 	})
 
@@ -141,7 +158,60 @@ describe('route introspection cache', () => {
 				.get('/m', { auth: true } as any, () => 'm')
 		)
 
-		expect(app.routes).toBe(app.routes)
+		if (memoizes()) expect(app.routes).toBe(app.routes)
+		else expectFreshButEqual(app)
+
 		expect(app.routes[0].hooks.beforeHandle).toBeDefined()
+	})
+
+	// Shared route arrays are frozen so readers cannot change cached routes.
+	const memoIt = memoizes() ? it : it.skip
+
+	memoIt('freezes the array it shares', async () => {
+		const app = seal(build())
+
+		expect(Object.isFrozen(app.routes)).toBe(true)
+		expect(() => (app.routes as any).pop()).toThrow(TypeError)
+		expect(() =>
+			(app.routes as any).push({ method: 'GET', path: '/x' })
+		).toThrow(TypeError)
+
+		expect(app.routes.length).toBe(2)
+		expect((await app.handle('/a')).status).toBe(200)
+
+		// The freeze is shallow, like history.
+		expect(Object.isFrozen(app.routes[0])).toBe(false)
+	})
+
+	it('leaves a fresh, unshared array mutable', () => {
+		const unsealed = build()
+
+		const first = unsealed.routes
+		expect(unsealed.routes).not.toBe(first)
+		expect(Object.isFrozen(first)).toBe(false)
+		expect(() => first.sort(() => 0)).not.toThrow()
+		expect(() => (first as any).pop()).not.toThrow()
+	})
+
+	it('does not re-cache a sealed production app', () => {
+		const nodeEnv = process.env.NODE_ENV
+		process.env.NODE_ENV = 'production'
+
+		try {
+			const app = seal(build())
+
+			expect(app.routes).not.toBe(app.routes)
+			expect((app as any).cachedRoutes).toBeUndefined()
+
+			expect(shape(app)).toEqual(shape(build()))
+			expect(Object.isFrozen(app.routes)).toBe(false)
+		} finally {
+			if (nodeEnv === undefined) delete process.env.NODE_ENV
+			else process.env.NODE_ENV = nodeEnv
+		}
+
+		const sealed = seal(build())
+		if (memoizes()) expect(sealed.routes).toBe(sealed.routes)
+		else expectFreshButEqual(sealed)
 	})
 })

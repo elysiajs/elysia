@@ -10,6 +10,7 @@ import {
 	t
 } from '../../src'
 import { InvalidCookie } from '../../src/cookie/error'
+import { mapCompactResponse } from '../../src/adapter/web-standard/handler'
 import { afterEach, describe, expect, it } from 'bun:test'
 
 class OutOfCredit extends HTTPError<'OUT_OF_CREDIT'> {
@@ -1747,6 +1748,125 @@ describe('error fallback lanes', () => {
 			title: 'Unprocessable Content',
 			detail: 'invalid',
 			status: 422
+		})
+	})
+})
+
+// typeBase also applies to built-in 404 and 500 responses.
+describe('typeBase on the built-in 404 and 500 bodies', () => {
+	afterEach(() => {
+		HTTPError.typeBase = undefined
+		delete process.env.NODE_ENV
+	})
+
+	it('prefixes the router-miss 404 and returns to the bare slug', async () => {
+		const app = new Elysia().get('/', 'hi')
+
+		await expect((await app.handle('/missing')).json()).resolves.toEqual({
+			type: 'not-found',
+			code: 'not-found',
+			status: 404,
+			title: 'Not Found'
+		})
+
+		HTTPError.typeBase = 'https://example.com/errors'
+		await expect((await app.handle('/missing')).json()).resolves.toEqual({
+			type: 'https://example.com/errors/not-found',
+			code: 'not-found',
+			status: 404,
+			title: 'Not Found'
+		})
+
+		// Changing typeBase invalidates the cached body.
+		HTTPError.typeBase = undefined
+		await expect((await app.handle('/missing')).json()).resolves.toEqual({
+			type: 'not-found',
+			code: 'not-found',
+			status: 404,
+			title: 'Not Found'
+		})
+	})
+
+	it('prefixes the 404 the header/cookie miss path writes', async () => {
+		HTTPError.typeBase = 'https://example.com/errors'
+
+		const app = new Elysia()
+			.request(({ set }) => {
+				set.headers['x-app'] = 'yes'
+			})
+			.get('/', 'hi')
+
+		const response = await app.handle('/missing')
+		expect(response.headers.get('x-app')).toBe('yes')
+		await expect(response.json()).resolves.toMatchObject({
+			type: 'https://example.com/errors/not-found',
+			code: 'not-found'
+		})
+	})
+
+	it('prefixes the 404 a declining error hook falls through to', async () => {
+		HTTPError.typeBase = 'https://example.com/errors'
+
+		const app = new Elysia().get('/', 'hi').error(() => {})
+
+		await expect((await app.handle('/missing')).json()).resolves.toMatchObject(
+			{
+				type: 'https://example.com/errors/not-found',
+				code: 'not-found'
+			}
+		)
+	})
+
+	it('prefixes the 404 of a precompiled app', async () => {
+		HTTPError.typeBase = 'https://example.com/errors'
+
+		const app = new Elysia({ precompile: true }).get('/', 'static')
+		await app.modules
+
+		await expect((await app.handle('/missing')).json()).resolves.toMatchObject(
+			{
+				type: 'https://example.com/errors/not-found',
+				code: 'not-found'
+			}
+		)
+	})
+
+	it('carries `code` on the generic 500 and prefixes its `type`', async () => {
+		const app = new Elysia().get('/', () => {
+			throw new Error('boom')
+		})
+
+		await expect((await app.handle('/')).json()).resolves.toMatchObject({
+			type: 'internal-server-error',
+			code: 'internal-server-error'
+		})
+
+		HTTPError.typeBase = 'https://example.com/errors'
+		await expect((await app.handle('/')).json()).resolves.toMatchObject({
+			type: 'https://example.com/errors/internal-server-error',
+			code: 'internal-server-error'
+		})
+	})
+
+	it('prefixes the 500 the web-standard and WS lanes serve', async () => {
+		HTTPError.typeBase = 'https://example.com/errors'
+
+		// The web-standard mapper shares the WebSocket 500 body.
+		await expect(
+			mapCompactResponse(new Error('boom')).json()
+		).resolves.toMatchObject({
+			type: 'https://example.com/errors/internal-server-error',
+			code: 'internal-server-error'
+		})
+
+		process.env.NODE_ENV = 'production'
+		await expect(
+			mapCompactResponse(new Error('SECRET')).json()
+		).resolves.toEqual({
+			type: 'https://example.com/errors/internal-server-error',
+			code: 'internal-server-error',
+			title: 'Internal Server Error',
+			status: 500
 		})
 	})
 })

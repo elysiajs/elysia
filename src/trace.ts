@@ -346,6 +346,14 @@ export type TraceHandler<
 	): unknown
 }
 
+/** Prevent rejected trace callbacks from becoming unhandled rejections. */
+function fire(result: unknown) {
+	if (typeof (result as PromiseLike<unknown>)?.then === 'function')
+		(result as PromiseLike<unknown>).then(undefined, (error) =>
+			console.error(error)
+		)
+}
+
 class TraceRecorder {
 	begun?: TraceStream
 	remaining = 0
@@ -453,7 +461,8 @@ class TraceRecorder {
 
 			const callbacks = this.callbacksBegin
 			if (callbacks)
-				for (let i = 0; i < callbacks.length; i++) callbacks[i](result)
+				for (let i = 0; i < callbacks.length; i++)
+					fire(callbacks[i](result))
 		}
 
 		return this
@@ -498,7 +507,7 @@ class TraceRecorder {
 				}
 			} as any
 
-			for (let i = 0; i < children.length; i++) children[i](result)
+			for (let i = 0; i < children.length; i++) fire(children[i](result))
 
 			let resolved = false
 			return (err: Error | null = null) => {
@@ -518,7 +527,7 @@ class TraceRecorder {
 				}
 
 				for (let i = 0; i < callbacksEnd.length; i++)
-					callbacksEnd[i](detail)
+					fire(callbacksEnd[i](detail))
 
 				resolveEnd(endAt)
 				resolveError(err)
@@ -548,7 +557,8 @@ class TraceRecorder {
 				}
 			}
 
-			for (let i = 0; i < callbacks.length; i++) callbacks[i](detail)
+			for (let i = 0; i < callbacks.length; i++)
+				fire(callbacks[i](detail))
 		}
 
 		this.endResolve?.(end)
@@ -701,7 +711,7 @@ export const createTracer =
 		const handle = new TracerHandle()
 		handle.rid = context.rid ?? ''
 
-		traceListener(new TracerLifecycle(handle, context) as any)
+		fire(traceListener(new TracerLifecycle(handle, context) as any))
 
 		return handle
 	}

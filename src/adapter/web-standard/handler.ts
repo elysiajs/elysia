@@ -7,6 +7,7 @@ import {
 } from '../utils'
 
 import { isBun } from '../../universal/constants'
+import { isProduction } from '../../universal/is-production'
 import { ElysiaFile, mime } from '../../universal/file'
 import { Cookie } from '../../cookie/cookie'
 import {
@@ -183,12 +184,26 @@ function mapResponseWithSet(
 	}
 }
 
+// Keep this constant so production builds can remove the check.
+const checkRemovedSetRedirect = !isProduction()
+
 export function mapResponse(
 	response: unknown,
 	set: Context['set'],
 	request?: Request,
 	owned?: boolean
 ): Response {
+	if (
+		checkRemovedSetRedirect &&
+		Object.hasOwn(set, 'redirect') &&
+		!isProduction()
+	) {
+		delete (set as any).redirect
+		throw new Error(
+			'[Elysia] set.redirect was removed in 2.0 — return redirect(url) instead'
+		)
+	}
+
 	const headers = set.headers
 	if (
 		set.status !== undefined ||

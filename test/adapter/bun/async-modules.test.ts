@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'bun:test'
+import { afterEach, describe, expect, it } from 'bun:test'
 import { Elysia } from '../../../src'
 import { websocket } from '../../../src/plugin/websocket'
 
 describe('Bun async modules', () => {
+	// Failed startup sets exitCode; reset it between tests.
+	afterEach(() => {
+		process.exitCode = 0
+	})
+
 	it('queues requests until async modules resolve', async () => {
 		let resolveLater!: (v: any) => void
 		const pending = new Promise((res) => {
@@ -115,6 +120,70 @@ describe('Bun async modules', () => {
 		)
 
 		app.stop()
+	})
+
+	it('does not wait on a never-settling module when forced to stop', async () => {
+		const app = new Elysia()
+			.get('/', 'ok')
+			.use(new Promise<never>(() => {}) as Promise<any>)
+
+		app.listen(0)
+		const port = app.server!.port
+
+		await Bun.sleep(10)
+		expect(app.pending).toBe(true)
+
+		// Forced shutdown must not wait for plugin setup.
+		const started = Bun.nanoseconds()
+		await app.stop(true)
+		expect((Bun.nanoseconds() - started) / 1e6).toBeLessThan(200)
+
+		const rebound = Bun.serve({ port, fetch: () => new Response('free') })
+		expect(rebound.port).toBe(port)
+		await rebound.stop(true)
+	})
+
+	it('abandons a never-settling module when a later stop forces', async () => {
+		const app = new Elysia()
+			.get('/', 'ok')
+			.use(new Promise<never>(() => {}) as Promise<any>)
+
+		app.listen(0)
+		await Bun.sleep(10)
+
+		const stopping = app.stop()!
+		await Bun.sleep(10)
+
+		// A later forced stop must unblock the existing shutdown.
+		expect(app.stop(true)).toBe(stopping)
+
+		const started = Bun.nanoseconds()
+		await stopping
+		expect((Bun.nanoseconds() - started) / 1e6).toBeLessThan(200)
+	})
+
+	it('keeps waiting on a pending module when stopped without force', async () => {
+		let release!: (plugin: Elysia) => void
+		const plugin = new Promise<Elysia>((resolve) => (release = resolve))
+		const app = new Elysia().get('/', 'ok').use(plugin)
+
+		app.listen(0)
+		await Bun.sleep(10)
+
+		// Graceful shutdown waits for plugin cleanup.
+		let settled = false
+		const stopping = app.stop()!
+		stopping.then(() => (settled = true))
+
+		await Bun.sleep(100)
+		expect(settled).toBe(false)
+
+		let cleaned = 0
+		release(new Elysia().cleanup(() => cleaned++))
+		await stopping
+
+		expect(settled).toBe(true)
+		expect(cleaned).toBe(1)
 	})
 
 	it('serves WebSocket routes from a pending plugin', async () => {

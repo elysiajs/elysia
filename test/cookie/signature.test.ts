@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test'
-import { parseCookie, Cookie, signCookie, unsignCookie } from '../../src/cookie'
+import { Cookie, signCookie, unsignCookie } from '../../src/cookie'
 import { signCookieSubtle } from '../../src/cookie/crypto'
+import { parseCookie } from '../utils/parse-cookie'
 
 describe('Parse Cookie', () => {
 	it('handle empty cookie', async () => {

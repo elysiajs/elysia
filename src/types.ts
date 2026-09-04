@@ -3,7 +3,12 @@ import type { OpenAPIV3 } from 'openapi-types'
 import type { TraceHandler } from './trace'
 import type { ElysiaFile } from './universal/file'
 import { type StatusMap, type StatusMapBack } from './constants'
-import type { ElysiaError, ElysiaStatus, ProblemResponseBody } from './error'
+import type {
+	ElysiaError,
+	ElysiaStatus,
+	ProblemResponseBody,
+	ValidationErrorResponse
+} from './error'
 import type { TypeBoxSchema, AnySchema, StandardSchemaV1Like } from './type'
 
 import type {
@@ -95,7 +100,8 @@ export interface ElysiaConfig<
 	 *
 	 * Only required for root instance (instance which use listen) to effect
 	 *
-	 * ! If performing a benchmark, it's recommended to set this to `true`
+	 * TypeBox loads during build when needed, regardless of this setting.
+	 * Enable this only to compile route handlers and validators before listen().
 	 *
 	 * @default false
 	 */
@@ -1854,7 +1860,7 @@ export type ObjectMacroDefs<
 							keyof N[K],
 							| MacroPropertyKey
 							| InputSchemaKey
-							| keyof MacroNames
+							| keyof MacroFn
 							| keyof N
 						>]: `Unknown macro property '${P & string}'`
 					}
@@ -2217,18 +2223,7 @@ export type ComposeElysiaResponse<
 		Possibility &
 			(HasInputValidator<Schema, Path> extends false
 				? {}
-				: {
-						422: {
-							type: 'validation'
-							title: 'Validation Error'
-							status: 422
-							detail?: string
-							on: string
-							found?: unknown
-							property?: string
-							expected?: string
-						}
-					})
+				: { 422: ValidationErrorResponse })
 	>
 >
 

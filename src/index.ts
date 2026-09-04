@@ -13,6 +13,9 @@ export {
 	InternalServerError,
 	ValidationError,
 	validationDetail,
+	type StatusResponse,
+	type NumericStatus,
+	type ValidationErrorResponse,
 	HTTPError,
 	type TaggedHTTPError,
 	type SelectiveStatus
@@ -52,8 +55,13 @@ export type {
 	StandardJSONSchemaV1Like
 } from './type'
 
-export type { HTTPHeaders, SSEPayload, UnwrapSchema } from './types'
 export type {
+	HTTPHeaders,
+	SSEPayload,
+	UnwrapSchema,
+	DefaultEphemeral,
+	DefaultMetadata,
+	DefaultSingleton,
 	RouteSchema,
 	InputSchema,
 	UnwrapRoute,

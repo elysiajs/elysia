@@ -594,6 +594,7 @@ export function removeDefaultParameter(parameter: string) {
 
 			// `end` is the `,` or `}` that terminates the value, it is structure
 			// and has to survive. It is never `=`, so resuming from it is safe
+			// eslint-disable-next-line sonarjs/updated-loop-counter -- scanner resumes past the consumed value
 			copyFrom = index = end
 		}
 
@@ -740,6 +741,7 @@ function decodeIdentifier(value: string): string | undefined {
 			const end = value.indexOf('}', i + 1)
 			if (end === -1) return
 			hex = value.slice(i + 1, end)
+			// eslint-disable-next-line sonarjs/updated-loop-counter -- scanner resumes past the consumed escape
 			i = end
 		} else {
 			hex = value.slice(i, i + 4)

@@ -2,17 +2,22 @@
 // bytes and any recorded lifecycle observations.
 
 import { describe, it, expect } from 'bun:test'
-import { corpus, type ObservableCorpusEntry } from './corpus'
+import {
+	corpus,
+	type CorpusRequest,
+	type ObservableCorpusEntry
+} from './corpus'
 import { lanePairs, type LanePair, type Observe } from './lanes'
 import { snapshot, comparators, formatMismatch } from './compare'
 
 const entryInPair = (entry: ObservableCorpusEntry, pair: LanePair) =>
 	!pair.requiresTag || entry.tags.includes(pair.requiresTag)
 
-// Socket lanes skip responses that include the lane-specific port.
-const requestInPair = (request: { tags?: string[] }, pair: LanePair) =>
-	pair.oracle.transport === 'handle' ||
-	!(request.tags ?? []).includes('handle-only')
+// Skip socket-specific responses and explicit lane exclusions.
+const requestInPair = (request: CorpusRequest, pair: LanePair) =>
+	(pair.oracle.transport === 'handle' ||
+		!(request.tags ?? []).includes('handle-only')) &&
+	!(request.excludeLanePairs ?? []).includes(pair.id)
 
 // Run every disposer before reporting their failures.
 const disposeAll = async (

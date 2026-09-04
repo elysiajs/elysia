@@ -433,6 +433,7 @@ export const BunAdapter = createAdapter({
 
 		let startupFailure: { error: unknown } | undefined
 		let forceRequested = false
+		const force = Promise.withResolvers<void>()
 		let forceDone = false
 		let nativeStopped = false
 		let abandoned = false
@@ -617,8 +618,10 @@ export const BunAdapter = createAdapter({
 			const reentrant = epoch.invoking
 
 			if (failure) startupFailure ??= failure
-			if (closeActiveConnections === true && !forceDone)
-				forceRequested = true
+			if (closeActiveConnections === true) {
+				force.resolve()
+				if (!forceDone) forceRequested = true
+			}
 
 			cancelled = true
 			clearAppServer(app, server)
@@ -645,7 +648,10 @@ export const BunAdapter = createAdapter({
 						await Promise.resolve()
 						if (modulesReady)
 							try {
-								await modulesReady
+								await Promise.race([
+									modulesReady,
+									force.promise
+								])
 							} catch (error) {
 								startupFailure ??= { error }
 							}
@@ -774,12 +780,14 @@ export const BunAdapter = createAdapter({
 		try {
 			// defer building app so it doesn't block main thread and allow other synchronous code to run first
 			const modules = (modulesReady = app.modules)
-			ready = modules.then(start)
 
-			ready = ready.catch((error) => stop(true, { error }))
-			ready.catch((error) => {
-				console.error('[Elysia] listen() failed:', error)
-			})
+			ready = modules
+				.then(start)
+				.catch((error) => stop(true, { error }))
+				.catch((error) => {
+					console.error('[Elysia] listen() failed:', error)
+					if (typeof process !== 'undefined') process.exitCode = 1
+				})
 		} catch (error) {
 			stop(true, { error }).catch(console.error)
 

@@ -22,6 +22,9 @@ Settings.Set({ unionPrioritySort: false })
 
 export function injectTypebox(_typebox?: TypeboxNamespaces) {}
 
+// TypeBox was imported above, so there is nothing left to warm.
+export function warmTypebox() {}
+
 export {
 	Check,
 	Clean,

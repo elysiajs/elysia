@@ -157,10 +157,12 @@ describe('EncodeFrom error path', () => {
 			)
 
 		const res = await app.handle('/')
-		expect(res.status).toBe(422)
+		// Response validation failures are server errors.
+		expect(res.status).toBe(500)
 		expect(
 			(caught as { isValidation?: boolean } | null)?.isValidation
 		).toBe(true)
+		expect((caught as { status?: number } | null)?.status).toBe(500)
 	})
 })
 

@@ -192,7 +192,7 @@ describe('Standard Schema Merge', () => {
 		expect(valid).toEqual({ id: 1, name: 'lilith' })
 
 		const invalid = await app.handle('/focou')
-		expect(invalid.status).toBe(422)
+		expect(invalid.status).toBe(500)
 	})
 
 	it('validate and normalize multiple response', async () => {
@@ -243,7 +243,7 @@ describe('Standard Schema Merge', () => {
 		expect(fouco).toEqual({ id: 2, name: 'fouco' })
 
 		const invalid = await app.handle('/unknown')
-		expect(invalid.status).toBe(422)
+		expect(invalid.status).toBe(500)
 	})
 
 	it('validate multiple schema together', async () => {
@@ -391,7 +391,7 @@ describe('Standard Schema Merge', () => {
 		expect(fouco).toEqual({ id: 2, name: 'fouco' })
 
 		const invalid = await app.handle('/unknown')
-		expect(invalid.status).toBe(422)
+		expect(invalid.status).toBe(500)
 	})
 
 	it('validate non-typebox schema', async () => {

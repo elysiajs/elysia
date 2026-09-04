@@ -10,10 +10,6 @@ import { Elysia } from '../../src'
 
 describe('validator capture availability', () => {
 	afterEach(() => {
-		if (captureImpl === undefined) {
-			const real = require('../../src/compile/aot-capture')
-			setCaptureImpl(real.captureImplementation)
-		}
 		try {
 			endValidatorCapture()
 		} catch {}
@@ -21,11 +17,12 @@ describe('validator capture availability', () => {
 
 	it('rejects capture when the implementation is unavailable', () => {
 		const saved = captureImpl!
-		setCaptureImpl(undefined)
-
-		expect(() => beginValidatorCapture()).toThrowError()
-
-		setCaptureImpl(saved)
+		try {
+			setCaptureImpl(undefined)
+			expect(() => beginValidatorCapture()).toThrowError()
+		} finally {
+			setCaptureImpl(saved)
+		}
 	})
 
 	it('starts and ends capture when the implementation is installed', () => {

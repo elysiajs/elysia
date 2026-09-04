@@ -70,7 +70,7 @@ describe('Normalize', () => {
 
 		const response = await app.handle('/')
 
-		expect(response.status).toEqual(422)
+		expect(response.status).toEqual(500)
 	})
 
 	it('normalize multiple response', async () => {
@@ -118,7 +118,7 @@ describe('Normalize', () => {
 
 		const response = await app.handle('/')
 
-		expect(response.status).toEqual(422)
+		expect(response.status).toEqual(500)
 	})
 
 	it('normalize multiple response using 200', async () => {
@@ -172,7 +172,7 @@ describe('Normalize', () => {
 
 		const response = await app.handle('/')
 
-		expect(response.status).toEqual(422)
+		expect(response.status).toEqual(500)
 	})
 
 	it('do not normalize response when allowing additional properties', async () => {

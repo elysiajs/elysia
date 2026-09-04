@@ -60,8 +60,7 @@ export const mime = {
 	pptx: `${msft365}presentationml.presentation`
 } as const
 
-/** @internal exported for test/universal/file-extension.test.ts */
-export function getFileExtension(path: string) {
+function getFileExtension(path: string) {
 	const index = path.lastIndexOf('.')
 	if (index === -1) return ''
 

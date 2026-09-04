@@ -6,13 +6,9 @@ import { dangerousKeys } from '../constants'
 import { nullObject } from '../utils'
 
 import type { Context } from '../context'
-import type { BaseCookie, CookieOptions } from './types'
+import type { BaseCookie } from './types'
 import type { CompiledCookieConfig } from './config'
-import {
-	compileCookieConfig,
-	isCookieSigned,
-	resolveSignSecrets
-} from './config'
+import { isCookieSigned, resolveSignSecrets } from './config'
 
 import {
 	hasSyncHmac,
@@ -27,20 +23,6 @@ import {
 } from './crypto'
 
 export { hasSyncHmac } from './crypto'
-
-// export for test
-export async function parseCookie(
-	set: Context['set'],
-	cookieString?: string | null,
-	options?: CookieOptions & {
-		sign?: true | string | string[]
-	}
-) {
-	const config = compileCookieConfig(undefined, options)
-	const raw = await parseCookieRaw(cookieString, config)
-
-	return buildCookieJar(set, raw, config)
-}
 
 export function parseCookieRawSync(
 	cookieString: string | null | undefined,

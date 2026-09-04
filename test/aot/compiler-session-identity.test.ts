@@ -3,10 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { Compiled, createAotFingerprint } from '../../src/compile/aot'
-import {
-	abortCapture,
-	getCompilerSessionDiagnostics
-} from '../../src/compile/aot-capture'
+import { abortCapture } from '../../src/compile/aot-capture'
 import { captureArtifacts } from '../../src/plugin/aot/source'
 import { Validator } from '../../src/validator'
 import { post, json } from '../utils'
@@ -222,17 +219,23 @@ describe('AOT manifest ownership and compiler sessions', () => {
 		await expect(response.text()).resolves.toBe('fresh')
 	})
 
-	it('releases sessions after successful and failed builds', () => {
+	it('releases sessions after successful and failed builds', async () => {
+		const expectFreshCapture = async (path: string) => {
+			const app = new Elysia({ precompile: true }).get(path, () => path)
+			const artifacts = await captureArtifacts(app)
+
+			expect(artifacts.handlers.some((handler) => handler.path === path)).toBe(
+				true
+			)
+			await expect(
+				app.handle(path).then((response) => response.text())
+			).resolves.toBe(path)
+		}
+
 		const good = new Elysia({ precompile: true }).get('/ok', () => 'ok')
 		void good.fetch
 		expect(good['~compilerSession']).toBeUndefined()
-		expect(getCompilerSessionDiagnostics()).toEqual({
-			active: false,
-			appAttached: false,
-			validators: 0,
-			handlers: 0,
-			sucrose: 0
-		})
+		await expectFreshCapture('/after-good')
 
 		const bad = new Elysia({ precompile: true }).post(
 			'/bad',
@@ -241,6 +244,6 @@ describe('AOT manifest ownership and compiler sessions', () => {
 		)
 		expect(() => void bad.fetch).toThrow('Unknown model reference')
 		expect(bad['~compilerSession']).toBeUndefined()
-		expect(getCompilerSessionDiagnostics().active).toBe(false)
+		await expectFreshCapture('/after-failure')
 	})
 })

@@ -215,15 +215,12 @@ const isAsyncValidator = (vali: Validator | undefined) =>
 const mayReturnPromiseValidator = (vali: Validator | undefined) =>
 	(vali as Validator | undefined)?.mayReturnPromise === true
 
-/**
- * Extracted from `buildNativeStaticResponse`'s for-in check so the native
- * static promotion predicate
- */
+/** Whether a hook can be skipped by a native static response. */
 export function isEmptyPipelineHook(hook: AnyLocalHook | undefined) {
 	if (!hook) return true
 
 	for (const key in hook) {
-		if (key === 'detail' || key === 'tags') continue
+		if (key === 'detail' || key === 'tags' || key === 'error') continue
 
 		const value = (hook as any)[key]
 		if (

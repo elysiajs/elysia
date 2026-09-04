@@ -149,7 +149,7 @@ describe('response validation with Promise-like results', () => {
 		await expect(pass.response.json()).resolves.toEqual({
 			accepted: 'response'
 		})
-		expect(fail.response.status).toBe(422)
+		expect(fail.response.status).toBe(500)
 		expect(pass.calls).toBe(1)
 		expect(fail.calls).toBe(1)
 	})
@@ -158,7 +158,7 @@ describe('response validation with Promise-like results', () => {
 		const native = await validateResponse('native', failing)
 		const custom = await validateResponse('custom', failing)
 
-		expect(custom.response.status).toBe(422)
+		expect(custom.response.status).toBe(500)
 		await expect(custom.response.text()).resolves.toBe(
 			await native.response.text()
 		)

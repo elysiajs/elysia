@@ -245,7 +245,7 @@ describe('Model', () => {
 			.get('/error', { response: 'res' }, () => 1)
 
 		const error = await app.handle('/error')
-		expect(error.status).toBe(422)
+		expect(error.status).toBe(500)
 
 		const correct = await app.handle('/correct')
 		expect(correct.status).toBe(200)
@@ -289,7 +289,7 @@ describe('Model', () => {
 			)
 
 		const error = await app.handle('/error')
-		expect(error.status).toBe(422)
+		expect(error.status).toBe(500)
 
 		const correct = await app.handle('/correct')
 		expect(correct.status).toBe(200)

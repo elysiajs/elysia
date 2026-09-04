@@ -2,6 +2,13 @@ import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { autoHead } from '../../src/plugin/auto-head'
 
+// Passes route registration but fails validator compilation.
+const BAD_HEADERS = {
+	'~kind': 'Object',
+	type: 'object',
+	properties: null
+} as any
+
 describe('loose path aliases', () => {
 	it('preserves explicit slash and non-slash routes', async () => {
 		const app = new Elysia()
@@ -228,7 +235,11 @@ describe('model references', () => {
 	it('an eager compile failure cannot expose earlier partial routes', () => {
 		const app = new Elysia()
 			.get('/ok', () => 'ok')
-			.get('/bad', { headers: { 'x-a': '1' } } as any, 'hello' as any)
+			.get(
+				'/bad',
+				{ headers: BAD_HEADERS } as any,
+				'hello' as any
+			)
 
 		expect(() => app.compile()).toThrow(/Failed to compile route GET \/bad/)
 		expect(() => app.fetch).toThrow(/Failed to compile route GET \/bad/)
@@ -314,7 +325,7 @@ describe('route compilation errors', () => {
 	it('eager compilation includes the route method and path', () => {
 		const app = new Elysia().get(
 			'/bad',
-			{ headers: { 'x-a': '1' } } as any,
+			{ headers: BAD_HEADERS } as any,
 			'hello' as any
 		)
 
@@ -324,7 +335,7 @@ describe('route compilation errors', () => {
 	it('lazy compilation includes the route in the error response', async () => {
 		const app = new Elysia().get(
 			'/bad',
-			{ headers: { 'x-a': '1' } } as any,
+			{ headers: BAD_HEADERS } as any,
 			'hello' as any
 		)
 

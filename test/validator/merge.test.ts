@@ -31,7 +31,7 @@ describe('merge validator', () => {
 			})
 		)
 
-		expect(incorrect.status).toBe(422)
+		expect(incorrect.status).toBe(500)
 	})
 
 	it('merge guard with local schema', async () => {
@@ -72,7 +72,7 @@ describe('merge validator', () => {
 			})
 		)
 
-		expect(incorrect.status).toBe(422)
+		expect(incorrect.status).toBe(500)
 	})
 
 	it('merge multiple guard without local schema', async () => {
@@ -103,7 +103,7 @@ describe('merge validator', () => {
 			})
 		)
 
-		expect(incorrect.status).toBe(422)
+		expect(incorrect.status).toBe(500)
 	})
 
 	it('merge multiple guard with local schema', async () => {
@@ -147,7 +147,7 @@ describe('merge validator', () => {
 			})
 		)
 
-		expect(incorrect.status).toBe(422)
+		expect(incorrect.status).toBe(500)
 	})
 
 	it('use override guard when local is not provided', async () => {
@@ -185,7 +185,7 @@ describe('merge validator', () => {
 			})
 		)
 
-		expect(incorrect.status).toBe(422)
+		expect(incorrect.status).toBe(500)
 	})
 
 	it('override guard when local is provided', async () => {
@@ -283,7 +283,7 @@ describe('merge validator', () => {
 			})
 		)
 
-		expect(incorrect.status).toBe(422)
+		expect(incorrect.status).toBe(500)
 	})
 
 	it('override additionalProperties while merging guards', async () => {

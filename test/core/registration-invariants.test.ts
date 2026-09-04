@@ -342,4 +342,22 @@ describe('inlined route registration parity', () => {
 			registered['~addRoute'](entry(registered, '/late'))
 		).toThrow('[Elysia] .route() called after the app was sealed')
 	})
+
+	it('names the on* hook that was called after the app was sealed', () => {
+		const app = new Elysia().get('/a', handler)
+		app.compile()
+
+		expect(() => app.request(() => {})).toThrow(
+			'[Elysia] .onRequest() called after the app was sealed'
+		)
+		expect(() => app.beforeHandle(() => {})).toThrow(
+			'[Elysia] .onBeforeHandle() called after the app was sealed'
+		)
+		expect(() => app.afterResponse(() => {})).toThrow(
+			'[Elysia] .onAfterResponse() called after the app was sealed'
+		)
+		expect(() => app.mapResponse(() => {})).toThrow(
+			'[Elysia] .onMapResponse() called after the app was sealed'
+		)
+	})
 })

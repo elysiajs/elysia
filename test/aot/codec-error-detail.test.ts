@@ -7,8 +7,7 @@ import { Compiled, type ProgramId } from '../../src/compile/aot'
 import {
 	beginValidatorCapture,
 	endValidatorCapture,
-	endHandlerCapture,
-	resetCompactErrorWarnings
+	endHandlerCapture
 } from '../../src/compile/aot-capture'
 import { RouteValidator } from '../../src/validator/route'
 import { buildFrozenRouteValidator } from '../../src/compile/handler/frozen-validator'
@@ -42,7 +41,6 @@ const PATH = '/x'
 function lanes(slot: 'cookie' | 'query' | 'body', schema: any) {
 	const method = slot === 'body' ? 'POST' : 'GET'
 	process.env.ELYSIA_AOT_BUILD = '1'
-	resetCompactErrorWarnings()
 
 	// the coarse-detail warning is asserted in frozen-error-detail.test.ts
 	const original = console.warn
@@ -339,7 +337,6 @@ describe('sealed JSON-string codec errors name the decoded field', () => {
 function buildWarnings(slot: 'cookie' | 'query', schema: any) {
 	process.env.ELYSIA_AOT_BUILD = '1'
 	process.env.ELYSIA_AOT_VERBOSE = '1'
-	resetCompactErrorWarnings()
 
 	const warns: string[] = []
 	const original = console.warn

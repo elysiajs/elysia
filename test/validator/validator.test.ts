@@ -31,7 +31,7 @@ describe('Validator Additional Case', () => {
 		await expect(res.text()).resolves.toBe('Mutsuki need correction 💢💢💢')
 		expect(res.status).toBe(200)
 
-		expect(invalid.status).toBe(422)
+		expect(invalid.status).toBe(500)
 	})
 
 	it('validate afterHandle', async () => {
@@ -59,7 +59,7 @@ describe('Validator Additional Case', () => {
 		await expect(res.text()).resolves.toBe('Mutsuki need correction 💢💢💢')
 
 		expect(res.status).toBe(200)
-		expect(invalid.status).toBe(422)
+		expect(invalid.status).toBe(500)
 	})
 
 	it('validate beforeHandle with afterHandle', async () => {
@@ -91,7 +91,7 @@ describe('Validator Additional Case', () => {
 		await expect(res.text()).resolves.toBe('Mutsuki need correction 💢💢💢')
 		expect(res.status).toBe(200)
 
-		expect(invalid.status).toBe(422)
+		expect(invalid.status).toBe(500)
 	})
 
 	it('handle guard hook', async () => {

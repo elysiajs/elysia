@@ -1,7 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
-	"version": "2.0.0-beta.11",
+	"version": "2.0.0-beta.12",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
@@ -10,6 +10,9 @@
 	"main": "./dist/index.js",
 	"module": "./dist/index.mjs",
 	"types": "./dist/index.d.ts",
+	"engines": {
+		"node": ">=20.19 <21 || >=22.12"
+	},
 	"files": [
 		"dist"
 	],
@@ -220,12 +223,14 @@
 	],
 	"license": "MIT",
 	"scripts": {
-		"test": "bun run test:functionality && bun run test:types && bun run test:node && bun run test:bundle",
+		"test": "bun run test:functionality && bun run test:types && bun run test:node && bun run test:bundle && bun run test:type-perf",
 		"test:functionality": "bun run build && bun test test && bun run test:imports",
 		"test:imports": "bun run test/type-system/import.ts",
 		"test:types": "tsc --project tsconfig.test.json",
 		"test:node": "bun run build && npm install --prefix test/node/cjs && npm install --prefix test/node/esm/ && node test/node/cjs/index.js && node test/node/esm/index.js",
 		"test:bundle": "bun run test/bundle-size.ts",
+		"test:type-perf": "bun run test/type-perf.ts",
+		"lint": "eslint src",
 		"test:cf": "bun run build && npm install --prefix test/cloudflare && cd test/cloudflare && bun run cf-typegen && bun run test",
 		"bench": "bun run example/stress/run.ts",
 		"bench:quick": "bun run example/stress/run.ts --quick",
@@ -245,7 +250,9 @@
 		"./dist/type/bridge-live.mjs",
 		"./dist/type/bridge-live.js",
 		"./dist/type/typebox-value-live.mjs",
-		"./dist/type/typebox-value-live.js"
+		"./dist/type/typebox-value-live.js",
+		"./dist/type/typebox-type-live.mjs",
+		"./dist/type/typebox-type-live.js"
 	],
 	"dependencies": {
 		"deuri": "^3.0.0",

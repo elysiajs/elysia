@@ -26,6 +26,9 @@ Settings.Set({ unionPrioritySort: false })
 
 export function useTypebox(_mod?: Parameters<typeof bridgeUseTypebox>[0]) {}
 
+// AOT imports TypeBox eagerly.
+export function warmTypebox() {}
+
 export const isBridgeLive = () => true
 
 export {

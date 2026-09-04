@@ -1,12 +1,23 @@
 // Each case gets a fresh app and requests. `safe-for-socket` enables socket
 // lanes, `handle-only` excludes them, and `observe` records hook order.
 
-import { Elysia, t, status, redirect, type AnyElysia } from '../../src'
+import {
+	Elysia,
+	t,
+	status,
+	redirect,
+	sse,
+	file,
+	type AnyElysia
+} from '../../src'
+import { autoHead } from '../../src/plugin/auto-head'
 
 export interface CorpusRequest {
 	id: string
 	make: () => Request
 	tags?: string[]
+	// Lane pairs to skip.
+	excludeLanePairs?: string[]
 }
 
 export interface CorpusEntry {
@@ -89,6 +100,21 @@ corpus.push({
 		]
 	})
 }
+
+// Error hooks do not run on promoted static routes.
+corpus.push({
+	id: 'native-static-error-hook',
+	tags: ['safe-for-socket', 'static', 'error', 'native-static'],
+	define: (app) =>
+		app
+			.headers({ 'x-static': 'promoted' })
+			.error(() => {})
+			.get('/native/error-hook', 'literal'),
+	requests: [
+		{ id: 'literal', make: get('/native/error-hook') },
+		{ id: 'miss', make: get('/native/error-hook/missing') }
+	]
+})
 
 corpus.push({
 	id: 'native-static-all',
@@ -355,6 +381,20 @@ corpus.push({
 				})
 		},
 		{
+			id: 'no-content-type',
+			make: () =>
+				new Request(url('/echo'), { method: 'POST', body: 'hello' })
+		},
+		{
+			id: 'empty-json-body',
+			make: () =>
+				new Request(url('/echo'), {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: ''
+				})
+		},
+		{
 			id: 'proto-key',
 			make: () =>
 				new Request(url('/echo'), {
@@ -503,7 +543,7 @@ corpus.push({
 
 corpus.push({
 	id: 'errors',
-	tags: ['safe-for-socket', 'error'],
+	tags: ['safe-for-socket', 'error', 'redirect'],
 	define: (app) =>
 		app
 			.get('/throw', () => {
@@ -514,13 +554,19 @@ corpus.push({
 				throw status(418, 'teapot')
 			})
 			.get('/redirect', () => redirect('http://localhost/dest', 302))
+			.get('/r308', () => redirect('/target', 308))
+			.get('/rset', ({ set }: any) => {
+				set.redirect = '/target2'
+			})
 			.get('/dest', () => 'arrived'),
 	requests: [
 		{ id: 'not-found', make: get('/does-not-exist') },
 		{ id: 'thrown-error', make: get('/throw') },
 		{ id: 'status-return', make: get('/status-return') },
 		{ id: 'status-throw', make: get('/status-throw') },
-		{ id: 'redirect', make: get('/redirect') }
+		{ id: 'redirect', make: get('/redirect') },
+		{ id: '308', make: get('/r308') },
+		{ id: 'set-redirect', make: get('/rset') }
 	]
 })
 
@@ -841,3 +887,291 @@ corpus.push({
 		requests: [{ id: 'exactly-once', make: get('/observed-ar') }]
 	})
 }
+
+corpus.push({
+	id: 'auto-head',
+	tags: ['safe-for-socket', 'method', 'head'],
+	define: (app) => app.use(autoHead()).get('/h', () => ({ a: 1 })) as any,
+	requests: [
+		{
+			id: 'head',
+			make: () => new Request(url('/h'), { method: 'HEAD' })
+		},
+		{ id: 'get', make: get('/h') }
+	]
+})
+
+corpus.push({
+	id: 'head-without-plugin',
+	tags: ['safe-for-socket', 'method', 'head'],
+	define: (app) => app.get('/head-plain', () => 'x'),
+	requests: [
+		{
+			id: 'head',
+			make: () => new Request(url('/head-plain'), { method: 'HEAD' })
+		}
+	]
+})
+
+corpus.push({
+	id: 'method-not-allowed',
+	tags: ['safe-for-socket', 'method'],
+	define: (app) => app.get('/only-get', () => 'x'),
+	requests: [
+		{
+			id: 'post',
+			make: () => new Request(url('/only-get'), { method: 'POST' })
+		},
+		{
+			id: 'options',
+			make: () => new Request(url('/only-get'), { method: 'OPTIONS' })
+		}
+	]
+})
+
+corpus.push({
+	id: 'sse-stream',
+	tags: ['safe-for-socket', 'stream', 'sse'],
+	define: (app) =>
+		app.get('/sse', async function* () {
+			yield sse({ data: 'one', event: 'e' })
+			yield sse({ data: 'two', id: '2' })
+		}),
+	requests: [{ id: 'stream', make: get('/sse') }]
+})
+
+corpus.push({
+	id: 'generator-throws-midstream',
+	tags: ['safe-for-socket', 'stream', 'error'],
+	define: (app) =>
+		app.get('/g', async function* () {
+			yield 'a'
+			throw new Error('midstream')
+		}),
+	requests: [{ id: 'g', make: get('/g') }]
+})
+
+corpus.push({
+	id: 'map-response',
+	tags: ['safe-for-socket', 'lifecycle'],
+	define: (app) =>
+		app
+			.mapResponse(({ response, set }: any) => {
+				set.headers['x-mapped'] = '1'
+				return new Response(`mapped:${response}`)
+			})
+			.get('/m', () => 'orig'),
+	requests: [{ id: 'm', make: get('/m') }]
+})
+
+corpus.push({
+	id: 'response-passthrough-with-set-headers',
+	tags: ['safe-for-socket', 'response', 'headers'],
+	define: (app) =>
+		app.get('/p', ({ set }: any) => {
+			set.headers['x-hook'] = 'h'
+			set.status = 201
+			return new Response('body', {
+				status: 202,
+				headers: { 'x-own': 'o', 'content-type': 'text/x-custom' }
+			})
+		}),
+	requests: [{ id: 'p', make: get('/p') }]
+})
+
+corpus.push({
+	id: 'cookie-remove',
+	tags: ['safe-for-socket', 'cookies'],
+	define: (app) =>
+		app
+			.get('/set', ({ cookie }: any) => {
+				cookie.a.value = 'v'
+				return 'ok'
+			})
+			.get('/rm', ({ cookie }: any) => {
+				cookie.a.remove()
+				return 'ok'
+			}),
+	requests: [
+		{ id: 'set', make: get('/set') },
+		{
+			id: 'remove',
+			make: () =>
+				new Request(url('/rm'), { headers: { cookie: 'a=v' } })
+		}
+	]
+})
+
+corpus.push({
+	id: 'derive-throws',
+	tags: ['safe-for-socket', 'lifecycle', 'error'],
+	define: (app) =>
+		app
+			.derive(() => {
+				throw new Error('derive-boom')
+			})
+			.get('/d', () => 'x'),
+	requests: [{ id: 'd', make: get('/d') }]
+})
+
+corpus.push({
+	id: 'throw-nonerror',
+	tags: ['safe-for-socket', 'error'],
+	define: (app) =>
+		app
+			.get('/s', () => {
+				throw 'a-string'
+			})
+			.get('/o', () => {
+				throw { k: 'v' }
+			})
+			.get('/n', () => {
+				throw null
+			})
+			.get('/u', () => {
+				throw undefined
+			}),
+	requests: [
+		{ id: 'string', make: get('/s') },
+		{ id: 'object', make: get('/o') },
+		{ id: 'null', make: get('/n') },
+		{ id: 'undefined', make: get('/u') }
+	]
+})
+
+corpus.push({
+	id: 'status-throw-with-headers',
+	tags: ['safe-for-socket', 'error', 'headers'],
+	define: (app) =>
+		app.get('/t', ({ set }: any) => {
+			set.headers['x-pre'] = '1'
+			throw status(403, { why: 'no' })
+		}),
+	requests: [{ id: 't', make: get('/t') }]
+})
+
+corpus.push({
+	id: 'guard-group',
+	tags: ['safe-for-socket', 'plugin', 'schema'],
+	define: (app) =>
+		app.group('/g', (a: any) =>
+			a
+				.guard({ query: t.Object({ q: t.String() }) })
+				.get('/x', ({ query }: any) => query.q)
+		),
+	requests: [
+		{ id: 'ok', make: get('/g/x?q=1') },
+		// A socket adds its port to the host echoed by the 422 response.
+		{ id: '422', make: get('/g/x'), tags: ['handle-only'] }
+	]
+})
+
+corpus.push({
+	id: 'file-response',
+	tags: ['safe-for-socket', 'response', 'file'],
+	define: (app) => app.get('/f', () => file('./package.json')),
+	requests: [{ id: 'f', make: get('/f') }]
+})
+
+corpus.push({
+	id: 'mount',
+	tags: ['safe-for-socket', 'plugin'],
+	define: (app) =>
+		app.mount(
+			'/mnt',
+			(req: Request) => new Response(`mounted:${new URL(req.url).pathname}`)
+		),
+	requests: [
+		{ id: 'root', make: get('/mnt') },
+		{ id: 'sub', make: get('/mnt/a/b') }
+	]
+})
+
+corpus.push({
+	id: 'normalize-strip',
+	tags: ['safe-for-socket', 'schema', 'body'],
+	define: (app) =>
+		app.post(
+			'/n',
+			{ body: t.Object({ a: t.String() }) },
+			({ body }: any) => body
+		),
+	requests: [
+		{
+			id: 'extra-key',
+			make: () =>
+				new Request(url('/n'), {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ a: 'x', extra: 'y' })
+				})
+		}
+	]
+})
+
+corpus.push({
+	id: 'response-schema-mismatch',
+	tags: ['safe-for-socket', 'schema', 'response'],
+	define: (app) =>
+		app.get(
+			'/rs',
+			{ response: t.Object({ a: t.Number() }) },
+			() => ({ a: 'not-a-number' }) as any
+		),
+	requests: [{ id: 'rs', make: get('/rs') }]
+})
+
+corpus.push({
+	id: 'afterhandle-returns',
+	tags: ['safe-for-socket', 'lifecycle'],
+	define: (app) =>
+		app
+			.afterHandle(({ response }: any) =>
+				typeof response === 'string' ? response + '!' : undefined
+			)
+			.get('/a2', () => 'x')
+			.get('/b2', () => ({ o: 1 })),
+	requests: [
+		{ id: 'string', make: get('/a2') },
+		{ id: 'object', make: get('/b2') }
+	]
+})
+
+// These routes omit autoHead to compare each lane's native HEAD behavior.
+corpus.push({
+	id: 'head-shapes',
+	tags: ['safe-for-socket', 'method', 'head'],
+	define: (app) =>
+		app
+			.get('/head/static', 'static-literal')
+			.get('/head/dynamic', () => 'dynamic-value')
+			.get(
+				'/head/schema',
+				{ response: t.Object({ v: t.Number() }) },
+				() => ({ v: 1 })
+			)
+			.get('/head/empty', ({ set }: any) => {
+				set.status = 204
+				return null
+			}),
+	requests: [
+		{
+			id: 'static',
+			make: () => new Request(url('/head/static'), { method: 'HEAD' }),
+			// The native static lane returns 200 while the JS lane returns 404.
+			excludeLanePairs: ['native-static-off-vs-on@listen']
+		},
+		{
+			id: 'dynamic',
+			make: () => new Request(url('/head/dynamic'), { method: 'HEAD' })
+		},
+		{
+			id: 'response-schema',
+			make: () => new Request(url('/head/schema'), { method: 'HEAD' })
+		},
+		{
+			id: 'empty-body',
+			make: () => new Request(url('/head/empty'), { method: 'HEAD' })
+		}
+	]
+})

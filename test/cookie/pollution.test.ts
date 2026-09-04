@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import { parseCookie } from '../../src/cookie'
 import type { Context } from '../../src/context'
+import { parseCookie } from '../utils/parse-cookie'
 
 const enc = encodeURIComponent
 

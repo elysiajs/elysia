@@ -664,7 +664,7 @@ describe('Handle Error', () => {
 
 		const res = await app.handle('/')
 
-		expect(res.status).toBe(422)
+		expect(res.status).toBe(500)
 		expect(res.headers.get('set-cookie')).toContain(
 			'session=test-session-id'
 		)
@@ -745,5 +745,51 @@ describe('Handle Error', () => {
 			'session=test-session-id'
 		)
 		expect(res.headers.get('x-custom')).toBe('value')
+	})
+
+	// Nullish thrown values must reach the generic 500 response.
+	it('handle thrown nullish value', async () => {
+		const logged: unknown[] = []
+		const error = console.error
+		console.error = (...parameter: unknown[]) => {
+			logged.push(parameter[0])
+		}
+
+		try {
+			for (const thrown of [null, undefined])
+				for (const withHook of [false, true]) {
+					let app = new Elysia()
+
+					if (withHook)
+						app = app.error(({ set }) => {
+							set.headers['x-error-hook'] = 'declined'
+						}) as typeof app
+
+					const res = await app
+						.get('/', () => {
+							throw thrown
+						})
+						.handle('/')
+
+					expect(res.status).toBe(500)
+					expect(res.headers.get('content-type')).toBe(
+						'application/problem+json'
+					)
+					await expect(res.json()).resolves.toEqual({
+						type: 'internal-server-error',
+						code: 'internal-server-error',
+						title: 'Internal Server Error',
+						status: 500
+					})
+
+					if (withHook)
+						expect(res.headers.get('x-error-hook')).toBe('declined')
+				}
+		} finally {
+			console.error = error
+		}
+
+		// No fallback error was logged.
+		expect(logged).toEqual([])
 	})
 })

@@ -95,7 +95,7 @@ export const mapTransform = /*#__PURE__*/ map<
 
 const deriveKeyCache = new WeakMap<Function, string[] | null>()
 
-export function extractDeriveKeys(fn: Function) {
+function extractDeriveKeys(fn: Function) {
 	const cached = deriveKeyCache.get(fn)
 	if (cached !== undefined) return cached
 
@@ -601,9 +601,7 @@ export const mapAfterResponse = /*#__PURE__*/ map<
 		? `await ar${at(i)}(c)\n`
 		: `let _ar=ar${at(i)}(c)\nif(_ar instanceof Promise)await _ar\n`
 
-	return (
-		`try{` + t.begin + call + t.end() + `}catch(_e){` + t.end('_e') + `}\n`
-	)
+	return `try{${t.begin}${call}${t.end()}}catch(_e){${t.end('_e')}console.error(_e)}\n`
 })
 
 export const mapError = /*#__PURE__*/ map<

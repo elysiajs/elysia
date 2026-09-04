@@ -1,0 +1,14 @@
+{
+	"extends": "../../tsconfig.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"incremental": false,
+		"skipLibCheck": true,
+		"types": ["@types/bun"],
+		"paths": {
+			"elysia": ["../../src/index.ts"],
+			"elysia/*": ["../../src/*"]
+		}
+	},
+	"include": ["fixture.ts"]
+}

@@ -1,44 +1,51 @@
 import { describe, it, expect } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import {
-	handlerParams,
-	resolveHandlerParams
-} from '../../src/compile/handler/params'
+import { resolveHandlerParams } from '../../src/compile/handler/params'
 
-/** Every captured handler dependency needs one runtime parameter descriptor. */
+const source = (file: string) =>
+	readFileSync(resolve(import.meta.dir, file), 'utf8')
 
-const SRC = [
+const compilerSource = [
 	'../../src/compile/handler/index.ts',
 	'../../src/compile/handler/jit.ts',
 	'../../src/compile/handler/utils.ts'
 ]
-	.map((file) => readFileSync(resolve(import.meta.dir, file), 'utf8'))
+	.map(source)
 	.join('\n')
+
+const paramsSource = source('../../src/compile/handler/params.ts')
 
 const linkedNames = () => {
 	const names = new Set<string>()
-	for (const m of SRC.matchAll(/\blink\([^,]+,\s*'([a-z0-9]+)'\)/g))
+	for (const m of compilerSource.matchAll(
+		/\blink\([^,]+,\s*'([a-z0-9]+)'\)/g
+	))
 		names.add(m[1]!)
-	if (SRC.includes("seenKeys.add('ho')")) names.add('ho')
+	if (compilerSource.includes("seenKeys.add('ho')")) names.add('ho')
 	// `rt`/`fre` are seeded into `seenKeys`/`paramValues` rather than linked
-	for (const m of SRC.matchAll(/\bnew Set<string>\(\[([^\]]+)\]\)/g))
+	for (const m of compilerSource.matchAll(
+		/\bnew Set<string>\(\[([^\]]+)\]\)/g
+	))
 		for (const n of m[1]!.matchAll(/'([a-z0-9]+)'/g)) names.add(n[1]!)
 	return names
 }
+
+const descriptorNames = () =>
+	new Set(
+		[...paramsSource.matchAll(/^\t([a-z0-9]+): \(/gm)].map(
+			(match) => match[1]!
+		)
+	)
 
 describe('frozen handler parameter descriptors', () => {
 	it('matches every dependency linked by the handler compiler', () => {
 		const linked = linkedNames()
 		expect(linked.size).toBeGreaterThan(20)
 
-		const missing = [...linked].filter((n) => !(n in handlerParams()))
-		const stale = Object.keys(handlerParams()).filter(
-			(n) => !linked.has(n)
+		expect([...descriptorNames()].sort()).toEqual(
+			[...linked].sort()
 		)
-
-		expect(missing).toEqual([])
-		expect(stale).toEqual([])
 	})
 
 	it('resolves params positionally, in alias order', () => {

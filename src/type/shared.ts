@@ -52,10 +52,8 @@ export const isPureRefinement = (refinement: object) =>
 export const coerceLeafCache = new Map<string, any>()
 
 /** @internal test isolation */
-export const coerceLeafCacheSize = () => coerceLeafCache.size
-
-/** @internal test isolation */
 export function clearCoerceLeafCache() {
+	// eslint-disable-next-line sonarjs/no-empty-collection -- intentional cache reset
 	coerceLeafCache.clear()
 }
 

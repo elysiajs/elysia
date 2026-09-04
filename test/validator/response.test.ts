@@ -216,7 +216,7 @@ describe('Response Validator', () => {
 
 		const res = await app.handle('/')
 
-		expect(res.status).toBe(422)
+		expect(res.status).toBe(500)
 	})
 
 	it('handle File', async () => {
@@ -324,9 +324,9 @@ describe('Response Validator', () => {
 		)
 
 		expect(r200valid.status).toBe(200)
-		expect(r200invalid.status).toBe(422)
+		expect(r200invalid.status).toBe(500)
 		expect(r201valid.status).toBe(201)
-		expect(r201invalid.status).toBe(422)
+		expect(r201invalid.status).toBe(500)
 	})
 
 	it('validate response per status with error()', async () => {
@@ -479,7 +479,7 @@ describe('Response Validator', () => {
 			app.handle('/validate-error').then((x) => x.status)
 		])
 
-		expect(response).toEqual([200, 418, 422])
+		expect(response).toEqual([200, 418, 500])
 	})
 
 	it('validate nested references', async () => {
@@ -673,7 +673,7 @@ describe('Response Validator', () => {
 
 		const res = await app.handle('/')
 
-		expect(res.status).toBe(422)
+		expect(res.status).toBe(500)
 	})
 
 	// The response validator is keyed on the status (`va.response[set.status]`)
@@ -721,7 +721,7 @@ describe('Response Validator', () => {
 		expect(await literal.text()).toBe(await fn.text())
 
 		expect(literalBad.status).toBe(fnBad.status)
-		expect(literalBad.status).toBe(422)
+		expect(literalBad.status).toBe(500)
 	})
 
 	// A literal with no `response` keeps the build-time `Response`, so the fix

@@ -797,7 +797,8 @@ export function compileHandlerJit({
 				(hasDynamicAfterResponse
 					? `let _q=c['~afterResponse']\n` +
 						`if(_q){let _l=_q.length\n` +
-						`for(let _i=0;_i<_l;_i++){try{await _q[_i](c)}catch{}}\n` +
+						// The response is already gone, so report deferred errors.
+						`for(let _i=0;_i<_l;_i++){try{await _q[_i](c)}catch(_e){console.error(_e)}}\n` +
 						(!isProduction()
 							? `if(_q.length!==_l)console.warn('[elysia] defer() called from inside the afterResponse drain is ignored')\n`
 							: '') +
@@ -807,17 +808,36 @@ export function compileHandlerJit({
 				`})\n`
 			: ''
 
+	// Hoisted error and finalizer helpers cannot call route-scoped `_sc`.
 	const dedupSchedule =
-		!!scheduleAfterResponse &&
-		(hasErrorHook || hasTrace) &&
-		!syncAfterResponse &&
-		!syncErrorHook
+		!!scheduleAfterResponse && !syncAfterResponse && !syncErrorHook
 
 	const scheduleDecl = dedupSchedule
 		? `function _sc(){\n${scheduleAfterResponse}}\n`
 		: ''
 
 	const schedule = dedupSchedule ? `_sc()\n` : scheduleAfterResponse
+
+	const syncScheduleDecl =
+		syncAfterResponse && scheduleAfterResponse
+			? `function _scf(c,_stl){\n${scheduleAfterResponse}}\n`
+			: ''
+
+	const catchSchedule = dedupSchedule
+		? `_sc()\n`
+		: syncScheduleDecl
+			? `_scf(c)\n`
+			: ''
+
+	const freThenSchedule = (arg: string) =>
+		catchSchedule
+			? `if(c._arf)return fre(rt,c,${arg})\n` +
+				`c._arf=true\n` +
+				`const _fr=fre(rt,c,${arg})\n` +
+				`return typeof _fr?.then==='function'` +
+				`?_fr.then((_v)=>{${catchSchedule}return _v\n})` +
+				`:(${catchSchedule.trim()},_fr)\n`
+			: `return fre(rt,c,${arg})\n`
 
 	const signPrefix = syncCookieSign
 		? `scv(c.set.cookie,cc)\n`
@@ -933,6 +953,7 @@ export function compileHandlerJit({
 			link(forwardError, 'fe')
 
 			factoryHelpers +=
+				syncScheduleDecl +
 				`function _fin(c,_r){\n` +
 				`if(_r instanceof Error)throw _r\n` +
 				`if(_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
@@ -943,7 +964,7 @@ export function compileHandlerJit({
 				`}\n` +
 				`function _fin2(c,_r,_stl){\n` +
 				`c.responseValue=_r\n` +
-				scheduleAfterResponse +
+				(syncScheduleDecl ? `_scf(c,_stl)\n` : scheduleAfterResponse) +
 				`const _m=${hasSet ? `${map}(_r,c.set,c.request,true)` : `${map}(_r,c.request,true)`}\n` +
 				`return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n` +
 				`}\n`
@@ -1023,18 +1044,31 @@ export function compileHandlerJit({
 				code += abortCheck()
 			}
 
-			code += schedule
+			// Mapping starts generators and can fail. Schedule only after mapping;
+			// rejected paths schedule after the error response sets the final status.
+			const deferSchedule = !!schedule
+
 			code += signPrefix
 			const finalMap = hasSet
 				? `${map}(_r,c.set,c.request,true)`
 				: `${map}(_r,c.request,true)`
+			const onMapReject = syncErrorHook
+				? `(_e)=>_ce(_e,c)`
+				: dedupSchedule
+					? `(_e)=>{${freThenSchedule('_e')}}`
+					: `(_e)=>fre(rt,c,_e)`
 
-			if (isAsync) code += `return await ${finalMap}\n`
+			if (isAsync)
+				code += deferSchedule
+					? `const _m=await ${finalMap}\n${schedule}return _m\n`
+					: `return await ${finalMap}\n`
 			else {
 				code += `const _m=${finalMap}\n`
-				code += syncErrorHook
-					? `return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>_ce(_e,c)):_m\n`
-					: `return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n`
+				code += deferSchedule
+					? `if(typeof _m?.then==='function')return Promise.resolve(_m).then((_v)=>{\n${schedule}return _v\n},${onMapReject})\n` +
+						schedule +
+						`return _m\n`
+					: `return typeof _m?.then==='function'?Promise.resolve(_m).catch(${onMapReject}):_m\n`
 			}
 		}
 	} else if (isHandleFunction) {
@@ -1127,10 +1161,7 @@ export function compileHandlerJit({
 				abortCatch +
 				schedule +
 				`return _efb(e,c)\n`
-		} else {
-			body += endTrace('error') + schedule
-			body += `return fre(rt,c,e)\n`
-		}
+		} else body += endTrace('error') + freThenSchedule('e')
 
 		if (syncErrorHook) {
 			// `_ce` is hoisted out of `route`, so it cannot see `route`'s `_as`
@@ -1139,7 +1170,10 @@ export function compileHandlerJit({
 			code += `}catch(e){return _ce(e,c)}\n`
 		} else
 			code += `}catch(e){try{\n${body}}catch(_ee){return fre(rt,c,_ee)}}\n`
-	} else code += `}catch(e){return fre(rt,c,e)}\n`
+	} else
+		code += catchSchedule
+			? `}catch(e){${freThenSchedule('e')}}\n`
+			: `}catch(e){return fre(rt,c,e)}\n`
 
 	code += '}'
 
