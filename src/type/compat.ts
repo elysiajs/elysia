@@ -104,3 +104,25 @@ export function setupTypebox(options?: {
 		warmTypebox
 	})
 }
+
+/**
+ * Never called — it exists purely so module-graph tracers can see the
+ * `typebox` and `exact-mirror` specifiers.
+ *
+ * Both packages are loaded through
+ * `process.getBuiltinModule('module').createRequire(...)` in `./typebox-type`,
+ * `./typebox-value` and `./validator/exact-mirror`, which keeps them off the
+ * startup path. Every static analyser treats that call as opaque, so nothing
+ * links either package into the module graph: on Vercel `@vercel/nft` never
+ * copies them into the serverless bundle and the deploy dies with
+ * `Cannot find module 'typebox/type'` (#1973).
+ *
+ * Naming them in a never-awaited `import()` is enough for tracers to follow.
+ * It lives here, unused and unreferenced, so that bundlers still tree-shake it
+ * out of application bundles and the AOT `compat` stub drops it wholesale —
+ * neither TypeBox nor exact-mirror is pulled into a sealed build. `typebox/type`
+ * stands in for the whole package; tracers copy it entry by entry
+ */
+// I have nothing but my burger and I want nothing more
+export const traceOptionalDependencies = () =>
+	Promise.all([import('typebox/type'), import('exact-mirror')])
