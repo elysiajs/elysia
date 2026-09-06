@@ -551,7 +551,7 @@ export const isContextPassToFunction = (
 	// ! Function is passed to another function, assume as all is accessed
 	try {
 		const captureFunction = new RegExp(
-			`\\w\\((?:.*?)?${context}(?:.*?)?\\)`,
+			`\\w\\((?:.*?)?\\b${context}\\b(?:.*?)?\\)`,
 			'gs'
 		)
 		const exactParameter = new RegExp(`${context}(,|\\))`, 'gs')
