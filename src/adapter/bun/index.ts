@@ -332,16 +332,13 @@ export const BunAdapter = createAdapter({
 				'[Elysia] Cannot call listen() while a server or teardown is active'
 			)
 
+		const requestReady = Promise.withResolvers<void>()
+
 		function gatedFetch(request: Request, server: unknown) {
-			return live
+			return live && !cancelled
 				? live(request, server)
-				: Promise.resolve(ready).then(async () => {
-						if (!live) {
-							await startupShutdown
-							throw new Error(
-								'[Elysia] Server was stopped before it was ready'
-							)
-						}
+				: requestReady.promise.then(() => {
+						if (cancelled || !live) return unavailableFetch()
 
 						return live(request, server)
 					})
@@ -368,7 +365,6 @@ export const BunAdapter = createAdapter({
 
 		let live: ((request: Request, server: unknown) => unknown) | undefined
 		let cancelled = false
-		let startupShutdown: Promise<void> | undefined
 		let shutdownAttempt: Promise<void> | undefined
 
 		let ready: Promise<unknown> | undefined
@@ -495,7 +491,13 @@ export const BunAdapter = createAdapter({
 			errors: unknown[]
 		) => {
 			try {
-				await server.stop(closeActiveConnections)
+				const stopping = server.stop(closeActiveConnections)
+				await (closeActiveConnections
+					? stopping
+					: Promise.race([stopping, force.promise]))
+				// Let quiesce force-stop without accepting the abandoned graceful result.
+				if (!closeActiveConnections && forceRequested && !forceDone)
+					return false
 				nativeStopped = true
 				if (closeActiveConnections) {
 					forceDone = true
@@ -624,6 +626,7 @@ export const BunAdapter = createAdapter({
 			}
 
 			cancelled = true
+			requestReady.resolve()
 			clearAppServer(app, server)
 
 			let outcome: Promise<void>
@@ -735,7 +738,6 @@ export const BunAdapter = createAdapter({
 				})().then(resolve, reject)
 			}
 
-			if (!published) startupShutdown ??= outcome
 			if (!reentrant) return outcome
 
 			if (observedOutcome !== outcome) {
@@ -750,22 +752,36 @@ export const BunAdapter = createAdapter({
 		ext.stop = stop
 
 		const publish = () => {
-			if (cancelled || app.server !== server) return
-			built ??= build()
+			if (cancelled || app.server !== server) {
+				requestReady.resolve()
+				return
+			}
 
-			live = serve.fetch = withOrigin(built!.fetch)
-			published = true
-			if (built!.websocket) serve.websocket = built!.websocket
-			if (built!.routes) serve.routes = built!.routes
+			try {
+				built ??= build()
 
-			reloadServer(server, serve)
+				live = serve.fetch = withOrigin(built!.fetch)
+				published = true
+				if (built!.websocket) serve.websocket = built!.websocket
+				if (built!.routes) serve.routes = built!.routes
 
-			if (callback) callback(server)
+				reloadServer(server, serve)
+
+				if (callback) callback(server)
+			} catch (error) {
+				startupFailure ??= { error }
+				throw error
+			}
+
+			requestReady.resolve()
 		}
 
 		const start = () => {
 			modulesReady = undefined
-			if (cancelled || app.server !== server) return
+			if (cancelled || app.server !== server) {
+				requestReady.resolve()
+				return
+			}
 
 			const setupReady = setup()
 			if (
@@ -781,13 +797,11 @@ export const BunAdapter = createAdapter({
 			// defer building app so it doesn't block main thread and allow other synchronous code to run first
 			const modules = (modulesReady = app.modules)
 
-			ready = modules
-				.then(start)
-				.catch((error) => stop(true, { error }))
-				.catch((error) => {
-					console.error('[Elysia] listen() failed:', error)
-					if (typeof process !== 'undefined') process.exitCode = 1
-				})
+			ready = modules.then(start).catch((error) => stop(true, { error }))
+			ready.catch((error) => {
+				console.error('[Elysia] listen() failed:', error)
+				if (typeof process !== 'undefined') process.exitCode = 1
+			})
 		} catch (error) {
 			stop(true, { error }).catch(console.error)
 

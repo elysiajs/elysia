@@ -198,17 +198,30 @@ describe('nested query coercion plans without TypeBox', () => {
 			[{ o: '{"n":1}', s: 'a' }, { s: 'a' }, { o: 'garbage', s: 'a' }]
 		)
 	})
-
-	it('decodes codecs inside nested objects', () => {
-		assertParity(t.Object({ o: t.Object({ d: t.Date() }) }), [
-			{ o: '{"d":"2024-01-02T03:04:05.000Z"}' },
-			{ o: '{"d":"garbage"}' },
-			{ o: { d: '2024-01-02T03:04:05.000Z' } }
-		])
-	})
 })
 
 describe('coercion plans that require TypeBox', () => {
+	it('preserves nested date codecs through the sealed decode mirror', () => {
+		const schema = t.Object({ o: t.Object({ d: t.Date() }) })
+		const { query } = freeze(schema)
+		expect(query?.decodeMirror).toBeDefined()
+		expect(query?.bridgeFree).toBe(true)
+		const validator = bridgeFree(schema)
+		expect(validator?.query).toBeDefined()
+		for (const input of [
+			{ o: '{"d":"2024-01-02T03:04:05.000Z"}' },
+			{ o: { d: '2024-01-02T03:04:05.000Z' } }
+		])
+			expect(run(validator, input)).toEqual({
+				ok: true,
+				value: { o: { d: new Date('2024-01-02T03:04:05.000Z') } }
+			})
+		expect(run(validator, { o: '{"d":"garbage"}' })).toEqual({
+			ok: false,
+			status: 422
+		})
+	})
+
 	it('defers arrays with nested number coercion to the wired validator', () => {
 		const schema = t.Object({ xs: t.Array(t.Number()) })
 		const { query } = freeze(schema)

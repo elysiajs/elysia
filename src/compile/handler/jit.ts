@@ -4,8 +4,6 @@ import type { ElysiaAdapter } from '../../adapter'
 
 import type { Validator } from '../../validator'
 
-import { isAsyncFunction } from '../utils'
-
 import {
 	parseCookieRaw,
 	parseCookieRawSync,
@@ -33,6 +31,7 @@ import { parseQueryFromURL } from '../../parse-query'
 
 import {
 	armEntryAbort,
+	awaitGuard,
 	cloneResponse,
 	cloneStaticValue,
 	emptyResponse,
@@ -71,7 +70,8 @@ import type {
 	MaybeArray
 } from '../../types'
 
-const parseFormData = 'c.body=await pf(c)\n'
+const awaitValue = (value: string, arm = '') =>
+	arm ? `await (_av=(${value}),${arm},_av)` : `await ${value}`
 
 let captureHeaderShorthand: boolean | undefined
 export const setCaptureHeaderShorthand = (value: boolean | undefined) => {
@@ -81,33 +81,34 @@ export const setCaptureHeaderShorthand = (value: boolean | undefined) => {
 function builtinParser(
 	adapter: ElysiaAdapter['parse'],
 	parse: string,
-	link: Link
+	link: Link,
+	arm: string
 ) {
 	switch (parse) {
 		case 'formdata':
 		case 'multipart/form-data':
 			link(adapter.formData, 'pf')
-			return parseFormData
+			return `c.body=${awaitValue('pf(c)', arm)}\n`
 
 		case 'json':
 		case 'application/json':
 			link(adapter.json, 'pj')
-			return 'c.body=await pj(c)\n'
+			return `c.body=${awaitValue('pj(c)', arm)}\n`
 
 		case 'urlencoded':
 		case 'application/x-www-form-urlencoded':
 			link(adapter.urlencoded, 'pu')
-			return 'c.body=await pu(c)\n'
+			return `c.body=${awaitValue('pu(c)', arm)}\n`
 
 		case 'arrayBuffer':
 		case 'application/octet-stream':
 			link(adapter.arrayBuffer, 'pa')
-			return 'c.body=await pa(c)\n'
+			return `c.body=${awaitValue('pa(c)', arm)}\n`
 
 		case 'text':
 		case 'text/plain':
 			link(adapter.text, 'pt')
-			return 'c.body=await pt(c)\n'
+			return `c.body=${awaitValue('pt(c)', arm)}\n`
 
 		case 'none':
 			return ''
@@ -123,7 +124,8 @@ function parse(
 	bodyVali: Validator | undefined,
 	hasHeaders: boolean,
 	link: Link,
-	report?: TraceReporter
+	report: TraceReporter | undefined,
+	arm: string
 ) {
 	if (parsers && typeof parsers === 'function')
 		parsers = [parsers] as ContentType[] | BodyHandler[]
@@ -140,7 +142,9 @@ function parse(
 		const begin = child ? child.begin : ''
 		const end = child ? child.end() : ''
 
-		return begin + builtinParser(adapter, parsers as string, link) + end
+		return (
+			begin + builtinParser(adapter, parsers as string, link, arm) + end
+		)
 	}
 
 	let hasFn = false
@@ -173,11 +177,10 @@ function parse(
 				if (i) code += 'if(!hasBody){'
 				if (child) code += child.begin
 
-				code += isAsyncFunction(parser as Function)
-					? `c.body=await ho.parse[${i}](c,ct)\n`
-					: `_bp=ho.parse[${i}](c,ct)\n` +
-						`if(_bp instanceof Promise)_bp=await _bp\n` +
-						`c.body=_bp\n`
+				code +=
+					`_bp=ho.parse[${i}](c,ct)\n` +
+					awaitGuard(parser as Function, true, '_bp', arm) +
+					`c.body=_bp\n`
 				code += 'hasBody=c.body!==undefined\n'
 				if (child) code += child.end()
 				if (i) code += '}\n'
@@ -187,7 +190,7 @@ function parse(
 				const child = report?.resolveChild(parser as string)
 				if (i) code += 'if(!hasBody){\n'
 				if (child) code += child.begin
-				code += builtinParser(adapter, parser as string, link)
+				code += builtinParser(adapter, parser as string, link, arm)
 				if (child) code += child.end()
 				if (i) code += '}\n'
 				break
@@ -218,9 +221,10 @@ function parse(
 			link(ElysiaStatus, 'es')
 		}
 
+		const value = `c.body=cj?${awaitValue('pj(c)', arm)}:${awaitValue('pd(c,ce,true)', arm)}\n`
 		code += hasFn
-			? `if(!hasBody&&${guard}){${begin}c.body=cj?await pj(c):await pd(c,ce,true)\n${end}}\n`
-			: `if(${guard}){${begin}c.body=cj?await pj(c):await pd(c,ce,true)\n${end}}\n`
+			? `if(!hasBody&&${guard}){${begin}${value}${end}}\n`
+			: `if(${guard}){${begin}${value}${end}}\n`
 
 		if (!bodyVali) link(hasRequestBody, 'hb')
 		link(adapter.json, 'pj')
@@ -296,8 +300,10 @@ export const createInlineHandler = (
 	((c: Context) => {
 		const r = h(c)
 		if (r instanceof Error) throw r
-		if (r instanceof Promise)
-			return r.then((v) => map(forwardError(v), c.request, true))
+		if (typeof (r as any)?.then === 'function')
+			return Promise.resolve(r).then((v) =>
+				map(forwardError(v), c.request, true)
+			)
 
 		return map(r, c.request, true)
 	}) as CompiledHandler
@@ -309,8 +315,10 @@ const createInlineHandlerWithSet = (
 	((c: Context) => {
 		const r = h(c)
 		if (r instanceof Error) throw r
-		if (r instanceof Promise)
-			return r.then((v) => map(forwardError(v), c.set, c.request, true))
+		if (typeof (r as any)?.then === 'function')
+			return Promise.resolve(r).then((v) =>
+				map(forwardError(v), c.set, c.request, true)
+			)
 
 		return map(r, c.set, c.request, true)
 	}) as CompiledHandler
@@ -324,8 +332,10 @@ const createInlineHandlerWithDefaultHeaders = (
 		const r = h(c)
 
 		if (r instanceof Error) throw r
-		if (r instanceof Promise)
-			return r.then((v) => map(forwardError(v), c.set, c.request, true))
+		if (typeof (r as any)?.then === 'function')
+			return Promise.resolve(r).then((v) =>
+				map(forwardError(v), c.set, c.request, true)
+			)
 
 		return map(r, c.set, c.request, true)
 	}) as CompiledHandler
@@ -394,7 +404,6 @@ export function compileHandlerJit({
 			hasTrace,
 			traceCount,
 			hasLifecycleHook,
-			callHandlerSyncOnAsync,
 			syncErrorHook,
 			syncAfterResponse
 		}
@@ -426,29 +435,18 @@ export function compileHandlerJit({
 
 	// Abort short-circuit.
 	//
-	// `request.signal` is materialized lazily by the runtime, so arming is
-	// deferred to the first suspension: before any `await`, the slot can only
-	// have been armed by someone upstream (the eager fetch lane, or an awaited
-	// request hook), so those sites just peek at it. After a suspension the
-	// route arms the slot itself and caches it route-locally in `_as`
-	// Sound because the cache is only ever populated by this route's own arming
+	// Capture callback results before arming at an actual await boundary.
+	// Ordinary guards only peek; an immediate result never needs a signal.
 	const abortOn = hasLifecycleHook && root['~config']?.abortSignal !== false
 	const abortPeek = "c['~sig']?.aborted"
-	const abortArm = "(_as??=(c['~sig']??=c.request.signal)).aborted"
-
-	let suspended = false
-	const abortExpression = () => {
-		if (!suspended && code.includes('await ')) suspended = true
-		return suspended ? abortArm : abortPeek
-	}
+	const arm = abortOn ? "_as??=(c['~sig']??=c.request.signal)" : ''
 
 	const abortCheck = () =>
-		abortOn ? `if(${abortExpression()})return emp.clone()\n` : ''
+		abortOn ? `if(${abortPeek})return emp.clone()\n` : ''
 
-	const abortChainGuard = () =>
-		abortOn ? (isAsync ? abortArm : abortExpression()) : undefined
+	const abortChainGuard = () => (abortOn ? abortPeek : undefined)
 
-	const abortCatch = abortOn ? `if(${abortArm})return emp.clone()\n` : ''
+	const abortCatch = abortOn ? `if((${arm}).aborted)return emp.clone()\n` : ''
 
 	const phaseOn = (phase: TraceEvent) =>
 		hasTrace && (tracePhases === null || tracePhases.has(phase))
@@ -531,9 +529,7 @@ export function compileHandlerJit({
 	if (needsStaticClone) link(cloneStaticValue, 'scl')
 
 	const callHandler = isHandleFunction
-		? callHandlerSyncOnAsync
-			? `_r=h(c)\nif(_r instanceof Promise)_r=await _r\n`
-			: `_r=${isAsync ? 'await ' : ''}h(c)\n`
+		? `_r=h(c)\n${awaitGuard(handler as Function, isAsync, '_r', arm)}`
 		: isStaticResponse
 			? `_r=cr(h)\n`
 			: isPromiseHandler
@@ -640,7 +636,8 @@ export function compileHandlerJit({
 			vali?.body,
 			hasHeaders,
 			link,
-			buildReport('parse')
+			buildReport('parse'),
+			arm
 		)
 		const preserveParseStatus = seenKeys.has('es')
 		link(ParseError, 'pe')
@@ -661,7 +658,7 @@ export function compileHandlerJit({
 			if (isAsync) code += 'let _tf\n'
 			code += mapTransform(
 				hook!.transform!,
-				[isAsync, buildReport('transform')],
+				[isAsync, buildReport('transform'), arm],
 				abortChainGuard()
 			)
 		}
@@ -671,22 +668,26 @@ export function compileHandlerJit({
 
 	if (vali?.body) {
 		link(vali, 'va')
-		code += `c.body=${bodyValiIsAsync ? 'await ' : ''}va.body.From(c.body,${fromArgs('body', bodyValiIsAsync)})\n`
+		const value = `va.body.From(c.body,${fromArgs('body', bodyValiIsAsync)})`
+		code += `c.body=${bodyValiIsAsync ? awaitValue(value, arm) : value}\n`
 	}
 
 	if (vali?.headers) {
 		link(vali, 'va')
-		code += `c.headers=${headersValiIsAsync ? 'await ' : ''}va.headers.From(c.headers,${fromArgs('headers', !!headersValiIsAsync)})\n`
+		const value = `va.headers.From(c.headers,${fromArgs('headers', !!headersValiIsAsync)})`
+		code += `c.headers=${headersValiIsAsync ? awaitValue(value, arm) : value}\n`
 	}
 
 	if (vali?.params) {
 		link(vali, 'va')
-		code += `c.params=${paramsValiIsAsync ? 'await ' : ''}va.params.From(c.params,${fromArgs('params', !!paramsValiIsAsync)})\n`
+		const value = `va.params.From(c.params,${fromArgs('params', !!paramsValiIsAsync)})`
+		code += `c.params=${paramsValiIsAsync ? awaitValue(value, arm) : value}\n`
 	}
 
 	if (vali?.query) {
 		link(vali, 'va')
-		code += `c.query=${queryValiIsAsync ? 'await ' : ''}va.query.From(c.query,${fromArgs('query', !!queryValiIsAsync)})\n`
+		const value = `va.query.From(c.query,${fromArgs('query', !!queryValiIsAsync)})`
+		code += `c.query=${queryValiIsAsync ? awaitValue(value, arm) : value}\n`
 	}
 
 	if (cookieConfig) {
@@ -720,14 +721,15 @@ export function compileHandlerJit({
 				code += `let _ck=pcrsg(${cookieHeaderExpr},cc)\n`
 			} else {
 				link(parseCookieRaw, 'pcr')
-				code += `let _ck=await pcr(${cookieHeaderExpr},cc)\n`
+				code += `let _ck=${awaitValue(`pcr(${cookieHeaderExpr},cc)`, arm)}\n`
 			}
 
 			if (vali?.cookie) {
 				link(vali, 'va')
 
 				const cookieIsOptional = !!(hook?.cookie as any)?.['~optional']
-				const validateExpr = `_ck=${cookieValidIsAsync ? 'await ' : ''}va.cookie.From(_ck,${fromArgs('cookie', !!cookieValidIsAsync)})\n`
+				const value = `va.cookie.From(_ck,${fromArgs('cookie', !!cookieValidIsAsync)})`
+				const validateExpr = `_ck=${cookieValidIsAsync ? awaitValue(value, arm) : value}\n`
 				if (cookieIsOptional)
 					code += `if(Object.keys(_ck).length){${validateExpr}}\n`
 				else code += validateExpr
@@ -737,15 +739,26 @@ export function compileHandlerJit({
 		}
 	}
 
-	const hasSet = responseMode !== 'compact'
-
+	const compactEligible = responseMode === 'compact'
 	const res = adapter.response
 	const responseMap = res.map
+	const responseCompact = compactEligible ? res.compact : undefined
+	const portableCompact =
+		compactEligible && (Capture.isAotBuildEnv() || Capture.isCapturing())
+	const hasSet = !compactEligible || (!responseCompact && !portableCompact)
 
 	/* eslint-disable sonarjs/no-use-of-empty-return-value */
 	const map = hasSet
-		? (link(res.map, 'rm') ?? 'rm')
-		: (link(res.compact ?? res.map, 'rc') ?? 'rc')
+		? (link(responseMap, 'rm') ?? 'rm')
+		: (link(responseCompact, 'rc') ?? 'rc')
+	if (portableCompact) link(responseMap, 'rm')
+
+	const mapValue = (value: string) =>
+		portableCompact
+			? `(rc?rc(${value},c.request,true):rm(${value},c.set,c.request,true))`
+			: hasSet
+				? `${map}(${value},c.set,c.request,true)`
+				: `${map}(${value},c.request,true)`
 
 	if (isStaticResponse || isPromiseHandler) link(cloneResponse, 'cr')
 
@@ -757,9 +770,7 @@ export function compileHandlerJit({
 				? 'h.then(cr)'
 				: 'h'
 
-	const mapReturn = hasSet
-		? `rm(${handleInstruction},c.set,c.request,true)\n`
-		: `rc(${handleInstruction},c.request,true)\n`
+	const mapReturn = `${mapValue(handleInstruction)}\n`
 
 	if (hasStaticAfterResponse) link(hook!.afterResponse!, 'ar')
 
@@ -842,7 +853,7 @@ export function compileHandlerJit({
 	const signPrefix = syncCookieSign
 		? `scv(c.set.cookie,cc)\n`
 		: asyncCookieSign
-			? `_sg=scv(c.set.cookie,cc)\nif(_sg)await _sg\n`
+			? `_sg=scv(c.set.cookie,cc)\nif(_sg){${arm ? `${arm}\n` : ''}await _sg}\n`
 			: ''
 
 	if (syncCookieSign || asyncCookieSign) link(signCookieValues, 'scv')
@@ -871,7 +882,7 @@ export function compileHandlerJit({
 					const rbpAbort = abortOn ? ',1' : ''
 					if (isAsync) {
 						link(runBeforeHandlePrefixAsync, 'rbp')
-						code += `tmp=await rbp(bp,c${rbpAbort})\n`
+						code += `tmp=${awaitValue(`rbp(bp,c${rbpAbort})`, arm)}\n`
 					} else {
 						link(runBeforeHandlePrefix, 'rbp')
 						code += `tmp=rbp(bp,c${rbpAbort})\n`
@@ -893,7 +904,8 @@ export function compileHandlerJit({
 						link,
 						isAsync,
 						buildReport('beforeHandle'),
-						chainGuard
+						chainGuard,
+						arm
 					)
 					code += beforeHandlePrefix
 						? `if(${chainGuard ? `!${chainGuard}&&` : ''}_r===undefined){\n${mapped}}\n`
@@ -907,18 +919,12 @@ export function compileHandlerJit({
 
 		if (hasAfterResponse || traceHandleOn) link(tee, 'tee')
 
-		const teeConsumers =
-			(hasAfterResponse ? 1 : 0) + (traceHandleOn ? 1 : 0)
-		const teeCount = teeConsumers + 1
 		const teeBlock =
-			teeConsumers > 0 && !syncAfterResponse
+			(hasAfterResponse || traceHandleOn) && !syncAfterResponse
 				? `if(_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
-					`const _s=tee(_r,${teeCount})\n` +
+					`const _s=tee(_r,2)\n` +
 					`_r=_s[0]\n` +
-					(hasAfterResponse ? `_stl=_s[1]\n` : '') +
-					(traceHandleOn
-						? `_trs=_s[${1 + (hasAfterResponse ? 1 : 0)}]\n`
-						: '') +
+					(traceHandleOn ? `_trs=_s[1]\n` : `_stl=_s[1]\n`) +
 					`}\n`
 				: ''
 
@@ -957,7 +963,7 @@ export function compileHandlerJit({
 				`function _fin(c,_r){\n` +
 				`if(_r instanceof Error)throw _r\n` +
 				`if(_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
-				`const _s=tee(_r,${teeCount})\n` +
+				`const _s=tee(_r,2)\n` +
 				`return _fin2(c,_s[0],_s[1])\n` +
 				`}\n` +
 				`return _fin2(c,_r,undefined)\n` +
@@ -965,18 +971,18 @@ export function compileHandlerJit({
 				`function _fin2(c,_r,_stl){\n` +
 				`c.responseValue=_r\n` +
 				(syncScheduleDecl ? `_scf(c,_stl)\n` : scheduleAfterResponse) +
-				`const _m=${hasSet ? `${map}(_r,c.set,c.request,true)` : `${map}(_r,c.request,true)`}\n` +
+				`const _m=${mapValue('_r')}\n` +
 				`return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n` +
 				`}\n`
 
 			code +=
-				`if(_r instanceof Promise)return _r.then(fe).then((_v)=>_fin(c,_v)).catch((_e)=>fre(rt,c,_e))\n` +
+				`if(typeof _r?.then==='function')return Promise.resolve(_r).then(fe).then((_v)=>_fin(c,_v)).catch((_e)=>fre(rt,c,_e))\n` +
 				`return _fin(c,_r)\n`
 		} else {
 			code += `if(_r instanceof Error)throw _r\n`
 			if (!isAsync) {
 				link(forwardError, 'fe')
-				code += `else if(_r instanceof Promise)_r=_r.then(fe)\n`
+				code += `else if(typeof _r?.then==='function')_r=Promise.resolve(_r).then(fe)\n`
 			}
 
 			if (
@@ -996,7 +1002,8 @@ export function compileHandlerJit({
 						hook!.afterHandle!,
 						isAsync,
 						buildReport('afterHandle'),
-						abortChainGuard()
+						abortChainGuard(),
+						arm
 					)
 				}
 				code += endTrace('afterHandle')
@@ -1012,7 +1019,8 @@ export function compileHandlerJit({
 						hook!.mapResponse!,
 						isAsync,
 						buildReport('mapResponse'),
-						abortChainGuard()
+						abortChainGuard(),
+						arm
 					)
 				}
 				code += endTrace('mapResponse')
@@ -1023,7 +1031,6 @@ export function compileHandlerJit({
 				link(vali!, 'va')
 				link(ElysiaStatus, 'es')
 
-				const awaitStr = responseValiAsync ? 'await ' : ''
 				const encodeStatus = responseValiAsync
 					? `(_vr.mayReturnPromise?_vr.From(_r.response,'response',true):_vr.EncodeFrom(_r.response,'response'))`
 					: `_vr.EncodeFrom(_r.response,'response')`
@@ -1034,12 +1041,12 @@ export function compileHandlerJit({
 				code +=
 					`if(_r instanceof es){\n` +
 					`const _vr=va.response[_r.status]\n` +
-					`if(_vr)_r.response=${awaitStr}${encodeStatus}\n` +
+					`if(_vr)_r.response=${responseValiAsync ? awaitValue(encodeStatus, arm) : encodeStatus}\n` +
 					`}else if(!(_r instanceof Response)` +
 					`&&!(_r instanceof ReadableStream)` +
 					`&&typeof _r?.next!=='function'){\n` +
 					`const _vr=va.response[c.set.status??200]\n` +
-					`if(_vr)_r=${awaitStr}${encodeBody}\n` +
+					`if(_vr)_r=${responseValiAsync ? awaitValue(encodeBody, arm) : encodeBody}\n` +
 					`}\n`
 				code += abortCheck()
 			}
@@ -1049,9 +1056,7 @@ export function compileHandlerJit({
 			const deferSchedule = !!schedule
 
 			code += signPrefix
-			const finalMap = hasSet
-				? `${map}(_r,c.set,c.request,true)`
-				: `${map}(_r,c.request,true)`
+			const finalMap = mapValue('_r')
 			const onMapReject = syncErrorHook
 				? `(_e)=>_ce(_e,c)`
 				: dedupSchedule
@@ -1073,21 +1078,17 @@ export function compileHandlerJit({
 		}
 	} else if (isHandleFunction) {
 		if (!isAsync) link(forwardError, 'fe')
-		const mapArgs = hasSet ? 'c.set,c.request,true' : 'c.request,true'
-		// append the handler call first: `abortCheck()` classifies the site by
-		// scanning what has been emitted so far
-		code += callHandlerSyncOnAsync
-			? `let _r=h(c)\nif(_r instanceof Promise)_r=await _r\n`
-			: `let _r=${isAsync ? 'await ' : ''}h(c)\n`
+		const finalMap = mapValue('_r')
+		code += `let ${callHandler}`
 
 		code +=
 			abortCheck() +
 			`if(_r instanceof Error)throw _r\n` +
 			(isAsync
-				? `return await ${map}(_r,${mapArgs})\n`
+				? `return await ${finalMap}\n`
 				: syncErrorHook
-					? `if(_r instanceof Promise)_r=_r.then(fe)\nconst _m=${map}(_r,${mapArgs})\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>_ce(_e,c)):_m\n`
-					: `if(_r instanceof Promise)_r=_r.then(fe)\nconst _m=${map}(_r,${mapArgs})\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n`)
+					? `if(typeof _r?.then==='function')_r=Promise.resolve(_r).then(fe)\nconst _m=${finalMap}\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>_ce(_e,c)):_m\n`
+					: `if(typeof _r?.then==='function')_r=Promise.resolve(_r).then(fe)\nconst _m=${finalMap}\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n`)
 	} else {
 		code +=
 			`const _m=${mapReturn.trim()}\n` +
@@ -1121,7 +1122,7 @@ export function compileHandlerJit({
 				`function _em(c,_r){return typeof _r?.then==='function'?Promise.resolve(_r).catch((_e)=>fre(rt,c,_e)):_r}\n` +
 				`function _fbm(_r,_s,_c){return ${map}(_r,_s,_c.request,true)}\n` +
 				`${asyncCookieSign ? 'async ' : ''}function _efb(e,c){\n` +
-				(asyncCookieSign ? `let _sg\n` : ``) +
+				(asyncCookieSign ? `let _sg${arm ? ',_as' : ''}\n` : ``) +
 				signPrefix +
 				`return _em(c,fbr(c,e,_fbm))\n` +
 				`}\n`
@@ -1139,23 +1140,25 @@ export function compileHandlerJit({
 					[
 						map,
 						link,
-						res.map,
+						responseMap,
 						(hasMapResponse
 							? `c.responseValue=_r\n` +
 								mapMapResponse(
 									hook!.mapResponse!,
 									isAsync,
 									undefined,
-									abortOn ? abortArm : undefined
+									abortChainGuard(),
+									arm
 								)
 							: '') +
 							endTrace('error') +
 							abortCatch +
 							schedule,
 						signPrefix,
-						isAsync
+						isAsync,
+						arm
 					],
-					abortOn ? abortArm : undefined
+					abortChainGuard()
 				) +
 				endTrace('error') +
 				abortCatch +
@@ -1180,6 +1183,7 @@ export function compileHandlerJit({
 	code =
 		head +
 		(abortOn && code.includes('_as') ? 'let _as\n' : '') +
+		(code.includes('_av') ? 'let _av\n' : '') +
 		scheduleDecl +
 		code
 
@@ -1195,10 +1199,7 @@ export function compileHandlerJit({
 
 	if (!hasTrace && isHandleFunction && !isGeneratorHandler && !inlineUnsafe) {
 		if (alias === 'rc' || (!isAsync && !syncErrorHook && alias === 'rc,fe'))
-			return createInlineHandler(
-				res.compact ?? (res.map as any),
-				handler as any
-			)
+			return createInlineHandler(responseCompact!, handler as any)
 		else if (
 			alias === 'rm' ||
 			alias === 'msh,rm' ||

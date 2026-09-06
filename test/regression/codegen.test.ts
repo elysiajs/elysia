@@ -319,7 +319,7 @@ describe('request abort short-circuits lifecycle hooks', () => {
 		// suspend cannot observe an abort either, so it must not pay the
 		// (lazy, ~214ns on Bun) `request.signal` getter.
 		const app = new Elysia()
-			.derive(() => ({ user: 'a' }))
+			.transform(() => {})
 			.guard({ beforeHandle: () => {} })
 			.beforeHandle(() => {})
 			.get('/sync', () => 'ok')
@@ -330,6 +330,16 @@ describe('request abort short-circuits lifecycle hooks', () => {
 		expect(src).not.toContain('c.request.signal')
 	})
 
+	it('preserves object-derived context on a conservatively asynchronous route', async () => {
+		const app = new Elysia()
+			.derive(() => ({ user: 'a' }))
+			.get('/derived', ({ user }) => user)
+		const handler = compileHandler(app['~routes']![0] as any, app)
+
+		expect(handler.constructor.name).toBe('AsyncFunction')
+		await expect((await app.handle('/derived')).text()).resolves.toBe('a')
+	})
+
 	it('arms at each suspension boundary in an async route', () => {
 		const app = new Elysia()
 			.transform(async () => {})
@@ -338,11 +348,11 @@ describe('request abort short-circuits lifecycle hooks', () => {
 
 		const src = compileHandler(app['~routes']![0] as any, app).toString()
 
-		// entry check is the provenance probe (nothing has suspended yet), every
-		// check after the awaited transform arms the slot and caches it in `_as`
+		// Capture the callback before arming so its synchronous prologue stays
+		// cold, but its continuation sees its own signal. Later checks only peek.
 		expect(src).toContain('if(ea(c))return emp.clone()')
 		expect(src).toContain(
-			"if((_as??=(c['~sig']??=c.request.signal)).aborted)return emp.clone()"
+			"_tf=tf[0](c)\n;_as??=(c['~sig']??=c.request.signal)\n_tf=await _tf\nif(c['~sig']?.aborted)return emp.clone()"
 		)
 		expect(src).toContain('let _as')
 	})

@@ -1,6 +1,7 @@
 import type { AnyElysia } from '../../base'
 
 import { defaultAdapter } from '../../adapter/constants'
+import { mapResponse } from '../../adapter/web-standard/handler'
 import { ElysiaFile } from '../../universal/file'
 import { isBun } from '../../universal/constants'
 
@@ -467,11 +468,18 @@ export function buildNativeStaticResponse(
 	const rootHeaders = frozenRoot['~ext']?.headers
 	if (handler instanceof Response && !rootHeaders) return handler
 
-	const mapped = (adapter.response.map as Function)(handler, {
+	const response = adapter.response
+	const map = response.map
+	const set = {
 		headers: rootHeaders
 			? Object.assign(nullObject(), rootHeaders)
 			: nullObject()
-	})
+	}
+	// Null marks canonical static preparation without consuming streams.
+	const mapped =
+		map === mapResponse
+			? mapResponse(handler, set, null!)
+			: Reflect.apply(map, response, [handler, set])
 
 	if (mapped instanceof Response) return staticPrimitiveType(mapped, handler)
 }
@@ -486,7 +494,8 @@ export function composeRouteHook(
 	appHook: ChainNode | undefined,
 	inheritedChain: ChainNode | undefined,
 	root: AnyElysia,
-	macroScope?: AnyElysia
+	macroScope?: AnyElysia,
+	allowCompactPrefix = true
 ): AnyLocalHook | undefined {
 	const resolve = chainResolver(root)
 	localHook = resolveLocalHook(
@@ -524,6 +533,7 @@ export function composeRouteHook(
 			: undefined
 
 	const compactPrefix =
+		allowCompactPrefix &&
 		instance !== root &&
 		!Capture.isCapturing() &&
 		!Capture.isAotBuildEnv() &&
@@ -674,7 +684,8 @@ export function compileHandler(
 		appHook as any,
 		inheritedChain as any,
 		root,
-		macroScope
+		macroScope,
+		!reconstructed
 	)
 
 	if (hook) {
@@ -724,7 +735,12 @@ export function compileHandler(
 				: nullObject()
 		}
 
-		const mapped = (adapter.response.map as Function)(handler, set)
+		const response = adapter.response
+		const map = response.map
+		const mapped =
+			map === mapResponse
+				? mapResponse(handler, set, null!)
+				: Reflect.apply(map, response, [handler, set])
 		if (mapped instanceof Response)
 			handler = staticPrimitiveType(mapped, handler)
 	}
@@ -779,11 +795,10 @@ export function compileHandler(
 		!Capture.isAotBuildEnv() &&
 		!Capture.isCapturing() &&
 		isContextFreeHandler(handler as Function)
-	)
-		return createInlineHandler(
-			(adapter.response.compact ?? adapter.response.map) as any,
-			handler as any
-		)
+	) {
+		const compact = adapter.response.compact
+		if (compact) return createInlineHandler(compact as any, handler as any)
+	}
 
 	const state = describeRoute({
 		method,

@@ -279,13 +279,11 @@ export function createFetchHandler(
 	}
 
 	/**
-	 * Post-suspension check: arm if nobody has yet, then read. Only emitted on
-	 * lanes that actually awaited, so a deferred request that never suspends
-	 * never reaches it.
+	 * Peek after each callback. The actual await branch arms deferred requests;
+	 * immediate callbacks must not materialize a signal just for this check.
 	 */
-	const armedAbort = (request: Request, context: Context) =>
-		abortSignal &&
-		((context as any)['~sig'] ??= request.signal).aborted === true
+	const armedAbort = (context: Context) =>
+		abortSignal && (context as any)['~sig']?.aborted === true
 
 	const baseMapResponse = (app['~config']?.adapter ?? defaultAdapter).response
 		.map as (
@@ -311,9 +309,9 @@ export function createFetchHandler(
 					for (; i < mapResponseHooks.length; i++) {
 						const result = mapResponseHooks[i](context)
 
-						if (result instanceof Promise)
+						if (typeof (result as any)?.then === 'function')
 							// eslint-disable-next-line sonarjs/function-inside-loop -- promise continuation for the hook at index i
-							return result.then((resolved) => {
+							return Promise.resolve(result).then((resolved) => {
 								if (resolved !== undefined)
 									return baseMapResponse(
 										resolved,
@@ -455,9 +453,6 @@ export function createFetchHandler(
 
 	if (traceRequestPhase) {
 		const onRequests = hook?.request ?? []
-		const asyncIndexes = onRequests.length
-			? getAsyncIndexes(onRequests)
-			: undefined
 
 		return async (
 			request: Request,
@@ -507,16 +502,19 @@ export function createFetchHandler(
 							begin: performance.now()
 						})
 
-					const result = asyncIndexes?.[i]
-						? await onRequests[i](context as any)
-						: onRequests[i](context as any)
+					let result = onRequests[i](context as any)
+					if (typeof (result as any)?.then === 'function') {
+						if (abortSignal)
+							(context as any)['~sig'] ??= request.signal
+						result = await result
+					}
 
 					if (watchPath && context.path !== path)
 						warnPathMutation(app)
 
 					for (let i = 0; i < traceLength; i++) endReports[i]?.()
 
-					if (armedAbort(request, context)) {
+					if (armedAbort(context)) {
 						for (let j = 0; j < traceLength; j++)
 							trace[j].r(requestReports[j])
 
@@ -588,16 +586,17 @@ export function createFetchHandler(
 
 				try {
 					for (let i = 0; i < onRequests.length; i++) {
-						let result = asyncIndexes?.[i]
-							? await onRequests[i](context)
-							: onRequests[i](context)
-
-						if (result instanceof Promise) result = await result
+						let result = onRequests[i](context)
+						if (typeof (result as any)?.then === 'function') {
+							if (abortSignal)
+								(context as any)['~sig'] ??= request.signal
+							result = await result
+						}
 
 						if (watchPath && context.path !== path)
 							warnPathMutation(app)
 
-						if (armedAbort(request, context))
+						if (armedAbort(context))
 							return emptyResponse.clone() as Response
 
 						if (result !== undefined) {

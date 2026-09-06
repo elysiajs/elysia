@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
-import { Compiled, type ProgramId } from '../../src/compile/aot'
+import { Compiled, type CapturedValidator, type ProgramId } from '../../src/compile/aot'
 import {
 	beginValidatorCapture,
 	endValidatorCapture,
@@ -334,7 +334,11 @@ describe('sealed JSON-string codec errors name the decoded field', () => {
 })
 
 /** Seal one slot and hand back only the `[elysia-aot]` warnings it produced. */
-function buildWarnings(slot: 'cookie' | 'query', schema: any) {
+function buildWarnings(
+	slot: 'cookie' | 'query',
+	schema: any,
+	verifyCapture?: (captured: CapturedValidator[]) => void
+) {
 	process.env.ELYSIA_AOT_BUILD = '1'
 	process.env.ELYSIA_AOT_VERBOSE = '1'
 
@@ -350,8 +354,9 @@ function buildWarnings(slot: 'cookie' | 'query', schema: any) {
 			() => 'ok'
 		)
 		;(app as any).compile()
-		endValidatorCapture()
+		const captured = endValidatorCapture()
 		endHandlerCapture()
+		verifyCapture?.(captured)
 	} finally {
 		console.warn = original
 		delete process.env.ELYSIA_AOT_BUILD
@@ -402,12 +407,19 @@ describe('the coarse-detail build warning', () => {
 		expect(warns[0]).toContain('cookie')
 	})
 
-	it('still fires when the decoded side is not walkable', () => {
-		// the JSON parses fine, but `t.Date` inside it is a codec of its own
+	it('still fires for a date codec inside a decoded container', () => {
+		// exact-mirror >= 1.2.5 cleans a decoded container itself, so the slot
+		// seals bridge-free; the walker sees through the ObjectString but not
+		// past the scalar date coercion inside it.
 		expect(
 			buildWarnings(
 				'cookie',
-				t.Cookie({ challenge: t.Optional(t.Object({ when: t.Date() })) })
+				t.Cookie({ challenge: t.Optional(t.Object({ when: t.Date() })) }),
+				(captured) => {
+					const cookie = captured.find((entry) => entry.slot === 'cookie')
+					expect(cookie?.bridgeFree).toBe(true)
+					expect(cookie?.decodeMirror).toBeDefined()
+				}
 			).length
 		).toBe(1)
 	})

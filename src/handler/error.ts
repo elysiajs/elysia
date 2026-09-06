@@ -429,14 +429,9 @@ export function createErrorHandler(
 			parseQuery(context)
 
 			for (let i = 0; i < onErrors.length; i++) {
-				let result = asyncIndexes?.[i]
-					? await onErrors[i](context as any)
-					: onErrors[i](context as any)
-
-				// A hook may synchronously return a Promise the heuristic
-				// didn't flag; await it before treating it as the response so
-				// a raw Promise can't suppress the fallback (empty 500).
-				if (result instanceof Promise) result = await result
+				let result = onErrors[i](context as any)
+				if (typeof (result as any)?.then === 'function')
+					result = await result
 
 				if (result !== undefined) {
 					if (

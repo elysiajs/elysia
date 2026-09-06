@@ -63,6 +63,7 @@ export const createAotPluginHooks = (
 	let virtualType: string | undefined
 	let stub: StubPlan = { ...NO_STUB }
 	let isElysiaModule = (_path: string) => false
+	let packageRoot = ''
 
 	return {
 		async buildStart() {
@@ -84,6 +85,7 @@ export const createAotPluginHooks = (
 			virtualType = generated.virtualType
 			const pkgRoot = resolveElysiaRoot(entryPath)
 			isElysiaModule = makeIsElysiaModule(pkgRoot)
+			packageRoot = toPosix(pkgRoot)
 		},
 		buildEnd() {
 			if (!entryMatched)
@@ -113,6 +115,14 @@ export const createAotPluginHooks = (
 				STUB_SOURCES
 			) as (keyof typeof STUB_SOURCES)[]) {
 				if (!stub[key]) continue
+				if (
+					key === 'staticClone' &&
+					(!isElysiaModule(cleanId) ||
+						!/^(dist|src)\/compile\/handler\/static-clone-resolver\.(m?js|ts)$/.test(
+							toPosix(cleanId).slice(packageRoot.length + 1)
+						))
+				)
+					continue
 				for (const { filter, source: stubSource } of STUB_SOURCES[key])
 					if (filter.test(cleanId))
 						return alignStubExtensions(stubSource, cleanId)

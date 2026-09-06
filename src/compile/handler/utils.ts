@@ -46,7 +46,11 @@ export function cloneResponse(r: unknown) {
 
 export function cloneStaticValue(value: unknown) {
 	try {
-		return structuredClone(value)
+		const cloned = structuredClone(value)
+		if (Object.getPrototypeOf(value) === ElysiaStatus.prototype)
+			Object.setPrototypeOf(cloned, ElysiaStatus.prototype)
+
+		return cloned
 	} catch {
 		return value
 	}
@@ -82,13 +86,12 @@ const toArray = <T>(v: MaybeArray<T>): T[] => (Array.isArray(v) ? v : [v])
 
 export const mapTransform = /*#__PURE__*/ map<
 	'transform',
-	[isAsync: boolean, report?: TraceReporter]
->((i, fn, [isAsync, report]) => {
+	[isAsync: boolean, report?: TraceReporter, arm?: string]
+>((i, fn, [isAsync, report, arm]) => {
 	const t = trace(report, fn)
-	const guard = awaitGuard(fn, isAsync, '_tf')
-	const call = guard
-		? `_tf=tf${at(i)}(c)\n${guard}`
-		: `${Await(fn)}tf${at(i)}(c)\n`
+	const call = isAsync
+		? `_tf=tf${at(i)}(c)\n${awaitGuard(fn, isAsync, '_tf', arm)}`
+		: `tf${at(i)}(c)\n`
 
 	return t.begin + call + t.end()
 })
@@ -442,7 +445,8 @@ export function mapBeforeHandle(
 	link: Link,
 	isAsync: boolean,
 	report?: TraceReporter,
-	abortGuard?: string
+	abortGuard?: string,
+	arm?: string
 ) {
 	const hooks = toArray(_hooks)
 	const modes = deriveModes(hooks, derive)
@@ -460,8 +464,8 @@ export function mapBeforeHandle(
 
 		const t = trace(report, fn)
 		code += t.begin
-		code += `tmp=${Await(fn)}bf${at(i)}(c)\n`
-		code += awaitGuard(fn, isAsync, 'tmp')
+		code += `tmp=bf${at(i)}(c)\n`
+		code += awaitGuard(fn, isAsync, 'tmp', arm)
 		if (modes?.[i] !== undefined) {
 			needsEs = true
 			if (modes[i]) {
@@ -539,7 +543,7 @@ export async function runBeforeHandlePrefixAsync(
 			if (!first && abort && context['~sig']?.aborted) return
 			first = false
 			let result = values[j]!(context)
-			if (result instanceof Promise) {
+			if (typeof (result as any)?.then === 'function') {
 				result = await result
 				// arm at the suspension so the next iteration's peek is exact
 				if (abort) context['~sig'] ??= context.request.signal
@@ -554,7 +558,8 @@ function mapChainHook(
 	prefix: string,
 	isAsync: boolean,
 	report?: TraceReporter,
-	abortGuard?: string
+	abortGuard?: string,
+	arm?: string
 ) {
 	let code = ''
 	let depth = 0
@@ -568,8 +573,8 @@ function mapChainHook(
 
 		const t = trace(report, fn)
 		code += t.begin
-		code += `tmp=${Await(fn)}${prefix}${at(i)}(c)\n`
-		code += awaitGuard(fn, isAsync, 'tmp')
+		code += `tmp=${prefix}${at(i)}(c)\n`
+		code += awaitGuard(fn, isAsync, 'tmp', arm)
 		code += t.end('tmp')
 	}
 
@@ -582,15 +587,17 @@ export const mapAfterHandle = (
 	_hooks: AppHook['afterHandle'] | AppHook['afterHandle'][0],
 	isAsync: boolean,
 	report?: TraceReporter,
-	abortGuard?: string
-) => mapChainHook(toArray(_hooks), 'af', isAsync, report, abortGuard)
+	abortGuard?: string,
+	arm?: string
+) => mapChainHook(toArray(_hooks), 'af', isAsync, report, abortGuard, arm)
 
 export const mapMapResponse = (
 	_hooks: AppHook['mapResponse'] | AppHook['mapResponse'][0],
 	isAsync: boolean,
 	report?: TraceReporter,
-	abortGuard?: string
-) => mapChainHook(toArray(_hooks), 'mr', isAsync, report, abortGuard)
+	abortGuard?: string,
+	arm?: string
+) => mapChainHook(toArray(_hooks), 'mr', isAsync, report, abortGuard, arm)
 
 export const mapAfterResponse = /*#__PURE__*/ map<
 	'afterResponse',
@@ -599,7 +606,7 @@ export const mapAfterResponse = /*#__PURE__*/ map<
 	const t = trace(report, fn)
 	const call = isAsyncFunction(fn)
 		? `await ar${at(i)}(c)\n`
-		: `let _ar=ar${at(i)}(c)\nif(_ar instanceof Promise)await _ar\n`
+		: `let _ar=ar${at(i)}(c)\nif(typeof _ar?.then==='function')await _ar\n`
 
 	return `try{${t.begin}${call}${t.end()}}catch(_e){${t.end('_e')}console.error(_e)}\n`
 })
@@ -612,14 +619,15 @@ export const mapError = /*#__PURE__*/ map<
 		mapResponse: ElysiaAdapter['response']['map'],
 		schedule: string,
 		sign: string,
-		isAsync: boolean
+		isAsync: boolean,
+		arm?: string
 	]
->((i, fn, [map, link, mapResponse, schedule, sign, isAsync]) => {
+>((i, fn, [map, link, mapResponse, schedule, sign, isAsync, arm]) => {
 	link(mapResponse, 'rm')
 	link(adoptErrorType, 'aet')
 	return (
-		`_r=${Await(fn)}er${at(i)}(c)\n` +
-		awaitGuard(fn, isAsync, '_r') +
+		`_r=er${at(i)}(c)\n` +
+		awaitGuard(fn, isAsync, '_r', arm) +
 		`if(_r!==undefined){\n` +
 		`if(_r instanceof Response)c.set.status=_r.status\n` +
 		`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
@@ -761,9 +769,15 @@ export function getQueryParseChannels(
 	return result ?? undefined
 }
 
-const Await = (fn: Function) => (isAsyncFunction(fn) ? 'await ' : '')
-
-const awaitGuard = (fn: Function, isAsync: boolean, target: string) =>
-	isAsync && !isAsyncFunction(fn)
-		? `if(${target} instanceof Promise)${target}=await ${target}\n`
-		: ''
+export function awaitGuard(
+	fn: Function,
+	isAsync: boolean,
+	target: string,
+	arm = ''
+) {
+	if (!isAsync) return ''
+	const code = `${arm ? `;${arm}\n` : ''}${target}=await ${target}\n`
+	return isAsyncFunction(fn)
+		? code
+		: `if(typeof ${target}?.then==='function'){${code}}\n`
+}

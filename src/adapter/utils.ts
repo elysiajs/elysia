@@ -282,6 +282,9 @@ export function createStreamHandler({
 		skipFormat?: boolean,
 		owned = false
 	) => {
+		// Internal preparation marker; valid public requests still map normally.
+		if (request === null) return undefined!
+
 		if (isByteStream(generator)) {
 			if (generator.locked)
 				throw new TypeError(

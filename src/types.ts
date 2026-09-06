@@ -17,6 +17,7 @@ import type {
 	StaticEncode,
 	TIntersect,
 	TObject,
+	TRef,
 	TSchema
 } from 'typebox'
 import type { AnyElysia, Elysia } from './base'
@@ -1188,6 +1189,21 @@ export type ContextAppendType = 'append' | 'override'
 // ? Unwrap Stuff
 type OptionalField = { '~optional': true }
 
+// A root Ref keeps its target's optional-input behavior after model resolution.
+type IsOptionalRoot<
+	Schema,
+	Definitions,
+	Seen extends string = never
+> = Schema extends OptionalField
+	? true
+	: Schema extends TRef<infer Ref>
+		? Ref extends Seen
+			? false
+			: Ref extends keyof Definitions
+				? IsOptionalRoot<Definitions[Ref], Definitions, Seen | Ref>
+				: false
+		: false
+
 type StaticCyclic<
 	T extends TypeBoxSchema,
 	Definitions extends Record<string, AnySchema>
@@ -1199,7 +1215,7 @@ export type UnwrapSchema<
 > = Schema extends undefined
 	? unknown
 	: Schema extends TypeBoxSchema
-		? Schema extends OptionalField
+		? true extends IsOptionalRoot<Schema, Definitions>
 			? Partial<StaticCyclic<Schema, Definitions>>
 			: StaticCyclic<Schema, Definitions>
 		: Schema extends StandardSchemaV1Like
@@ -1207,7 +1223,17 @@ export type UnwrapSchema<
 			: Schema extends string
 				? Schema extends keyof Definitions
 					? Definitions[Schema] extends TypeBoxSchema
-						? StaticCyclic<Definitions[Schema], Definitions>
+						? true extends IsOptionalRoot<
+								Definitions[Schema],
+								Definitions
+							>
+							? Partial<
+									StaticCyclic<
+										Definitions[Schema],
+										Definitions
+									>
+								>
+							: StaticCyclic<Definitions[Schema], Definitions>
 						: Definitions[Schema] extends StandardSchemaV1Like
 							? NonNullable<
 									Definitions[Schema]['~standard']['types']
@@ -1222,15 +1248,28 @@ export type UnwrapBodySchema<
 > = undefined extends Schema
 	? unknown
 	: Schema extends TypeBoxSchema
-		? Schema extends OptionalField
-			? Partial<StaticCyclic<Schema, Definitions>> | null
+		? true extends IsOptionalRoot<Schema, Definitions>
+			? Partial<StaticCyclic<Schema, Definitions>> | null | undefined
 			: StaticCyclic<Schema, Definitions>
 		: Schema extends StandardSchemaV1Like
 			? NonNullable<Schema['~standard']['types']>['output']
 			: Schema extends string
 				? Schema extends keyof Definitions
 					? Definitions[Schema] extends TypeBoxSchema
-						? StaticCyclic<Definitions[Schema], Definitions>
+						? true extends IsOptionalRoot<
+								Definitions[Schema],
+								Definitions
+							>
+							?
+									| Partial<
+											StaticCyclic<
+												Definitions[Schema],
+												Definitions
+											>
+									  >
+									| null
+									| undefined
+							: StaticCyclic<Definitions[Schema], Definitions>
 						: Definitions[Schema] extends StandardSchemaV1Like
 							? NonNullable<
 									Definitions[Schema]['~standard']['types']
@@ -1254,7 +1293,9 @@ type UnwrapResponseSchema<
 					FormInnerProperties<Schema>[K] & TSchema
 				>
 			}>
-		: UnwrapSchema<Schema, Definitions>
+		: Schema extends OptionalField
+			? Partial<StaticCyclic<Schema, Definitions>>
+			: StaticCyclic<Schema, Definitions>
 	: Schema extends StandardSchemaV1Like
 		? NonNullable<Schema['~standard']['types']>['input']
 		: Schema extends string

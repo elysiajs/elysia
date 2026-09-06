@@ -5,7 +5,7 @@ const cases = {
 	},
 	schema: {
 		limit: 400 * 1024,
-		source: `import { Elysia, t } from './dist/index.mjs'; globalThis.app = new Elysia().get('/', () => 'ok', { query: t.Object({ q: t.String() }) })`
+		source: `import { Elysia, t } from './dist/index.mjs'; globalThis.app = new Elysia().get('/', { query: t.Object({ q: t.String() }) }, () => 'ok')`
 	}
 } as const
 
@@ -96,6 +96,35 @@ for (const [name, { limit, source }] of Object.entries(cases)) {
 	const output = result.outputs[0]
 	const raw = await output.arrayBuffer()
 	console.log(`${name}: ${raw.byteLength} / ${limit} bytes`)
+
+	const smoke = Bun.spawnSync({
+		cmd: [
+			process.execPath,
+			'--eval',
+			`import assert from 'node:assert/strict'
+			await import('data:text/javascript;base64,' + Buffer.from(await Bun.stdin.arrayBuffer()).toString('base64'))
+			const response = await globalThis.app.handle(new Request('http://localhost/?q=ok'))
+			assert.equal(response.status, ${name === 'schema' ? 200 : 404})
+			const body = await response.text()
+			if (${name === 'schema'}) {
+				assert.equal(body, 'ok')
+				const invalid = await globalThis.app.handle(new Request('http://localhost/'))
+				assert.equal(invalid.status, 422)
+				await invalid.text()
+			}`
+		],
+		stdin: new Uint8Array(raw),
+		stdout: 'pipe',
+		stderr: 'pipe',
+		cwd: process.cwd(),
+		env: process.env,
+		timeout: 10_000
+	})
+
+	if (!smoke.success)
+		throw new Error(
+			`${name} bundle smoke failed (exit ${smoke.exitCode}, signal ${smoke.signalCode ?? 'none'}, timeout ${!!smoke.exitedDueToTimeout}):\n${smoke.stderr.toString()}`
+		)
 
 	if (raw.byteLength > limit) {
 		await printAttribution(source)

@@ -4,6 +4,18 @@ import { isIdentCharCode } from './compile/lexer'
 import type { Context } from './context'
 import type { Prettify, RouteSchema, SingletonBase } from './types'
 
+// Node 20 does not provide Promise.withResolvers.
+const withResolvers =
+	typeof Promise.withResolvers === 'function'
+		? Promise.withResolvers.bind(Promise)
+		: function withResolvers<T>() {
+				let resolve!: (value: T | PromiseLike<T>) => void
+				const promise = new Promise<T>((r) => {
+					resolve = r
+				})
+				return { promise, resolve }
+			}
+
 export type TraceEvent =
 	| 'request'
 	| 'parse'
@@ -387,7 +399,7 @@ class TraceRecorder {
 
 		// pre-subscription: settle at `begin()`
 		const { promise, resolve } =
-			Promise.withResolvers<TraceProcess<'begin'>>()
+			withResolvers<TraceProcess<'begin'>>()
 		this.pendingPromise = promise
 		this.pendingResolve = resolve
 
@@ -427,7 +439,7 @@ class TraceRecorder {
 		if (this.endPromise) return this.endPromise
 		if (this.ended) return (this.endPromise = Promise.resolve(this.endTime))
 
-		const { promise, resolve } = Promise.withResolvers<number>()
+		const { promise, resolve } = withResolvers<number>()
 		this.endPromise = promise
 		this.endResolve = resolve
 
@@ -439,7 +451,7 @@ class TraceRecorder {
 		if (this.ended)
 			return (this.errorPromise = Promise.resolve(this.endError))
 
-		const { promise, resolve } = Promise.withResolvers<Error | null>()
+		const { promise, resolve } = withResolvers<Error | null>()
 		this.errorPromise = promise
 		this.errorResolve = resolve
 
@@ -490,9 +502,9 @@ class TraceRecorder {
 
 		return (process: TraceStream) => {
 			const { promise: end, resolve: resolveEnd } =
-				Promise.withResolvers<number>()
+				withResolvers<number>()
 			const { promise: error, resolve: resolveError } =
-				Promise.withResolvers<Error | null>()
+				withResolvers<Error | null>()
 			const callbacksEnd: Function[] = []
 
 			const result = {

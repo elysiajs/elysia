@@ -1,4 +1,5 @@
 import { nullObject } from '../utils'
+import { dangerousKeys } from '../constants'
 import { InvalidCookie } from './error'
 import type { CookieOptions } from './types'
 
@@ -34,7 +35,7 @@ export function parse(str: string): Record<string, string | undefined> {
 			ke--
 
 		const key = str.slice(ks, ke)
-		if (obj[key] === undefined) {
+		if (obj[key] === undefined && !dangerousKeys.has(key)) {
 			// trim value [eq+1, semi)
 			let vs = eq + 1,
 				ve = semi

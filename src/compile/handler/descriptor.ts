@@ -106,37 +106,13 @@ export const routeDescriptors = new WeakMap<
 // Read-only: consumers only call `.has` (`jit.ts` `phaseOn`, `descriptor.ts` `phaseOn`)
 const noTracePhases: ReadonlySet<TraceEvent> = new Set<TraceEvent>()
 
-const matchReturnIdentifier =
-	// eslint-disable-next-line sonarjs/regex-complexity
-	/(?:=>\s*|\breturn\s+)(?!(?:true|false|null|undefined|void|new|typeof|async|await|function|class)\b)[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*\s*(?![\w$([])/
-
-const mayReturnIdentifierCache = new WeakMap<Function, boolean>()
-
-export function mayReturnIdentifier(fn: Function) {
-	let result = mayReturnIdentifierCache.get(fn)
-	if (result !== undefined) return result
-
-	result = matchReturnIdentifier.test(fn.toString())
-	mayReturnIdentifierCache.set(fn, result)
-
-	return result
-}
-
 export const lifecycleMayReturnPromise = (
-	handlers: MaybeArray<Function> | undefined,
-	observed: boolean
+	handlers: MaybeArray<Function> | undefined
 ) =>
 	handlers
 		? Array.isArray(handlers)
-			? handlers.some(
-					(fn) =>
-						!isAsyncFunction(fn) &&
-						(mayReturnPromise(fn) ||
-							(observed && mayReturnIdentifier(fn)))
-				)
-			: !isAsyncFunction(handlers) &&
-				(mayReturnPromise(handlers) ||
-					(observed && mayReturnIdentifier(handlers)))
+			? handlers.some(mayReturnPromise)
+			: mayReturnPromise(handlers)
 		: false
 
 const compactPrefixInference = new WeakMap<
@@ -198,10 +174,7 @@ function compactPrefixForcesAsync(prefix: CompactBeforeHandlePrefix) {
 		const item = pending[i]!
 		for (let j = 0; !value && j < item.added.length; j++) {
 			const fn = item.added[j]!
-			value =
-				isAsyncFunction(fn) ||
-				(!isAsyncFunction(fn) &&
-					(mayReturnPromise(fn) || mayReturnIdentifier(fn)))
+			value = mayReturnPromise(fn)
 		}
 		compactPrefixAsync.set(item, value)
 	}
@@ -370,7 +343,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 			hasMapResponse ||
 			hasResponseValidator ||
 			isAsyncLifecycle(hook?.error) ||
-			lifecycleMayReturnPromise(hook?.error, false))
+			lifecycleMayReturnPromise(hook?.error))
 
 	const afterResponseForcesAsync =
 		(hasStaticAfterResponse && isAsyncLifecycle(hook?.afterResponse)) ||
@@ -384,25 +357,23 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		(traceHandleOn || phaseOn('error') || phaseOn('afterResponse')) &&
 		isHandleFunction &&
 		!handlerIsAsync &&
-		(mayReturnPromise(handler as Function) ||
-			mayReturnIdentifier(handler as Function))
+		mayReturnPromise(handler as Function)
 
 	const handlerResultObserved =
 		isHandleFunction &&
 		!handlerIsAsync &&
 		(hasResponseValidator || hasAfterHandle || hasMapResponse) &&
-		(mayReturnPromise(handler as Function) ||
-			mayReturnIdentifier(handler as Function))
+		mayReturnPromise(handler as Function)
 
 	const lifecycleForcesAsync =
 		!!hook &&
 		((beforeHandlePrefix
 			? compactPrefixForcesAsync(beforeHandlePrefix)
 			: false) ||
-			lifecycleMayReturnPromise(hook.beforeHandle, true) ||
-			lifecycleMayReturnPromise(hook.transform, false) ||
-			lifecycleMayReturnPromise(hook.afterHandle, true) ||
-			lifecycleMayReturnPromise(hook.mapResponse, true))
+			lifecycleMayReturnPromise(hook.beforeHandle) ||
+			lifecycleMayReturnPromise(hook.transform) ||
+			lifecycleMayReturnPromise(hook.afterHandle) ||
+			lifecycleMayReturnPromise(hook.mapResponse))
 
 	const isAsync =
 		hasBody ||

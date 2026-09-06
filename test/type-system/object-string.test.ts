@@ -243,9 +243,8 @@ describe('TypeSystem - ObjectString raw string lane', () => {
  * object) that path is unreachable, so it read `undefined` and deleted the
  * decoded value. Silent field loss on a 200.
  *
- * SKIPPED until exact-mirror ships the fix (elysiajs/exact-mirror, branch
- * `fix/codec-container-optional-drop`). Un-skip together with the dependency
- * bump in package.json — verified green against that build locally.
+ * Until exact-mirror ships its fix, container codecs decode through TypeBox
+ * before the normalizer walks the resulting object.
  *
  * `t.ArrayString` was never affected, since array elements are addressed
  * positionally and never reach the epilogue; it stays enabled below as the
@@ -265,7 +264,7 @@ describe('TypeSystem - ObjectString inner coercion', () => {
 
 	const app = () => new Elysia().post('/b', { body: shape }, ({ body }) => body)
 
-	it.skip('coerces an inner field of a still-encoded object', async () => {
+	it('coerces an inner field of a still-encoded object', async () => {
 		const res = await app().handle(body({ m: '{"n":"42","s":"keep"}' }))
 
 		expect(res.status).toBe(200)
@@ -274,7 +273,7 @@ describe('TypeSystem - ObjectString inner coercion', () => {
 		expect(typeof out.m.n).toBe('number')
 	})
 
-	it.skip('keeps an optional inner field of a still-encoded object', async () => {
+	it('keeps an optional inner field of a still-encoded object', async () => {
 		const optional = new Elysia().post(
 			'/b',
 			{ body: t.Object({ m: t.ObjectString({ s: t.Optional(t.String()) }) }) },

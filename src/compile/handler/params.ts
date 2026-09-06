@@ -24,7 +24,6 @@ import {
 } from '../../adapter/utils'
 import {
 	cloneResponse,
-	cloneStaticValue,
 	emptyResponse,
 	getQueryParseChannels,
 	hasRequestBody,
@@ -32,6 +31,7 @@ import {
 	runBeforeHandlePrefix,
 	armEntryAbort
 } from './utils'
+import { staticCloneResolver } from './static-clone-resolver'
 
 /**
  * mirror compileHandler params and save in build time
@@ -52,11 +52,11 @@ interface HandlerParamContext {
 
 type Resolver = (c: HandlerParamContext) => unknown
 
-// Built on first AOT manifest reconstruction
-// non-AOT apps never pay for the 47 resolver closures
-let _handlerParams: Record<string, Resolver> | undefined
+// Built on first AOT manifest reconstruction. Only staticCloneResolver is
+// allocated eagerly; the remaining resolver closures stay lazy.
+let _handlerParams: Record<string, Resolver | undefined> | undefined
 
-const handlerParams = (): Record<string, Resolver> =>
+const handlerParams = (): Record<string, Resolver | undefined> =>
 	(_handlerParams ??= {
 	// parse adapter
 	pf: (c) => c.parse.formData,
@@ -71,7 +71,7 @@ const handlerParams = (): Record<string, Resolver> =>
 	qo: (c) => getQueryParseChannels((c.vali as any)?.query?.schema)?.object,
 	// response adapter
 	rm: (c) => c.res.map,
-	rc: (c) => c.res.compact ?? c.res.map,
+	rc: (c) => c.res.compact,
 	// constants
 	rid: () => requestId,
 	pq: () => parseQueryFromURL,
@@ -86,7 +86,7 @@ const handlerParams = (): Record<string, Resolver> =>
 	tee: () => tee,
 	msh: () => materializeSetHeaders,
 	cr: () => cloneResponse,
-	scl: () => cloneStaticValue,
+	scl: staticCloneResolver,
 	pcr: () => parseCookieRaw,
 	pcrs: () => parseCookieRawSync,
 	pcrsg: () => parseCookieRawSigned,

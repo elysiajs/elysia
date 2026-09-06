@@ -68,7 +68,7 @@ describe('shared AOT branch checks', () => {
 
 		const entries = (src.match(/const _c\d+ =/g) ?? []).length
 		const branches = (src.match(/const _b\d+ =/g) ?? []).length
-		const checkFns = (src.match(/function\(External/g) ?? []).length
+		const checkFns = (src.match(/\(External/g) ?? []).length
 		expect(entries).toBe(1)
 		expect(branches).toBeGreaterThanOrEqual(1)
 		expect(checkFns).toBe(entries + branches)

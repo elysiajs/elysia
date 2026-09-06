@@ -95,7 +95,14 @@ describe('sync handler returning a stored Promise is awaited', () => {
 		await expect(res.json()).resolves.toEqual({ ok: true })
 	})
 
-	it('keeps literal-returning handlers synchronous', () => {
+	it('keeps primitive-literal handlers synchronous', () => {
+		const app = new Elysia().get('/x', { response: t.String() }, () => 'ok')
+		const route = (app as any)['~routes']![0]
+		const fn = compileHandler(route, app)
+		expect(fn.constructor.name).toBe('Function')
+	})
+
+	it('validates object-returning handlers when conservatively asynchronous', async () => {
 		const app = new Elysia().get(
 			'/x',
 			{ response: { 200: t.Object({ ok: t.Boolean() }) } },
@@ -103,7 +110,10 @@ describe('sync handler returning a stored Promise is awaited', () => {
 		)
 		const route = (app as any)['~routes']![0]
 		const fn = compileHandler(route, app)
-		expect(fn.constructor.name).toBe('Function')
+		expect(fn.constructor.name).toBe('AsyncFunction')
+		const response = await app.handle('/x')
+		expect(response.status).toBe(200)
+		await expect(response.json()).resolves.toEqual({ ok: true })
 	})
 })
 

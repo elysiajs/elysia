@@ -173,6 +173,46 @@ describe('frozen validation without TypeBox', () => {
 })
 
 describe('schemas that require TypeBox', () => {
+	it('seals codec containers and keeps their optional fields', () => {
+		const schema = t.Object({
+			m: t.ObjectString({ n: t.Numeric(), s: t.Optional(t.String()) })
+		})
+		const { body } = freeze(schema)
+		expect(body?.decodeMirror).toBeDefined()
+		expect(body?.bridgeFree).toBe(true)
+		const sealed = bridgeFree(schema)
+		expect(sealed?.body).toBeDefined()
+		for (const validator of [sealed, wired(schema)]) {
+			expect(run(validator, { m: '{"n":"42","s":"keep"}' })).toEqual({
+				ok: true,
+				value: { m: { n: 42, s: 'keep' } }
+			})
+			expect(run(validator, { m: '{"n":"42"}' })).toEqual({
+				ok: true,
+				value: { m: { n: 42 } }
+			})
+			expect(run(validator, { m: '{"n":"bad"}' })).toEqual({
+				ok: false,
+				status: 422
+			})
+		}
+	})
+
+	it('seals a nested inner codec', () => {
+		const schema = t.Object({
+			m: t.ObjectString({
+				inner: t.ObjectString({ s: t.Optional(t.String()) })
+			})
+		})
+		freeze(schema)
+		const sealed = bridgeFree(schema)
+		expect(sealed?.body).toBeDefined()
+		for (const validator of [sealed, wired(schema)])
+			expect(
+				run(validator, { m: JSON.stringify({ inner: '{"s":"keep"}' }) })
+			).toEqual({ ok: true, value: { m: { inner: { s: 'keep' } } } })
+	})
+
 	const unsupported: [string, any][] = [
 		['union member', t.Object({ v: t.Union([t.String(), t.Number()]) })],
 		['custom error', t.Object({ x: t.String({ error: 'bad' }) })],

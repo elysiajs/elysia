@@ -111,7 +111,8 @@ describe('Bun transactional startup', () => {
 				server
 			)
 
-			await expect(response).rejects.toThrow('Unknown model reference')
+			expect((await response).status).toBe(503)
+			await expect(app.stop()).rejects.toThrow('Unknown model reference')
 			expect(server.stopped).toBe(true)
 			expect(app.server).toBeUndefined()
 		}))
@@ -203,7 +204,7 @@ describe('Bun transactional startup', () => {
 				finishGraceful()
 
 				await expect(stopping).rejects.toBe(failure)
-				expect(await response).toBe(failure)
+				expect((await response).status).toBe(503)
 				expect(modesBeforeRelease).toEqual([true])
 				expect(server.stopModes).toEqual([true])
 				expect(order).toEqual(['second', 'first'])
@@ -264,10 +265,16 @@ describe('Bun transactional startup', () => {
 					const stoppedBeforeFallback = server.stopCalls
 					const publishedBeforeFallback = app.server !== undefined
 					await app.stop(true)?.catch(() => {})
+					await Bun.sleep(0)
 
-					expect(result.status).toBe('rejected')
-					if (result.status === 'rejected')
-						expect(result.reason).toBe(failure)
+					expect(result.status).toBe('fulfilled')
+					if (result.status === 'fulfilled')
+						expect(result.value.status).toBe(503)
+					const startupReports = reported.mock.calls.filter(
+						(args) => args[0] === '[Elysia] listen() failed:'
+					)
+					expect(startupReports).toHaveLength(1)
+					expect(startupReports[0][1]).toBe(failure)
 					expect(callbackCalls).toBe(0)
 					expect(stoppedBeforeFallback).toBe(1)
 					expect(publishedBeforeFallback).toBe(false)
@@ -336,7 +343,7 @@ describe('Bun transactional startup', () => {
 			expect(app.server).toBe(server as any)
 		}))
 
-	it('settles a queued request only after immediate-stop cleanup', () =>
+	it('settles a queued request while stop still waits for cleanup', () =>
 		withServer(async (getOptions, server) => {
 			const order: string[] = []
 			let finishCleanup!: () => void
@@ -360,33 +367,28 @@ describe('Bun transactional startup', () => {
 				.listen(0)
 			const response = Promise.resolve(
 				getOptions().fetch(new Request('http://localhost/'), server)
-			).then(
-				() => order.push('response-ok'),
-				(error) => {
-					order.push('response-error')
-					return error
-				}
-			)
+			).then((response: Response) => {
+				order.push('response')
+				return response
+			})
 			const stopping = app.stop(true)!
+			let stopped = false
+			const completed = stopping.then(() => (stopped = true))
 
 			await started
-			const beforeCleanup = await Promise.race([
-				response.then(() => 'response'),
-				Bun.sleep(20).then(() => 'cleanup')
-			])
+			const unavailable = await response
+			expect(stopped).toBe(false)
+			expect(unavailable.status).toBe(503)
 			finishCleanup()
-			const [responseError] = await Promise.all([response, stopping])
-
-			expect(beforeCleanup).toBe('cleanup')
-			expect(responseError).toEqual(
-				new Error('[Elysia] Server was stopped before it was ready')
+			await completed
+			expect(stopped).toBe(true)
+			expect(order[0]).toBe('native-stop')
+			expect(order.indexOf('response')).toBeLessThan(
+				order.indexOf('cleanup-end')
 			)
-			expect(order).toEqual([
-				'native-stop',
-				'cleanup-start',
-				'cleanup-end',
-				'response-error'
-			])
+			expect(order.indexOf('cleanup-start')).toBeLessThan(
+				order.indexOf('cleanup-end')
+			)
 		}))
 
 	it('does not retry a failed stop through a queued request', () =>
@@ -402,7 +404,7 @@ describe('Bun transactional startup', () => {
 			).catch((error) => error)
 			const stopping = app.stop(true)!
 
-			expect(await response).toBe(stopError)
+			expect((await response).status).toBe(503)
 			await expect(stopping).rejects.toBe(stopError)
 			await Bun.sleep(0)
 			expect(server.stopCalls).toBe(1)
@@ -1443,6 +1445,82 @@ describe('Bun transactional startup', () => {
 			expect(cleanups).toBe(1)
 		}))
 
+	it('interrupts a pending graceful stop and waits for force before cleanup', () =>
+		withServer(async (_getOptions, server) => {
+			const graceful = Promise.withResolvers<void>()
+			const forced = Promise.withResolvers<void>()
+			const started = Promise.withResolvers<void>()
+			const unhandled: unknown[] = []
+			const onUnhandled = (error: unknown) => unhandled.push(error)
+			server.gracefulStopReady = graceful.promise
+			server.stopReady = forced.promise
+			server.onStop = (close) => {
+				if (close === false) started.resolve()
+			}
+			let cleanups = 0
+			const app = new Elysia().cleanup(() => cleanups++).listen(0)
+			await Bun.sleep(0)
+			const stopping = app.stop()!
+			process.on('unhandledRejection', onUnhandled)
+
+			try {
+				await started.promise
+				expect(app.stop(true)).toBe(stopping)
+				await Bun.sleep(0)
+				expect(server.stopModes).toEqual([false, true])
+				expect(cleanups).toBe(0)
+
+				forced.resolve()
+				await stopping
+				expect(cleanups).toBe(1)
+				graceful.reject(new Error('superseded graceful stop failed'))
+				await Bun.sleep(0)
+				expect(unhandled).toEqual([])
+				expect(server.stopModes).toEqual([false, true])
+				expect(cleanups).toBe(1)
+			} finally {
+				graceful.resolve()
+				forced.resolve()
+				await stopping.catch(() => {})
+				process.off('unhandledRejection', onUnhandled)
+			}
+		}))
+
+	it('retries a failed force escalation without cleaning an active server', () =>
+		withServer(async (_getOptions, server) => {
+			const graceful = Promise.withResolvers<void>()
+			const started = Promise.withResolvers<void>()
+			const failure = (server.forceStopError = new Error('force failed'))
+			server.gracefulStopReady = graceful.promise
+			server.onStop = (close) => {
+				if (close === false) started.resolve()
+			}
+			let cleanups = 0
+			const app = new Elysia().cleanup(() => cleanups++).listen(0)
+			await Bun.sleep(0)
+			const stopping = app.stop()!
+
+			try {
+				await started.promise
+				expect(app.stop(true)).toBe(stopping)
+				await expect(stopping).rejects.toBe(failure)
+				expect(server.stopModes).toEqual([false, true])
+				expect(cleanups).toBe(0)
+
+				server.forceStopError = undefined
+				await app.stop(true)
+				expect(server.stopModes).toEqual([false, true, true])
+				expect(cleanups).toBe(1)
+				graceful.resolve()
+				await Bun.sleep(0)
+				expect(cleanups).toBe(1)
+			} finally {
+				graceful.resolve()
+				server.forceStopError = undefined
+				await app.stop(true)?.catch(() => {})
+			}
+		}))
+
 	it('does not clean an armed handler after publish and force-stop fail', () =>
 		withServer(async (getOptions, server) => {
 			const reloadError = (server.reloadError = new Error(
@@ -1925,7 +2003,7 @@ describe('Bun transactional startup', () => {
 			expect(server.stopCalls).toBe(1)
 		}))
 
-	it('waits for every started setup before rollback cleanup and request rejection', () =>
+	it('returns unavailable but waits for every started setup before cleanup', () =>
 		withServer(async (getOptions, server) => {
 			const order: string[] = []
 			const setupError = new Error('setup failed')
@@ -1950,17 +2028,22 @@ describe('Bun transactional startup', () => {
 				.get('/', 'ready')
 				.listen(0)
 
-			let responseError: unknown
+			let unavailable: Response | undefined
 			let responseSettled = false
 			const response = getOptions()
 				.fetch(new Request('http://localhost/'), server)
-				.catch((error: unknown) => {
-					responseError = error
+				.then((response: Response) => {
+					unavailable = response
 					responseSettled = true
 				})
 
 			await Bun.sleep(0)
 			const stopping = app.stop()
+			let stopSettled = false
+			stopping?.then(
+				() => (stopSettled = true),
+				() => (stopSettled = true)
+			)
 			expect(server.stopped).toBe(true)
 			expect(server.stopClose).toBe(true)
 			expect(responseSettled).toBe(false)
@@ -1972,7 +2055,8 @@ describe('Bun transactional startup', () => {
 
 			fail(setupError)
 			await Bun.sleep(0)
-			expect(responseSettled).toBe(false)
+			expect(responseSettled).toBe(true)
+			expect(stopSettled).toBe(false)
 			expect(order).toEqual(['reject-start', 'delayed-start'])
 
 			finish()
@@ -1980,7 +2064,7 @@ describe('Bun transactional startup', () => {
 			let stopResult: unknown
 			await stopping?.catch((error) => (stopResult = error))
 
-			expect(responseError).toBe(setupError)
+			expect(unavailable?.status).toBe(503)
 			expect(stopResult).toBe(setupError)
 			expect(order).toEqual([
 				'reject-start',
@@ -2021,18 +2105,14 @@ describe('Bun transactional startup', () => {
 				expect(server.stopped).toBe(true)
 				expect(order).toEqual([])
 
+				expect((await response).status).toBe(503)
+				expect(order).toEqual([])
 				fail(moduleError)
-				const [stopResult, responseResult] = await Promise.allSettled([
-					stopping!,
-					response
-				])
+				const [stopResult] = await Promise.allSettled([stopping!])
 
 				expect(stopResult.status).toBe('rejected')
 				if (stopResult.status === 'rejected')
 					expect(stopResult.reason).toBe(moduleError)
-				expect(responseResult.status).toBe('rejected')
-				if (responseResult.status === 'rejected')
-					expect(responseResult.reason).toBe(moduleError)
 				expect(order).toEqual(['cleanup'])
 				expect(server.stopCalls).toBe(1)
 				expect(app.server).toBeUndefined()
@@ -2080,24 +2160,27 @@ describe('Bun transactional startup', () => {
 				.get('/', 'ready')
 				.listen(0)
 
-			let responseError: unknown
+			let unavailable: Response | undefined
 			let responseSettled = false
 			const response = getOptions()
 				.fetch(new Request('http://localhost/'), server)
-				.catch((error: unknown) => {
-					responseError = error
+				.then((response: Response) => {
+					unavailable = response
 					responseSettled = true
 				})
 
 			await Bun.sleep(0)
 			expect(order).toEqual(['second-start'])
-			expect(responseSettled).toBe(false)
+			expect(responseSettled).toBe(true)
+			expect(unavailable?.status).toBe(503)
+			const stopping = app.stop()!
 
 			finishCleanup()
 			await response
+			const stopErrorResult = await stopping.catch((error) => error)
 
-			expect(responseError).toBeInstanceOf(AggregateError)
-			const errors = (responseError as AggregateError).errors
+			expect(stopErrorResult).toBeInstanceOf(AggregateError)
+			const errors = (stopErrorResult as AggregateError).errors
 			expect(errors).toHaveLength(4)
 			expect(errors[0]).toBe(setupError)
 			expect(errors[1]).toBe(stopError)
@@ -2136,7 +2219,8 @@ describe('Bun transactional startup', () => {
 				new Elysia().get('/y', { body: 'DoesNotExist' }, () => 'second')
 			)
 
-			await expect(response).rejects.toThrow('Unknown model reference')
+			expect((await response).status).toBe(503)
+			await expect(app.stop()).rejects.toThrow('Unknown model reference')
 			expect(server.stopped).toBe(true)
 			expect(app.server).toBeUndefined()
 		}))

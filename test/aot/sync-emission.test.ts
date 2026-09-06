@@ -268,7 +268,9 @@ describe('synchronous route emission', () => {
 		)
 
 		const { source } = compileRoute(app)
-		expect(source).toContain('if(_r instanceof Promise)_r=await _r')
+		expect(source).toContain(
+			"if(typeof _r?.then==='function'){_r=await _r\n}"
+		)
 		expect(source).not.toMatch(/_r=await h\(c\)/)
 	})
 })
@@ -298,9 +300,7 @@ describe('Promise rejection from synchronous handlers', () => {
 		await expect(res.text()).resolves.toBe('ok')
 	})
 
-	// a SYNC throw on a sync error-hook route is caught by the sync
-	// try/catch and the route stays a plain Function
-	it('sync throw on sync error-hook route is handled (plain Function)', async () => {
+	it('handles a synchronous throw when an error property return is conservatively async', async () => {
 		const app = new Elysia()
 			.error(({ error, set }: any) => {
 				set.status = 400
@@ -310,7 +310,7 @@ describe('Promise rejection from synchronous handlers', () => {
 				throw new Error('nope')
 			})
 
-		expect(isAsync(app)).toBe(false)
+		expect(isAsync(app)).toBe(true)
 		const res = await app.handle('/')
 		expect(res.status).toBe(400)
 		await expect(res.text()).resolves.toBe('nope')
@@ -511,7 +511,7 @@ describe('Promise-returning synchronous functions', () => {
 				afterHandle: () => {},
 				transform: () => {}
 			},
-			() => ({ ok: 1 })
+			() => 'ok'
 		)
 
 		expect(isAsync(app)).toBe(false)
@@ -586,21 +586,25 @@ describe('Promise-returning synchronous functions', () => {
 		await expect(res.text()).resolves.toBe('passthru')
 	})
 
-	it('keeps a stored-Promise transform synchronous because its return is discarded', async () => {
-		const p = Promise.resolve('unused')
+	it('awaits a stored-Promise transform before running the handler', async () => {
+		let transformed = false
+		const p = Promise.resolve().then(() => {
+			transformed = true
+		})
 		let handlerRan = false
 		const app = new Elysia().get('/', { transform: () => p as any }, () => {
+			expect(transformed).toBe(true)
 			handlerRan = true
 			return 'ok'
 		})
 
-		expect(isAsync(app)).toBe(false)
+		expect(isAsync(app)).toBe(true)
 		const res = await app.handle('/')
 		await expect(res.text()).resolves.toBe('ok')
 		expect(handlerRan).toBe(true)
 	})
 
-	it('async route emits an instanceof-Promise await guard for a sync beforeHandle', () => {
+	it('async route emits a conditional await guard for a sync beforeHandle', () => {
 		const app = new Elysia().get(
 			'/',
 			{ beforeHandle: () => Promise.resolve('x') as any },
@@ -608,7 +612,7 @@ describe('Promise-returning synchronous functions', () => {
 		)
 
 		const { source } = compileRoute(app)
-		expect(source).toContain('tmp instanceof Promise')
+		expect(source).toContain("typeof tmp?.then==='function'")
 	})
 })
 

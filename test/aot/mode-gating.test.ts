@@ -124,6 +124,7 @@ beforeAll(async () => {
 	dir = mkdtempSync(join(tmpdir(), 'ely-mode-gating-'))
 
 	code.esbuildSealed = await buildEsbuild(SEALED_APP)
+	code.esbuildSealedProduction = await buildEsbuild(SEALED_APP, true)
 	code.esbuildWired = await buildEsbuild(WIRED_APP)
 	code.bunWired = await buildBun(WIRED_APP)
 	code.esbuildGuard = await buildEsbuild(MERGE_SCHEMA_APP)
@@ -612,46 +613,53 @@ describe('AOT sealing with duplicate routes', () => {
 })
 
 describe('sealed esbuild output', () => {
-	it('drops TypeBox and stubs setupTypebox', () => {
-		expect(dragsTypeBox(code.esbuildSealed!)).toBe(false)
-		expect(/setupTypebox\(\)/.test(code.esbuildSealed!)).toBe(false)
-	})
+	it.each(['esbuildSealed', 'esbuildSealedProduction'])(
+		'%s drops TypeBox and stubs setupTypebox',
+		(label) => {
+			expect(dragsTypeBox(code[label]!)).toBe(false)
+			expect(/setupTypebox\(\)/.test(code[label]!)).toBe(false)
+		}
+	)
 
-	it('stays below the sealed bundle size ceiling', () => {
-		const min = Buffer.byteLength(code.esbuildSealed!)
-		const gz = gzipSync(code.esbuildSealed!, { level: 9 }).length
+	it('keeps production output below the sealed bundle size ceiling', () => {
+		const min = Buffer.byteLength(code.esbuildSealedProduction!)
+		const gz = gzipSync(code.esbuildSealedProduction!, { level: 9 }).length
+		// Only production is size-gated; development keeps diagnostics and the checks below.
 		// This ceiling distinguishes sealed output from the wired ~275K bundle.
 		expect(min).toBeLessThan(160_000)
 		expect(gz).toBeLessThan(50_000)
 	})
 
-	it('validates requests after sealing', async () => {
-		const app = await loadApp('esbuildSealed')
+	it.each(['esbuildSealed', 'esbuildSealedProduction'])(
+		'%s validates requests after sealing',
+		async (label) => {
+			const app = await loadApp(label)
 
-		expect(
-			(await app.handle(new Request('http://localhost/'))).status
-		).toBe(200)
+			expect(
+				(await app.handle(new Request('http://localhost/'))).status
+			).toBe(200)
 
-		const valid = await app.handle(
-			new Request('http://localhost/u', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ name: 'a', age: 5 })
-			})
-		)
-		expect(valid.status).toBe(200)
-		await expect(valid.json()).resolves.toEqual({ name: 'a', age: 5 })
+			const valid = await app.handle(
+				new Request('http://localhost/u', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ name: 'a', age: 5 })
+				})
+			)
+			expect(valid.status).toBe(200)
+			await expect(valid.json()).resolves.toEqual({ name: 'a', age: 5 })
 
-		const invalid = await app.handle(
-			new Request('http://localhost/u', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ age: 'x' })
-			})
-		)
-		// fail-closed 422 even though TypeBox `Errors` is severed
-		expect(invalid.status).toBe(422)
-	})
+			const invalid = await app.handle(
+				new Request('http://localhost/u', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ age: 'x' })
+				})
+			)
+			// fail-closed 422 even though TypeBox `Errors` is severed
+			expect(invalid.status).toBe(422)
+		}
+	)
 })
 
 describe('wired esbuild output', () => {

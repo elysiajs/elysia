@@ -89,6 +89,47 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		})
 	})
 
+	it.each([
+		['plain', false, true],
+		['clone', true, false],
+		['mixed', true, false],
+		['duplicate', false, false]
+	] as const)(
+		'keeps the static clone resolver when captured %s routes need it',
+		async (mode, hasClone, omit) => {
+			const app = new Elysia()
+			if (mode === 'plain' || mode === 'mixed')
+				app.get('/plain', () => 'plain')
+			if (hasClone)
+				app.get(
+					'/clone',
+					{ response: t.Any(), afterHandle() {} },
+					{ value: 'clone' }
+				)
+			if (mode === 'duplicate')
+				app.get('/duplicate', () => 'loser').get(
+					'/duplicate',
+					() => 'winner'
+				)
+
+			const { handlers } = await captureArtifacts(app as any)
+			const report = replayStubbability(app as any, handlers)
+			const aliases = new Set(
+				handlers.flatMap((handler) => handler.alias?.split(',') ?? [])
+			)
+			expect(aliases.has('scl')).toBe(hasClone)
+			expect(report).toEqual({
+				jit: mode !== 'duplicate',
+				reasons: mode === 'duplicate' ? ['handler:indexed-duplicate'] : []
+			})
+			if (mode === 'mixed') expect(handlers[0]?.path).toBe('/plain')
+			expect(
+				planFromReport('auto', report, false, false, aliases, true, false)
+					.plan.staticClone
+			).toBe(omit)
+		}
+	)
+
 	// WebSocket routes do not call the HTTP handler compiler.
 	it('WS-only app: handler JIT is stubbable (WS never reaches sucrose)', async () => {
 		const app = new Elysia()
@@ -197,6 +238,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		)
 		expect(safe.stub).toEqual({
 			jit: true,
+			staticClone: true,
 			ws: true,
 			reconstruct: false,
 			cookie: true,
@@ -216,6 +258,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		)
 		expect(inline.stub).toEqual({
 			jit: true,
+			staticClone: true,
 			ws: true,
 			reconstruct: true,
 			cookie: true,
@@ -235,6 +278,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		)
 		expect(wsOnly.stub).toEqual({
 			jit: true,
+			staticClone: true,
 			ws: false,
 			reconstruct: true,
 			cookie: true,

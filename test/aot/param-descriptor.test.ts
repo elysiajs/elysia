@@ -33,7 +33,7 @@ const linkedNames = () => {
 
 const descriptorNames = () =>
 	new Set(
-		[...paramsSource.matchAll(/^\t([a-z0-9]+): \(/gm)].map(
+		[...paramsSource.matchAll(/^\t([a-z0-9]+): (?:\(|staticCloneResolver,?$)/gm)].map(
 			(match) => match[1]!
 		)
 	)
@@ -64,7 +64,7 @@ describe('frozen handler parameter descriptors', () => {
 		expect(resolveHandlerParams([], ctx)).toEqual([])
 		expect(
 			resolveHandlerParams(['rc'], { res: { map: 'M' } } as any)
-		).toEqual(['M'])
+		).toEqual([undefined])
 	})
 
 	it('rejects an unknown dependency name', () => {

@@ -180,6 +180,9 @@ export interface StubPlan {
 	/** Stub the internal handler codegen module. */
 	jit: boolean
 
+	/** Omit the static-clone resolver when no captured handler aliases scl. */
+	staticClone: boolean
+
 	/** Stub internal WS route builders when the app declares no WS routes. */
 	ws: boolean
 
@@ -308,6 +311,7 @@ export type BridgeMode = 'sealed' | 'wired' | 'off'
 
 export const NO_STUB: StubPlan = {
 	jit: false,
+	staticClone: false,
 	ws: false,
 	reconstruct: false,
 	cookie: false,
@@ -380,6 +384,7 @@ export function planFromReport(
 	return {
 		plan: {
 			jit,
+			staticClone: jit && !aliases.has('scl'),
 			ws: !hasWS,
 			reconstruct:
 				jit &&
@@ -469,6 +474,12 @@ export const STUB_SOURCES: Record<
 	Exclude<keyof StubPlan, 'adapter' | 'isProduction'>,
 	Array<{ filter: RegExp; source: string }>
 > = {
+	staticClone: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]handler[\\/]static-clone-resolver\.(m?js|ts)$/,
+			source: `export const staticCloneResolver = undefined\n`
+		}
+	],
 	jit: [
 		{
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]handler[\\/]jit\.(m?js|ts)$/,

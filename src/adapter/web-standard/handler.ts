@@ -410,7 +410,7 @@ function mapFallback(
 	}
 
 	if (response instanceof ElysiaFile)
-		return handleElysiaFile(response as ElysiaFile, undefined, request)
+		return handleElysiaFile(response as ElysiaFile, set, request)
 
 	if (isElysiaForm(response))
 		return new Response(
@@ -440,7 +440,8 @@ function mapFallback(
 
 	// custom class with an array-like value
 	// eg. Bun.sql`` result
-	if (Array.isArray(response)) return Response.json(response) as any
+	if (Array.isArray(response))
+		return Response.json(response, set as ResponseInit) as any
 
 	// @ts-expect-error
 	if (typeof response?.toResponse === 'function')

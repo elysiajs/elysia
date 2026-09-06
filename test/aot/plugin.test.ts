@@ -71,7 +71,7 @@ describe('AOT plugin', () => {
 		expect(src).toContain('return { bf: 1, fingerprint')
 		// Simple schemas require no TypeBox runtime imports.
 		expect(src).not.toContain('typebox/')
-		expect(src).not.toContain('function(CheckContext')
+		expect(src).not.toContain('(CheckContext')
 		expect(src).toContain('"/body"')
 		// /body and /echo share one validator factory.
 		expect((src.match(/const _c\d+ =/g) ?? []).length).toBe(2)
@@ -250,8 +250,8 @@ describe('AOT plugin', () => {
 		expect(out).toContain('.register((() => {')
 		expect(out).toMatch(/return \{ bf: 1, fingerprint,[^}]*\bvalidators\b[^}]*\bhandlers\b/)
 		expect(out).toContain('"/body"')
-		// a real check factory body, not the `undefined` stub
-		expect(out).toContain('function(External')
+		// A real validator factory (including a merged check/clean factory), not a stub.
+		expect(out).toContain('(External')
 	})
 
 	it('esbuild (Wrangler toolchain) inlines the manifest + injects the autoload', async () => {
@@ -275,8 +275,8 @@ describe('AOT plugin', () => {
 		expect(out).toMatch(/\.register\((?:\/\* @__PURE__ \*\/ )?\(\(\) => \{/)
 		expect(out).toMatch(/return \{ bf: 1, fingerprint,[^}]*\bvalidators\b[^}]*\bhandlers\b/)
 		expect(out).toContain('"/body"')
-		// real check + handler factory bodies, not the `undefined` stub
-		expect(out).toContain('function(External')
+		// A real validator factory (including a merged check/clean factory), not a stub.
+		expect(out).toContain('(External')
 	})
 
 	it('vite plugin generates the manifest + redirects + injects via its hooks', async () => {
@@ -302,7 +302,7 @@ describe('AOT plugin', () => {
 		const loaded = plugin.load(virtual!)!
 		expect(loaded).toContain('validators')
 		expect(loaded).toContain('handlers')
-		expect(loaded).toContain('function(External')
+		expect(loaded).toContain('(External')
 		expect(plugin.load('\0not-ours')).toBeUndefined()
 
 		// transform injects the autoload import into the ENTRY only

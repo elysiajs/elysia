@@ -1,6 +1,9 @@
-import { describe, it, expect } from 'bun:test'
+import { afterAll, beforeAll, describe, it, expect } from 'bun:test'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
-import { Elysia, file, form, redirect, status } from '../../../src'
+import { Elysia, ElysiaFile, file, form, redirect, status } from '../../../src'
 
 import { mapResponse } from '../../../src/adapter/web-standard/handler'
 import { Passthrough } from './utils'
@@ -22,6 +25,115 @@ class Student {
 }
 
 class CustomResponse extends Response {}
+
+describe('supported subclass response metadata', () => {
+	class OtherArray extends Array<unknown> {}
+	class OtherFile extends ElysiaFile {}
+	const content = 'file fallback probe\n'
+	let directory: string
+	let fixture: string
+
+	beforeAll(() => {
+		directory = mkdtempSync(join(tmpdir(), 'elysia-response-metadata-'))
+		fixture = join(directory, 'payload.txt')
+		writeFileSync(fixture, content)
+	})
+
+	afterAll(() => rmSync(directory, { recursive: true }))
+
+	const cases = (['array', 'file'] as const).flatMap((value) =>
+		(['ordinary', 'subclass'] as const).flatMap((kind) =>
+			[
+				'no-set',
+				'status-header',
+				'cookie',
+				'default-header',
+				'default-and-set',
+				'static-default',
+				...(value === 'file' ? ['not-modified'] : [])
+			].map((mode) => ({ value, kind, mode }))
+		)
+	)
+
+	it.each(cases)(
+		'$value $kind $mode preserves cold and warm metadata',
+		async ({ value, kind, mode }) => {
+			const makeValue = () =>
+				value === 'file'
+					? kind === 'ordinary'
+						? new ElysiaFile(fixture)
+						: new OtherFile(fixture)
+					: kind === 'ordinary'
+						? ['hello', { id: 7 }]
+						: new OtherArray('hello', { id: 7 })
+			const defaults =
+				mode === 'default-header' ||
+				mode === 'default-and-set' ||
+				mode === 'static-default'
+			const fullSet =
+				mode === 'status-header' || mode === 'default-and-set'
+			const notModified = mode === 'not-modified'
+			const app = new Elysia()
+			if (defaults) app.headers({ 'x-default': 'base' })
+			if (mode === 'static-default') app.get('/', makeValue())
+			else if (fullSet || notModified)
+				app.get('/', ({ set }) => {
+					set.status = notModified ? 304 : 202
+					set.headers['x-probe'] = 'fallback-probe'
+					return makeValue()
+				})
+			else if (mode === 'cookie')
+				app.get('/', ({ cookie }) => {
+					cookie.session.set({
+						value: 'fallback-probe',
+						path: '/',
+						httpOnly: true
+					})
+					return makeValue()
+				})
+			else app.get('/', () => makeValue())
+
+			const headers: Record<string, string> = {
+				'content-type':
+					value === 'file'
+						? 'text/plain'
+						: 'application/json;charset=utf-8'
+			}
+			if (value === 'file' && !notModified) {
+				headers['accept-ranges'] = 'bytes'
+				headers['content-range'] =
+					`bytes 0-${content.length - 1}/${content.length}`
+			}
+			if (defaults) headers['x-default'] = 'base'
+			if (fullSet || notModified) headers['x-probe'] = 'fallback-probe'
+			if (mode === 'cookie')
+				headers['set-cookie'] =
+					'session=fallback-probe; Path=/; HttpOnly'
+			const expected = {
+				status: notModified ? 304 : fullSet ? 202 : 200,
+				headers: [...new Headers(headers).entries()],
+				body: value === 'file' ? content : '["hello",{"id":7}]'
+			}
+			const responses = []
+			// Consume both dispatches before asserting so an old-source cold failure
+			// cannot hide a different warm-path result.
+			for (const phase of ['cold', 'warm']) {
+				const response = await app.handle(
+					new Request('http://localhost/')
+				)
+				responses.push({
+					phase,
+					status: response.status,
+					headers: [...response.headers.entries()],
+					body: await response.text()
+				})
+			}
+			expect(responses).toEqual(
+				['cold', 'warm'].map((phase) => ({ phase, ...expected }))
+			)
+		}
+	)
+})
 
 describe('Web Standard - Map Response', () => {
 	it('map string', async () => {

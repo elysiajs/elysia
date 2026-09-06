@@ -40,7 +40,7 @@ function reconstructCheckCode(build: CheckBuildResult) {
 
 // emit into bundle for frozen check
 const checkFactorySource = (identifier: string, code: string) =>
-	`function(${identifier}){${code}}`
+	`(${identifier})=>{${code}}`
 
 const handlerFactorySource = (alias: string, code: string) =>
 	`function(h${alias ? ',' + alias : ''}){return ${code}}`

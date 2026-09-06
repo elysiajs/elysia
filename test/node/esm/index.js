@@ -1,7 +1,9 @@
 import { Elysia, file, t } from 'elysia'
 import * as adapterUtils from 'elysia/adapter/utils'
 import * as compiled from 'elysia/compiled'
+import { trace } from 'elysia/trace'
 import assertListenError from '../assert-listen-error.cjs'
+import assertTrace from '../assert-trace.cjs'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -24,6 +26,7 @@ if (!('validators' in compiled) || !('handlers' in compiled))
 	throw new Error('❌ ESM Node.js compiled subpath failed')
 
 assertListenError(Elysia, 'ESM')
+await assertTrace(Elysia, trace, 'ESM')
 
 const app = new Elysia().get(
 	'/',

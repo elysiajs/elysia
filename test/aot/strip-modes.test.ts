@@ -136,6 +136,7 @@ describe('automatic AOT stripping', () => {
 
 		expect(stub).toEqual({
 			jit: true,
+			staticClone: true,
 			ws: false,
 			reconstruct: true,
 			cookie: true,

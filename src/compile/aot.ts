@@ -3,7 +3,7 @@ import { nullObject } from '../utils'
 import packageJson from '../../package.json'
 import type { CoerceNode } from '../type/coerce'
 
-export const AOT_MANIFEST_FORMAT = 3
+export const AOT_MANIFEST_FORMAT = 4
 export const AOT_ABI = `${packageJson.version}:${AOT_MANIFEST_FORMAT}`
 
 export interface AotFingerprint {

@@ -1,26 +1,12 @@
-// @ts-nocheck — throwaway perf harness, run under Bun (`bun run`), not part of
-// any typecheck gate. The root tsconfig's `types: ["@types/bun"]` doesn't surface
-// node globals here; not worth fighting for a script.
+// @ts-nocheck — perf harness, run under Bun (`bun run`), not in a typecheck gate.
 /**
  * Type-instantiation benchmark — schema reuse.
  *
- * Elysia resolves every route schema to a static TS type via
- * `UnwrapRoute -> UnwrapSchema -> StaticDecode` (TypeBox's `Static` machinery,
- * the dominant per-route type-check cost). TypeScript caches `Static` results by
- * schema-NODE identity, so:
- *   - N distinct inline `t.Object({...})` literals each pay full `Static`
- *     resolution (even when structurally identical — distinct nodes, distinct
- *     cache keys).
- *   - N routes referencing ONE registered `.model()` by name share a single
- *     cached `Static` resolution.
+ * Compare distinct inline schemas, identical inline schemas, and one named
+ * model. Counters show the cost of each app; they do not isolate compiler cache
+ * internals. A zero-route app supplies the shared import/checking baseline.
  *
- * This bench compiles three N-route apps with `tsc --extendedDiagnostics` and
- * reports `Instantiations` (the metric that scales editor/`tsc` cost). The
- * model-ref app should be materially cheaper than inline — measured ~ -31% at
- * N=50 on first authoring (2026-06-17). It is also a regression guard: the run
- * asserts ref < inline-distinct and exits non-zero if reuse ever stops working.
- *
- *   bun run example/type-perf/measure.ts [N=50]
+ *   bun run example/type-perf/measure.ts [N=50] [package|source]
  */
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs'
@@ -28,31 +14,48 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const N = Number(process.argv[2] ?? 50)
+const entry = process.argv[3] ?? 'package'
+if (!Number.isSafeInteger(N) || N < 1 || !['package', 'source'].includes(entry))
+	throw new Error('usage: measure.ts [positive route count] [package|source]')
 const here = dirname(fileURLToPath(import.meta.url))
 const root = join(here, '..', '..') // repo root
 const tmp = join(here, '.bench-tmp')
 
 // ── fixtures: identical handlers/route count, differ ONLY in how the body
 //    schema is supplied (the variable under test) ─────────────────────────────
-const head = `import { Elysia, t } from '../../../src'\n\nexport default new Elysia()\n`
-const route = (i: number, schema: string) =>
-	`  .post('/r${i}/:id', ${schema}, ({ body, params }) => ({ id: params.id, a: body.a${i} }))\n`
+const imports = `import { Elysia, t } from '${entry === 'source' ? '../../../src' : 'elysia'}'\n\n`
+const head = imports + `export default new Elysia()\n`
+const route = (i: number, schema: string, field = 'a') =>
+	`  .post('/r${i}/:id', ${schema}, ({ body, params }) => ({ id: params.id, a: body.${field} }))\n`
 
 const fixtures: Record<string, string> = {
-	// N DISTINCT inline literals — no `Static` cache reuse (the common worst case)
-	'inline-distinct': head + Array.from({ length: N }, (_, i) =>
-		route(i, `{ body: t.Object({ a${i}: t.String(), b${i}: t.Number(), c${i}: t.Boolean() }) }`)
-	).join(''),
-	// N STRUCTURALLY-IDENTICAL inline literals — proves same-shape does NOT dedup
-	'inline-same': head + Array.from({ length: N }, (_, i) =>
-		route(i, `{ body: t.Object({ a${i}: t.String(), b: t.Number(), c: t.Boolean() }) }`)
-	).join(''),
-	// 1 registered model, N references by name — single cached `Static`
-	'model-ref':
-		`import { Elysia, t } from '../../../src'\n\nexport default new Elysia()\n` +
-		`  .model({ Body: t.Object({ a: t.String(), b: t.Number(), c: t.Boolean() }) })\n` +
+	// N different schema shapes.
+	'inline-distinct':
+		head +
 		Array.from({ length: N }, (_, i) =>
-			`  .post('/r${i}/:id', { body: 'Body' }, ({ body, params }) => ({ id: params.id, a: body.a }))\n`
+			route(
+				i,
+				`{ body: t.Object({ a${i}: t.String(), b${i}: t.Number(), c${i}: t.Boolean() }) }`,
+				`a${i}`
+			)
+		).join(''),
+	// N separate expressions with exactly the same schema and handler shape.
+	'inline-same':
+		head +
+		Array.from({ length: N }, (_, i) =>
+			route(
+				i,
+				`{ body: t.Object({ a: t.String(), b: t.Number(), c: t.Boolean() }) }`
+			)
+		).join(''),
+	// 1 registered model, N references by name.
+	'model-ref':
+		head +
+		`  .model({ Body: t.Object({ a: t.String(), b: t.Number(), c: t.Boolean() }) })\n` +
+		Array.from(
+			{ length: N },
+			(_, i) =>
+				`  .post('/r${i}/:id', { body: 'Body' }, ({ body, params }) => ({ id: params.id, a: body.a }))\n`
 		).join('')
 }
 
@@ -70,34 +73,44 @@ function measure(name: string, source: string) {
 		})
 	)
 	const out = spawnSync(
-		'npx',
-		['tsc', '--project', cfg, '--extendedDiagnostics'],
+		join(root, 'node_modules/.bin/tsc'),
+		['--project', cfg, '--extendedDiagnostics'],
 		{ cwd: root, encoding: 'utf8' }
 	)
 	const text = (out.stdout ?? '') + (out.stderr ?? '')
-	const num = (re: RegExp) => Number(text.match(re)?.[1]?.replace(/,/g, '') ?? NaN)
-	const errors = (text.match(/error TS/g) ?? []).length
-	return {
+	if (out.error || out.status !== 0)
+		throw new Error(
+			`${name}: compiler failed (${out.status ?? out.signal}): ${out.error ?? ''}\n${text}`
+		)
+	const num = (re: RegExp) =>
+		Number(text.match(re)?.[1]?.replace(/,/g, '') ?? NaN)
+	const result = {
 		name,
 		inst: num(/Instantiations:\s+(\d+)/),
 		types: num(/^Types:\s+(\d+)/m),
-		check: text.match(/Check time:\s+([\d.]+s)/)?.[1] ?? '?',
-		errors
+		check: text.match(/Check time:\s+([\d.]+s)/)?.[1]
 	}
+	if (
+		!Number.isFinite(result.inst) ||
+		!Number.isFinite(result.types) ||
+		!result.check
+	)
+		throw new Error(`${name}: missing compiler diagnostics\n${text}`)
+	return result
 }
 
 rmSync(tmp, { recursive: true, force: true })
 mkdirSync(tmp, { recursive: true })
 try {
-	console.log(`\n  Type-instantiation bench — schema reuse, N=${N} routes`)
 	console.log(
-		`  (imports ../../../src, so each total carries the ~1.3M one-time declaration`
+		`\n  Type-instantiation bench — schema reuse, N=${N} routes, ${entry} imports\n`
 	)
-	console.log(`   baseline; the per-route MARGINAL is what schema reuse moves.)\n`)
 
-	// shared 0-route baseline (empty instance) — the declaration cost to subtract
+	// Shared import/checking baseline for an empty instance.
 	const base = measure('_baseline', head + '')
-	const rows = Object.entries(fixtures).map(([name, src]) => measure(name, src))
+	const rows = Object.entries(fixtures).map(([name, src]) =>
+		measure(name, src)
+	)
 
 	const marginal = (r: { inst: number }) => r.inst - base.inst
 	const inlineDistinct = rows.find((r) => r.name === 'inline-distinct')!
@@ -108,10 +121,6 @@ try {
 		`  ${pad('fixture', 18)}${pad('total inst', 14)}${pad('marginal', 12)}${pad('/route', 10)}${pad('check', 9)}vs inline`
 	)
 	for (const r of rows) {
-		if (r.errors) {
-			console.log(`  ${pad(r.name, 18)}!! ${r.errors} type errors — fixture invalid`)
-			continue
-		}
 		const marg = marginal(r)
 		const rel = Math.round((marg / inlineMarg - 1) * 100)
 		console.log(
@@ -119,25 +128,20 @@ try {
 		)
 	}
 	console.log(
-		`\n  baseline (0 routes, declaration cost): ${base.inst.toLocaleString()} inst`
+		`\n  baseline (0 routes, import/checking cost): ${base.inst.toLocaleString()} inst`
 	)
 
-	// ── regression guard: reuse must beat distinct inline, no fixture may error
+	// Fixed-size guard: registration overhead may exceed savings on small apps.
 	const ref = rows.find((r) => r.name === 'model-ref')!
-	const bad = [base, ...rows].filter((r) => r.errors)
-	if (bad.length) {
-		console.error(`\n  FAIL: fixtures with type errors: ${bad.map((b) => b.name).join(', ')}`)
-		process.exit(1)
-	}
-	if (!(marginal(ref) < inlineMarg)) {
+	if (N === 50 && !(marginal(ref) < inlineMarg)) {
 		console.error(
-			`\n  FAIL: model-ref marginal (${marginal(ref)}) is not cheaper than inline-distinct (${inlineMarg}) — schema-reuse caching regressed`
+			`\n  FAIL: model-ref marginal (${marginal(ref)}) is not cheaper than inline-distinct (${inlineMarg})`
 		)
 		process.exit(1)
 	}
 	const saved = Math.round(((inlineMarg - marginal(ref)) / inlineMarg) * 100)
 	console.log(
-		`\n  ✓ schema reuse saves ${saved}% of the per-route cost (model-ref vs inline-distinct, marginal)\n`
+		`\n  model-ref uses ${Math.abs(saved)}% ${saved >= 0 ? 'fewer' : 'more'} marginal instantiations than inline-distinct\n`
 	)
 } finally {
 	rmSync(tmp, { recursive: true, force: true })

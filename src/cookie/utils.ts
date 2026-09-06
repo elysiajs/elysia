@@ -2,7 +2,6 @@ import decodeComponent from 'deuri'
 import { parse } from './lib'
 
 import { Cookie } from './cookie'
-import { dangerousKeys } from '../constants'
 import { nullObject } from '../utils'
 
 import type { Context } from '../context'
@@ -28,14 +27,12 @@ export function parseCookieRawSync(
 	cookieString: string | null | undefined,
 	_config: CompiledCookieConfig
 ) {
-	const out: Record<string, unknown> = nullObject() as any
-	if (!cookieString) return out
+	if (!cookieString) return nullObject()
 
 	const cookies = parse(cookieString)
+	const out: Record<string, unknown> = cookies
 
 	for (const name in cookies) {
-		if (dangerousKeys.has(name)) continue
-
 		const v = cookies[name]
 		if (v === undefined) continue
 
@@ -57,36 +54,20 @@ export function parseCookieRawSync(
 export function parseCookieRawDeferred(
 	cookieString: string | null | undefined,
 	_config: CompiledCookieConfig
-) {
-	const out: Record<string, unknown> = nullObject() as any
-	if (!cookieString) return out
-
-	const cookies = parse(cookieString)
-
-	for (const name in cookies) {
-		if (dangerousKeys.has(name)) continue
-
-		const v = cookies[name]
-		if (v === undefined) continue
-
-		out[name] = v
-	}
-
-	return out
+): Record<string, unknown> {
+	return cookieString ? parse(cookieString) : nullObject()
 }
 
 export function parseCookieRawLazy(
 	cookieString: string | null | undefined,
 	config: CompiledCookieConfig
-) {
-	const out: Record<string, unknown> = nullObject() as any
-	if (!cookieString) return out
+): Record<string, unknown> {
+	if (!cookieString) return nullObject()
 
 	const cookies = parse(cookieString)
+	const out: Record<string, unknown> = cookies
 
 	for (const name in cookies) {
-		if (dangerousKeys.has(name)) continue
-
 		const v = cookies[name]
 		if (v === undefined) continue
 
@@ -103,18 +84,16 @@ export function parseCookieRawLazy(
 export async function parseCookieRaw(
 	cookieString: string | null | undefined,
 	config: CompiledCookieConfig
-) {
+): Promise<Record<string, unknown>> {
 	if (!config.hasSign) return parseCookieRawSync(cookieString, config)
 	if (hasSyncHmac) return parseCookieRawSigned(cookieString, config)
 
-	const out: Record<string, unknown> = nullObject() as any
-	if (!cookieString) return out
+	if (!cookieString) return nullObject()
 
 	const cookies = parse(cookieString)
+	const out: Record<string, unknown> = cookies
 
 	for (const name in cookies) {
-		if (dangerousKeys.has(name)) continue
-
 		const v = cookies[name]
 		if (v === undefined) continue
 
@@ -138,17 +117,15 @@ export async function parseCookieRaw(
 export function parseCookieRawSigned(
 	cookieString: string | null | undefined,
 	config: CompiledCookieConfig
-) {
+): Record<string, unknown> {
 	if (!config.hasSign) return parseCookieRawSync(cookieString, config)
 
-	const out: Record<string, unknown> = nullObject() as any
-	if (!cookieString) return out
+	if (!cookieString) return nullObject()
 
 	const cookies = parse(cookieString)
+	const out: Record<string, unknown> = cookies
 
 	for (const name in cookies) {
-		if (dangerousKeys.has(name)) continue
-
 		const v = cookies[name]
 		if (v === undefined) continue
 

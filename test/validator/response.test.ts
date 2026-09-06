@@ -1,4 +1,4 @@
-import { Elysia, t, sse } from '../../src'
+import { Elysia, ElysiaStatus, t, sse } from '../../src'
 import { streamResponse } from '../../src/adapter/utils'
 import * as z from 'zod'
 
@@ -794,5 +794,282 @@ describe('Response Validator', () => {
 		).resolves.toEqual({ owner: 'none', name: 'bob' })
 
 		expect(literal).toEqual({ owner: 'none', name: 'bob' })
+	})
+	it.each(['afterHandle', 'mapResponse'] as const)(
+		'isolates a static status payload and headers per request through %s',
+		async (hook) => {
+			const headers = { 'x-owned': 'pristine' }
+			const payload = { name: 'intact' }
+			const owner = new ElysiaStatus(201, payload, headers)
+			const seen: Record<string, string>[] = []
+			const app = new Elysia().get(
+				'/',
+				{
+					response: { 201: t.Object({ name: t.String() }) },
+					[hook]({ responseValue, query }: any) {
+						seen.push(responseValue.headers)
+						if (query.stamp) {
+							responseValue.response.name = 'stamped'
+							responseValue.headers['x-owned'] = 'stamped'
+						}
+					}
+				},
+				owner
+			)
+
+			const first = await app.handle('/?stamp=1')
+			const firstBody = await first.text()
+			const second = await app.handle('/')
+			const secondBody = await second.text()
+			expect([first.status, second.status]).toEqual([201, 201])
+			expect([firstBody, secondBody]).toEqual([
+				'{"name":"stamped"}',
+				'{"name":"intact"}'
+			])
+			expect(first.headers.get('x-owned')).toBe('stamped')
+			expect(second.headers.get('x-owned')).toBe('pristine')
+			expect(seen).toHaveLength(2)
+			expect(seen[0]).not.toBe(seen[1])
+			for (const value of seen) expect(value).not.toBe(headers)
+			expect(owner.status).toBe(201)
+			expect(owner.response).toBe(payload)
+			expect(owner.headers).toBe(headers)
+			expect(payload).toEqual({ name: 'intact' })
+			expect(headers).toEqual({ 'x-owned': 'pristine' })
+		}
+	)
+
+	it('validates a static status with its declared status schema', async () => {
+		const invalidBody = {
+			type: 'internal-server-error',
+			code: 'internal-server-error',
+			title: 'Internal Server Error',
+			status: 500,
+			detail: 'must be string',
+			on: 'response',
+			property: '/name',
+			found: { name: 1 },
+			expected: { name: '' },
+			errors: [
+				{
+					keyword: 'type',
+					schemaPath: '#/properties/name',
+					instancePath: '/name',
+					params: { type: 'string' },
+					message: 'must be string'
+				}
+			]
+		}
+		for (const valid of [true, false]) {
+			const results: { status: number; body: string }[][] = []
+			for (const kind of ['static', 'function']) {
+				const payload = { name: valid ? 'intact' : 1 }
+				const value = new ElysiaStatus(201, payload, {
+					'x-owned': 'yes'
+				})
+				const seen: unknown[] = []
+				const app = new Elysia({
+					allowUnsafeValidationDetails: true
+				}).get(
+					'/',
+					{
+						response: { 201: t.Object({ name: t.String() }) },
+						afterHandle({ responseValue }) {
+							seen.push(responseValue)
+						}
+					},
+					(kind === 'static'
+						? value
+						: () =>
+								new ElysiaStatus(
+									201,
+									{ ...payload },
+									{ 'x-owned': 'yes' }
+								)) as any
+				)
+				const pair = []
+				for (let i = 0; i < 2; i++) {
+					const response = await app.handle('/')
+					const body = await response.text()
+					pair.push({ status: response.status, body })
+					expect(response.status).toBe(valid ? 201 : 500)
+					expect(JSON.parse(body)).toEqual(
+						valid ? { name: 'intact' } : invalidBody
+					)
+					if (valid)
+						expect(response.headers.get('x-owned')).toBe('yes')
+				}
+				expect(seen).toHaveLength(2)
+				expect(value.response).toBe(payload)
+				expect(payload).toEqual({ name: valid ? 'intact' : 1 })
+				results.push(pair)
+			}
+			expect(results[0]).toEqual(results[1])
+		}
+	})
+
+	it('preserves the native graph while restoring a static status root', async () => {
+		const node = { count: 0 }
+		const date = new Date(1234)
+		const payload: any = { left: node, right: node, date, dateAgain: date }
+		const owner = new ElysiaStatus(201, payload, { 'x-owned': 'yes' })
+		const map = new Map<unknown, unknown>([
+			[node, date],
+			[owner, node],
+			['root', owner]
+		])
+		payload.map = map
+		payload.root = owner
+		let reads = 0
+		Object.defineProperty(payload, 'counted', {
+			enumerable: true,
+			get() {
+				reads++
+				return 'fixed'
+			}
+		})
+		const seen: unknown[] = []
+		const app = new Elysia().get(
+			'/',
+			{
+				response: { 201: t.Any() },
+				afterHandle({ responseValue }) {
+					const current = responseValue as any
+					const value = current.response
+					expect(current).not.toBe(owner)
+					expect(seen).not.toContain(current)
+					expect(value).not.toBe(current)
+					expect(value).not.toBe(payload)
+					expect(current.headers).not.toBe(owner.headers)
+					expect(value.left).not.toBe(node)
+					expect(value.date).not.toBe(date)
+					expect(value.map).not.toBe(map)
+					expect(value.left).toBe(value.right)
+					expect(value.date).toBe(value.dateAgain)
+					expect(value.map.get(value.left)).toBe(value.date)
+					expect(value.map.get(current)).toBe(value.left)
+					expect(value.map.get('root')).toBe(current)
+					expect(value.root).toBe(current)
+					expect([
+						value.left.count,
+						value.date.getTime(),
+						value.map.size
+					]).toEqual([0, 1234, 3])
+					expect(value.counted).toBe('fixed')
+					seen.push(current)
+					expect(reads).toBe(seen.length)
+					value.left.count++
+					value.date.setTime(5678)
+					value.map.set('changed', value.left)
+					expect(value.right.count).toBe(1)
+					expect(value.dateAgain.getTime()).toBe(5678)
+					current.response = {
+						count: value.left.count,
+						date: value.date.getTime(),
+						mapSize: value.map.size
+					}
+				}
+			},
+			owner
+		)
+		expect(reads).toBe(0)
+		for (let i = 0; i < 2; i++) {
+			const response = await app.handle('/')
+			const body = await response.text()
+			expect(response.status).toBe(201)
+			expect(body).toBe('{"count":1,"date":5678,"mapSize":4}')
+			expect(response.headers.get('x-owned')).toBe('yes')
+		}
+		expect(reads).toBe(2)
+		expect([node.count, date.getTime(), map.size]).toEqual([0, 1234, 3])
+		expect(owner.response).toBe(payload)
+		expect(payload.root).toBe(owner)
+		expect(map.get(owner)).toBe(node)
+		expect(map.get('root')).toBe(owner)
+		expect(map.get(node)).toBe(date)
+	})
+
+	it('isolates a static graph without traversing its prototype ancestors', async () => {
+		let armed = false
+		let armedCalls = 0
+		const prototype = new Proxy(
+			{},
+			{
+				getPrototypeOf(target) {
+					if (armed) {
+						armed = false
+						armedCalls++
+						throw new Error('Armed prototype traversal')
+					}
+					return Reflect.getPrototypeOf(target)
+				}
+			}
+		)
+		const node = { count: 0 }
+		const date = new Date(1234)
+		const map = new Map<unknown, unknown>([
+			['node', node],
+			['date', date]
+		])
+		const owner = { left: node, right: node, date, dateAgain: date, map }
+		Object.setPrototypeOf(owner, prototype)
+		const seen: unknown[] = []
+		const app = new Elysia({ precompile: true }).get(
+			'/',
+			{
+				response: t.Any(),
+				afterHandle({ responseValue }) {
+					const value = responseValue as typeof owner
+					expect(value).not.toBe(owner)
+					expect(seen).not.toContain(value)
+					expect(Object.getPrototypeOf(value)).toBe(Object.prototype)
+					expect(value.left).not.toBe(node)
+					expect(value.date).not.toBe(date)
+					expect(value.map).not.toBe(map)
+					expect(value.left).toBe(value.right)
+					expect(value.date).toBe(value.dateAgain)
+					expect(value.map.get('node')).toBe(value.left)
+					expect(value.map.get('date')).toBe(value.date)
+					expect([
+						value.left.count,
+						value.date.getTime(),
+						value.map.size
+					]).toEqual([0, 1234, 2])
+					seen.push(value)
+					value.left.count++
+					value.date.setTime(2234)
+					value.map.set('mutation', value.left)
+					return {
+						count: value.left.count,
+						date: value.date.getTime(),
+						mapSize: value.map.size
+					}
+				}
+			},
+			owner
+		)
+		app.compile()
+		for (let i = 0; i < 2; i++) {
+			armed = true
+			try {
+				const response = await app.handle('/')
+				const body = await response.text()
+				expect(response.status).toBe(200)
+				expect(body).toBe('{"count":1,"date":2234,"mapSize":3}')
+			} finally {
+				armed = false
+			}
+		}
+		expect(armedCalls).toBe(0)
+		expect(seen).toHaveLength(2)
+		expect([node.count, date.getTime(), map.size]).toEqual([0, 1234, 2])
+		expect(owner.left).toBe(node)
+		expect(owner.right).toBe(node)
+		expect(owner.date).toBe(date)
+		expect(owner.dateAgain).toBe(date)
+		expect(owner.map).toBe(map)
+		expect(map.get('node')).toBe(node)
+		expect(map.get('date')).toBe(date)
+		expect(Object.getPrototypeOf(owner)).toBe(prototype)
 	})
 })
