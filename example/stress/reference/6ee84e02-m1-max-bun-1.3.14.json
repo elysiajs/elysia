@@ -1,0 +1,49 @@
+{
+	"schemaVersion": 1,
+	"commit": "6ee84e02",
+	"gating": false,
+	"sampleKind": "historical audit snapshot; single runs except retained-route and router-slope medians",
+	"environment": {
+		"cpu": "Apple M1 Max",
+		"os": "macOS 26.5",
+		"runtime": "Bun 1.3.14"
+	},
+	"throughputNsPerIteration": {
+		"handlePlainGet": 179.83,
+		"handleDynamicGet": 381.99,
+		"validatedJsonPost": 1280,
+		"jsonPostWithDefaults": 1200,
+		"coercedQueryGet": 803.43,
+		"cookieGet": 921.02,
+		"mixedSixRouteTraffic": 888.38
+	},
+	"retainedBytesPerRouteMedian": {
+		"static": 860.2,
+		"dynamicDefault": 1718,
+		"dynamicTrailingDefault": 1836.3,
+		"dynamicStrict": 1631.8,
+		"dynamicTrailingStrict": 1702.6
+	},
+	"routerBuildNsPerRouteMedian": {
+		"lazyStatic": 337,
+		"precompiledStatic": 1118,
+		"lazyStrictStatic": 251,
+		"lazyStaticLiteral": 319,
+		"staticLiteralNativeStaticDisabled": 472,
+		"lazyDynamic": 738,
+		"precompiledDynamic": 1419
+	},
+	"propagatedHook30000RouteBuildMs": 14480.16,
+	"warmModuleColdStartMs": {
+		"p50": 0.0186,
+		"p99": 0.0897
+	},
+	"rejected": {
+		"combinedProcessWebSocketBytesPerConnection": 12681.2,
+		"reason": "Client and server ran in one process, so the value cannot be attributed to server connections."
+	},
+	"notes": [
+		"Absolute values are diagnostic and are not comparable across CPU, OS, Bun version, or memory metric.",
+		"The WebSocket result is retained only as rejected historical context and must not be used as a baseline."
+	]
+}

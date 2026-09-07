@@ -1,10 +1,10 @@
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
+import { post, json } from '../utils'
 
-describe('map derive', () => {
-	it('work', async () => {
+describe('mapDerive', () => {
+	it('replaces the derived context with its returned fields', async () => {
 		const app = new Elysia()
 			.derive(() => ({
 				hi: () => 'hi'
@@ -16,16 +16,40 @@ describe('map derive', () => {
 			.get('/', ({ hi }) => hi())
 			.get('/h2', ({ hi2 }) => hi2())
 
-		const res = await app.handle(req('/')).then((t) => t.text())
-		const res2 = await app.handle(req('/h2')).then((t) => t.text())
+		const res = await app.handle('/').then((t) => t.text())
+		const res2 = await app.handle('/h2').then((t) => t.text())
 
 		expect(res).toBe('hi')
 		expect(res2).toBe('hi')
 	})
 
-	it('inherits plugin', async () => {
+	it('replaces derived values while preserving context fields', async () => {
+		const app = new Elysia()
+			.derive(() => ({
+				old: 'old'
+			}))
+			.mapDerive(({ params }) => ({
+				id: params.id
+			}))
+			.post('/user/:id', (context: any) => ({
+				old: context.old,
+				id: context.id,
+				body: context.body.name
+			}))
+
+		const res = await app
+			.handle('/user/1', json({ name: 'Elysia' }))
+			.then((t) => t.json())
+
+		expect(res).toEqual({
+			id: '1',
+			body: 'Elysia'
+		})
+	})
+
+	it('maps a global derive inside a plugin', async () => {
 		const plugin = new Elysia()
-			.derive({ as: 'global' }, () => ({
+			.derive('global', () => ({
 				hi: () => 'hi'
 			}))
 			.mapDerive((derivatives) => ({
@@ -36,14 +60,14 @@ describe('map derive', () => {
 
 		const app = new Elysia().use(plugin).get('/', ({ hi }) => hi())
 
-		const res = await app.handle(req('/')).then((t) => t.text())
-		const res2 = await app.handle(req('/h2')).then((t) => t.text())
+		const res = await app.handle('/').then((t) => t.text())
+		const res2 = await app.handle('/h2').then((t) => t.text())
 
 		expect(res).toBe('hi')
 		expect(res2).toBe('hi')
 	})
 
-	it('not inherits plugin on local', async () => {
+	it('keeps a local mapped derive inside its plugin', async () => {
 		const plugin = new Elysia()
 			.derive(() => ({
 				hi: () => 'hi'
@@ -52,17 +76,23 @@ describe('map derive', () => {
 				...derivatives,
 				hi2: () => 'hi'
 			}))
+			.get('/mapped', ({ hi2 }) => hi2())
 
 		const app = new Elysia()
 			.use(plugin)
 			// @ts-expect-error
 			.get('/', ({ hi2 }) => typeof hi2 === 'undefined')
 
-		const res = await app.handle(req('/')).then((t) => t.text())
-		expect(res).toBe('true')
+		const [outer, inner] = await Promise.all([
+			app.handle('/').then((response) => response.text()),
+			app.handle('/mapped').then((response) => response.text())
+		])
+
+		expect(outer).toBe('true')
+		expect(inner).toBe('hi')
 	})
 
-	it('can mutate store', async () => {
+	it('can expose a helper that mutates the store', async () => {
 		const app = new Elysia()
 			.state('counter', 1)
 			.mapDerive(({ store }) => ({
@@ -74,11 +104,11 @@ describe('map derive', () => {
 				return store.counter
 			})
 
-		const res = await app.handle(req('/')).then((t) => t.text())
+		const res = await app.handle('/').then((t) => t.text())
 		expect(res).toBe('2')
 	})
 
-	it('derive with static analysis', async () => {
+	it('can read a destructured request header', async () => {
 		const app = new Elysia()
 			.mapDerive(({ headers: { name } }) => ({
 				name
@@ -98,11 +128,11 @@ describe('map derive', () => {
 		expect(res).toBe('Elysia')
 	})
 
-	it('store in the same stack as transform', async () => {
+	it('runs between app and route-local beforeHandle hooks', async () => {
 		const stack: number[] = []
 
 		const app = new Elysia()
-			.onTransform(() => {
+			.beforeHandle(() => {
 				stack.push(1)
 			})
 			.mapDerive(() => {
@@ -110,11 +140,15 @@ describe('map derive', () => {
 
 				return { name: 'Ina' }
 			})
-			.get('/', ({ name }) => name, {
-				transform() {
-					stack.push(3)
-				}
-			})
+			.get(
+				'/',
+				{
+					beforeHandle() {
+						stack.push(3)
+					}
+				},
+				({ name }) => name
+			)
 
 		await app.handle(
 			new Request('http://localhost/', {
@@ -127,7 +161,7 @@ describe('map derive', () => {
 		expect(stack).toEqual([1, 2, 3])
 	})
 
-	it('map derive in order', async () => {
+	it('runs mapped derives in registration order', async () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
@@ -141,16 +175,16 @@ describe('map derive', () => {
 			})
 			.get('/', () => '')
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(order).toEqual(['A', 'B'])
 	})
 
-	it('as local', async () => {
+	it('runs locally only on routes declared by its plugin', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.mapDerive({ as: 'local' }, ({ path }) => {
+			.mapDerive('local', ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -160,18 +194,18 @@ describe('map derive', () => {
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
 		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
+			app.handle('/inner'),
+			app.handle('/outer')
 		])
 
 		expect(called).toEqual(['/inner'])
 	})
 
-	it('as global', async () => {
+	it('runs globally on plugin and parent routes', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.mapDerive({ as: 'global' }, ({ path }) => {
+			.mapDerive('global', ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -181,10 +215,121 @@ describe('map derive', () => {
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
 		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
+			app.handle('/inner'),
+			app.handle('/outer')
 		])
 
 		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('global plugin replaces inherited derive values', async () => {
+		const plugin = new Elysia()
+			.derive('global', () => ({
+				old: 'old'
+			}))
+			.mapDerive('global', () => ({
+				name: 'Elysia'
+			}))
+
+		const app = new Elysia().use(plugin).get('/', (context: any) => ({
+			old: context.old,
+			name: context.name
+		}))
+
+		const res = await app.handle('/').then((t) => t.json())
+
+		expect(res).toEqual({
+			name: 'Elysia'
+		})
+	})
+
+	it('preserves request context fields beside mapped properties', async () => {
+		let capturedContext: any
+
+		const app = new Elysia()
+			.mapDerive(() => ({
+				mapped: 'yes'
+			}))
+			.get('/', (context: any) => {
+				capturedContext = context
+				return 'ok'
+			})
+
+		await app.handle(new Request('http://localhost/'))
+
+		expect(capturedContext.mapped).toBe('yes')
+		expect(capturedContext.request).toBeInstanceOf(Request)
+		expect(capturedContext.set).toBeDefined()
+		expect(capturedContext.path).toBe('/')
+	})
+
+	it('gives request context fields precedence over mapped properties', async () => {
+		let capturedPath: any
+
+		const app = new Elysia()
+			.mapDerive(() => ({
+				path: 'SHOULD_BE_OVERWRITTEN'
+			}))
+			.get('/real-path', (context: any) => {
+				capturedPath = context.path
+				return 'ok'
+			})
+
+		await app.handle('/real-path')
+
+		expect(capturedPath).toBe('/real-path')
+	})
+
+	it('does not mutate a shared returned object', async () => {
+		const shared = { user: 'x' }
+		const originalProto = Object.getPrototypeOf(shared)
+
+		const app = new Elysia().mapDerive(() => shared).get('/', () => 'ok')
+
+		await app.handle('/')
+		await app.handle('/')
+
+		expect(Object.getPrototypeOf(shared)).toBe(originalProto)
+		expect('request' in shared).toBe(false)
+		expect('set' in shared).toBe(false)
+	})
+
+	it('does not copy request state onto a shared returned object', async () => {
+		const shared = { user: 'singleton' }
+		const setValues: any[] = []
+
+		const app = new Elysia()
+			.mapDerive(() => shared)
+			.get('/', () => {
+				setValues.push(
+					'set' in shared ? (shared as any).set : undefined
+				)
+				return 'ok'
+			})
+
+		await app.handle('/')
+		await app.handle('/')
+
+		expect(setValues[0]).toBeUndefined()
+		expect(setValues[1]).toBeUndefined()
+	})
+
+	it('snapshots getter values when merging mapped properties', async () => {
+		let callCount = 0
+		const derivative = {
+			get computed() {
+				callCount++
+				return 'computed-' + callCount
+			}
+		}
+
+		const app = new Elysia()
+			.mapDerive(() => derivative)
+			.get('/', (context: any) => [context.computed, context.computed])
+
+		const res = await app.handle('/').then((response) => response.json())
+
+		expect(res).toEqual(['computed-1', 'computed-1'])
+		expect(callCount).toBe(1)
 	})
 })

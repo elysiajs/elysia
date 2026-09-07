@@ -1,25 +1,24 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
-import { req } from '../utils'
 
 describe('State', () => {
-	it('decorate primitive', async () => {
+	it('state primitive', async () => {
 		const app = new Elysia().state('name', 'Ina').state('name', 'Tako')
 
-		expect(app.store.name).toBe('Ina')
+		expect(app['~ext']?.store?.name).toBe('Ina')
 	})
 
-	it('decorate multiple', async () => {
+	it('state multiple', async () => {
 		const app = new Elysia().state('name', 'Ina').state('job', 'artist')
 
-		expect(app.store).toEqual({
+		expect(app['~ext']?.store).toEqual({
 			name: 'Ina',
 			job: 'artist'
 		})
 	})
 
-	it('decorate object', async () => {
+	it('state object', async () => {
 		const app = new Elysia()
 			.state({
 				name: 'Ina',
@@ -29,7 +28,7 @@ describe('State', () => {
 				name: 'Fubuki'
 			})
 
-		expect(app.store).toEqual({
+		expect(app['~ext']?.store).toEqual({
 			name: 'Ina',
 			job: 'artist'
 		})
@@ -46,7 +45,7 @@ describe('State', () => {
 				job: 'streamer'
 			}))
 
-		expect(app.store).toEqual({
+		expect(app['~ext']?.store).toEqual({
 			name: 'Ina',
 			job: 'streamer'
 		})
@@ -59,7 +58,7 @@ describe('State', () => {
 			.use(plugin())
 			.get('/', ({ store: { hi } }) => hi())
 
-		const res = await app.handle(req('/')).then((r) => r.text())
+		const res = await app.handle('/').then((r) => r.text())
 		expect(res).toBe('hi')
 	})
 
@@ -70,7 +69,7 @@ describe('State', () => {
 			.use(plugin)
 			.get('/', ({ store: { hi } }) => hi())
 
-		const res = await app.handle(req('/')).then((r) => r.text())
+		const res = await app.handle('/').then((r) => r.text())
 		expect(res).toBe('hi')
 	})
 
@@ -81,19 +80,19 @@ describe('State', () => {
 			}
 		})
 
-		expect(app.store.hi.there.hello).toBe('world')
+		expect(app['~ext']?.store?.hi.there.hello).toBe('world')
 	})
 
 	it('remap', async () => {
 		const app = new Elysia()
 			.state('job', 'artist')
 			.state('name', 'Ina')
-			.state(({ job, ...decorators }) => ({
-				...decorators,
+			.state(({ job, ...store }) => ({
+				...store,
 				job: 'vtuber'
 			}))
 
-		expect(app.store.job).toBe('vtuber')
+		expect(app['~ext']?.store?.job).toBe('vtuber')
 	})
 
 	it('handle class deduplication', async () => {
@@ -109,7 +108,7 @@ describe('State', () => {
 
 		const app = new Elysia().state('a', new A()).state('a', new A())
 
-		expect(app.store.a.i).toBe(0)
+		expect(app['~ext']?.store?.a.i).toBe(0)
 	})
 
 	it('handle nested object deduplication', async () => {
@@ -126,7 +125,7 @@ describe('State', () => {
 				}
 			})
 
-		expect(app.store).toEqual({
+		expect(app['~ext']?.store).toEqual({
 			a: {
 				hello: {
 					world: 'Tako',
@@ -139,9 +138,9 @@ describe('State', () => {
 	it('override primitive', async () => {
 		const app = new Elysia()
 			.state('name', 'Ina')
-			.state({ as: 'override' }, 'name', 'Tako')
+			.state('override', 'name', 'Tako')
 
-		expect(app.store.name).toBe('Tako')
+		expect(app['~ext']?.store?.name).toBe('Tako')
 	})
 
 	it('override object', async () => {
@@ -150,14 +149,11 @@ describe('State', () => {
 				name: 'Ina',
 				job: 'artist'
 			})
-			.state(
-				{ as: 'override' },
-				{
-					name: 'Fubuki'
-				}
-			)
+			.state('override', {
+				name: 'Fubuki'
+			})
 
-		expect(app.store).toEqual({
+		expect(app['~ext']?.store).toEqual({
 			name: 'Fubuki',
 			job: 'artist'
 		})
@@ -176,9 +172,9 @@ describe('State', () => {
 
 		const app = new Elysia()
 			.state('a', new A())
-			.state({ as: 'override' }, 'a', new A())
+			.state('override', 'a', new A())
 
-		expect(app.store.a.i).toBe(1)
+		expect(app['~ext']?.store?.a.i).toBe(1)
 	})
 
 	it('override nested object deduplication using name', async () => {
@@ -188,14 +184,14 @@ describe('State', () => {
 					world: 'Tako'
 				}
 			})
-			.state({ as: 'override' }, 'a', {
+			.state('override', 'a', {
 				hello: {
 					world: 'Ina',
 					cookie: 'wah!'
 				}
 			})
 
-		expect(app.store.a.hello).toEqual({
+		expect(app['~ext']?.store?.a.hello).toEqual({
 			world: 'Ina',
 			cookie: 'wah!'
 		})
@@ -208,19 +204,36 @@ describe('State', () => {
 					world: 'Tako'
 				}
 			})
-			.state(
-				{ as: 'override' },
-				{
-					hello: {
-						world: 'Ina',
-						cookie: 'wah!'
-					}
+			.state('override', {
+				hello: {
+					world: 'Ina',
+					cookie: 'wah!'
 				}
-			)
+			})
 
-		expect(app.store.hello).toEqual({
+		expect(app['~ext']?.store?.hello).toEqual({
 			world: 'Ina',
 			cookie: 'wah!'
+		})
+	})
+
+	it('explicit append primitive does not overwrite', async () => {
+		const app = new Elysia()
+			.state('name', 'Ina')
+			.state('append', 'name', 'Tako')
+
+		expect(app['~ext']?.store?.name).toBe('Ina')
+	})
+
+	it('explicit append object preserves existing keys', async () => {
+		const app = new Elysia()
+			.state({ name: 'Ina', job: 'artist' })
+			.state('append', { name: 'Fubuki', team: 'hololive' })
+
+		expect(app['~ext']?.store).toEqual({
+			name: 'Ina',
+			job: 'artist',
+			team: 'hololive'
 		})
 	})
 })

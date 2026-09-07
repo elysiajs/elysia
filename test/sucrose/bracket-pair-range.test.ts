@@ -57,12 +57,6 @@ describe('bracket pair range', () => {
 		expect(result).toEqual([7, 23])
 	})
 
-	it('return the correct range when given a string with nested bracket pairs', () => {
-		const parameter = 'hello: { world: { a } }, elysia'
-		const result = bracketPairRange(parameter)
-		expect(result).toEqual([7, 23])
-	})
-
 	it('return the correct range when given a string with non-bracket characters', () => {
 		const parameter = 'hello: { world: { a } }, elysia'
 		const result = bracketPairRange(parameter)

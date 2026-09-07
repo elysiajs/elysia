@@ -1,12 +1,12 @@
-import { Elysia, t } from '../../src'
+import { Elysia, ParseError, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { post } from '../utils'
+import { post, json } from '../utils'
 
 describe('Parser', () => {
 	it('handle onParse', async () => {
 		const app = new Elysia()
-			.onParse((context, contentType) => {
+			.parse(({ contentType }) => {
 				switch (contentType) {
 					case 'application/Elysia':
 						return 'A'
@@ -25,36 +25,12 @@ describe('Parser', () => {
 			})
 		)
 
-		expect(await res.text()).toBe('A')
-	})
-
-	it('register using on', async () => {
-		const app = new Elysia()
-			.on('parse', (context, contentType) => {
-				switch (contentType) {
-					case 'application/Elysia':
-						return context.request.text()
-				}
-			})
-			.post('/', ({ body }) => body)
-
-		const res = await app.handle(
-			new Request('http://localhost/', {
-				method: 'POST',
-				body: ':D',
-				headers: {
-					'content-type': 'application/Elysia',
-					'content-length': '2'
-				}
-			})
-		)
-
-		expect(await res.text()).toBe(':D')
+		await expect(res.text()).resolves.toBe('A')
 	})
 
 	it('overwrite default parser', async () => {
 		const app = new Elysia()
-			.onParse((context, contentType) => {
+			.parse(({ contentType }) => {
 				switch (contentType) {
 					case 'text/plain':
 						return 'Overwrited'
@@ -73,7 +49,7 @@ describe('Parser', () => {
 			})
 		)
 
-		expect(await res.text()).toBe('Overwrited')
+		await expect(res.text()).resolves.toBe('Overwrited')
 	})
 
 	it('parse x-www-form-urlencoded', async () => {
@@ -94,7 +70,26 @@ describe('Parser', () => {
 			})
 		)
 
-		expect(await res.json()).toEqual(body)
+		await expect(res.json()).resolves.toEqual(body)
+	})
+
+	it('does not parse application/xml as urlencoded', async () => {
+		const app = new Elysia().post('/', ({ body }) => ({
+			type: typeof body,
+			isObject: !!body && typeof body === 'object'
+		}))
+
+		const res = (await app
+			.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					body: '<root><a>1</a></root>',
+					headers: { 'content-type': 'application/xml' }
+				})
+			)
+			.then((r) => r.json())) as { type: string; isObject: boolean }
+
+		expect(res.isObject).toBe(false)
 	})
 
 	it('parse with extra content-type attribute', async () => {
@@ -115,15 +110,19 @@ describe('Parser', () => {
 			})
 		)
 
-		expect(await res.json()).toEqual(body)
+		await expect(res.json()).resolves.toEqual(body)
 	})
 
 	it('inline parse', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			parse({ request }) {
-				return request.text().then(() => 'hi')
-			}
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				parse({ request }) {
+					return request.text().then(() => 'hi')
+				}
+			},
+			({ body }) => body
+		)
 
 		const res = await app
 			.handle(
@@ -144,35 +143,35 @@ describe('Parser', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.onParse({ as: 'global' }, ({ path }) => {
+			.parse('global', ({ path }) => {
 				order.push('A')
 			})
-			.onParse({ as: 'global' }, ({ path }) => {
+			.parse('global', ({ path }) => {
 				order.push('B')
 			})
 			.post('/', ({ body }) => 'NOOP')
 
-		const res = await app.handle(post('/', {}))
+		const res = await app.handle('/', json({}))
 
 		expect(order).toEqual(['A', 'B'])
 	})
 
 	it('inherits plugin', async () => {
-		const plugin = new Elysia().onParse({ as: 'global' }, () => 'Kozeki Ui')
+		const plugin = new Elysia().parse('global', () => 'Kozeki Ui')
 
 		const app = new Elysia().use(plugin).post('/', ({ body }) => body)
 
-		const res = await app.handle(post('/', {})).then((t) => t.text())
+		const res = await app.handle('/', json({})).then((t) => t.text())
 		expect(res).toBe('Kozeki Ui')
 	})
 
 	it('not inherits plugin on local', async () => {
-		const plugin = new Elysia().onParse(() => 'Kozeki Ui')
+		const plugin = new Elysia().parse(() => 'Kozeki Ui')
 
 		const app = new Elysia().use(plugin).post('/', ({ body }) => body)
 
 		const res = await app
-			.handle(post('/', { name: 'Kozeki Ui' }))
+			.handle('/', json({ name: 'Kozeki Ui' }))
 			.then((t) => t.json())
 
 		expect(res).toEqual({ name: 'Kozeki Ui' })
@@ -182,7 +181,7 @@ describe('Parser', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onParse({ as: 'global' }, ({ path }) => {
+			.parse('global', ({ path }) => {
 				called.push(path)
 			})
 			.post('/inner', () => 'NOOP')
@@ -190,8 +189,8 @@ describe('Parser', () => {
 		const app = new Elysia().use(plugin).post('/outer', () => 'NOOP')
 
 		const res = await Promise.all([
-			app.handle(post('/inner', {})),
-			app.handle(post('/outer', {}))
+			app.handle('/inner', json({})),
+			app.handle('/outer', json({}))
 		])
 
 		expect(called).toEqual(['/inner', '/outer'])
@@ -201,7 +200,7 @@ describe('Parser', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onParse({ as: 'local' }, ({ path }) => {
+			.parse('local', ({ path }) => {
 				called.push(path)
 			})
 			.post('/inner', () => 'NOOP')
@@ -209,8 +208,8 @@ describe('Parser', () => {
 		const app = new Elysia().use(plugin).post('/outer', () => 'NOOP')
 
 		const res = await Promise.all([
-			app.handle(post('/inner', {})),
-			app.handle(post('/outer', {}))
+			app.handle('/inner', json({})),
+			app.handle('/outer', json({}))
 		])
 
 		expect(called).toEqual(['/inner'])
@@ -220,7 +219,7 @@ describe('Parser', () => {
 		let total = 0
 
 		const app = new Elysia()
-			.onParse([
+			.parse([
 				() => {
 					total++
 				},
@@ -230,28 +229,32 @@ describe('Parser', () => {
 			])
 			.post('/', ({ body }) => 'NOOP')
 
-		const res = await app.handle(post('/', {}))
+		const res = await app.handle('/', json({}))
 
 		expect(total).toEqual(2)
 	})
 
 	it('handle type with validator with custom parse', async () => {
-		const app = new Elysia().post('/json', ({ body: { name } }) => name, {
-			body: t.Object({
-				name: t.String()
-			}),
-			parse: [
-				({ contentType }) => {
-					if (contentType === 'custom') return { name: 'Mutsuki' }
-				},
-				'json'
-			]
-		})
+		const app = new Elysia().post(
+			'/json',
+			{
+				body: t.Object({
+					name: t.String()
+				}),
+				parse: [
+					({ contentType }) => {
+						if (contentType === 'custom') return { name: 'Mutsuki' }
+					},
+					'json'
+				]
+			},
+			({ body: { name } }) => name
+		)
 
 		const [correct, incorrect, custom] = await Promise.all([
-			app.handle(post('/json', { name: 'Aru' })).then((x) => x.text()),
+			app.handle('/json', json({ name: 'Aru' })).then((x) => x.text()),
 			app
-				.handle(post('/json', { school: 'Gehenna' }))
+				.handle('/json', json({ school: 'Gehenna' }))
 				.then((x) => x.status),
 			app
 				.handle(
@@ -272,9 +275,13 @@ describe('Parser', () => {
 	})
 
 	it('handle name parser', async () => {
-		const app = new Elysia().post('/json', ({ body }) => body, {
-			parse: ['json']
-		})
+		const app = new Elysia().post(
+			'/json',
+			{
+				parse: ['json']
+			},
+			({ body }) => body
+		)
 
 		const response = await app
 			.handle(
@@ -294,9 +301,13 @@ describe('Parser', () => {
 				if (contentType.startsWith('application/x-elysia'))
 					return { name: 'Eden' }
 			})
-			.post('/json', ({ body }) => body, {
-				parse: ['custom', 'json']
-			})
+			.post(
+				'/json',
+				{
+					parse: ['custom', 'json']
+				},
+				({ body }) => body
+			)
 
 		const response = await Promise.all([
 			app
@@ -329,9 +340,13 @@ describe('Parser', () => {
 				if (contentType.startsWith('application/x-elysia'))
 					return { name: 'Eden' }
 			})
-			.post('/json', ({ body }) => body, {
-				parse: ['custom']
-			})
+			.post(
+				'/json',
+				{
+					parse: ['custom']
+				},
+				({ body }) => body
+			)
 
 		const response = await Promise.all([
 			app
@@ -376,9 +391,13 @@ describe('Parser', () => {
 				if (contentType === 'application/x-elysia-2')
 					return { name: 'Pardofelis' }
 			})
-			.post('/json', ({ body }) => body, {
-				parse: ['custom', 'custom2']
-			})
+			.post(
+				'/json',
+				{
+					parse: ['custom', 'custom2']
+				},
+				({ body }) => body
+			)
 
 		const response = await Promise.all([
 			app
@@ -423,19 +442,47 @@ describe('Parser', () => {
 		])
 	})
 
+	it('honor explicit parser when schema contains File', async () => {
+		const app = new Elysia().post(
+			'/',
+			{
+				parse: 'json',
+				body: t.Object({
+					name: t.String(),
+					file: t.Optional(t.File())
+				})
+			},
+			({ body }) => body
+		)
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name: 'Aru' })
+			})
+		)
+
+		expect(response.status).toBe(200)
+		await expect(response.json()).resolves.toEqual({ name: 'Aru' })
+	})
+
 	it('should get parse error', async () => {
-		let code: string | undefined
+		let parseError = false
 
 		const app = new Elysia()
-			.onError((ctx) => {
-				// @ts-ignore
-				code = ctx.code
+			.error(({ error }) => {
+				parseError = error instanceof ParseError
 			})
-			.post('/', () => '', {
-				body: t.Object({
-					test: t.String()
-				})
-			})
+			.post(
+				'/',
+				{
+					body: t.Object({
+						test: t.String()
+					})
+				},
+				() => ''
+			)
 
 		await app.modules
 
@@ -447,7 +494,33 @@ describe('Parser', () => {
 			})
 		)
 
-		expect(code).toBe('PARSE')
+		expect(parseError).toBe(true)
 		expect(response.status).toBe(400)
+	})
+
+	it('scopes group() parse to the group, not sibling parent routes', async () => {
+		const app = new Elysia()
+			.post('/before', ({ body }) => body)
+			.group('/g', (g) =>
+				g
+					.parse(() => ({ hijacked: true }))
+					.post('/x', ({ body }) => body)
+			)
+			.post('/after', ({ body }) => body)
+
+		const call = (path: string) =>
+			app
+				.handle(
+					new Request('http://localhost' + path, {
+						method: 'POST',
+						headers: { 'content-type': 'application/json' },
+						body: JSON.stringify({ real: 'payload' })
+					})
+				)
+				.then((r) => r.json())
+
+		await expect(call('/g/x')).resolves.toEqual({ hijacked: true })
+		await expect(call('/before')).resolves.toEqual({ real: 'payload' })
+		await expect(call('/after')).resolves.toEqual({ real: 'payload' })
 	})
 })

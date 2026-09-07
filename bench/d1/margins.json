@@ -1,0 +1,337 @@
+[
+	{
+		"fixture": "cold-start",
+		"metric": "spawn-to-first-2xx-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 independent child processes; one real port-0 fetch per block",
+		"owner": "D1",
+		"status": "active",
+		"margin": 0.145
+	},
+	{
+		"fixture": "cold-start",
+		"metric": "import-to-listen-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 independent child processes; import and listen split in each block",
+		"owner": "D1",
+		"status": "active",
+		"margin": 0.155
+	},
+	{
+		"fixture": "http",
+		"metric": "plain-get-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired blocks; 200 timed requests per shape after 50 warmups; real socket",
+		"owner": "D1",
+		"status": "active",
+		"margin": 0.83
+	},
+	{
+		"fixture": "http",
+		"metric": "plain-get-p95-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired blocks; 200 timed requests per shape after 50 warmups; real socket",
+		"owner": "D1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "http",
+		"metric": "plain-get-p99-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired blocks; 200 timed requests per shape after 50 warmups; real socket",
+		"owner": "D1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "http",
+		"metric": "dynamic-param-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired blocks; 200 timed requests per shape after 50 warmups; real socket",
+		"owner": "D1",
+		"status": "active",
+		"margin": 0.15
+	},
+	{
+		"fixture": "http",
+		"metric": "dynamic-param-p95-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired blocks; 200 timed requests per shape after 50 warmups; real socket",
+		"owner": "D1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "http",
+		"metric": "dynamic-param-p99-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired blocks; 200 timed requests per shape after 50 warmups; real socket",
+		"owner": "D1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "http",
+		"metric": "validated-json-post-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired blocks; 200 timed requests per shape after 50 warmups; real socket",
+		"owner": "D1",
+		"status": "active",
+		"margin": 0.18
+	},
+	{
+		"fixture": "http",
+		"metric": "validated-json-post-p95-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired blocks; 200 timed requests per shape after 50 warmups; real socket",
+		"owner": "D1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "http",
+		"metric": "validated-json-post-p99-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired blocks; 200 timed requests per shape after 50 warmups; real socket",
+		"owner": "D1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "http",
+		"metric": "coerced-query-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired blocks; 200 timed requests per shape after 50 warmups; real socket",
+		"owner": "D1",
+		"status": "active",
+		"margin": 0.205
+	},
+	{
+		"fixture": "http",
+		"metric": "coerced-query-p95-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired blocks; 200 timed requests per shape after 50 warmups; real socket",
+		"owner": "D1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "http",
+		"metric": "coerced-query-p99-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired blocks; 200 timed requests per shape after 50 warmups; real socket",
+		"owner": "D1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "http",
+		"metric": "cookie-read-write-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired blocks; 200 timed requests per shape after 50 warmups; real socket",
+		"owner": "D1",
+		"status": "active",
+		"margin": 0.205
+	},
+	{
+		"fixture": "http",
+		"metric": "cookie-read-write-p95-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired blocks; 200 timed requests per shape after 50 warmups; real socket",
+		"owner": "D1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "http",
+		"metric": "cookie-read-write-p99-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired blocks; 200 timed requests per shape after 50 warmups; real socket",
+		"owner": "D1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "http",
+		"metric": "mixed-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired blocks; 200 timed requests per shape after 50 warmups; real socket",
+		"owner": "D1",
+		"status": "active",
+		"margin": 0.185
+	},
+	{
+		"fixture": "http",
+		"metric": "mixed-p95-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired blocks; 200 timed requests per shape after 50 warmups; real socket",
+		"owner": "D1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "http",
+		"metric": "mixed-p99-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 paired blocks; 200 timed requests per shape after 50 warmups; real socket",
+		"owner": "D1",
+		"status": "report-only",
+		"margin": null
+	},
+	{
+		"fixture": "default-headers",
+		"metric": "default-headers-p50-ns",
+		"kind": "timing",
+		"direction": "lower",
+		"sampleRule": "8 independent child processes; 200 body-consumed real-socket requests after 50 warmups; immutable app-default header verified on every response",
+		"owner": "C1",
+		"status": "pending-floor",
+		"margin": null
+	},
+	{
+		"fixture": "default-headers",
+		"metric": "retained-rss-slope-bytes-per-request",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 independent child processes; full GC before a 20000-request allocator warmup; RSS snapshots across four 10000-request body-consumed blocks; absolute least-squares slope with a 1-byte reporting floor",
+		"owner": "C1",
+		"status": "pending-floor",
+		"margin": null
+	},
+	{
+		"fixture": "compile-memory",
+		"metric": "build-highwater-bytes-per-route",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 independent child processes; 1000 routes; child-lifetime maxRSS high-water",
+		"owner": "D1",
+		"status": "active",
+		"margin": 0.06
+	},
+	{
+		"fixture": "compile-memory",
+		"metric": "post-gc-current-bytes-per-route",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 independent child processes; 1000 routes; full GC before post-build snapshot",
+		"owner": "D1",
+		"status": "active",
+		"margin": 0.06
+	},
+	{
+		"fixture": "retained",
+		"metric": "retained-current-bytes-per-route",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 independent clean child processes; 1000 routes; full GC before snapshot",
+		"owner": "D1",
+		"status": "active",
+		"margin": 0.105
+	},
+	{
+		"fixture": "retained",
+		"metric": "retained-heap-size-bytes-per-route",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 independent clean child processes; 1000 routes; full GC before snapshot",
+		"owner": "D1",
+		"status": "active",
+		"margin": 0.05
+	},
+	{
+		"fixture": "retained",
+		"metric": "retained-extra-memory-bytes-per-route",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 independent clean child processes; 1000 routes; full GC before snapshot",
+		"owner": "D1",
+		"status": "active",
+		"margin": 0.05
+	},
+	{
+		"fixture": "retained",
+		"metric": "retained-rss-bytes-per-route",
+		"kind": "memory",
+		"direction": "lower",
+		"sampleRule": "8 independent clean child processes; 1000 routes; full GC before snapshot",
+		"owner": "D1",
+		"status": "active",
+		"margin": 0.105
+	},
+	{
+		"fixture": "executables",
+		"metric": "Structure",
+		"kind": "count",
+		"direction": "equal",
+		"sampleRule": "8 independent clean child processes; 1000 routes; build, warm six route classes, full GC",
+		"owner": "D1",
+		"status": "active",
+		"margin": 0,
+		"tolerance": 1
+	},
+	{
+		"fixture": "executables",
+		"metric": "FunctionExecutable",
+		"kind": "count",
+		"direction": "equal",
+		"sampleRule": "8 independent clean child processes; 1000 routes; build, warm six route classes, full GC",
+		"owner": "D1",
+		"status": "active",
+		"margin": 0,
+		"tolerance": 0
+	},
+	{
+		"fixture": "executables",
+		"metric": "FunctionCodeBlock",
+		"kind": "count",
+		"direction": "equal",
+		"sampleRule": "8 independent clean child processes; 1000 routes; build, warm six route classes, full GC",
+		"owner": "D1",
+		"status": "active",
+		"margin": 0,
+		"tolerance": 1
+	},
+	{
+		"fixture": "executables",
+		"metric": "UnlinkedFunctionExecutable",
+		"kind": "count",
+		"direction": "equal",
+		"sampleRule": "8 independent clean child processes; 1000 routes; build, warm six route classes, full GC",
+		"owner": "D1",
+		"status": "active",
+		"margin": 0,
+		"tolerance": 0
+	},
+	{
+		"fixture": "native-table",
+		"metric": "promoted-routes",
+		"kind": "count",
+		"direction": "equal",
+		"sampleRule": "8 independent child processes; 1000 pure-literal static routes; native table count plus byte parity",
+		"owner": "D1",
+		"status": "active",
+		"margin": 0,
+		"tolerance": 0
+	}
+]

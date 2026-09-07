@@ -1,0 +1,6 @@
+{
+	"name": "elysia-cf-standalone",
+	"main": "dist-cf/worker.mjs",
+	"compatibility_date": "2025-09-06",
+	"compatibility_flags": ["nodejs_compat"]
+}

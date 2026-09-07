@@ -1,7 +1,8 @@
 import { Elysia, t } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
+import { autoHead } from '../../src/plugin/auto-head'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 import z from 'zod'
 
 describe('Edge Case', () => {
@@ -9,9 +10,9 @@ describe('Edge Case', () => {
 		const app = new Elysia()
 			.state('a', 'a')
 			.get('/', ({ store: { a } }) => a)
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
-		expect(await res.text()).toBe('a')
+		await expect(res.text()).resolves.toBe('a')
 	})
 
 	// https://github.com/oven-sh/bun/issues/1523
@@ -22,7 +23,7 @@ describe('Edge Case', () => {
 			return 'hi'
 		})
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 		expect(res.status).toBe(200)
 	})
 
@@ -35,8 +36,8 @@ describe('Edge Case', () => {
 			})
 			.get('/2', () => 'hi')
 
-		const res1 = await app.handle(req('/1'))
-		const res2 = await app.handle(req('/2'))
+		const res1 = await app.handle('/1')
+		const res2 = await app.handle('/2')
 
 		expect(res1.headers.get('x-server')).toBe('Elysia')
 		expect(res2.headers.get('x-server')).toBe(null)
@@ -48,65 +49,39 @@ describe('Edge Case', () => {
 			() => new Promise((resolve) => resolve('h'))
 		)
 
-		const res = await app.handle(req('/')).then((x) => x.text())
+		const res = await app.handle('/').then((x) => x.text())
 		expect(res).toBe('h')
 	})
 
 	it('handle dynamic all method', async () => {
 		const app = new Elysia().all('/all/*', () => 'ALL')
 
-		const res = await app.handle(req('/all/world')).then((x) => x.text())
+		const res = await app.handle('/all/world').then((x) => x.text())
 		expect(res).toBe('ALL')
 	})
-
-	// ? since different runtime expected to have different implementation of new Response
-	// ? we can't handle all the case
-	// it('handle object of class', async () => {
-	// 	class SomeResponse {
-	// 		constructor(public message: string) {}
-	// 	}
-
-	// 	const app = new Elysia().get(
-	// 		'/',
-	// 		() => new SomeResponse('Hello, world!')
-	// 	)
-
-	// 	const res = await app.handle(req('/')).then((x) => x.json())
-	// 	expect(res).toStrictEqual({
-	// 		message: 'Hello, world!'
-	// 	})
-	// })
-
-	// it('handle object of class (async)', async () => {
-	// 	class SomeResponse {
-	// 		constructor(public message: string) {}
-	// 	}
-
-	// 	const app = new Elysia().get('/', async () => {
-	// 		await Bun.sleep(1)
-	// 		return new SomeResponse('Hello, world!')
-	// 	})
-
-	// 	const res = await app.handle(req('/')).then((x) => x.json())
-	// 	expect(res).toStrictEqual({
-	// 		message: 'Hello, world!'
-	// 	})
-	// })
 
 	it('handle strict path and loose path', async () => {
 		const loose = new Elysia().group('/a', (app) =>
 			app.get('/', () => 'Hi')
 		)
 
-		expect(await loose.handle(req('/a')).then((x) => x.status)).toBe(200)
-		expect(await loose.handle(req('/a/')).then((x) => x.status)).toBe(200)
+		await expect(loose.handle('/a').then((x) => x.status)).resolves.toBe(
+			200
+		)
+		await expect(loose.handle('/a/').then((x) => x.status)).resolves.toBe(
+			200
+		)
 
 		const strict = new Elysia({
 			strictPath: true
 		}).group('/a', (app) => app.get('/', () => 'Hi'))
 
-		expect(await strict.handle(req('/a')).then((x) => x.status)).toBe(404)
-		expect(await strict.handle(req('/a/')).then((x) => x.status)).toBe(200)
+		await expect(strict.handle('/a').then((x) => x.status)).resolves.toBe(
+			404
+		)
+		await expect(strict.handle('/a/').then((x) => x.status)).resolves.toBe(
+			200
+		)
 	})
 
 	it('return cookie with file', async () => {
@@ -122,9 +97,7 @@ describe('Edge Case', () => {
 			return kyuukararin
 		})
 
-		const response = await app
-			.handle(req('/'))
-			.then((x) => x.headers.toJSON())
+		const response = await app.handle('/').then((x) => x.headers.toJSON())
 
 		expect(response['set-cookie']).toHaveLength(1)
 		expect(response['content-type']).toBe('video/mp4')
@@ -140,7 +113,7 @@ describe('Edge Case', () => {
 			return kyuukararin
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.headers.get('content-type')).toBe('video/mp4')
 		expect(response.headers.getSetCookie()).toEqual([
@@ -158,10 +131,14 @@ describe('Edge Case', () => {
 			.get('/1', () => '-')
 			.get('/4', () => '4')
 
-		// @ts-expect-error
-		expect(app.routeTree['GET_/0']).toEqual(0)
-		// @ts-expect-error
-		expect(app.routeTree['GET_/4']).toEqual(4)
+		expect(app.history.map((route) => route.path)).toEqual([
+			'/0',
+			'/1',
+			'/2',
+			'/3',
+			'/1',
+			'/4'
+		])
 	})
 
 	it('preserve correct index order of routes if duplicated from plugin', () => {
@@ -176,25 +153,148 @@ describe('Edge Case', () => {
 			.get('/2', () => '2')
 			.use(plugin)
 
-		// @ts-expect-error
-		expect(app.routeTree['GET_/0']).toEqual(0)
-		// @ts-expect-error
-		expect(app.routeTree['GET_/4']).toEqual(4)
+		expect(app.history.map((route) => route.path)).toEqual([
+			'/0',
+			'/1',
+			'/2',
+			'/3',
+			'/1',
+			'/4'
+		])
 	})
 
-	it('get getGlobalRoutes', () => {
+	it('exposes absorbed routes through .routes', () => {
 		const plugin = new Elysia().get('/', () => 'hello')
 
 		const main = new Elysia().use(plugin).get('/2', () => 'hi')
 
-		// @ts-expect-error private property
-		expect(main.getGlobalRoutes().length).toBe(2)
+		expect(main.routes.length).toBe(2)
 	})
 
-	describe('value returned from transform has priority over the default value from schema', () => {
+	it('shares one combine node across routes absorbed under the same chain', async () => {
+		const called: string[] = []
+
+		const inner = new Elysia()
+			.transform(() => {
+				called.push('inner')
+			})
+			.get('/a', () => 'a')
+			.get('/b', () => 'b')
+
+		const mid = new Elysia()
+			.transform(() => {
+				called.push('mid')
+			})
+			.use(inner)
+
+		const app = new Elysia()
+			.transform(() => {
+				called.push('app')
+			})
+			.use(mid)
+
+		const a = app['~routes'].find((route) => route[1] === '/a')!
+		const b = app['~routes'].find((route) => route[1] === '/b')!
+
+		expect(a[6]).toBeDefined()
+		expect(a[6]).toBe(b[6]!)
+
+		const resA = await app.handle('/a')
+		await expect(resA.text()).resolves.toBe('a')
+		const forA = called.splice(0)
+
+		const resB = await app.handle('/b')
+		await expect(resB.text()).resolves.toBe('b')
+		const forB = called.splice(0)
+
+		expect(forB).toEqual(forA)
+		expect(forA.length).toBeGreaterThan(0)
+	})
+
+	// `routes` is recomputed per access (the memo pinned every composed hook
+	// per route for the app's lifetime); the contract is stable CONTENT, not
+	// object identity
+	it('recomputes the routes getter with stable content', () => {
+		const app = new Elysia().get('/a', () => 'a')
+
+		const first = app.routes
+		expect(app.routes).toEqual(first)
+
+		app.get('/b', () => 'b')
+
+		const second = app.routes
+		expect(second).not.toEqual(first)
+		expect(second.length).toBe(2)
+		expect(app.routes).toEqual(second)
+
+		const plugin = new Elysia()
+			.macro({
+				tagged: {
+					transform: () => {}
+				}
+			})
+			.get('/c', { tagged: true }, () => 'c')
+
+		app.use(plugin)
+
+		const third = app.routes
+		expect(third.length).toBe(3)
+		expect(
+			third.find((route) => route.path === '/c')!.hooks.transform!.length
+		).toBe(1)
+
+		app.compile()
+		const fourth = app.routes
+		expect(fourth.map((r) => `${r.method} ${r.path}`)).toEqual(
+			third.map((r) => `${r.method} ${r.path}`)
+		)
+		expect(
+			fourth.find((route) => route.path === '/c')!.hooks.transform!.length
+		).toBe(1)
+	})
+
+	it('keeps routes content stable across a JIT compile', async () => {
+		const app = new Elysia()
+			.use(autoHead())
+			.get('/a', () => 'a')
+			.get('/c/:id', ({ params }) => params.id)
+			.use(websocket())
+			.ws('/ws', { message() {} })
+		await app.modules
+
+		const before = app.routes
+		const beforeSnapshot = before.map((r) => `${r.method} ${r.path}`).sort()
+
+		await app.handle('/a')
+		await app.handle('/c/5')
+		await app.handle(new Request('http://localhost/a', { method: 'HEAD' }))
+
+		const after = app.routes
+
+		expect(after.map((r) => `${r.method} ${r.path}`).sort()).toEqual(
+			beforeSnapshot
+		)
+	})
+
+	it('reading routes is idempotent (no hook duplication)', () => {
+		const plugin = new Elysia().transform(() => {})
+		const app = new Elysia().use(plugin).get(
+			'/',
+			{
+				transform() {}
+			},
+			() => 'hi'
+		)
+
+		const first = app.routes[0].hooks.transform!.length
+
+		expect(app.routes[0].hooks.transform!.length).toBe(first)
+		expect(app.routes[0].hooks.transform!.length).toBe(first)
+	})
+
+	it('value returned from transform has priority over the default value from schema', async () => {
 		const route = new Elysia().get(
 			'/:propParams?',
-			({ params: { propParams } }) => propParams,
 			{
 				params: t.Object({
 					propParams: t.String({
@@ -204,28 +304,17 @@ describe('Edge Case', () => {
 				transform({ params }) {
 					params.propParams = 'params-transform'
 				}
-			}
+			},
+			({ params: { propParams } }) => propParams
 		)
 
-		it('aot is on', async () => {
-			const app = new Elysia().use(route)
+		const app = new Elysia().use(route)
 
-			const response = await app
-				.handle(new Request('http://localhost'))
-				.then((x) => x.text())
+		const response = await app
+			.handle(new Request('http://localhost'))
+			.then((x) => x.text())
 
-			expect(response).toBe('params-transform')
-		})
-
-		it('aot is off', async () => {
-			const app = new Elysia({ aot: false }).use(route)
-
-			const response = await app
-				.handle(new Request('http://localhost'))
-				.then((x) => x.text())
-
-			expect(response).toBe('params-transform')
-		})
+		expect(response).toBe('params-transform')
 	})
 
 	it('handle duplicated static route may cause index conflict correctly', async () => {
@@ -238,8 +327,8 @@ describe('Edge Case', () => {
 		const app = new Elysia({ name: 'main' }).use(Path).use(Module)
 
 		const responses = await Promise.all([
-			app.handle(req('/AB')).then((x) => x.text()),
-			app.handle(req('/BA')).then((x) => x.text())
+			app.handle('/AB').then((x) => x.text()),
+			app.handle('/BA').then((x) => x.text())
 		])
 
 		expect(responses).toEqual(['AB', 'BA'])
@@ -251,6 +340,20 @@ describe('Edge Case', () => {
 		}).get(
 			'/',
 			// @ts-ignore
+			{
+				response: t.Cyclic(
+					{
+						a: t.Object({
+							type: t.String(),
+							data: t.Union([
+								t.Nullable(t.Ref('a')),
+								t.Array(t.Ref('a'))
+							])
+						})
+					},
+					'a'
+				)
+			},
 			() => ({
 				type: 'ok',
 				data: [
@@ -266,18 +369,10 @@ describe('Edge Case', () => {
 						}
 					}
 				]
-			}),
-			{
-				response: t.Recursive((This) =>
-					t.Object({
-						type: t.String(),
-						data: t.Union([t.Nullable(This), t.Array(This)])
-					})
-				)
-			}
+			})
 		)
 
-		const response = await app.handle(req('/')).then((x) => x.json())
+		const response = await app.handle('/').then((x) => x.json())
 
 		expect(response).toEqual({
 			type: 'Elysia',
@@ -297,11 +392,103 @@ describe('Edge Case', () => {
 		})
 	})
 
+	it('sanitize cyclic schema nested in object', async () => {
+		const app = new Elysia({
+			sanitize: (v) => v && 'Elysia'
+		}).get(
+			'/',
+			// @ts-ignore
+			{
+				response: t.Object({
+					wrap: t.Cyclic(
+						{
+							a: t.Object({
+								type: t.String(),
+								data: t.Nullable(t.Ref('a'))
+							})
+						},
+						'a'
+					),
+					extra: t.String()
+				})
+			},
+			() => ({
+				wrap: {
+					type: 'ok',
+					data: { type: 'nested', data: null }
+				},
+				extra: 'untouched-number-free'
+			})
+		)
+
+		const response = await app.handle('/').then((x) => x.json())
+
+		expect(response).toEqual({
+			wrap: {
+				type: 'Elysia',
+				data: { type: 'Elysia', data: null }
+			},
+			extra: 'Elysia'
+		})
+	})
+
+	it('serves an async static response repeatedly', async () => {
+		const app = new Elysia().get('/', Promise.resolve(new Response('hi')))
+
+		const first = await app.handle('/')
+		expect(first.status).toBe(200)
+		await expect(first.text()).resolves.toBe('hi')
+
+		const second = await app.handle('/')
+		expect(second.status).toBe(200)
+		await expect(second.text()).resolves.toBe('hi')
+	})
+
+	it('sanitize cyclic value at arbitrary depth', async () => {
+		let payload: any = { type: 'leaf', data: null }
+		for (let i = 0; i < 12; i++) payload = { type: 'node', data: payload }
+
+		const app = new Elysia({
+			sanitize: (v) => v && 'Elysia'
+		}).get(
+			'/',
+			// @ts-ignore
+			{
+				response: t.Cyclic(
+					{
+						a: t.Object({
+							type: t.String(),
+							data: t.Union([
+								t.Nullable(t.Ref('a')),
+								t.Array(t.Ref('a'))
+							])
+						})
+					},
+					'a'
+				)
+			},
+			() => payload
+		)
+
+		const response = await app.handle('/').then((x) => x.json())
+
+		let node: any = response
+		let depth = 0
+		while (node.data) {
+			expect(node.type).toBe('Elysia')
+			node = node.data
+			depth++
+		}
+
+		expect(depth).toBe(12)
+		expect(node.type).toBe('Elysia')
+	})
+
 	it('clone hooks before mapping it to usable function while compose', async () => {
 		const group = new Elysia()
 			.macro({
 				user: (enabled: true) => ({
-					resolve() {
+					derive() {
 						if (!enabled) return
 
 						return {
@@ -312,13 +499,13 @@ describe('Edge Case', () => {
 			})
 			.get(
 				'/',
+				{
+					user: true
+				},
 				({ user, status }) => {
 					if (!user) return status(401)
 
 					return { hello: 'hanabi' }
-				},
-				{
-					user: true
 				}
 			)
 
@@ -326,7 +513,7 @@ describe('Edge Case', () => {
 			precompile: true
 		}).group('/group', (app) => app.use(group))
 
-		const response = await app.handle(req('/group')).then((x) => x.json())
+		const response = await app.handle('/group').then((x) => x.json())
 
 		expect(response).toEqual({
 			hello: 'hanabi'
@@ -334,11 +521,15 @@ describe('Edge Case', () => {
 	})
 
 	it('decode URI of path parameter', async () => {
-		const api = new Elysia().get('/:id', ({ params }) => params, {
-			params: t.Object({
-				id: t.String()
-			})
-		})
+		const api = new Elysia().get(
+			'/:id',
+			{
+				params: t.Object({
+					id: t.String()
+				})
+			},
+			({ params }) => params
+		)
 
 		const value = await api
 			.handle(new Request('http://localhost:3000/hello world'))
@@ -352,19 +543,19 @@ describe('Edge Case', () => {
 	it('clean non-root additionalProperties', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => ({
-				keys: [{ a: 1, b: 2 }],
-				extra: true
-			}),
 			{
 				response: t.Object(
 					{ keys: t.Array(t.Object({ a: t.Number() })) },
 					{ additionalProperties: true }
 				)
-			}
+			},
+			() => ({
+				keys: [{ a: 1, b: 2 }],
+				extra: true
+			})
 		)
 
-		const value = await app.handle(req('/')).then((x) => x.json())
+		const value = await app.handle('/').then((x) => x.json())
 
 		expect(value).toEqual({
 			keys: [{ a: 1 }],
@@ -381,17 +572,18 @@ describe('Edge Case', () => {
 			},
 			(app) =>
 				app
-					.get('/foo', () => 'bar', { response: { 200: t.String() } })
-					.get('/bar', () => 12, { response: { 200: t.Integer() } })
+					.get('/foo', { response: { 200: t.String() } }, () => 'bar')
+					.get('/bar', { response: { 200: t.Integer() } }, () => 12)
 		)
 
-		const response = await app.handle(req('/foo'))
+		const response = await app.handle('/foo')
 
 		expect(response.status).toBe(200)
 	})
 
 	it('automatically handle HEAD request for GET static path', async () => {
-		const app = new Elysia().get('/', () => 'hello world')
+		const app = new Elysia().use(autoHead()).get('/', () => 'hello world')
+		await app.modules
 
 		const response = await app.handle(
 			new Request('http://localhost', {
@@ -400,13 +592,15 @@ describe('Edge Case', () => {
 		)
 
 		expect(response.status).toBe(200)
-		expect(response.headers.toJSON()).toEqual({
-			'content-length': '11'
-		})
+		expect(response.headers.get('content-length')).toBeNull()
+		await expect(response.text()).resolves.toBe('')
 	})
 
 	it('automatically handle HEAD request for GET dynamic path', async () => {
-		const app = new Elysia().get('/:id', () => 'hello world')
+		const app = new Elysia()
+			.use(autoHead())
+			.get('/:id', () => 'hello world')
+		await app.modules
 
 		const response = await app.handle(
 			new Request('http://localhost/1', {
@@ -415,9 +609,84 @@ describe('Edge Case', () => {
 		)
 
 		expect(response.status).toBe(200)
-		expect(response.headers.toJSON()).toEqual({
-			'content-length': '11'
-		})
+		expect(response.headers.get('content-length')).toBeNull()
+		await expect(response.text()).resolves.toBe('')
+	})
+
+	it('prefers an explicit HEAD route over auto-HEAD for a static GET', async () => {
+		const app = new Elysia()
+			.use(autoHead())
+			.get('/', () => 'hello world')
+			.head('/', ({ set }) => {
+				set.headers['x-source'] = 'manual-head'
+			})
+		await app.modules
+
+		const response = await app.handle(
+			new Request('http://localhost', {
+				method: 'HEAD'
+			})
+		)
+
+		expect(response.status).toBe(200)
+		expect(response.headers.get('x-source')).toBe('manual-head')
+		expect(response.headers.get('content-length')).not.toBe('11')
+	})
+
+	it('prefers an explicit HEAD route over auto-HEAD for a dynamic GET', async () => {
+		const app = new Elysia()
+			.use(autoHead())
+			.get('/:id', () => 'hello world')
+			.head('/:id', ({ set }) => {
+				set.headers['x-source'] = 'manual-head'
+			})
+		await app.modules
+
+		const response = await app.handle(
+			new Request('http://localhost/1', {
+				method: 'HEAD'
+			})
+		)
+
+		expect(response.status).toBe(200)
+		expect(response.headers.get('x-source')).toBe('manual-head')
+	})
+
+	it('auto-HEAD on an infinite-stream GET returns instead of hanging', async () => {
+		const app = new Elysia()
+			.use(autoHead())
+			.get('/stream', async function* () {
+				while (true) {
+					yield 'tick'
+					await new Promise((resolve) => setTimeout(resolve, 1))
+				}
+			})
+		await app.modules
+
+		const result = await Promise.race([
+			app.handle(
+				new Request('http://localhost/stream', { method: 'HEAD' })
+			),
+			new Promise<'TIMEOUT'>((resolve) =>
+				setTimeout(() => resolve('TIMEOUT'), 250)
+			)
+		])
+
+		expect(result).not.toBe('TIMEOUT')
+		expect((result as Response).status).toBe(200)
+		expect((result as Response).body).toBeNull()
+	})
+
+	it('does not auto-register HEAD for GET unless autoHead is enabled', async () => {
+		const app = new Elysia().get('/', () => 'hello world')
+
+		const response = await app.handle(
+			new Request('http://localhost', {
+				method: 'HEAD'
+			})
+		)
+
+		expect(response.status).toBe(404)
 	})
 
 	it('handle arbitrary code execution from cookie', async () => {
@@ -428,18 +697,18 @@ describe('Edge Case', () => {
 			}
 		}).get(
 			'/',
-			(c) =>
-				// @ts-ignore
-				c.q ?? 'safe',
 			{
 				cookie: t.Cookie({
 					foo: t.Optional(t.Any())
 				})
-			}
+			},
+			(c) =>
+				// @ts-ignore
+				c.q ?? 'safe'
 		)
 
 		const response = await app
-			.handle(req('/?name=saltyaom'))
+			.handle('/?name=saltyaom')
 			.then((x) => x.text())
 
 		expect(response).toBe('safe')
@@ -448,26 +717,26 @@ describe('Edge Case', () => {
 	it('prototype pollution from input', () => {
 		const app = new Elysia()
 			.guard({
-				schema: 'standalone',
+				schema: 'merge',
 				body: z.object({
 					data: z.any()
 				})
 			})
 			.post(
 				'/',
-				({ body }) => ({
-					body,
-					win:
-						// @ts-ignore
-						{}.foo
-				}),
 				{
 					body: z.object({
 						data: z.object({
 							messageId: z.string('pollute-me')
 						})
 					})
-				}
+				},
+				({ body }) => ({
+					body,
+					win:
+						// @ts-ignore
+						{}.foo
+				})
 			)
 
 		app.handle(

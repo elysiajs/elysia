@@ -1,0 +1,79 @@
+import { RouteValidator } from '../../validator/route'
+import { compileCookieConfig } from '../../cookie/config'
+import {
+	frozenRootOf,
+	resolvedTraceOf,
+	traceCapabilityRequired
+} from '../../generation'
+import { isBridgeLive } from '../../type/bridge'
+import {
+	buildFrozenRouteValidator,
+	isBridgeNotInitialized
+} from './frozen-validator'
+
+import type { AnyLocalHook, HTTPMethod } from '../../types'
+import type { AnyElysia } from '../../base'
+
+export abstract class Reconstrct {
+	static validator(
+		hook: AnyLocalHook,
+		root: AnyElysia,
+		method: HTTPMethod,
+		path: string,
+		liveOnly: boolean = false
+	) {
+		const frozenRoot = frozenRootOf(root)
+
+		if (!liveOnly && !isBridgeLive()) {
+			const frozen = buildFrozenRouteValidator(hook, root, method, path)
+			if (frozen) return frozen as any
+			// fall through to RouteValidator so the error surfaces as today
+		}
+
+		try {
+			return new RouteValidator(hook, {
+				models: frozenRoot['~ext']?.models,
+				app: root,
+				normalize: frozenRoot['~config']?.normalize,
+				sanitize: frozenRoot['~config']?.sanitize,
+				schemas: hook?.schemas,
+				aot: liveOnly ? undefined : { method, path },
+				// precompile / .compile() ⇒ eager validator JIT (§10.3)
+				eager: frozenRoot['~config']?.precompile
+			})
+		} catch (error) {
+			if (!isBridgeNotInitialized(error)) throw error
+
+			if (liveOnly)
+				throw new Error(
+					'Duplicate route must compile JIT but the TypeBox bridge is not initialized',
+					{ cause: error }
+				)
+
+			const frozen = buildFrozenRouteValidator(hook, root, method, path)
+			if (frozen) return frozen as any
+
+			throw error
+		}
+	}
+
+	static cookie(hook: AnyLocalHook, root: AnyElysia) {
+		return compileCookieConfig(
+			hook?.cookie as any,
+			frozenRootOf(root)['~config']?.cookie as any
+		)
+	}
+
+	// need to be any because of private type error something something
+	static trace(hook: AnyLocalHook, root: AnyElysia): any {
+		const traceHandlers = hook?.trace as any[] | undefined
+		if (!traceHandlers) return
+
+		if (!traceHandlers.length) return traceHandlers
+
+		const provider = resolvedTraceOf(root)
+		if (!provider) throw new Error(traceCapabilityRequired)
+
+		return traceHandlers.map((fn) => provider.createTracer(fn))
+	}
+}

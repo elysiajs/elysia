@@ -1,180 +1,254 @@
-// @ts-nocheck
-import { Elysia, t, status } from '../../../src'
-import { afterEach, describe, expect, it } from 'bun:test'
+import { describe, expect, it } from 'bun:test'
+import { Elysia, t } from '../../../src'
+import { collectStaticRoutes } from '../../../src/adapter/bun'
 
-// These cover the runtime half of native static promotion: a promoted route is
-// installed into Bun's own route table and answered *before* `app.fetch` is
-// reached, so a bypass here is invisible to `app.handle()` and only shows up
-// against a real server.
+describe('Bun native static promotion', () => {
+	it('keeps pure literals promoted by default', async () => {
+		const app = new Elysia().get('/literal', 'literal')
+		const promoted = collectStaticRoutes(app as any)
 
-let server: Elysia | undefined
+		expect(promoted?.['/literal']?.GET).toBeInstanceOf(Response)
+		await expect(promoted!['/literal'].GET.text()).resolves.toBe('literal')
+	})
 
-const listen = (app: Elysia, port: number) => {
-	server = app.listen({ hostname: '127.0.0.1', port })
+	it('keeps primitive literals text/plain when a wrapper blocks promotion', async () => {
+		const app = new Elysia()
+			.headers({ server: 'Elysia' })
+			.wrap((fetch) => fetch)
+			.get('/literal', 'literal')
 
-	return `http://127.0.0.1:${port}`
-}
+		expect(collectStaticRoutes(app as any)).toBeUndefined()
+		app.listen(0)
 
-afterEach(() => {
-	server?.stop()
-	server = undefined
-})
+		try {
+			const response = await fetch(
+				`http://localhost:${app.server!.port}/literal`
+			)
 
-const authorize = ({ request }: any) => {
-	if (request?.headers.get('authorization') !== 'Bearer secret')
-		return status(401, 'DENY')
-}
-
-describe('Bun Native Static Response', () => {
-	// `onRequest` runs before routing, so it is the only place an app can put a
-	// blanket auth or rate limit boundary. A literal route must not be able to
-	// answer around it, whichever order the two were declared in - the hook may
-	// be registered long after the route was already promoted.
-	describe('an app-level request hook guards literal routes', () => {
-		const orders = {
-			'hook before route': () =>
-				new Elysia().onRequest(authorize).get('/secret', 'TOP_SECRET'),
-			'route before hook': () =>
-				new Elysia().get('/secret', 'TOP_SECRET').onRequest(authorize),
-			'hook on parent, route in plugin': () =>
-				new Elysia()
-					.onRequest(authorize)
-					.use(new Elysia().get('/secret', 'TOP_SECRET')),
-			'hook in plugin, route after': () =>
-				new Elysia()
-					.use(new Elysia({ name: 'auth' }).onRequest(authorize))
-					.get('/secret', 'TOP_SECRET')
+			expect(response.headers.get('content-type')).toBe(
+				'text/plain;charset=utf-8'
+			)
+			await expect(response.text()).resolves.toBe('literal')
+		} finally {
+			await app.stop(true)
 		}
+	})
 
-		let port = 8420
+	it('keeps .all() on the JS lane without a later rejection', async () => {
+		const rejections: unknown[] = []
+		const onUnhandled = (error: unknown) => rejections.push(error)
+		process.on('unhandledRejection', onUnhandled)
 
-		for (const [name, build] of Object.entries(orders))
-			it(`reject an unauthorized request - ${name}`, async () => {
-				const url = listen(build(), port++)
+		let app: Elysia | undefined
+		try {
+			expect(() => {
+				app = new Elysia().all('/all', 'all').listen(0)
+			}).not.toThrow()
 
-				const denied = await fetch(`${url}/secret`)
-				expect(denied.status).toBe(401)
-				expect(await denied.text()).toBe('DENY')
-
-				const allowed = await fetch(`${url}/secret`, {
-					headers: { authorization: 'Bearer secret' }
-				})
-				expect(allowed.status).toBe(200)
-				expect(await allowed.text()).toBe('TOP_SECRET')
-			})
-
-		it('treat a literal route exactly like a function route', async () => {
-			const url = listen(
-				new Elysia()
-					.onRequest(authorize)
-					.get('/literal', 'SECRET')
-					.get('/function', () => 'SECRET'),
-				port++
+			await Bun.sleep(20)
+			const response = await fetch(
+				`http://localhost:${app!.server!.port}/all`
 			)
+			await expect(response.text()).resolves.toBe('all')
+			expect(rejections).toEqual([])
+		} finally {
+			process.off('unhandledRejection', onUnhandled)
+			await app?.stop(true)
+		}
+	})
 
-			expect((await fetch(`${url}/literal`)).status).toBe(
-				(await fetch(`${url}/function`)).status
+	it('runs afterResponse on a real request instead of promoting', async () => {
+		let fired = 0
+		const app = new Elysia().get(
+			'/after-response',
+			{
+				afterResponse() {
+					fired++
+				}
+			},
+			'after-response'
+		)
+
+		expect(collectStaticRoutes(app as any)).toBeUndefined()
+		app.listen(0)
+
+		try {
+			const response = await fetch(
+				`http://localhost:${app.server!.port}/after-response`
 			)
-		})
+			await expect(response.text()).resolves.toBe('after-response')
+			await Bun.sleep(0)
+			expect(fired).toBe(1)
+		} finally {
+			await app.stop(true)
+		}
 	})
 
-	// Independent of any hook: a route schema is the only thing validating
-	// headers, query and cookies, and a promoted route skipped all of it.
-	it('enforce a request schema on a literal route with no hook present', async () => {
-		const url = listen(
-			new Elysia()
-				.get('/headers', 'HEADERS', {
-					headers: t.Object({
-						authorization: t.Literal('Bearer secret')
-					})
-				})
-				.get('/query', 'QUERY', {
-					query: t.Object({ id: t.Numeric() })
-				}),
-			8440
+	it('keeps request-dependent handlers on the JS lane', async () => {
+		const app = new Elysia().get('/header', ({ request }) =>
+			request.headers.get('x-value')
 		)
 
-		expect((await fetch(`${url}/headers`)).status).toBe(422)
-		expect((await fetch(`${url}/query`)).status).toBe(422)
+		expect(collectStaticRoutes(app as any)).toBeUndefined()
+		app.listen(0)
 
-		expect(
-			(
-				await fetch(`${url}/headers`, {
-					headers: { authorization: 'Bearer secret' }
-				})
-			).status
-		).toBe(200)
-		expect((await fetch(`${url}/query?id=1`)).status).toBe(200)
+		try {
+			const url = `http://localhost:${app.server!.port}/header`
+			await expect(
+				fetch(url, { headers: { 'x-value': 'one' } }).then((x) =>
+					x.text()
+				)
+			).resolves.toBe('one')
+			await expect(
+				fetch(url, { headers: { 'x-value': 'two' } }).then((x) =>
+					x.text()
+				)
+			).resolves.toBe('two')
+		} finally {
+			await app.stop(true)
+		}
 	})
 
-	// A higher order function wraps `fetch`, so a natively answered route never
-	// reaches it either.
-	it('run a higher order function for a literal route', async () => {
-		let wrapped = 0
-
-		const url = listen(
-			new Elysia()
-				.wrap((fn) => (request) => {
-					wrapped++
-
-					return fn(request)
-				})
-				.get('/', 'Static Content'),
-			8441
+	it('maps request-dependent static output per request', async () => {
+		const app = new Elysia().get(
+			'/mapped-header',
+			{
+				mapResponse({ request }) {
+					return new Response(
+						request.headers.get('x-value') ?? 'missing'
+					)
+				}
+			},
+			'literal'
 		)
 
-		expect(await (await fetch(url)).text()).toBe('Static Content')
-		expect(wrapped).toBe(1)
+		expect(collectStaticRoutes(app as any)).toBeUndefined()
+		app.listen(0)
+
+		try {
+			const url = `http://localhost:${app.server!.port}/mapped-header`
+			await expect(
+				fetch(url, { headers: { 'x-value': 'one' } }).then((x) =>
+					x.text()
+				)
+			).resolves.toBe('one')
+			await expect(
+				fetch(url, { headers: { 'x-value': 'two' } }).then((x) =>
+					x.text()
+				)
+			).resolves.toBe('two')
+		} finally {
+			await app.stop(true)
+		}
 	})
 
-	// Same class as the request hook: `trace` is installed app-wide and may be
-	// registered after the route was already promoted.
-	it('run trace for a literal route registered before it', async () => {
-		let traced = 0
-
-		const url = listen(
-			new Elysia().get('/', 'Static Content').trace(() => {
-				traced++
-			}),
-			8443
-		)
-
-		expect(await (await fetch(url)).text()).toBe('Static Content')
-		expect(traced).toBe(1)
-	})
-
-	// Non-vacuity: the guard must still let an ordinary literal route be served
-	// natively. `onAfterResponse` only runs inside the composed handler, so its
-	// absence for `/literal` - next to its presence for `/function` - is proof
-	// that `/literal` really was answered from the native route table and not
-	// merely that it returned 200.
-	it('keep serving a route natively when nothing can intercept it', async () => {
-		const seen: string[] = []
-
-		const url = listen(
-			new Elysia()
-				.onStart(() => {})
-				.onError(() => {})
-				.onAfterResponse(({ path }) => {
-					seen.push(path)
-				})
-				.get('/literal', 'Static Content', {
-					detail: { summary: 'home' },
-					tags: ['static']
-				})
-				.get('/function', () => 'Dynamic Content'),
-			8442
-		)
-
-		expect(await (await fetch(`${url}/literal`)).text()).toBe(
-			'Static Content'
-		)
-		expect(await (await fetch(`${url}/function`)).text()).toBe(
-			'Dynamic Content'
-		)
+	it('serves synchronous static routes alongside dynamic routes', async () => {
+		const app = new Elysia()
+			.get('/static', 'static-value')
+			.get('/dyn/:id', ({ params: { id } }) => `dyn:${id}`)
+			.listen(0)
 
 		await Bun.sleep(50)
 
-		expect(seen).toEqual(['/function'])
+		const base = `http://localhost:${app.server!.port}`
+		await expect(
+			fetch(`${base}/static`).then((x) => x.text())
+		).resolves.toBe('static-value')
+		await expect(
+			fetch(`${base}/dyn/1`).then((x) => x.text())
+		).resolves.toBe('dyn:1')
+
+		app.stop()
+	})
+
+	it('keeps a dynamic path static-value route on the JS lane', async () => {
+		const app = new Elysia()
+			.get('/user/:id', 'dynamic')
+			.get('/user/me', () => 'me')
+			.get('/health', 'ok')
+
+		// Bun matches `routes` before the fallback `fetch`, so promoting the
+		// dynamic literal would swallow `/user/me`, which is ineligible and
+		// stays on the JS router
+		const promoted = collectStaticRoutes(app as any)
+		expect(promoted?.['/health']?.GET).toBeInstanceOf(Response)
+		expect(promoted?.['/user/:id']).toBeUndefined()
+
+		app.listen(0)
+		await Bun.sleep(50)
+
+		try {
+			const base = `http://localhost:${app.server!.port}`
+			await expect(
+				fetch(`${base}/user/me`).then((x) => x.text())
+			).resolves.toBe('me')
+			await expect(
+				fetch(`${base}/user/1`).then((x) => x.text())
+			).resolves.toBe('dynamic')
+		} finally {
+			await app.stop(true)
+		}
+	})
+
+	it('promotes routes with an error hook — no user code runs, so it can never fire', async () => {
+		let fired = 0
+		const app = new Elysia()
+			.error(() => {
+				fired++
+			})
+			.get('/health', 'ok')
+
+		expect(collectStaticRoutes(app as any)?.['/health']?.GET).toBeInstanceOf(
+			Response
+		)
+
+		app.listen(0)
+		await Bun.sleep(50)
+
+		const base = `http://localhost:${app.server!.port}`
+		const hit = await fetch(`${base}/health`)
+		expect(hit.status).toBe(200)
+		await expect(hit.text()).resolves.toBe('ok')
+		expect(fired).toBe(0)
+
+		expect((await fetch(`${base}/missing`)).status).toBe(404)
+		expect(fired).toBe(1)
+
+		app.stop()
+	})
+
+	it('validates static-value routes with schemas on the JS lane', async () => {
+		const app = new Elysia()
+			.error(() => {})
+			.get('/q', { query: t.Object({ id: t.String() }) }, 'ok')
+			.listen(0)
+
+		await Bun.sleep(50)
+
+		const base = `http://localhost:${app.server!.port}`
+		expect((await fetch(`${base}/q`)).status).toBe(422)
+
+		const valid = await fetch(`${base}/q?id=1`)
+		expect(valid.status).toBe(200)
+		await expect(valid.text()).resolves.toBe('ok')
+
+		app.stop()
+	})
+
+	it('runs mapResponse for static-value routes on the JS lane', async () => {
+		const app = new Elysia()
+			.mapResponse(() => new Response('MAPPED'))
+			.get('/health', 'ok')
+			.listen(0)
+
+		await Bun.sleep(50)
+
+		await expect(
+			fetch(`http://localhost:${app.server!.port}/health`).then((x) =>
+				x.text()
+			)
+		).resolves.toBe('MAPPED')
+
+		app.stop()
 	})
 })

@@ -1,4 +1,4 @@
-import { Serve as BunServe, type Server as BunServer } from 'bun'
+import type { Serve as BunServe, Server as BunServer } from 'bun'
 import type { Equal, MaybePromise } from '../types'
 
 export interface ErrorLike extends Error {
@@ -32,6 +32,7 @@ export interface GenericServeOptions {
 
 	/**
 	 * What is the maximum size of a request body? (in bytes)
+	 *
 	 * @default 1024 * 1024 * 128 // 128MB
 	 */
 	maxRequestBodySize?: number

@@ -2,8 +2,8 @@
 import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { post, req } from '../utils'
-import { hasType } from '../../src/schema'
+import { post } from '../utils'
+import { hasType } from '../schema/has-type'
 
 const payload = { hello: 'world' }
 
@@ -101,9 +101,13 @@ describe('Static code analysis', () => {
 			message: 'Rikuhachima Aru'
 		}
 
-		const app = new Elysia().post('/json', (c) => c.body, {
-			parse: 'json'
-		})
+		const app = new Elysia().post(
+			'/json',
+			{
+				parse: 'json'
+			},
+			(c) => c.body
+		)
 
 		const res = await app.handle(post('/json', body)).then((x) => x.json())
 
@@ -161,19 +165,23 @@ describe('Static code analysis', () => {
 
 		await new Promise((resolve) => setTimeout(resolve, 25))
 
-		const response = await app.handle(req('/')).then((x) => x.text())
+		const response = await app.handle('/').then((x) => x.text())
 
 		expect(response).toBe('hi')
 	})
 
 	it('parse custom parser with schema', async () => {
 		const app = new Elysia()
-			.onParse((request, contentType) => {
+			.parse(({ contentType }) => {
 				if (contentType === 'application/elysia') return 'hi'
 			})
-			.post('/', ({ body }) => body, {
-				body: t.String()
-			})
+			.post(
+				'/',
+				{
+					body: t.String()
+				},
+				({ body }) => body
+			)
 
 		await new Promise((resolve) => setTimeout(resolve, 25))
 
@@ -197,18 +205,18 @@ describe('Static code analysis', () => {
 			.get('/', () => 'Hello Elysia1')
 			.get(
 				'/products',
-				({ query }) =>
-					`pageIndex=${query.pageIndex}; pageSize=${query.pageSize}`,
 				{
 					query: t.Object({
 						pageIndex: t.Numeric(),
 						pageSize: t.Numeric()
 					})
-				}
+				},
+				({ query }) =>
+					`pageIndex=${query.pageIndex}; pageSize=${query.pageSize}`
 			)
 
 		const response = await app
-			.handle(req('/products?pageIndex=1&pageSize=2'))
+			.handle('/products?pageIndex=1&pageSize=2')
 			.then((x) => x.text())
 
 		expect(response).toBe(`pageIndex=1; pageSize=2`)
@@ -231,19 +239,23 @@ describe('Static code analysis', () => {
 	})
 
 	it('handle accurate trie properties', async () => {
-		const app = new Elysia().get('/what', ({ query }) => query, {
-			query: t.Object({
-				stee: t.Optional(t.Literal('on')),
-				mtee: t.Optional(t.Literal('on')),
-				ltee: t.Optional(t.Literal('on')),
-				xltee: t.Optional(t.Literal('on')),
-				xxltee: t.Optional(t.Literal('on')),
-				xxxltee: t.Optional(t.Literal('on'))
-			})
-		})
+		const app = new Elysia().get(
+			'/what',
+			{
+				query: t.Object({
+					stee: t.Optional(t.Literal('on')),
+					mtee: t.Optional(t.Literal('on')),
+					ltee: t.Optional(t.Literal('on')),
+					xltee: t.Optional(t.Literal('on')),
+					xxltee: t.Optional(t.Literal('on')),
+					xxxltee: t.Optional(t.Literal('on'))
+				})
+			},
+			({ query }) => query
+		)
 
 		const response = await app
-			.handle(req('/what?xxltee=on'))
+			.handle('/what?xxltee=on')
 			.then((x) => x.json())
 
 		expect(response).toEqual({

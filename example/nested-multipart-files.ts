@@ -17,13 +17,6 @@ const app = new Elysia()
 	// Basic nested file upload
 	.post(
 		'/user/profile',
-		({ body }) => ({
-			message: 'Profile created!',
-			user: {
-				name: body.user.name,
-				avatarSize: body.user.avatar.size
-			}
-		}),
 		{
 			body: t.Object({
 				user: t.Object({
@@ -31,16 +24,19 @@ const app = new Elysia()
 					avatar: t.File()
 				})
 			})
-		}
+		},
+		({ body }) => ({
+			message: 'Profile created!',
+			user: {
+				name: body.user.name,
+				avatarSize: body.user.avatar.size
+			}
+		})
 	)
 
 	// Deeply nested files
 	.post(
 		'/user/portfolio',
-		({ body }) => ({
-			bio: body.user.profile.bio,
-			photoCount: body.user.profile.photos.length
-		}),
 		{
 			body: t.Object({
 				user: t.Object({
@@ -50,17 +46,16 @@ const app = new Elysia()
 					})
 				})
 			})
-		}
+		},
+		({ body }) => ({
+			bio: body.user.profile.bio,
+			photoCount: body.user.profile.photos.length
+		})
 	)
 
 	// Mixed flat and nested fields
 	.post(
 		'/post',
-		({ body }) => ({
-			title: body.title,
-			authorName: body.author.name,
-			imageSize: body.author.avatar.size
-		}),
 		{
 			body: t.Object({
 				title: t.String(),
@@ -69,11 +64,18 @@ const app = new Elysia()
 					avatar: t.File()
 				})
 			})
-		}
+		},
+		({ body }) => ({
+			title: body.title,
+			authorName: body.author.name,
+			imageSize: body.author.avatar.size
+		})
 	)
 	.listen(3000)
 
-console.log(`🦊 Server running at http://${app.server?.hostname}:${app.server?.port}`)
+console.log(
+	`🦊 Server running at http://${app.server?.hostname}:${app.server?.port}`
+)
 
 /**
  * Client-side usage (with fetch):

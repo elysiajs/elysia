@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
-import { req } from '../utils'
 
 describe('Decorate', () => {
 	it('decorate primitive', async () => {
@@ -9,7 +8,7 @@ describe('Decorate', () => {
 			.decorate('name', 'Ina')
 			.decorate('name', 'Tako')
 
-		expect(app.decorator.name).toBe('Ina')
+		expect(app['~ext']?.decorator?.name).toBe('Ina')
 	})
 
 	it('decorate multiple', async () => {
@@ -17,7 +16,7 @@ describe('Decorate', () => {
 			.decorate('name', 'Ina')
 			.decorate('job', 'artist')
 
-		expect(app.decorator).toEqual({
+		expect(app['~ext']?.decorator).toEqual({
 			name: 'Ina',
 			job: 'artist'
 		})
@@ -29,11 +28,11 @@ describe('Decorate', () => {
 				name: 'Ina',
 				job: 'artist'
 			})
-			.decorate({ as: 'override' }, {
+			.decorate('override', {
 				name: 'Fubuki'
 			})
 
-		expect(app.decorator).toEqual({
+		expect(app['~ext']?.decorator).toEqual({
 			name: 'Fubuki',
 			job: 'artist'
 		})
@@ -50,7 +49,7 @@ describe('Decorate', () => {
 				job: 'streamer'
 			}))
 
-		expect(app.decorator).toEqual({
+		expect(app['~ext']?.decorator).toEqual({
 			name: 'Ina',
 			job: 'streamer'
 		})
@@ -61,7 +60,7 @@ describe('Decorate', () => {
 
 		const app = new Elysia().use(plugin()).get('/', ({ hi }) => hi())
 
-		const res = await app.handle(req('/')).then((r) => r.text())
+		const res = await app.handle('/').then((r) => r.text())
 		expect(res).toBe('hi')
 	})
 
@@ -70,7 +69,7 @@ describe('Decorate', () => {
 
 		const app = new Elysia().use(plugin).get('/', ({ hi }) => hi())
 
-		const res = await app.handle(req('/')).then((r) => r.text())
+		const res = await app.handle('/').then((r) => r.text())
 		expect(res).toBe('hi')
 	})
 
@@ -81,7 +80,7 @@ describe('Decorate', () => {
 			}
 		})
 
-		expect(app.decorator.hi.there.hello).toBe('world')
+		expect(app['~ext']?.decorator?.hi.there.hello).toBe('world')
 	})
 
 	it('remap', async () => {
@@ -93,7 +92,7 @@ describe('Decorate', () => {
 				job: 'vtuber'
 			}))
 
-		expect(app.decorator.job).toBe('vtuber')
+		expect(app['~ext']?.decorator?.job).toBe('vtuber')
 	})
 
 	it('handle class deduplication', async () => {
@@ -109,7 +108,7 @@ describe('Decorate', () => {
 
 		const app = new Elysia().decorate('a', new A()).decorate('a', new A())
 
-		expect(app.decorator.a.i).toBe(0)
+		expect(app['~ext']?.decorator?.a.i).toBe(0)
 	})
 
 	it('handle nested object deduplication', async () => {
@@ -126,7 +125,7 @@ describe('Decorate', () => {
 				}
 			})
 
-		expect(app.decorator).toEqual({
+		expect(app['~ext']?.decorator).toEqual({
 			a: {
 				hello: {
 					world: 'Tako',
@@ -139,9 +138,9 @@ describe('Decorate', () => {
 	it('override primitive', async () => {
 		const app = new Elysia()
 			.decorate('name', 'Ina')
-			.decorate({ as: 'override' }, 'name', 'Tako')
+			.decorate('override', 'name', 'Tako')
 
-		expect(app.decorator.name).toBe('Tako')
+		expect(app['~ext']?.decorator?.name).toBe('Tako')
 	})
 
 	it('override object', async () => {
@@ -150,14 +149,11 @@ describe('Decorate', () => {
 				name: 'Ina',
 				job: 'artist'
 			})
-			.decorate(
-				{ as: 'override' },
-				{
-					name: 'Fubuki'
-				}
-			)
+			.decorate('override', {
+				name: 'Fubuki'
+			})
 
-		expect(app.decorator).toEqual({
+		expect(app['~ext']?.decorator).toEqual({
 			name: 'Fubuki',
 			job: 'artist'
 		})
@@ -176,9 +172,9 @@ describe('Decorate', () => {
 
 		const app = new Elysia()
 			.decorate('a', new A())
-			.decorate({ as: 'override' }, 'a', new A())
+			.decorate('override', 'a', new A())
 
-		expect(app.decorator.a.i).toBe(1)
+		expect(app['~ext']?.decorator?.a.i).toBe(1)
 	})
 
 	it('override nested object deduplication using name', async () => {
@@ -188,14 +184,14 @@ describe('Decorate', () => {
 					world: 'Tako'
 				}
 			})
-			.decorate({ as: 'override' }, 'a', {
+			.decorate('override', 'a', {
 				hello: {
 					world: 'Ina',
 					cookie: 'wah!'
 				}
 			})
 
-		expect(app.decorator.a.hello).toEqual({
+		expect(app['~ext']?.decorator?.a.hello).toEqual({
 			world: 'Ina',
 			cookie: 'wah!'
 		})
@@ -208,26 +204,42 @@ describe('Decorate', () => {
 					world: 'Tako'
 				}
 			})
-			.decorate(
-				{ as: 'override' },
-				{
-					hello: {
-						world: 'Ina',
-						cookie: 'wah!'
-					}
+			.decorate('override', {
+				hello: {
+					world: 'Ina',
+					cookie: 'wah!'
 				}
-			)
+			})
 
-		expect(app.decorator.hello).toEqual({
+		expect(app['~ext']?.decorator?.hello).toEqual({
 			world: 'Ina',
 			cookie: 'wah!'
 		})
 	})
 
 	it('handle escaped name', async () => {
-		const app = new Elysia()
-			.decorate('name ina', 'Ina')
+		const app = new Elysia().decorate('name ina', 'Ina')
 
-		expect(app.decorator['name ina']).toBe('Ina')
+		expect(app['~ext']?.decorator?.['name ina']).toBe('Ina')
+	})
+
+	it('explicit append primitive does not overwrite', async () => {
+		const app = new Elysia()
+			.decorate('name', 'Ina')
+			.decorate('append', 'name', 'Tako')
+
+		expect(app['~ext']?.decorator?.name).toBe('Ina')
+	})
+
+	it('explicit append object preserves existing keys', async () => {
+		const app = new Elysia()
+			.decorate({ name: 'Ina', job: 'artist' })
+			.decorate('append', { name: 'Fubuki', team: 'hololive' })
+
+		expect(app['~ext']?.decorator).toEqual({
+			name: 'Ina',
+			job: 'artist',
+			team: 'hololive'
+		})
 	})
 })

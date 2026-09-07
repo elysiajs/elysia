@@ -1,14 +1,36 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Cookie, Elysia, t } from '../../../src'
+import { Elysia, t } from '../../../src'
 
 import z from 'zod'
 
 import { expectTypeOf } from 'expect-type'
+import { Cookie } from '../../../src/cookie'
 
 // ? handle standard schema
 {
 	new Elysia().post(
 		'/:name',
+		{
+			body: z.object({
+				name: z.literal('fouco').or(z.literal('lilith'))
+			}),
+			query: z.object({
+				name: z.literal('fouco').or(z.literal('lilith'))
+			}),
+			params: z.object({
+				name: z.literal('fouco').or(z.literal('lilith'))
+			}),
+			headers: z.object({
+				name: z.literal('fouco').or(z.literal('lilith'))
+			}),
+			cookie: z.object({
+				name: z.literal('fouco').or(z.literal('lilith'))
+			}),
+			response: {
+				404: z.literal('lilith'),
+				418: z.literal('fouco')
+			}
+		},
 		({
 			params,
 			params: { name },
@@ -49,27 +71,6 @@ import { expectTypeOf } from 'expect-type'
 			return name === 'lilith'
 				? status(404, 'lilith')
 				: status(418, name as any)
-		},
-		{
-			body: z.object({
-				name: z.literal('fouco').or(z.literal('lilith'))
-			}),
-			query: z.object({
-				name: z.literal('fouco').or(z.literal('lilith'))
-			}),
-			params: z.object({
-				name: z.literal('fouco').or(z.literal('lilith'))
-			}),
-			headers: z.object({
-				name: z.literal('fouco').or(z.literal('lilith'))
-			}),
-			cookie: z.object({
-				name: z.literal('fouco').or(z.literal('lilith'))
-			}),
-			response: {
-				404: z.literal('lilith'),
-				418: z.literal('fouco')
-			}
 		}
 	)
 }
@@ -77,16 +78,28 @@ import { expectTypeOf } from 'expect-type'
 // ? handle standard schema single response
 {
 	new Elysia()
-		.get('/lilith', () => 'lilith' as const, {
-			response: z.literal('lilith')
-		})
-		.get('/lilith', 'lilith', {
-			response: z.literal('lilith')
-		})
-		// @ts-expect-error
-		.get('/lilith', () => 'a' as const, {
-			response: z.literal('lilith')
-		})
+		.get(
+			'/lilith',
+			{
+				response: z.literal('lilith')
+			},
+			() => 'lilith' as const
+		)
+		.get(
+			'/lilith',
+			{
+				response: z.literal('lilith')
+			},
+			'lilith'
+		)
+		.get(
+			'/lilith',
+			{
+				response: z.literal('lilith')
+			},
+			// @ts-expect-error the response schema accepts only "lilith"
+			() => 'a' as const
+		)
 }
 
 // ? handle standard schema from reference
@@ -113,6 +126,17 @@ import { expectTypeOf } from 'expect-type'
 		})
 		.post(
 			'/:name',
+			{
+				body: 'body',
+				query: 'query',
+				params: 'params',
+				headers: 'headers',
+				cookie: 'cookie',
+				response: {
+					404: 'response.404',
+					418: 'response.418'
+				}
+			},
 			({
 				params,
 				params: { name },
@@ -153,17 +177,6 @@ import { expectTypeOf } from 'expect-type'
 				return name === 'lilith'
 					? status(404, 'lilith')
 					: status(418, name as any)
-			},
-			{
-				body: 'body',
-				query: 'query',
-				params: 'params',
-				headers: 'headers',
-				cookie: 'cookie',
-				response: {
-					404: 'response.404',
-					418: 'response.418'
-				}
 			}
 		)
 }
@@ -246,30 +259,50 @@ import { expectTypeOf } from 'expect-type'
 				418: z.literal('fouco')
 			}
 		})
-		.get('/lilith', () => 'lilith' as const, {
-			response: z.literal('lilith')
-		})
-		.get('/lilith', 'lilith', {
-			response: z.literal('lilith')
-		})
-		// @ts-expect-error
-		.get('/lilith', () => 'focou' as const, {
-			response: z.literal('lilith')
-		})
-		.get('/fouco', ({ status }) => status(418, 'fouco'), {
-			response: z.literal('lilith')
-		})
-		// @ts-expect-error
-		.get('/fouco', ({ status }) => status(418, 'lilith'), {
-			response: z.literal('lilith')
-		})
+		.get(
+			'/lilith',
+			{
+				response: z.literal('lilith')
+			},
+			() => 'lilith' as const
+		)
+		.get(
+			'/lilith',
+			{
+				response: z.literal('lilith')
+			},
+			'lilith'
+		)
+		.get(
+			'/lilith',
+			{
+				response: z.literal('lilith')
+			},
+			// @ts-expect-error the response schema accepts only "lilith"
+			() => 'focou' as const
+		)
+		.get(
+			'/fouco',
+			{
+				response: z.literal('lilith')
+			},
+			({ status }) => status(418, 'fouco')
+		)
+		.get(
+			'/fouco',
+			{
+				response: z.literal('lilith')
+			},
+			// @ts-expect-error status 418 expects "fouco"
+			({ status }) => status(418, 'lilith')
+		)
 }
 
-// ? merge standalone standard schema
+// ? merge standard schemas
 {
 	new Elysia()
 		.guard({
-			schema: 'standalone',
+			schema: 'merge',
 			body: z.object({
 				name: z.literal('fouco').or(z.literal('lilith'))
 			}),
@@ -296,6 +329,31 @@ import { expectTypeOf } from 'expect-type'
 		})
 		.post(
 			'/:name',
+			{
+				body: t.Object({
+					q: t.UnionEnum(['lilith', 'fouco'])
+				}),
+				query: t.Object({
+					q: t.UnionEnum(['lilith', 'fouco'])
+				}),
+				params: t.Object({
+					q: t.UnionEnum(['lilith', 'fouco'])
+				}),
+				headers: t.Object({
+					q: t.UnionEnum(['lilith', 'fouco'])
+				}),
+				cookie: t.Object({
+					q: t.UnionEnum(['lilith', 'fouco'])
+				}),
+				response: {
+					404: t.Object({
+						q: t.Literal('lilith')
+					}),
+					418: t.Object({
+						q: t.Literal('fouco')
+					})
+				}
+			},
 			({
 				params,
 				params: { name },
@@ -355,40 +413,14 @@ import { expectTypeOf } from 'expect-type'
 							name,
 							q: 'fouco'
 						})
-			},
-			{
-				body: t.Object({
-					q: t.UnionEnum(['lilith', 'fouco'])
-				}),
-				query: t.Object({
-					q: t.UnionEnum(['lilith', 'fouco'])
-				}),
-				params: t.Object({
-					q: t.UnionEnum(['lilith', 'fouco'])
-				}),
-				headers: t.Object({
-					q: t.UnionEnum(['lilith', 'fouco'])
-				}),
-				cookie: t.Object({
-					q: t.UnionEnum(['lilith', 'fouco'])
-				}),
-				response: {
-					404: t.Object({
-						q: t.Literal('lilith')
-					}),
-					418: t.Object({
-						q: t.Literal('fouco')
-					})
-				}
 			}
 		)
 }
 
-// ? merge standalone standard schema from plugin
+// ? merge standard schemas from plugin
 {
-	const plugin = new Elysia().guard({
-		as: 'scoped',
-		schema: 'standalone',
+	const plugin = new Elysia().guard('plugin', {
+		schema: 'merge',
 		body: z.object({
 			name: z.literal('fouco').or(z.literal('lilith'))
 		}),
@@ -416,6 +448,31 @@ import { expectTypeOf } from 'expect-type'
 
 	new Elysia().use(plugin).post(
 		'/:name',
+		{
+			body: t.Object({
+				q: t.UnionEnum(['lilith', 'fouco'])
+			}),
+			query: t.Object({
+				q: t.UnionEnum(['lilith', 'fouco'])
+			}),
+			params: t.Object({
+				q: t.UnionEnum(['lilith', 'fouco'])
+			}),
+			headers: t.Object({
+				q: t.UnionEnum(['lilith', 'fouco'])
+			}),
+			cookie: t.Object({
+				q: t.UnionEnum(['lilith', 'fouco'])
+			}),
+			response: {
+				404: t.Object({
+					q: t.Literal('lilith')
+				}),
+				418: t.Object({
+					q: t.Literal('fouco')
+				})
+			}
+		},
 		({
 			params,
 			params: { name },
@@ -475,31 +532,23 @@ import { expectTypeOf } from 'expect-type'
 						name,
 						q: 'fouco'
 					})
-		},
-		{
-			body: t.Object({
-				q: t.UnionEnum(['lilith', 'fouco'])
-			}),
-			query: t.Object({
-				q: t.UnionEnum(['lilith', 'fouco'])
-			}),
-			params: t.Object({
-				q: t.UnionEnum(['lilith', 'fouco'])
-			}),
-			headers: t.Object({
-				q: t.UnionEnum(['lilith', 'fouco'])
-			}),
-			cookie: t.Object({
-				q: t.UnionEnum(['lilith', 'fouco'])
-			}),
-			response: {
-				404: t.Object({
-					q: t.Literal('lilith')
-				}),
-				418: t.Object({
-					q: t.Literal('fouco')
-				})
-			}
 		}
+	)
+}
+
+// Response handlers return the Standard Schema input type; validation then
+// transforms it to the output type.
+{
+	const strToNum = z.string().transform(Number)
+
+	// The input type is accepted.
+	new Elysia().get('/h14', { response: strToNum }, () => 'hello')
+
+	// The transformed output type is rejected as a handler return.
+	new Elysia().get(
+		'/h14',
+		{ response: strToNum },
+		// @ts-expect-error The transformed number is not valid handler input.
+		() => 42
 	)
 }

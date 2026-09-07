@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'bun:test'
+import type { Static } from 'typebox'
+import { fileTypeFromBlob } from 'file-type'
 import { z } from 'zod'
-import { Elysia, fileType, t, type ValidationError } from '../../src'
+import {
+	Elysia,
+	fileType,
+	setFileTypeDetector,
+	t,
+	type ValidationError
+} from '../../src'
+import { upload } from '../utils'
+
+// The detector is a process-wide global with no default. A whole-suite run only
+// passes because file.test.ts sorts first and leaves one installed; without this
+// every `t.File({ type })` here fails as the wrong type.
+setFileTypeDetector(fileTypeFromBlob)
 
 const variantObject = t.Object({
 	price: t.Number({ minimum: 0 }),
@@ -19,7 +33,7 @@ const postProductModel = t.Object({
 	metadata: t.Object(metadataObject),
 	image: t.File({ type: 'image' })
 })
-type postProductModel = typeof postProductModel.static
+type postProductModel = Static<typeof postProductModel>
 
 const patchProductModel = t.Object({
 	name: t.Optional(t.String()),
@@ -27,7 +41,7 @@ const patchProductModel = t.Object({
 	metadata: t.Optional(t.Object(metadataObject)),
 	image: t.Optional(t.File({ type: 'image' }))
 })
-type patchProductModel = typeof patchProductModel.static
+type patchProductModel = Static<typeof patchProductModel>
 
 const postProductModelComplex = t.Object({
 	name: t.String(),
@@ -35,7 +49,7 @@ const postProductModelComplex = t.Object({
 	metadata: t.ObjectString(metadataObject),
 	image: t.File({ type: 'image' })
 })
-type postProductModelComplex = typeof postProductModelComplex.static
+type postProductModelComplex = Static<typeof postProductModelComplex>
 
 const patchProductModelComplex = t.Object({
 	name: t.Optional(t.String()),
@@ -43,38 +57,42 @@ const patchProductModelComplex = t.Object({
 	metadata: t.Optional(t.ObjectString(metadataObject)),
 	image: t.Optional(t.File({ type: 'image' }))
 })
-type patchProductModelComplex = typeof patchProductModelComplex.static
+type patchProductModelComplex = Static<typeof patchProductModelComplex>
 
 const app = new Elysia()
-	.post('/product', async ({ body, status }) => status('Created', body), {
-		body: postProductModel
-	})
+	.post(
+		'/product',
+		{
+			body: postProductModel
+		},
+		async ({ body, status }) => status('Created', body)
+	)
 	.patch(
 		'/product/:id',
+		{
+			body: patchProductModel
+		},
 		({ body, params }) => ({
 			id: params.id,
 			...body
-		}),
-		{
-			body: patchProductModel
-		}
+		})
 	)
 	.post(
 		'/product-complex',
-		async ({ body, status }) => status('Created', body),
 		{
 			body: postProductModelComplex
-		}
+		},
+		async ({ body, status }) => status('Created', body)
 	)
 	.patch(
 		'/product-complex/:id',
+		{
+			body: patchProductModelComplex
+		},
 		({ body, params }) => ({
 			id: params.id,
 			...body
-		}),
-		{
-			body: patchProductModelComplex
-		}
+		})
 	)
 
 describe('Nested FormData with mandatory bunFile (post operation)', async () => {
@@ -182,8 +200,6 @@ describe('Nested FormData with optionnal file (patch operation)', async () => {
 		const body = new FormData()
 		body.append('name', 'Updated Product')
 		body.append('image', bunFile)
-		// metadata and variants fields are omitted (should be OK since they're optional)
-
 		const response = await app.handle(
 			new Request('http://localhost/product/123', {
 				method: 'PATCH',
@@ -464,8 +480,6 @@ describe('Nested FormData with optional t.ArrayString and t.ObjectString (PATCH 
 		const body = new FormData()
 		body.append('name', 'Updated Product Complex')
 		body.append('image', bunFile)
-		// metadata and variants fields are omitted (should be OK since they're optional)
-
 		const response = await app.handle(
 			new Request('http://localhost/product-complex/456', {
 				method: 'PATCH',
@@ -653,9 +667,13 @@ describe('Model reference with File and nested Object', () => {
 					})
 				})
 			)
-			.post('/user', ({ body }) => body, {
-				body: 'userWithAvatar'
-			})
+			.post(
+				'/user',
+				{
+					body: 'userWithAvatar'
+				},
+				({ body }) => body
+			)
 
 		const formData = new FormData()
 		formData.append('name', 'John')
@@ -683,15 +701,21 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 	const bunFile = Bun.file(bunFilePath6) as File
 
 	it('should handle Zod schema with File and nested object (without manual coercion)', async () => {
-		const app = new Elysia().post('/upload', ({ body }) => body, {
-			body: z.object({
-				name: z.string(),
-				file: z.file().refine((file) => fileType(file, 'image/jpeg')),
-				metadata: z.object({
-					age: z.coerce.number()
+		const app = new Elysia().post(
+			'/upload',
+			{
+				body: z.object({
+					name: z.string(),
+					file: z
+						.file()
+						.refine((file) => fileType(file, 'image/jpeg')),
+					metadata: z.object({
+						age: z.coerce.number()
+					})
 				})
-			})
-		})
+			},
+			({ body }) => body
+		)
 
 		const formData = new FormData()
 		formData.append('name', 'John')
@@ -713,13 +737,43 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 		})
 	})
 
-	it('should handle array JSON strings in FormData', async () => {
-		const app = new Elysia().post('/upload', ({ body }) => body, {
-			body: z.object({
-				file: z.file().refine((file) => fileType(file, 'image/jpeg')),
-				tags: z.array(z.string())
+	it('should reject when async file refine fails', async () => {
+		const app = new Elysia().post(
+			'/upload',
+			{
+				body: z.object({
+					file: z.file().refine((file) => fileType(file, 'image/png'))
+				})
+			},
+			({ body }) => body
+		)
+
+		const formData = new FormData()
+		formData.append('file', bunFile)
+
+		const response = await app.handle(
+			new Request('http://localhost/upload', {
+				method: 'POST',
+				body: formData
 			})
-		})
+		)
+
+		expect(response.status).toBe(422)
+	})
+
+	it('should handle array JSON strings in FormData', async () => {
+		const app = new Elysia().post(
+			'/upload',
+			{
+				body: z.object({
+					file: z
+						.file()
+						.refine((file) => fileType(file, 'image/jpeg')),
+					tags: z.array(z.string())
+				})
+			},
+			({ body }) => body
+		)
 
 		const formData = new FormData()
 		formData.append('file', bunFile)
@@ -742,12 +796,18 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 	})
 
 	it('should keep invalid JSON as string', async () => {
-		const app = new Elysia().post('/upload', ({ body }) => body, {
-			body: z.object({
-				file: z.file().refine((file) => fileType(file, 'image/jpeg')),
-				description: z.string()
-			})
-		})
+		const app = new Elysia().post(
+			'/upload',
+			{
+				body: z.object({
+					file: z
+						.file()
+						.refine((file) => fileType(file, 'image/jpeg')),
+					description: z.string()
+				})
+			},
+			({ body }) => body
+		)
 
 		const formData = new FormData()
 		formData.append('file', bunFile)
@@ -768,12 +828,18 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 	})
 
 	it('should keep plain strings that are not JSON', async () => {
-		const app = new Elysia().post('/upload', ({ body }) => body, {
-			body: z.object({
-				file: z.file().refine((file) => fileType(file, 'image/jpeg')),
-				comment: z.string()
-			})
-		})
+		const app = new Elysia().post(
+			'/upload',
+			{
+				body: z.object({
+					file: z
+						.file()
+						.refine((file) => fileType(file, 'image/jpeg')),
+					comment: z.string()
+				})
+			},
+			({ body }) => body
+		)
 
 		const formData = new FormData()
 		formData.append('file', bunFile)
@@ -794,20 +860,26 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 	})
 
 	it('should handle nested objects in JSON', async () => {
-		const app = new Elysia().post('/upload', ({ body }) => body, {
-			body: z.object({
-				file: z.file().refine((file) => fileType(file, 'image/jpeg')),
-				profile: z.object({
-					user: z.object({
-						name: z.string(),
-						age: z.coerce.number()
-					}),
-					settings: z.object({
-						notifications: z.coerce.boolean()
+		const app = new Elysia().post(
+			'/upload',
+			{
+				body: z.object({
+					file: z
+						.file()
+						.refine((file) => fileType(file, 'image/jpeg')),
+					profile: z.object({
+						user: z.object({
+							name: z.string(),
+							age: z.coerce.number()
+						}),
+						settings: z.object({
+							notifications: z.coerce.boolean()
+						})
 					})
 				})
-			})
-		})
+			},
+			({ body }) => body
+		)
 
 		const formData = new FormData()
 		formData.append('file', bunFile)
@@ -840,26 +912,30 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 	})
 
 	it('should handle Zod schema with optional fields', async () => {
-		const app = new Elysia().post('/upload', ({ body }) => body, {
-			body: z.object({
-				file: z.file().refine((file) => fileType(file, 'image/jpeg')),
-				name: z.string(),
-				description: z.string().optional(),
-				metadata: z
-					.object({
-						category: z.string(),
-						tags: z.array(z.string()).optional(),
-						featured: z.boolean().optional()
-					})
-					.optional()
-			})
-		})
+		const app = new Elysia().post(
+			'/upload',
+			{
+				body: z.object({
+					file: z
+						.file()
+						.refine((file) => fileType(file, 'image/jpeg')),
+					name: z.string(),
+					description: z.string().optional(),
+					metadata: z
+						.object({
+							category: z.string(),
+							tags: z.array(z.string()).optional(),
+							featured: z.boolean().optional()
+						})
+						.optional()
+				})
+			},
+			({ body }) => body
+		)
 
 		const formData = new FormData()
 		formData.append('file', bunFile)
 		formData.append('name', 'Test Product')
-		// Omit optional fields
-
 		const response = await app.handle(
 			new Request('http://localhost/upload', {
 				method: 'POST',
@@ -877,20 +953,26 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 	})
 
 	it('should handle Zod schema with optional fields provided', async () => {
-		const app = new Elysia().post('/upload', ({ body }) => body, {
-			body: z.object({
-				file: z.file().refine((file) => fileType(file, 'image/jpeg')),
-				name: z.string(),
-				description: z.string().optional(),
-				metadata: z
-					.object({
-						category: z.string(),
-						tags: z.array(z.string()).optional(),
-						featured: z.coerce.boolean().optional()
-					})
-					.optional()
-			})
-		})
+		const app = new Elysia().post(
+			'/upload',
+			{
+				body: z.object({
+					file: z
+						.file()
+						.refine((file) => fileType(file, 'image/jpeg')),
+					name: z.string(),
+					description: z.string().optional(),
+					metadata: z
+						.object({
+							category: z.string(),
+							tags: z.array(z.string()).optional(),
+							featured: z.coerce.boolean().optional()
+						})
+						.optional()
+				})
+			},
+			({ body }) => body
+		)
 
 		const formData = new FormData()
 		formData.append('file', bunFile)
@@ -923,5 +1005,174 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 				featured: true
 			}
 		})
+	})
+})
+
+// Multipart is an all-strings transport: a File-bearing schema coerces scalars
+// at its root properties, as query/headers do. A schema without a File is
+// indistinguishable from a JSON body and keeps `coerceBody`'s stricter
+// Number/Boolean rule, so the two lanes diverge on purpose.
+describe('FormData scalar coercion', () => {
+	const scalar = (n: any) =>
+		new Elysia().post(
+			'/',
+			{ body: t.Object({ file: t.File(), n }) },
+			({ body }: any) => ({ n: body.n })
+		)
+
+	it('should coerce Integer alongside a File', async () => {
+		const response = await scalar(t.Integer()).handle(
+			upload('/', { file: 'aris-yuzu.jpg', n: '1' }).request
+		)
+
+		expect(response.status).toBe(200)
+		await expect(response.json()).resolves.toEqual({ n: 1 })
+	})
+
+	it('should coerce Number alongside a File', async () => {
+		const response = await scalar(t.Number()).handle(
+			upload('/', { file: 'aris-yuzu.jpg', n: '1' }).request
+		)
+
+		expect(response.status).toBe(200)
+		await expect(response.json()).resolves.toEqual({ n: 1 })
+	})
+
+	it('should coerce a fractional Number alongside a File', async () => {
+		// `upload` reads any value containing '.' as an image filename
+		const body = new FormData()
+		body.append('file', Bun.file('./test/images/aris-yuzu.jpg'))
+		body.append('n', '1.5')
+
+		const response = await scalar(t.Number()).handle(
+			new Request('http://localhost/', { method: 'POST', body })
+		)
+
+		expect(response.status).toBe(200)
+		await expect(response.json()).resolves.toEqual({ n: 1.5 })
+	})
+
+	it('should coerce Boolean alongside a File', async () => {
+		const response = await scalar(t.Boolean()).handle(
+			upload('/', { file: 'aris-yuzu.jpg', n: 'true' }).request
+		)
+
+		expect(response.status).toBe(200)
+		await expect(response.json()).resolves.toEqual({ n: true })
+	})
+
+	it('should still reject a non-numeric Integer alongside a File', async () => {
+		const response = await scalar(t.Integer()).handle(
+			upload('/', { file: 'aris-yuzu.jpg', n: 'abc' }).request
+		)
+
+		expect(response.status).toBe(422)
+		await expect(response.json()).resolves.toMatchObject({
+			type: 'validation',
+			property: '/n'
+		})
+	})
+
+	it('should still reject a fractional value for Integer alongside a File', async () => {
+		const body = new FormData()
+		body.append('file', Bun.file('./test/images/aris-yuzu.jpg'))
+		body.append('n', '1.5')
+
+		const response = await scalar(t.Integer()).handle(
+			new Request('http://localhost/', { method: 'POST', body })
+		)
+
+		expect(response.status).toBe(422)
+	})
+
+	// `coerceRoot` descends a root property's combinators, so the Number branch
+	// of a union coerces too — the query lane already decodes `?v=1` to a
+	// number, and both lanes carry the same all-strings transport
+	it('should coerce the Number branch of a root union alongside a File, as query does', async () => {
+		const union = () => t.Union([t.Number(), t.String()])
+
+		const withFile = await new Elysia()
+			.post(
+				'/',
+				{ body: t.Object({ file: t.File(), v: union() }) },
+				({ body }: any) => ({ v: body.v })
+			)
+			.handle(upload('/', { file: 'aris-yuzu.jpg', v: '1' }).request)
+
+		expect(withFile.status).toBe(200)
+		await expect(withFile.json()).resolves.toEqual({ v: 1 })
+
+		const query = await new Elysia()
+			.get(
+				'/',
+				{ query: t.Object({ v: union() }) },
+				({ query }: any) => ({
+					v: query.v
+				})
+			)
+			.handle(new Request('http://localhost/?v=1'))
+
+		expect(query.status).toBe(200)
+		await expect(query.json()).resolves.toEqual({ v: 1 })
+	})
+
+	it('should coerce Integer without a File', async () => {
+		const app = new Elysia().post(
+			'/',
+			{ body: t.Object({ n: t.Integer() }) },
+			({ body }) => ({ n: body.n })
+		)
+
+		const response = await app.handle(upload('/', { n: '1' }).request)
+
+		expect(response.status).toBe(200)
+		await expect(response.json()).resolves.toEqual({ n: 1 })
+	})
+
+	// deeper than `coerceRoot` reaches: the unfiltered Integer entry is what
+	// decodes the JSON string's contents, in both lanes
+	it('should coerce a nested Integer sent as a JSON string, with and without a File', async () => {
+		const nested = t.Object({ n: t.Integer() })
+
+		const withFile = await new Elysia()
+			.post(
+				'/',
+				{ body: t.Object({ file: t.File(), meta: nested }) },
+				({ body }: any) => body.meta
+			)
+			.handle(
+				upload('/', {
+					file: 'aris-yuzu.jpg',
+					meta: JSON.stringify({ n: '2' })
+				}).request
+			)
+
+		expect(withFile.status).toBe(200)
+		await expect(withFile.json()).resolves.toEqual({ n: 2 })
+
+		const app = new Elysia().post(
+			'/',
+			{ body: t.Object({ meta: nested }) },
+			({ body }) => body.meta
+		)
+		const withoutFile = await app.handle(
+			upload('/', { meta: JSON.stringify({ n: '2' }) }).request
+		)
+
+		expect(withoutFile.status).toBe(200)
+		await expect(withoutFile.json()).resolves.toEqual({ n: 2 })
+	})
+
+	// pins the divergence: no File is indistinguishable from a JSON body
+	it('should not coerce Number without a File', async () => {
+		const app = new Elysia().post(
+			'/',
+			{ body: t.Object({ n: t.Number() }) },
+			({ body }) => ({ n: body.n })
+		)
+
+		const response = await app.handle(upload('/', { n: '1' }).request)
+
+		expect(response.status).toBe(422)
 	})
 })
