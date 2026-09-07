@@ -367,6 +367,26 @@ describe('Path', () => {
 		expect(options).toBe('Hi')
 	})
 
+	it('handle QUERY method with body', async () => {
+		const app = new Elysia().query(
+			'/search',
+			{ body: t.Object({ q: t.String() }) },
+			({ body }) => body.q
+		)
+
+		const res = await app
+			.handle(
+				new Request('http://localhost/search', {
+					method: 'QUERY',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ q: 'elysia' })
+				})
+			)
+			.then((r) => r.text())
+
+		expect(res).toBe('elysia')
+	})
+
 	it('decode uri', async () => {
 		const app = new Elysia().get('/', ({ query }) => query)
 

@@ -309,6 +309,7 @@ export type HTTPMethod =
 	| 'PROPPATCH'
 	| 'PURGE'
 	| 'PUT'
+	| 'QUERY'
 	| 'REBIND'
 	| 'REPORT'
 	| 'SEARCH'
@@ -760,12 +761,14 @@ export type InlineHandlerNonMacro<
 	Route extends RouteSchema = {},
 	Singleton extends SingletonBase = DefaultSingleton
 > =
-	| MaybePromise<
-			| InlineHandlerResponse<Route['response']>
-			| ({} extends Route['response']
-					? InlineResponse
-					: Route['response'][keyof Route['response']])
-	  >
+	| (Route['response'] extends infer ResponseSchema
+			? {} extends ResponseSchema
+				? MaybePromise<InlineResponse>
+				: MaybePromise<
+						| ResponseSchema[keyof ResponseSchema]
+						| InlineHandlerResponse<ResponseSchema>
+					>
+			: never)
 	| ((context: Context<Route, Singleton>) =>
 			| MaybePromise<Response>
 			| MaybePromise<

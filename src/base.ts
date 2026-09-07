@@ -6327,6 +6327,139 @@ export class Elysia<
 	}
 
 	/**
+	 * ### query
+	 * Register handler for path with method [OPTIONS]
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { Elysia, t } from 'elysia'
+	 *
+	 * new Elysia()
+	 *     .query('/', () => 'hi')
+	 *     .query('/hook', { query: t.Object({ name: t.String() }) }, () => 'hi')
+	 * ```
+	 */
+	query<
+		const Path extends string,
+		const Input extends Metadata['macro'] &
+			InputSchema<keyof Definitions['typebox'] & string>,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				'',
+				undefined extends Input['params'] ? true : false
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
+		>,
+		const Decorator extends Singleton & {
+			derive: Ephemeral['derive'] & Volatile['derive']
+		},
+		const MacroContext extends {} extends Metadata['macroFn']
+			? {}
+			: MacroToContext<
+					Metadata['macroFn'],
+					Omit<Input, NonResolvableMacroKey>,
+					Definitions['typebox']
+				>,
+		const Handle extends {} extends MacroContext
+			? InlineHandlerNonMacro<NoInfer<Schema>, NoInfer<Decorator>>
+			: InlineHandler<
+					NoInfer<Schema>,
+					NoInfer<Decorator>,
+					// @ts-ignore
+					MacroContext
+				>
+	>(
+		path: Path,
+		hook: LocalHook<
+			Input,
+			// @ts-ignore
+			Schema & MacroContext,
+			Decorator,
+			Definitions['error'],
+			keyof Metadata['parser']
+		>,
+		fn: Handle
+	): AddRoute<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		'query',
+		Path,
+		Schema,
+		MacroContext,
+		Handle
+	>
+	query<
+		const Path extends string,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					{},
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				'',
+				true
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
+		>,
+		const Decorator extends Singleton & {
+			derive: Ephemeral['derive'] & Volatile['derive']
+		},
+		const Handle extends InlineHandlerNonMacro<
+			NoInfer<Schema>,
+			NoInfer<Decorator>
+		>
+	>(
+		path: Path,
+		fn: Handle & Metadata['macro']
+	): AddRoute<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		'query',
+		Path,
+		Schema,
+		{},
+		Handle
+	>
+	query(path: string, hookOrFn: unknown, fn?: unknown): any {
+		return this.#add('QUERY', path, hookOrFn, fn)
+	}
+
+	/**
 	 * ### head
 	 * Register handler for path with method [HEAD]
 	 *

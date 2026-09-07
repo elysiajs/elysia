@@ -73,6 +73,7 @@ const listenLane = (
 			const server = (app as any).server
 			if (!server) throw new Error(`[${id}] listen(0) produced no server`)
 			const port: number = server.port
+			const hostname: string = server.hostname
 			const origin = `http://localhost:${port}`
 
 			return {
@@ -96,31 +97,51 @@ const listenLane = (
 				observe,
 				async dispose() {
 					await app.stop(true)
-					await assertPortClosed(id, port)
+					await assertPortClosed(id, hostname, port)
 				}
 			}
 		}
 	}) satisfies LaneFactory
 
-// Retry until the operating system stops accepting connections on the port.
+// Retry until the operating system lets us bind the port again: a leaked
+// listener keeps it bound; a neighbour that briefly reused the port frees it.
+// `app.listen(0)` never passes a hostname to Bun.serve, so the real bind is
+// the IPv4 + IPv6 wildcard ("all interfaces"), even though `server.hostname`
+// only ever reports the cosmetic default label 'localhost'. Probing a
+// loopback address instead of the wildcard never collides with that listener,
+// so re-bind the same wildcard pair the server actually used in that case.
+const wildcardAddresses = ['0.0.0.0', '::']
+
 async function assertPortClosed(
 	id: string,
+	hostname: string,
 	port: number,
-	timeoutMs = 200
+	timeoutMs = 2000
 ): Promise<void> {
+	const candidates = hostname === 'localhost' ? wildcardAddresses : [hostname]
 	const deadline = Date.now() + timeoutMs
 	for (;;) {
-		let accepted = false
-		try {
-			await fetch(`http://localhost:${port}/`, {
-				signal: AbortSignal.timeout(50)
-			})
-			accepted = true
-		} catch {}
-		if (!accepted) return
+		let bound = false
+		for (const candidate of candidates) {
+			try {
+				const probe = Bun.listen({
+					hostname: candidate,
+					port,
+					socket: { data() {} }
+				})
+				probe.stop(true)
+			} catch (error) {
+				if ((error as any)?.code !== 'EADDRINUSE') {
+					if (candidates.length === 1) throw error
+					continue
+				}
+				bound = true
+			}
+		}
+		if (!bound) return
 		if (Date.now() >= deadline)
 			throw new Error(
-				`[${id}] port ${port} still accepts connections after stop(true) — leaked`
+				`[${id}] port ${port} is still bound after stop(true) — leaked`
 			)
 		await new Promise((r) => setTimeout(r, 10))
 	}

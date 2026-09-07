@@ -1,10 +1,10 @@
 import { Elysia, t } from '../src'
 
 new Elysia()
-	.macro({
-		a: () => ({
-			beforeHandle({ request, set }) {
+	.wrap((fn) => async (request) => {
+		const response = await fn(request)
 
-			}
-		})
+		console.log({ request, response })
+
+		return response
 	})
