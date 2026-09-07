@@ -40,89 +40,22 @@ export const WebStandardAdapter: ElysiaAdapter = {
 				return `c.body=await c.request.arrayBuffer()\n`
 			},
 			formData(isOptional) {
-				let fnLiteral = '\nc.body={}\n'
-
 				if (isOptional)
-					fnLiteral += `let form;try{form=await c.request.formData()}catch{}`
-				else fnLiteral += `const form=await c.request.formData()\n`
+					return (
+						'\nc.body={}\n' +
+						`let form;try{form=await c.request.formData()}catch{}\n` +
+						`if(form!==undefined){` +
+						`const fd=parseFormData(form)\n` +
+						`c.body=fd.body\n` +
+						`if(fd.structured!==undefined)c[ELYSIA_STRUCTURED_FORM]=fd.structured` +
+						`}\n`
+					)
 
 				return (
-					fnLiteral +
-					`const dangerousKeys=new Set(['__proto__','constructor','prototype'])\n` +
-					`const isDangerousKey=(k)=>{` +
-					`if(dangerousKeys.has(k))return true;` +
-					`const m=k.match(/^(.+)\\[(\\d+)\\]$/);` +
-					`return m?dangerousKeys.has(m[1]):false` +
-					`}\n` +
-					`const parseArrayKey=(k)=>{` +
-					`const m=k.match(/^(.+)\\[(\\d+)\\]$/);` +
-					`return m?{name:m[1],index:parseInt(m[2],10)}:null` +
-					`}\n` +
-					`const grouped=new Map()\n` +
-					`form.forEach((v,k)=>{const l=grouped.get(k);if(l)l.push(v);else grouped.set(k,[v])})\n` +
-					`for(const [key,value] of grouped){` +
-					`if(c.body[key])continue\n` +
-					`let finalValue\n` +
-    				`if(value.length===1){\n` +
-    				`const sv=value[0]\n` +
-    				`if(typeof sv==='string'&&(sv.charCodeAt(0)===123||sv.charCodeAt(0)===91)){\n` +
-    				`try{\n` +
-    				`const p=JSON.parse(sv)\n` +
-    				`if(p&&typeof p==='object')finalValue=p\n` +
-    				`}catch{}\n` +
-    				`}\n` +
-    				`if(finalValue===undefined)finalValue=sv\n` +
-    				`}else finalValue=value\n` +
-					`if(Array.isArray(finalValue)){\n` +
-					`const stringValue=finalValue.find((entry)=>typeof entry==='string')\n` +
-					`const files=typeof File==='undefined'?[]:finalValue.filter((entry)=>entry instanceof File)\n` +
-					`if(stringValue&&files.length&&stringValue.charCodeAt(0)===123){\n` +
-					`try{\n` +
-					`const parsed=JSON.parse(stringValue)\n` +
-					`if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed)){\n` +
-					`if(!('file' in parsed)&&files.length===1)parsed.file=files[0]\n` +
-					`else if(!('files' in parsed)&&files.length>1)parsed.files=files\n` +
-					`finalValue=parsed\n` +
-					`}\n` +
-					`}catch{}\n` +
-					`}\n` +
-					`}\n` +
-					`if(key.includes('.')||key.includes('[')){` +
-					`const keys=key.split('.')\n` +
-					`const lastKey=keys.pop()\n` +
-					`if(isDangerousKey(lastKey)||keys.some(isDangerousKey))continue\n` +
-					`let current=c.body\n` +
-					`for(const k of keys){` +
-					`const arrayInfo=parseArrayKey(k)\n` +
-					`if(arrayInfo){` +
-					`if(!Array.isArray(current[arrayInfo.name]))current[arrayInfo.name]=[]\n` +
-					`const existing=current[arrayInfo.name][arrayInfo.index]\n` +
-					`const isFile=typeof File!=='undefined'&&existing instanceof File\n` +
-					`if(!existing||typeof existing!=='object'||Array.isArray(existing)||isFile){\n` +
-					`let parsed\n` +
-					`if(typeof existing==='string'&&existing.charCodeAt(0)===123){\n` +
-					`try{` +
-					`parsed=JSON.parse(existing)\n` +
-					`if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))parsed=undefined` +
-					`}catch{}\n` +
-					`}\n` +
-					`current[arrayInfo.name][arrayInfo.index]=parsed||{}\n` +
-					`}\n` +
-					`current=current[arrayInfo.name][arrayInfo.index]` +
-					`}else{` +
-					`if(!current[k]||typeof current[k]!=='object')current[k]={}\n` +
-					`current=current[k]` +
-					`}` +
-					`}\n` +
-					`const arrayInfo=parseArrayKey(lastKey)\n` +
-					`if(arrayInfo){` +
-					`if(!Array.isArray(current[arrayInfo.name]))current[arrayInfo.name]=[]\n` +
-					`current[arrayInfo.name][arrayInfo.index]=finalValue` +
-					`}else{` +
-					`current[lastKey]=finalValue` +
-					`}` +
-					`}else c.body[key]=finalValue` +
-					`}`
+					`\nconst form=await c.request.formData()\n` +
+					`const fd=parseFormData(form)\n` +
+					`c.body=fd.body\n` +
+					`if(fd.structured!==undefined)c[ELYSIA_STRUCTURED_FORM]=fd.structured\n`
 				)
 			}
 		}
