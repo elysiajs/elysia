@@ -28,6 +28,7 @@ import type {
 	InputSchema,
 	IsAny,
 	MaybeArray,
+	MaybePromise,
 	StandaloneInputSchema,
 	StandardSchemaV1LikeValidate,
 	UnwrapSchema
@@ -47,13 +48,14 @@ export interface ElysiaTypeCheck<T extends AnySchema>
 	provider: 'typebox' | 'standard'
 	schema: T
 	config: Object
-	Check(value: unknown): T extends TSchema
-		? boolean
-		:
-				| {
-						value: UnwrapSchema<T>
-				  }
-				| { issues: unknown[] }
+	Check(value: unknown): boolean
+	Validate?(value: unknown): MaybePromise<
+		| {
+				value: UnwrapSchema<T>
+				issues?: never
+		  }
+		| { value?: never; issues: unknown[] }
+	>
 	Clean?(v: unknown): UnwrapSchema<T>
 	parse(v: unknown): UnwrapSchema<T>
 	safeParse(v: unknown):
@@ -606,14 +608,19 @@ export const getSchemaValidator = <T extends AnySchema | string | undefined>(
 				}
 			}
 
-		function Check(
-			value: unknown,
-			validated = false
-		): value is UnwrapSchema<T> {
-			let v = validated ? value : mainCheck.validate(value)
+		function Validate(value: unknown): any {
+			const v = mainCheck.validate(value)
 
 			if (v instanceof Promise)
-				return v.then((v) => Check(v, true)) as any
+				return v.then((resolved) => {
+					if (resolved.issues) return resolved
+
+					const values = <(Record<string, unknown> | unknown[])[]>[]
+					if (resolved && typeof resolved === 'object')
+						values.push(resolved.value)
+
+					return runCheckers(value, 0, values, resolved)
+				})
 
 			if (v.issues) return v
 
@@ -621,6 +628,24 @@ export const getSchemaValidator = <T extends AnySchema | string | undefined>(
 			if (v && typeof v === 'object') values.push(v.value as any)
 
 			return runCheckers(value, 0, values, v)
+		}
+
+		/**
+		 * Boolean-returning validation, matching the TypeBox provider's
+		 * `Check` contract so that `Check(x) === false` is a correct failure
+		 * test for every provider.
+		 *
+		 * Standard Schema allows `~standard.validate` to return a `Promise`,
+		 * which a synchronous boolean cannot represent. Rather than leak a
+		 * (truthy) `Promise` to a caller testing for `false`, this fails
+		 * closed; callers that can await must use {@link Validate}.
+		 */
+		function Check(value: unknown): boolean {
+			const v = Validate(value)
+
+			if (v instanceof Promise) return false
+
+			return !v.issues
 		}
 
 		function runCheckers(
@@ -676,13 +701,13 @@ export const getSchemaValidator = <T extends AnySchema | string | undefined>(
 			references: '',
 			checkFunc: () => {},
 			code: '',
-			// @ts-ignore
 			Check,
+			Validate,
 			// @ts-ignore
-			Errors: (value: unknown) => Check(value)?.then?.((x) => x?.issues),
+			Errors: (value: unknown) => Validate(value)?.then?.((x) => x?.issues),
 			Code: () => '',
 			// @ts-ignore
-			Decode: Check,
+			Decode: Validate,
 			// @ts-ignore
 			Encode: (value: unknown) => value,
 			hasAdditionalProperties: false,

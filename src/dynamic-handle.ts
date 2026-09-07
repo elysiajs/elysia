@@ -43,6 +43,25 @@ const injectDefaultValues = (
 	}
 }
 
+async function validateStandardSchema(
+	type: string,
+	validator: ElysiaTypeCheck<any>,
+	value: unknown
+) {
+	const result = await validator.Validate!(value)
+
+	if (result.issues)
+		throw new ValidationError(
+			type,
+			validator,
+			value,
+			false,
+			result.issues as any
+		)
+
+	return result.value
+}
+
 export const createDynamicHandler = (app: AnyElysia) => {
 	const { mapResponse, mapEarlyResponse } = app['~adapter'].handler
 
@@ -382,7 +401,13 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					for (const [key, value] of request.headers)
 						_header[key] = value
 
-					if (validator.headers!.Check(_header) === false)
+					if (headerValidator.provider === 'standard')
+						context.headers = await validateStandardSchema(
+							'header',
+							headerValidator,
+							_header
+						)
+					else if (validator.headers!.Check(_header) === false)
 						throw new ValidationError(
 							'header',
 							validator.headers!,
@@ -392,7 +417,13 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					// @ts-ignore
 					context.headers = validator.headers.Decode(context.headers)
 
-				if (paramsValidator?.Check(context.params) === false) {
+				if (paramsValidator?.provider === 'standard') {
+					context.params = await validateStandardSchema(
+						'params',
+						paramsValidator,
+						context.params
+					)
+				} else if (paramsValidator?.Check(context.params) === false) {
 					throw new ValidationError(
 						'params',
 						validator.params!,
@@ -426,7 +457,13 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					}
 				}
 
-				if (queryValidator?.Check(context.query) === false)
+				if (queryValidator?.provider === 'standard')
+					context.query = await validateStandardSchema(
+						'query',
+						queryValidator,
+						context.query
+					)
+				else if (queryValidator?.Check(context.query) === false)
 					throw new ValidationError(
 						'query',
 						validator.query!,
@@ -440,7 +477,18 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					for (const [key, value] of Object.entries(context.cookie))
 						cookieValue[key] = value.value
 
-					if (validator.cookie!.Check(cookieValue) === false)
+					if (validator.cookie!.provider === 'standard') {
+						cookieValue = await validateStandardSchema(
+							'cookie',
+							validator.cookie!,
+							cookieValue
+						)
+
+						// Mirrors the AOT path: write the validated values back
+						// into the cookie jar
+						for (const key of Object.keys(cookieValue))
+							context.cookie[key].value = cookieValue[key]
+					} else if (validator.cookie!.Check(cookieValue) === false)
 						throw new ValidationError(
 							'cookie',
 							validator.cookie!,
@@ -454,82 +502,94 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 				const bodyValidator = validator.createBody?.()
 				if (bodyValidator) {
-					let result = bodyValidator.Check(body) as any
-					if (result instanceof Promise) result = await result
+					const isStandard = bodyValidator.provider === 'standard'
+					let isValid = true
+					let errorToThrow: any
 
-					const isFail = (res: any) =>
-						bodyValidator.provider === 'standard'
-							? !!res?.issues
-							: res === false
+					if (isStandard) {
+						try {
+							context.body = body = await validateStandardSchema('body', bodyValidator, body)
+						} catch (e) {
+							isValid = false
+							errorToThrow = e
+						}
+					} else {
+						let result = bodyValidator.Check(body) as any
+						if (result instanceof Promise) result = await result
+						if (result === false) isValid = false
+					}
 
-					if (isFail(result)) {
-						let isValid = false
+					if (!isValid) {
+						let isResolved = false
+
 						if (structuredForm !== undefined) {
-							let structuredResult = bodyValidator.Check(
-								structuredForm
-							) as any
-							if (structuredResult instanceof Promise)
-								structuredResult = await structuredResult
-
-							if (!isFail(structuredResult)) {
-								context.body = body = structuredForm
-								result = structuredResult
-								isValid = true
+							if (isStandard) {
+								try {
+									context.body = body = await validateStandardSchema('body', bodyValidator, structuredForm)
+									isResolved = true
+								} catch (e) {
+									// ignore, try combos
+								}
 							} else {
+								let structuredResult = bodyValidator.Check(structuredForm) as any
+								if (structuredResult instanceof Promise) structuredResult = await structuredResult
+								if (structuredResult !== false) {
+									context.body = body = structuredForm
+									isResolved = true
+								}
+							}
+
+							if (!isResolved) {
 								const bodyObj = body as Record<string, any>
-								const differingKeys = Object.keys(
-									structuredForm
-								).filter(
-									(key) => structuredForm[key] !== bodyObj[key]
-								)
+								const differingKeys = Object.keys(structuredForm).filter((key) => structuredForm[key] !== bodyObj[key])
 								const numCombos = 1 << differingKeys.length
+								
 								if (numCombos <= 16) {
 									for (let i = 1; i < numCombos - 1; i++) {
 										const combo = { ...bodyObj }
-										for (
-											let j = 0;
-											j < differingKeys.length;
-											j++
-										) {
+										for (let j = 0; j < differingKeys.length; j++) {
 											if (i & (1 << j)) {
-												combo[differingKeys[j]] =
-													structuredForm[
-														differingKeys[j]
-													]
+												combo[differingKeys[j]] = structuredForm[differingKeys[j]]
 											}
 										}
-										let comboResult = bodyValidator.Check(
-											combo
-										) as any
-										if (comboResult instanceof Promise)
-											comboResult = await comboResult
-										if (!isFail(comboResult)) {
-											context.body = body = combo
-											result = comboResult
-											isValid = true
-											break
+										
+										if (isStandard) {
+											try {
+												context.body = body = await validateStandardSchema('body', bodyValidator, combo)
+												isResolved = true
+												break
+											} catch (e) {
+												// ignore, try next
+											}
+										} else {
+											let comboResult = bodyValidator.Check(combo) as any
+											if (comboResult instanceof Promise) comboResult = await comboResult
+											if (comboResult !== false) {
+												context.body = body = combo
+												isResolved = true
+												break
+											}
 										}
 									}
 								}
 							}
 						}
 
-						if (!isValid)
-							throw new ValidationError(
-								'body',
-								validator.body!,
-								body
-							)
+						if (!isResolved) {
+							if (isStandard && errorToThrow) {
+								throw errorToThrow
+							} else {
+								throw new ValidationError('body', validator.body!, body)
+							}
+						}
 					}
 
-					if (validator.body?.Decode) {
+					if (!isStandard && validator.body?.Decode) {
 						let decoded = validator.body.Decode(body) as any
 						if (decoded instanceof Promise) decoded = await decoded
 
 						// Zod returns { value: ... } wrapper
 						context.body = decoded?.value ?? decoded
-					} else if (bodyValidator.provider === 'standard') {
-						context.body = result?.value ?? body
 					}
 				}
 			}
@@ -602,7 +662,13 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				const responseValidator =
 					validator?.createResponse?.()?.[status]
 
-				if (responseValidator?.Check(response) === false) {
+				if (responseValidator?.provider === 'standard')
+					response = await validateStandardSchema(
+						'response',
+						responseValidator,
+						response
+					)
+				else if (responseValidator?.Check(response) === false) {
 					if (responseValidator?.Clean) {
 						try {
 							const temp = responseValidator.Clean(response)
@@ -673,7 +739,13 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					const responseValidator =
 						validator?.createResponse?.()?.[status]
 
-					if (responseValidator?.Check(response) === false) {
+					if (responseValidator?.provider === 'standard')
+						response = await validateStandardSchema(
+							'response',
+							responseValidator,
+							response
+						)
+					else if (responseValidator?.Check(response) === false) {
 						if (responseValidator?.Clean) {
 							try {
 								const temp = responseValidator.Clean(response)

@@ -278,7 +278,7 @@ const composeValidationFactory = ({
 
 			if (value.provider === 'standard') {
 				code +=
-					`let vare${status}=validator.response[${status}].Check(${name})\n` +
+					`let vare${status}=validator.response[${status}].Validate(${name})\n` +
 					`if(vare${status} instanceof Promise)vare${status}=await vare${status}\n` +
 					`if(vare${status}.issues)` +
 					`throw new ValidationError('response',validator.response[${status}],${name},${allowUnsafeValidationDetails},vare${status}.issues)\n` +
@@ -1248,11 +1248,11 @@ export const composeHandler = ({
 						typeof value === 'object'
 							? JSON.stringify(value)
 							: typeof value === 'string'
-								? `'${value}'`
+								? JSON.stringify(value)
 								: value
 
 					if (parsed !== undefined)
-						fnLiteral += `c.headers['${key}']??=${parsed}\n`
+						fnLiteral += `c.headers[${JSON.stringify(key)}]??=${parsed}\n`
 				}
 
 			fnLiteral += composeCleaner({
@@ -1267,7 +1267,7 @@ export const composeHandler = ({
 
 			if (validator.headers?.provider === 'standard') {
 				fnLiteral +=
-					`let vah=validator.headers.Check(c.headers)\n` +
+					`let vah=validator.headers.Validate(c.headers)\n` +
 					`if(vah instanceof Promise)vah=await vah\n` +
 					`if(vah.issues){` +
 					validation.validate('headers', undefined, 'vah.issues') +
@@ -1301,16 +1301,16 @@ export const composeHandler = ({
 						typeof value === 'object'
 							? JSON.stringify(value)
 							: typeof value === 'string'
-								? `'${value}'`
+								? JSON.stringify(value)
 								: value
 
 					if (parsed !== undefined)
-						fnLiteral += `c.params['${key}']??=${parsed}\n`
+						fnLiteral += `c.params[${JSON.stringify(key)}]??=${parsed}\n`
 				}
 
 			if (validator.params.provider === 'standard') {
 				fnLiteral +=
-					`let vap=validator.params.Check(c.params)\n` +
+					`let vap=validator.params.Validate(c.params)\n` +
 					`if(vap instanceof Promise)vap=await vap\n` +
 					`if(vap.issues){` +
 					validation.validate('params', undefined, 'vap.issues') +
@@ -1342,11 +1342,11 @@ export const composeHandler = ({
 						typeof value === 'object'
 							? JSON.stringify(value)
 							: typeof value === 'string'
-								? `'${value}'`
+								? JSON.stringify(value)
 								: value
 
 					if (parsed !== undefined)
-						fnLiteral += `if(c.query['${key}']===undefined)c.query['${key}']=${parsed}\n`
+						fnLiteral += `if(c.query[${JSON.stringify(key)}]===undefined)c.query[${JSON.stringify(key)}]=${parsed}\n`
 				}
 
 			fnLiteral += composeCleaner({
@@ -1361,7 +1361,7 @@ export const composeHandler = ({
 
 			if (validator.query.provider === 'standard') {
 				fnLiteral +=
-					`let vaq=validator.query.Check(c.query)\n` +
+					`let vaq=validator.query.Validate(c.query)\n` +
 					`if(vaq instanceof Promise)vaq=await vaq\n` +
 					`if(vaq.issues){` +
 					validation.validate('query', undefined, 'vaq.issues') +
@@ -1446,7 +1446,7 @@ export const composeHandler = ({
 					typeof value === 'object'
 						? JSON.stringify(value)
 						: typeof value === 'string'
-							? `'${value}'`
+							? JSON.stringify(value)
 							: value
 
 				if (value !== undefined && value !== null) {
@@ -1474,7 +1474,7 @@ export const composeHandler = ({
 
 				if (validator.body.provider === 'standard') {
 					fnLiteral +=
-						`let vab=validator.body.Check(c.body)\n` +
+						`let vab=validator.body.Validate(c.body)\n` +
 						`if(vab instanceof Promise)vab=await vab\n` +
 						`if(vab.issues&&c[ELYSIA_STRUCTURED_FORM]!==undefined){` +
 						`let vsb=validator.body.Check(c[ELYSIA_STRUCTURED_FORM])\n` +
@@ -1504,7 +1504,7 @@ export const composeHandler = ({
 
 				if (validator.body.provider === 'standard') {
 					fnLiteral +=
-						`let vab=validator.body.Check(c.body)\n` +
+						`let vab=validator.body.Validate(c.body)\n` +
 						`if(vab instanceof Promise)vab=await vab\n` +
 						`if(vab.issues&&c[ELYSIA_STRUCTURED_FORM]!==undefined){` +
 						`let vsb=validator.body.Check(c[ELYSIA_STRUCTURED_FORM])\n` +
@@ -1663,7 +1663,7 @@ export const composeHandler = ({
 
 			if (validator.cookie.provider === 'standard') {
 				fnLiteral +=
-					`let vac=validator.cookie.Check(cookieValue)\n` +
+					`let vac=validator.cookie.Validate(cookieValue)\n` +
 					`if(vac instanceof Promise)vac=await vac\n` +
 					`if(vac.issues){` +
 					validation.validate('cookie', undefined, 'vac.issues') +

@@ -9,7 +9,7 @@ import {
 } from '@sinclair/typebox'
 
 import fastDecodeURIComponent from 'fast-decode-uri-component'
-import type { Context, PreContext } from './context'
+import type { Context } from './context'
 
 import { t } from './type-system'
 import { mergeInference, sucrose, type Sucrose } from './sucrose'
@@ -873,50 +873,17 @@ export default class Elysia<
 		const nativeStaticHandler =
 			typeof handle !== 'function'
 				? () => {
-						const context: PreContext = {
-							redirect,
-							request: this['~adapter'].isWebStandard
-								? new Request(`http://ely.sia${path}`, {
-										method
-									})
-								: (undefined as any as Request),
-							server: null,
-							set: {
-								headers: Object.assign({}, this.setHeaders)
-							},
-							status,
-							store: this.store
-						}
-
-						try {
-							this.event.request?.map((x) => {
-								if (typeof x.fn === 'function')
-									return x.fn(context)
-
-								// @ts-ignore just in case
-								if (typeof x === 'function') return x(context)
-							})
-						} catch (error) {
-							let res
-							// @ts-ignore
-							context.error = error
-
-							this.event.error?.some((x) => {
-								if (typeof x.fn === 'function')
-									return (res = x.fn(context))
-
-								if (typeof x === 'function')
-									// @ts-ignore just in case
-									return (res = x(context))
-							})
-
-							if (res !== undefined) handle = res
-						}
-
+						// `onRequest` is deliberately not run here. A request
+						// hook invoked at registration time only ever sees a
+						// synthetic request, so its result cannot stand in for
+						// the real one - a route with request hooks is denied
+						// native promotion instead.
 						const fn = adapter.createNativeStaticHandler?.(
 							handle,
 							hooks,
-							context.set as Context['set']
+							{
+								headers: Object.assign({}, this.setHeaders)
+							} as Context['set']
 						)
 
 						return fn instanceof Promise

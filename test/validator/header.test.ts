@@ -285,6 +285,39 @@ describe('Header Validator', () => {
 		})
 	})
 
+	it('escapes single quote in default string value', async () => {
+		const payload = "tea';globalThis.__headerDefaultValueInjection=1;//"
+		const app = new Elysia().get('/', ({ headers }) => headers, {
+			headers: t.Object({
+				name: t.String(),
+				faction: t.String({ default: payload })
+			})
+		})
+
+		const value = await app
+			.handle(req('/', { headers: { name: 'nagisa' } }))
+			.then((x) => x.json())
+
+		expect(
+			(globalThis as any).__headerDefaultValueInjection
+		).toBeUndefined()
+		expect(value.faction).toBe(payload)
+	})
+
+	it('escapes single quote in default property key', async () => {
+		const key = "faction'];globalThis.__headerDefaultKeyInjection=1;//"
+		const app = new Elysia().get('/', () => 'ok', {
+			headers: t.Object({
+				[key]: t.String({ default: 'tea_party' })
+			})
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect((globalThis as any).__headerDefaultKeyInjection).toBeUndefined()
+		expect(res.status).toBe(200)
+	})
+
 	it('create default number params', async () => {
 		const app = new Elysia().get('/', ({ headers }) => headers, {
 			headers: t.Object({
