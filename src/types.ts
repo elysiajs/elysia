@@ -2228,6 +2228,54 @@ export type ElysiaHandlerToResponseSchemaAmbiguous<
 				? ElysiaHandlerToResponseSchemas<Schemas>
 				: {}
 
+// Statuses a plain onError return keeps at runtime: PARSE 400, NOT_FOUND 404,
+// VALIDATION 422, unhandled / INTERNAL_SERVER_ERROR 500.
+type OnErrorDefaultStatus = 400 | 404 | 422 | 500
+
+type OnErrorPlainReturn<Value> = Exclude<
+	Value,
+	AnyElysiaCustomStatusResponse | undefined
+>
+
+type OnErrorPlainToResponseSchema<Plain> = IsNever<Plain> extends true
+	? {}
+	: { [Status in OnErrorDefaultStatus]: Plain }
+
+type OnErrorValueToResponseSchema<Value> = UnionResponseStatus<
+	ExtractErrorFromHandle<Value>,
+	OnErrorPlainToResponseSchema<OnErrorPlainReturn<Value>>
+>
+
+export type ElysiaErrorHandlerToResponseSchema<in out Handle extends Function> =
+	Prettify<
+		Handle extends (...a: any) => MaybePromise<infer R>
+			? OnErrorValueToResponseSchema<Exclude<R, undefined>>
+			: {}
+	>
+
+export type ElysiaErrorHandlerToResponseSchemas<
+	Handle extends Function[],
+	Carry extends PossibleResponse = {}
+> = Handle extends [infer Current, ...infer Rest]
+	? ElysiaErrorHandlerToResponseSchemas<
+			// @ts-ignore Trust me bro
+			Rest,
+			// @ts-ignore Trust me bro
+			UnionResponseStatus<ElysiaErrorHandlerToResponseSchema<Current>, Carry>
+		>
+	: Prettify<Carry>
+
+export type ElysiaErrorHandlerToResponseSchemaAmbiguous<
+	Schemas extends MaybeArray<Function>
+> =
+	MaybeArray<(...a: any) => any> extends Schemas
+		? {}
+		: Schemas extends Function
+			? ElysiaErrorHandlerToResponseSchema<Schemas>
+			: Schemas extends Function[]
+				? ElysiaErrorHandlerToResponseSchemas<Schemas>
+				: {}
+
 type ReconcileStatus<
 	in out A extends Record<number, unknown>,
 	in out B extends Record<number, unknown>
