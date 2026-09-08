@@ -7,12 +7,9 @@ const VALUE_HAS_PLUS = 4
 const VALUE_NEEDS_DECODE = 8
 
 function splitRawParts(raw: string, flags: number) {
-	const parts = raw.split(',')
-	if (flags & VALUE_NEEDS_DECODE)
-		for (let i = 0; i < parts.length; i++)
-			parts[i] = decodeComponent(parts[i]) ?? parts[i]
-
-	return parts
+	return flags & VALUE_NEEDS_DECODE 
+		? raw.split(',').map(decodeComponent) 
+		: raw.split(',')
 }
 
 // Parse query without array
@@ -86,7 +83,7 @@ export function parseQueryFromURL(
 		let finalKey = keySlice
 		if (flags & KEY_HAS_PLUS) finalKey = finalKey.replace(/\+/g, ' ')
 		if (flags & KEY_NEEDS_DECODE)
-			finalKey = decodeComponent(finalKey) || finalKey
+			finalKey = decodeComponent(finalKey)
 
 		let finalValue = ''
 		if (hasBothKeyValuePair) {
@@ -94,7 +91,7 @@ export function parseQueryFromURL(
 			if (flags & VALUE_HAS_PLUS)
 				valueSlice = valueSlice.replace(/\+/g, ' ')
 			if (flags & VALUE_NEEDS_DECODE)
-				valueSlice = decodeComponent(valueSlice) || valueSlice
+				valueSlice = decodeComponent(valueSlice)
 			finalValue = valueSlice
 		}
 
@@ -250,7 +247,7 @@ export function parseQuery(input: string) {
 		let finalKey = keySlice
 		if (flags & KEY_HAS_PLUS) finalKey = finalKey.replace(/\+/g, ' ')
 		if (flags & KEY_NEEDS_DECODE)
-			finalKey = decodeComponent(finalKey) || finalKey
+			finalKey = decodeComponent(finalKey)
 
 		let finalValue = ''
 		if (hasBothKeyValuePair) {
@@ -258,7 +255,7 @@ export function parseQuery(input: string) {
 			if (flags & VALUE_HAS_PLUS)
 				valueSlice = valueSlice.replace(/\+/g, ' ')
 			if (flags & VALUE_NEEDS_DECODE)
-				valueSlice = decodeComponent(valueSlice) || valueSlice
+				valueSlice = decodeComponent(valueSlice)
 			finalValue = valueSlice
 		}
 
