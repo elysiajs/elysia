@@ -1,6 +1,6 @@
 import { Elysia, t } from '../../src'
 
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it, spyOn } from 'bun:test'
 import { post, req } from '../utils'
 
 describe('Path', () => {
@@ -113,6 +113,124 @@ describe('Path', () => {
 		const res = await app.handle(req('/wildcard/okayu'))
 
 		expect(await res.text()).toBe('Wildcard')
+	})
+
+	it('parse wildcard params with an explicit schema without warning', async () => {
+		const warn = spyOn(console, 'warn').mockImplementation(() => {})
+
+		try {
+			const app = new Elysia().get(
+				'/uploads/:type/*',
+				({ params }) => ({
+					type: params.type,
+					path: params['*']
+				}),
+				{
+					params: t.Object({
+						type: t.String(),
+						'*': t.String()
+					})
+				}
+			)
+			const response = await app.handle(
+				req('/uploads/images/2024-11-08/a.jpg')
+			)
+
+			expect(await response.json()).toEqual({
+				type: 'images',
+				path: '2024-11-08/a.jpg'
+			})
+			expect(warn).not.toHaveBeenCalled()
+		} finally {
+			warn.mockRestore()
+		}
+	})
+
+	it('normalize nested wildcard response schemas without warning', async () => {
+		const warn = spyOn(console, 'warn').mockImplementation(() => {})
+
+		try {
+			const app = new Elysia().get(
+				'/uploads',
+				() => ({
+					files: {
+						'*': '2024-11-08/a.jpg'
+					}
+				}),
+				{
+					response: t.Object({
+						files: t.Object({
+							'*': t.String()
+						})
+					})
+				}
+			)
+			const response = await app.handle(req('/uploads'))
+
+			expect(await response.json()).toEqual({
+				files: {
+					'*': '2024-11-08/a.jpg'
+				}
+			})
+			expect(warn).not.toHaveBeenCalled()
+		} finally {
+			warn.mockRestore()
+		}
+	})
+
+	it('normalize wildcard array response schemas without warning', async () => {
+		const warn = spyOn(console, 'warn').mockImplementation(() => {})
+
+		try {
+			const app = new Elysia().get(
+				'/uploads',
+				() => [{ '*': '2024-11-08/a.jpg' }],
+				{
+					response: t.Array(
+						t.Object({
+							'*': t.String()
+						})
+					)
+				}
+			)
+			const response = await app.handle(req('/uploads'))
+
+			expect(await response.json()).toEqual([
+				{ '*': '2024-11-08/a.jpg' }
+			])
+			expect(warn).not.toHaveBeenCalled()
+		} finally {
+			warn.mockRestore()
+		}
+	})
+
+	it('normalize wildcard union response schemas without warning', async () => {
+		const warn = spyOn(console, 'warn').mockImplementation(() => {})
+
+		try {
+			const app = new Elysia().get(
+				'/uploads',
+				() => ({ '*': '2024-11-08/a.jpg' }),
+				{
+					response: t.Union([
+						t.Object({
+							'*': t.String()
+						}),
+						t.Object({
+							path: t.String()
+						})
+					])
+				}
+			)
+			const response = await app.handle(req('/uploads'))
+
+			expect(await response.json()).toEqual({
+				'*': '2024-11-08/a.jpg'
+			})
+			expect(warn).not.toHaveBeenCalled()
+		} finally {
+			warn.mockRestore()
+		}
 	})
 
 	it('custom error', async () => {
