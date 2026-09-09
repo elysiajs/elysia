@@ -15,6 +15,78 @@ describe('Exact Mirror', () => {
 		})
 	})
 
+	it('normalizes nested module refs with wildcard keys without warnings', async () => {
+		const warn = console.warn
+		let warnings = 0
+		console.warn = () => warnings++
+
+		try {
+			const schema = t
+				.Module({
+					Foo: t.Object({
+						child: t.Ref('Bar')
+					}),
+					Bar: t.Object({
+						'*': t.String()
+					})
+				})
+				.Import('Foo')
+			const app = new Elysia().post('/', ({ body }) => body, {
+				body: schema
+			})
+
+			const response = await app
+				.handle(
+					post('/', {
+						child: { '*': 'file' }
+					})
+				)
+				.then((x) => x.json())
+
+			expect(response).toEqual({
+				child: { '*': 'file' }
+			})
+		} finally {
+			console.warn = warn
+		}
+
+		expect(warnings).toBe(0)
+	})
+
+	it('normalizes records with wildcard keys without warnings', async () => {
+		const warn = console.warn
+		let warnings = 0
+		console.warn = () => warnings++
+
+		try {
+			const app = new Elysia().post('/', ({ body }) => body, {
+				body: t.Record(
+					t.String(),
+					t.Object({
+						'*': t.String()
+					})
+				)
+			})
+
+			const response = await app
+				.handle(
+					post('/', {
+						file: { '*': 'ok' }
+					})
+				)
+				.then((x) => x.json())
+
+			expect(response).toEqual({
+				file: { '*': 'ok' }
+			})
+		} finally {
+			console.warn = warn
+		}
+
+		expect(warnings).toBe(0)
+	})
+
+
 	it('leave incorrect union field as-is', async () => {
 		const app = new Elysia().post(
 			'/test',
