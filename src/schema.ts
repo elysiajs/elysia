@@ -408,6 +408,43 @@ const createCleaner = (schema: TAnySchema) => (value: unknown) => {
 	return value
 }
 
+const isExactMirrorCompatible = (
+	schema: TAnySchema,
+	seen = new WeakSet<object>()
+): boolean => {
+	if (seen.has(schema)) return true
+	seen.add(schema)
+
+	if (schema.$ref && schema.$defs?.[schema.$ref])
+		return isExactMirrorCompatible(schema.$defs[schema.$ref], seen)
+
+	if (schema.type === 'object' && schema.properties)
+		for (const [key, property] of Object.entries(schema.properties)) {
+			if (
+				!/^[$_\p{ID_Start}][$\u200C\u200D\p{ID_Continue}]*$/u.test(key) ||
+				!isExactMirrorCompatible(property as TAnySchema, seen)
+			)
+				return false
+		}
+
+	if (schema.type === 'array' && schema.items) {
+		const items = Array.isArray(schema.items)
+			? schema.items
+			: [schema.items]
+
+		for (const item of items)
+			if (!isExactMirrorCompatible(item as TAnySchema, seen)) return false
+	}
+
+	for (const combinator of [schema.allOf, schema.anyOf, schema.oneOf])
+		if (combinator)
+			for (const subSchema of combinator)
+				if (!isExactMirrorCompatible(subSchema as TAnySchema, seen))
+					return false
+
+	return true
+}
+
 // const caches = <Record<string, ElysiaTypeCheck<any>>>{}
 
 export const getSchemaValidator = <T extends AnySchema | string | undefined>(
@@ -543,20 +580,23 @@ export const getSchemaValidator = <T extends AnySchema | string | undefined>(
 			schema: TSchema
 		): StandardSchemaV1LikeValidate => {
 			let mirror: Function
-			if (normalize === true || normalize === 'exactMirror')
-				try {
-					mirror = createMirror(schema as TSchema, {
-						TypeCompiler,
-						sanitize: sanitize?.(),
-						modules
-					})
-				} catch {
-					console.warn(
-						'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
-					)
-					console.warn(schema)
-					mirror = createCleaner(schema as TSchema)
-				}
+			if (normalize === true || normalize === 'exactMirror') {
+				if (isExactMirrorCompatible(schema))
+					try {
+						mirror = createMirror(schema as TSchema, {
+							TypeCompiler,
+							sanitize: sanitize?.(),
+							modules
+						})
+					} catch {
+						console.warn(
+							'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
+						)
+						console.warn(schema)
+						mirror = createCleaner(schema as TSchema)
+					}
+				else mirror = createCleaner(schema as TSchema)
+			}
 
 			const vali = getSchemaValidator(schema, {
 				models,
@@ -861,19 +901,21 @@ export const getSchemaValidator = <T extends AnySchema | string | undefined>(
 
 			if (normalize && schema.additionalProperties === false) {
 				if (normalize === true || normalize === 'exactMirror') {
-					try {
-						validator.Clean = createMirror(schema, {
-							TypeCompiler,
-							sanitize: sanitize?.(),
-							modules
-						})
-					} catch {
-						console.warn(
-							'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
-						)
-						console.warn(schema)
-						validator.Clean = createCleaner(schema)
-					}
+					if (isExactMirrorCompatible(schema))
+						try {
+							validator.Clean = createMirror(schema, {
+								TypeCompiler,
+								sanitize: sanitize?.(),
+								modules
+							})
+						} catch {
+							console.warn(
+								'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
+							)
+							console.warn(schema)
+							validator.Clean = createCleaner(schema)
+						}
+					else validator.Clean = createCleaner(schema)
 				} else validator.Clean = createCleaner(schema)
 			}
 
@@ -999,22 +1041,24 @@ export const getSchemaValidator = <T extends AnySchema | string | undefined>(
 		}
 
 		if (normalize === true || normalize === 'exactMirror') {
-			try {
-				compiled.Clean = createMirror(schema, {
-					TypeCompiler,
-					sanitize: sanitize?.(),
-					modules
-				})
-			} catch (error) {
-				console.warn(
-					'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
-				)
-				console.dir(schema, {
-					depth: null
-				})
+			if (isExactMirrorCompatible(schema))
+				try {
+					compiled.Clean = createMirror(schema, {
+						TypeCompiler,
+						sanitize: sanitize?.(),
+						modules
+					})
+				} catch (error) {
+					console.warn(
+						'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
+					)
+					console.dir(schema, {
+						depth: null
+					})
 
-				compiled.Clean = createCleaner(schema)
-			}
+					compiled.Clean = createCleaner(schema)
+				}
+			else compiled.Clean = createCleaner(schema)
 		} else if (normalize === 'typebox')
 			compiled.Clean = createCleaner(schema)
 	} else {
