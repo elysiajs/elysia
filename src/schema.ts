@@ -408,24 +408,93 @@ const createCleaner = (schema: TAnySchema) => (value: unknown) => {
 	return value
 }
 
+type ExactMirrorScope = {
+	definitions: Record<string, TSchema>
+	parent?: ExactMirrorScope
+}
+
+type ExactMirrorTraversal = {
+	root: ExactMirrorScope
+	scopes: WeakMap<object, WeakMap<object, ExactMirrorScope>>
+	seen: WeakMap<object, WeakSet<object>>
+}
+
+const createExactMirrorScope = (
+	definitions: Record<string, TSchema>,
+	parent: ExactMirrorScope | undefined,
+	traversal: ExactMirrorTraversal
+) => {
+	const parentScope = parent ?? traversal.root
+	let scopes = traversal.scopes.get(definitions)
+
+	if (!scopes)
+		traversal.scopes.set(definitions, (scopes = new WeakMap()))
+
+	let scope = scopes.get(parentScope)
+
+	if (!scope) {
+		scope = { definitions, parent }
+		scopes.set(parentScope, scope)
+	}
+
+	return scope
+}
+
+const resolveExactMirrorReference = (
+	reference: string,
+	scope?: ExactMirrorScope
+) => {
+	for (let current = scope; current; current = current.parent)
+		if (reference in current.definitions)
+			return current.definitions[reference]
+}
+
 const isExactMirrorCompatible = (
 	schema: TAnySchema,
-	seen = new WeakSet<object>()
+	scope?: ExactMirrorScope,
+	traversal: ExactMirrorTraversal = {
+		root: { definitions: {} },
+		scopes: new WeakMap(),
+		seen: new WeakMap()
+	}
 ): boolean => {
-	if (seen.has(schema)) return true
-	seen.add(schema)
+	if (schema.$defs)
+		scope = createExactMirrorScope(
+			schema.$defs as Record<string, TSchema>,
+			scope,
+			traversal
+		)
 
-	if (schema.$ref && schema.$defs?.[schema.$ref])
-		return isExactMirrorCompatible(schema.$defs[schema.$ref], seen)
+	const currentScope = scope ?? traversal.root
+	let scopes = traversal.seen.get(schema)
+
+	if (scopes?.has(currentScope)) return true
+
+	if (!scopes)
+		traversal.seen.set(schema, (scopes = new WeakSet()))
+
+	scopes.add(currentScope)
+
+	if (schema.$ref) {
+		const reference = resolveExactMirrorReference(schema.$ref, scope)
+
+		if (reference)
+			return isExactMirrorCompatible(reference, scope, traversal)
+	}
 
 	if (schema.type === 'object' && schema.properties)
 		for (const [key, property] of Object.entries(schema.properties)) {
 			if (
 				!/^[$_\p{ID_Start}][$\u200C\u200D\p{ID_Continue}]*$/u.test(key) ||
-				!isExactMirrorCompatible(property as TAnySchema, seen)
+				!isExactMirrorCompatible(property as TAnySchema, scope, traversal)
 			)
 				return false
 		}
+
+	if (schema.patternProperties)
+		for (const property of Object.values(schema.patternProperties))
+			if (!isExactMirrorCompatible(property as TAnySchema, scope, traversal))
+				return false
 
 	if (schema.type === 'array' && schema.items) {
 		const items = Array.isArray(schema.items)
@@ -433,17 +502,25 @@ const isExactMirrorCompatible = (
 			: [schema.items]
 
 		for (const item of items)
-			if (!isExactMirrorCompatible(item as TAnySchema, seen)) return false
+			if (!isExactMirrorCompatible(item as TAnySchema, scope, traversal))
+				return false
 	}
 
 	for (const combinator of [schema.allOf, schema.anyOf, schema.oneOf])
 		if (combinator)
 			for (const subSchema of combinator)
-				if (!isExactMirrorCompatible(subSchema as TAnySchema, seen))
+				if (
+					!isExactMirrorCompatible(
+						subSchema as TAnySchema,
+						scope,
+						traversal
+					)
+				)
 					return false
 
 	return true
 }
+
 
 // const caches = <Record<string, ElysiaTypeCheck<any>>>{}
 
