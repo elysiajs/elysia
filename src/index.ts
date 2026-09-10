@@ -3929,12 +3929,14 @@ export default class Elysia<
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
-					response: Metadata['response'] &
-						// @ts-ignore
-						MacroContext['response'] &
-						ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-						ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+					response: UnionResponseStatus<
+						Metadata['response'] &
+							// @ts-ignore
+							MacroContext['response'] &
+							ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+							ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle>,
 						ElysiaErrorHandlerToResponseSchemaAmbiguous<ErrorHandle>
+					>
 				},
 				{},
 				Ephemeral,
@@ -4181,12 +4183,14 @@ export default class Elysia<
 								>
 						standaloneSchema: Volatile['standaloneSchema'] &
 							SimplifyToSchema<MacroContext>
-						response: Volatile['response'] &
-							ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-							ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-							ElysiaErrorHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-							// @ts-ignore
-							MacroContext['return']
+						response: UnionResponseStatus<
+							Volatile['response'] &
+								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+								// @ts-ignore
+								MacroContext['return'],
+							ElysiaErrorHandlerToResponseSchemaAmbiguous<ErrorHandle>
+						>
 					}
 				>
 			: AsType extends 'global'
@@ -4220,12 +4224,14 @@ export default class Elysia<
 							macro: Metadata['macro']
 							macroFn: Metadata['macroFn']
 							parser: Metadata['parser']
-							response: Metadata['response'] &
-								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-								ElysiaErrorHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-								// @ts-ignore
-								MacroContext['return']
+							response: UnionResponseStatus<
+								Metadata['response'] &
+									ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+									ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+									// @ts-ignore
+									MacroContext['return'],
+								ElysiaErrorHandlerToResponseSchemaAmbiguous<ErrorHandle>
+							>
 						},
 						Routes,
 						Ephemeral,
@@ -4256,12 +4262,14 @@ export default class Elysia<
 									>
 							standaloneSchema: Ephemeral['standaloneSchema'] &
 								SimplifyToSchema<MacroContext>
-							response: Ephemeral['response'] &
-								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-								ElysiaErrorHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-								// @ts-ignore
-								MacroContext['return']
+							response: UnionResponseStatus<
+								Ephemeral['response'] &
+									ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+									ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+									// @ts-ignore
+									MacroContext['return'],
+								ElysiaErrorHandlerToResponseSchemaAmbiguous<ErrorHandle>
+							>
 						},
 						Volatile
 					>
@@ -4290,12 +4298,14 @@ export default class Elysia<
 											Input,
 											Definitions['typebox']
 										>)
-						response: Volatile['response'] &
-							ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-							ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-							ElysiaErrorHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-							// @ts-ignore
-							MacroContext['return']
+						response: UnionResponseStatus<
+							Volatile['response'] &
+								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+								// @ts-ignore
+								MacroContext['return'],
+							ElysiaErrorHandlerToResponseSchemaAmbiguous<ErrorHandle>
+						>
 					}
 				>
 			: AsType extends 'global'
@@ -4327,12 +4337,14 @@ export default class Elysia<
 							macro: Metadata['macro']
 							macroFn: Metadata['macroFn']
 							parser: Metadata['parser']
-							response: Metadata['response'] &
-								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-								ElysiaErrorHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-								// @ts-ignore
-								MacroContext['return']
+							response: UnionResponseStatus<
+								Metadata['response'] &
+									ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+									ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+									// @ts-ignore
+									MacroContext['return'],
+								ElysiaErrorHandlerToResponseSchemaAmbiguous<ErrorHandle>
+							>
 						},
 						Routes,
 						Ephemeral,
@@ -4361,12 +4373,14 @@ export default class Elysia<
 												Input,
 												Definitions['typebox']
 											>)
-							response: Ephemeral['response'] &
-								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-								ElysiaErrorHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-								// @ts-ignore
-								MacroContext['return']
+							response: UnionResponseStatus<
+								Ephemeral['response'] &
+									ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+									ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+									// @ts-ignore
+									MacroContext['return'],
+								ElysiaErrorHandlerToResponseSchemaAmbiguous<ErrorHandle>
+							>
 						},
 						Volatile
 					>
@@ -4433,12 +4447,14 @@ export default class Elysia<
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
-					response: Metadata['response'] &
-						// @ts-ignore
-						MacroContext['response'] &
-						ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-						ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+					response: UnionResponseStatus<
+						Metadata['response'] &
+							// @ts-ignore
+							MacroContext['response'] &
+							ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+							ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle>,
 						ElysiaErrorHandlerToResponseSchemaAmbiguous<ErrorHandle>
+					>
 				},
 				{},
 				Ephemeral,

@@ -1,4 +1,4 @@
-import { Elysia, status } from '../../../src'
+import { Elysia, status, t } from '../../../src'
 import { expectTypeOf } from 'expect-type'
 import type { Prettify, ErrorHandler } from '../../../src/types'
 
@@ -179,4 +179,42 @@ import type { Prettify, ErrorHandler } from '../../../src/types'
 		200: 'ok'
 	}>()
 }
+
+// Guard: parent error handler and guard error handler union instead of intersect
+{
+	const app = new Elysia()
+		.onError(() => ({ firstError: '1' as const }))
+		.guard({
+			error: () => ({ secondError: '2' as const })
+		})
+		.get('/', () => 'ok' as const)
+
+	type AppResponse = Prettify<(typeof app)['~Routes']['get']['response']>
+	expectTypeOf<AppResponse[500]>().toEqualTypeOf<
+		{ firstError: '1' } | { secondError: '2' }
+	>()
+}
+
+// Group: parent error handler and group error handler union instead of intersect
+{
+	const app = new Elysia()
+		.onError(() => ({ firstError: '1' as const }))
+		.group(
+			'/api',
+			{
+				error: () => ({ secondError: '2' as const })
+			},
+			(app) => app.get('/test', () => 'ok' as const)
+		)
+
+	type AppResponse = Prettify<
+		(typeof app)['~Routes']['api']['test']['get']['response']
+	>
+	expectTypeOf<AppResponse[500]>().toEqualTypeOf<
+		{ firstError: '1' } | { secondError: '2' }
+	>()
+}
+
+
+
 
