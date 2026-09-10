@@ -656,4 +656,20 @@ describe('Handle Error', () => {
 		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
 		expect(res.headers.get('x-custom')).toBe('value')
 	})
+
+	it('return JSON error with preserved status code (issue #313)', async () => {
+		const app = new Elysia()
+			.onError(({ error }) => {
+				return { failure: error.message }
+			})
+			.get('/', () => {
+				throw new Error('Server is during maintenance')
+			})
+
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(500)
+		expect(res.headers.get('content-type')).toContain('application/json')
+		const json = await res.json()
+		expect(json).toEqual({ failure: 'Server is during maintenance' })
+	})
 })
