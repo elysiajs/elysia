@@ -2242,34 +2242,38 @@ export type ElysiaHandlerToResponseSchemaAmbiguous<
 				: {}
 
 export type ErrorValueToResponseSchema<Value> =
-	ExtractErrorFromHandle<Value> extends infer Explicit
-		? Prettify<
-				(Extract<Value, Response> extends infer NativeResponse
-					? [NativeResponse] extends [never]
-						? {}
-						: { 200: NativeResponse }
-					: {}) &
-					(Exclude<
-						Value,
-						AnyElysiaCustomStatusResponse | Response | undefined | void
-					> extends infer Plain
-						? [Plain] extends [never]
-							? Explicit
-							: Prettify<
-									Omit<Explicit, 400 | 404 | 422 | 500> & {
-										[K in 400 | 404 | 422 | 500]: K extends keyof Explicit
-											? Explicit[K] | Plain
-											: Plain
-									}
-							  >
-						: never)
-		  >
-		: never
+	IsAny<Value> extends true
+		? {}
+		: ExtractErrorFromHandle<Value> extends infer Explicit
+			? Prettify<
+					(Extract<Value, Response> extends infer NativeResponse
+						? [NativeResponse] extends [never]
+							? {}
+							: { 200: NativeResponse }
+						: {}) &
+						(Exclude<
+							Value,
+							AnyElysiaCustomStatusResponse | Response | undefined | void
+						> extends infer Plain
+							? [Plain] extends [never]
+								? Explicit
+								: Prettify<
+										Omit<Explicit, 400 | 404 | 422 | 500> & {
+											[K in 400 | 404 | 422 | 500]: K extends keyof Explicit
+												? Explicit[K] | Plain
+												: Plain
+										}
+								  >
+							: never)
+			  >
+			: never
 
 export type ElysiaErrorHandlerToResponseSchema<in out Handle extends Function> =
 	Prettify<
 		Handle extends (...a: any) => MaybePromise<infer R>
-			? ErrorValueToResponseSchema<R>
+			? IsAny<R> extends true
+				? {}
+				: ErrorValueToResponseSchema<R>
 			: {}
 	>
 

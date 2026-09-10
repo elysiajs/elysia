@@ -1,6 +1,6 @@
 import { Elysia, status } from '../../../src'
 import { expectTypeOf } from 'expect-type'
-import type { Prettify } from '../../../src/types'
+import type { Prettify, ErrorHandler } from '../../../src/types'
 
 // Issue #313: plain onError return is typed under error statuses (400, 404, 422, 500)
 // and not under 200, so Eden clients type error.value correctly without polluting data.
@@ -166,3 +166,17 @@ import type { Prettify } from '../../../src/types'
 	type TreatyData<Res> = Res extends { 200: infer D } ? D : never
 	expectTypeOf<TreatyData<RouteResponse>>().toEqualTypeOf<'ok'>()
 }
+
+// Explicitly typed ErrorHandler does not produce broad 200 or [x: number] schema
+{
+	const handler: ErrorHandler = () => {}
+	const app = new Elysia()
+		.onError(handler)
+		.get('/', () => 'ok' as const)
+
+	type AppResponse = (typeof app)['~Routes']['get']['response']
+	expectTypeOf<AppResponse>().toEqualTypeOf<{
+		200: 'ok'
+	}>()
+}
+
