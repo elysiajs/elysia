@@ -1016,6 +1016,19 @@ type ExtractAllResponseFromMacro<A> =
 						: {})
 			}
 
+type ExtractAllErrorResponseFromMacro<A> =
+	IsNever<A> extends true
+		? {}
+		: Exclude<A, undefined | void> extends infer A
+			? IsAny<A> extends true
+				? {}
+				: IsNever<A> extends true
+					? {}
+					: {
+							return: ErrorValueToResponseSchema<A>
+						}
+			: {}
+
 type FlattenMacroResponse<T> = T extends object
 	? '_' extends keyof T
 		? MergeFlattenMacroResponse<
@@ -1108,7 +1121,7 @@ type InnerMacroToContext<
 										Value['afterHandle']
 									>
 								> &
-								ExtractAllResponseFromMacro<
+								ExtractAllErrorResponseFromMacro<
 									// @ts-expect-error type is checked in key mapping
 									FunctionArrayReturnType<Value['error']>
 								> &
@@ -2226,6 +2239,65 @@ export type ElysiaHandlerToResponseSchemaAmbiguous<
 			? ElysiaHandlerToResponseSchema<Schemas>
 			: Schemas extends Function[]
 				? ElysiaHandlerToResponseSchemas<Schemas>
+				: {}
+
+export type ErrorValueToResponseSchema<Value> =
+	ExtractErrorFromHandle<Value> extends infer Explicit
+		? Prettify<
+				(Extract<Value, Response> extends infer NativeResponse
+					? [NativeResponse] extends [never]
+						? {}
+						: { 200: NativeResponse }
+					: {}) &
+					(Exclude<
+						Value,
+						AnyElysiaCustomStatusResponse | Response | undefined | void
+					> extends infer Plain
+						? [Plain] extends [never]
+							? Explicit
+							: Prettify<
+									Omit<Explicit, 400 | 404 | 422 | 500> & {
+										[K in 400 | 404 | 422 | 500]: K extends keyof Explicit
+											? Explicit[K] | Plain
+											: Plain
+									}
+							  >
+						: never)
+		  >
+		: never
+
+export type ElysiaErrorHandlerToResponseSchema<in out Handle extends Function> =
+	Prettify<
+		Handle extends (...a: any) => MaybePromise<infer R>
+			? ErrorValueToResponseSchema<R>
+			: {}
+	>
+
+export type ElysiaErrorHandlerToResponseSchemas<
+	Handle extends Function[],
+	Carry extends PossibleResponse = {}
+> = Handle extends [infer Current, ...infer Rest]
+	? ElysiaErrorHandlerToResponseSchemas<
+			// @ts-ignore Trust me bro
+			Rest,
+			Current extends Function
+				? UnionResponseStatus<
+						ElysiaErrorHandlerToResponseSchema<Current>,
+						Carry
+					>
+				: Carry
+		>
+	: Prettify<Carry>
+
+export type ElysiaErrorHandlerToResponseSchemaAmbiguous<
+	Schemas extends MaybeArray<Function>
+> =
+	MaybeArray<(...a: any) => any> extends Schemas
+		? {}
+		: Schemas extends Function
+			? ElysiaErrorHandlerToResponseSchema<Schemas>
+			: Schemas extends Function[]
+				? ElysiaErrorHandlerToResponseSchemas<Schemas>
 				: {}
 
 type ReconcileStatus<
