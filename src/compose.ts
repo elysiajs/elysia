@@ -2744,7 +2744,11 @@ export const composeErrorHandler = (app: AnyElysia) => {
 	fnLiteral +=
 		`if(!context.response&&error instanceof Error){` +
 		afterResponse() +
-		adapter.unknownError +
+		(app.config?.forceErrorEncapsulation
+			? `set.status=error.status??set.status??500;` +
+			  `set.headers['content-type']='application/json';` +
+			  `return mapResponse(JSON.stringify({ name: error.name ?? 'Error', message: error.message }), set)`
+			: adapter.unknownError) +
 		`\n}`
 
 	const mapResponseReporter = report('mapResponse', {
@@ -2752,8 +2756,11 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		name: 'context'
 	})
 
-	fnLiteral +=
-		'\nif(!context.response)context.response=context.responseValue=error.message??error\n'
+	if (app.config?.forceErrorEncapsulation) {
+		fnLiteral += '\nif(!context.response){set.headers["content-type"]="application/json";context.response=context.responseValue=JSON.stringify({ name: "Error", message: error.message ?? error.toString() })}\n'
+	} else {
+		fnLiteral += '\nif(!context.response)context.response=context.responseValue=error.message??error\n'
+	}
 
 	if (hooks.mapResponse?.length) {
 		fnLiteral += 'let mr\n'

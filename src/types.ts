@@ -255,6 +255,12 @@ export interface ElysiaConfig<in out Prefix extends string | undefined> {
 	 * @default false
 	 */
 	allowUnsafeValidationDetails?: boolean
+	/**
+	 * Return errors as JSON
+	 *
+	 * @default false
+	 */
+	forceErrorEncapsulation?: boolean
 }
 
 export interface ValidatorLayer {
