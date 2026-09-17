@@ -1,4 +1,9 @@
-import { status, type SelectiveStatus } from './error'
+import {
+	problem,
+	status,
+	type SelectiveProblem,
+	type SelectiveStatus
+} from './error'
 import { isNotEmpty, nullObject, redirect } from './utils'
 
 import { defaultHeaders } from './adapter/default-headers'
@@ -38,7 +43,7 @@ const defer = {
 
 function buildEmptyDecorator() {
 	class Decorator {}
-	Object.assign(Decorator.prototype, { status, redirect })
+	Object.assign(Decorator.prototype, { status, problem, redirect })
 	Object.defineProperty(Decorator.prototype, 'defer', defer)
 	return Decorator
 }
@@ -56,6 +61,7 @@ export function createBaseContext(app: AnyElysia) {
 		...decorator,
 		store,
 		status,
+		problem,
 		redirect
 	})
 	Object.defineProperty(Decorator.prototype, 'defer', defer)
@@ -169,6 +175,10 @@ interface ContextBase<
 	status: {} extends Route['response']
 		? typeof status
 		: SelectiveStatus<Route['response']>
+
+	problem: {} extends Route['response']
+		? typeof problem
+		: SelectiveProblem<Route['response']>
 
 	/**
 	 * Append a callback to run after the response is sent
@@ -311,5 +321,6 @@ export type PreContext<
 		}
 
 		status: typeof status
+		problem: typeof problem
 	} & Singleton['decorator']
 >

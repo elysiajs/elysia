@@ -667,6 +667,7 @@ export const OVERRIDE_MAP: Record<string, { leaf: string; export: string }> = {
 	Object: { leaf: 'object', export: 'ObjectType' },
 	ObjectString: { leaf: 'object-string', export: 'ObjectString' },
 	Optional: { leaf: 'optional', export: 'Optional' },
+	Problem: { leaf: 'problem', export: 'Problem' },
 	String: { leaf: 'string', export: 'StringType' },
 	Uint8Array: { leaf: 'uint8-array', export: 'Uint8ArrayType' },
 	Union: { leaf: 'union', export: 'Union' },

@@ -75,15 +75,21 @@ describe('derive key codegen', () => {
 	for (const [fn, expected, label] of analyzable)
 		it(`emits exact stores for ${label}`, () => {
 			const source = compileDerive(fn)
-			const stores = source.match(/c\[[^\]]+\]=tmp\[[^\]]+\]/g) ?? []
+			// each key is read once into `_v`, offered to disposal registration,
+			// then stored - one group per extracted key, in order
+			const stores = Array.from(
+				source.match(/_v=tmp\[[^\]]+\];dsp\(c,_v\);c\[[^\]]+\]=_v/g) ??
+					[]
+			)
 
 			expect(stores).toEqual(
-				expected.map(
-					(key) =>
-						`c[${JSON.stringify(key)}]=tmp[${JSON.stringify(key)}]`
-				)
+				expected.map((key) => {
+					const k = JSON.stringify(key)
+
+					return `_v=tmp[${k}];dsp(c,_v);c[${k}]=_v`
+				})
 			)
-			expect(source).not.toContain('Object.assign(c,tmp)')
+			expect(source).not.toContain('_v=Object.assign({},tmp)')
 		})
 
 	const bails: [Function, string][] = [
@@ -134,7 +140,9 @@ describe('derive key codegen', () => {
 
 	for (const [fn, label] of bails)
 		it(`falls back for ${label}`, () => {
-			expect(compileDerive(fn)).toContain('Object.assign(c,tmp)')
+			// the keyless merge materializes one copy into `_v`, then registers
+			// and assigns per key
+			expect(compileDerive(fn)).toContain('_v=Object.assign({},tmp)')
 		})
 })
 

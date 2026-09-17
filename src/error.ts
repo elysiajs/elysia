@@ -667,10 +667,6 @@ export class ValidationError extends ElysiaError {
 		return isProduction() && !this.allowUnsafeValidationDetails
 	}
 
-	get #maskResponseValue() {
-		return this.type === 'response' && this.#productionDetail
-	}
-
 	detail(message: unknown) {
 		if (this.#productionDetail) {
 			if (this.type === 'response')
@@ -780,7 +776,7 @@ export class ValidationError extends ElysiaError {
 	}
 
 	toResponse(headers?: Record<string, any>) {
-		if (this.#maskResponseValue)
+		if (this.type === 'response' && this.#productionDetail)
 			return problemResponse(this.payload, headers)
 
 		// validateDetail
@@ -1107,6 +1103,39 @@ export type SelectiveStatus<in out Res> = <
 	// @ts-ignore trust me bro
 	Code,
 	T
+>
+
+type ProblemInput<T> = T extends object
+	? Omit<T, 'type' | 'title' | 'status'> & {
+			[K in keyof T as K extends 'type' | 'title' ? K : never]?: T[K]
+		}
+	: never
+
+type ResponseOf<Res, Code> = Code extends keyof Res
+	? Res[Code]
+	: Code extends keyof StatusMap
+		? // @ts-ignore StatusMap[Code] always valid because Code generic check
+			Res[StatusMap[Code]]
+		: never
+
+export type SelectiveProblem<in out Res> = <
+	const Code extends
+		| keyof Res
+		| StatusMapBack[Extract<keyof StatusMapBack, keyof Res>],
+	T extends ProblemInput<ResponseOf<Res, Code>> = ProblemInput<
+		ResponseOf<Res, Code>
+	>
+>(
+	code: Code,
+	// A rest tuple so the argument is only optional when every remaining
+	// member is: `problemBody` cannot invent a required extension member
+	...detail: {} extends ProblemInput<ResponseOf<Res, Code>>
+		? [detail?: CheckExcessProps<T, ProblemInput<ResponseOf<Res, Code>>>]
+		: [detail: CheckExcessProps<T, ProblemInput<ResponseOf<Res, Code>>>]
+) => ElysiaStatus<
+	// @ts-ignore trust me bro
+	NumericStatus<Code>,
+	ResponseOf<Res, Code>
 >
 
 /**

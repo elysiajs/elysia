@@ -28,6 +28,7 @@ import { NumericEnum } from './elysia/numeric-enum'
 import { ObjectType } from './elysia/object'
 import { ObjectString } from './elysia/object-string'
 import { Optional } from './elysia/optional'
+import { Problem } from './elysia/problem'
 import { StringType } from './elysia/string'
 import { Uint8ArrayType } from './elysia/uint8-array'
 import { Union } from './elysia/union'
@@ -112,6 +113,7 @@ export const t = lazyNamespace<TypeBuilder>(() => loadTypeNamespace().type, {
 	Object: ObjectType,
 	ObjectString,
 	Optional,
+	Problem,
 	String: StringType,
 	Uint8Array: Uint8ArrayType,
 	Union,

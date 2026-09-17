@@ -76,6 +76,43 @@ if (text !== 'hello world')
 
 console.log('✅ ESM Node.js stream chunks are Uint8Array')
 
+const disposed = []
+const disposeApp = new Elysia()
+	.decorate('client', {
+		[Symbol.dispose]() {
+			disposed.push('decorator')
+		}
+	})
+	.derive(() => ({
+		tx: {
+			[Symbol.dispose]() {
+				disposed.push('derive')
+			}
+		}
+	}))
+	.get('/dispose', ({ tx }) => (tx ? 'ok' : 'missing'))
+
+const disposeRes = await disposeApp.handle(
+	new Request('http://localhost/dispose')
+)
+const disposeBody = await disposeRes.text()
+if (disposeRes.status !== 200 || disposeBody !== 'ok')
+	throw new Error(
+		`❌ ESM Node.js disposable derive route returned ${disposeRes.status}: ${disposeBody}`
+	)
+
+await new Promise((resolve) => setTimeout(resolve, 10))
+if (!disposed.includes('derive'))
+	throw new Error('❌ ESM Node.js derive value was not disposed')
+
+// `listen()` needs an adapter on Node, so drive the generic stop lane directly
+disposeApp.server = { stop() {} }
+await disposeApp.stop()
+if (!disposed.includes('decorator'))
+	throw new Error('❌ ESM Node.js decorator was not disposed on stop')
+
+console.log('✅ ESM Node.js disposes derive and decorate values')
+
 const filePath = fileURLToPath(
 	new URL('../../../package.json', import.meta.url)
 )

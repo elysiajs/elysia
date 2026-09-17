@@ -621,42 +621,13 @@ type SourceCache = Map<
 
 const globalSourceCache: SourceCache = new Map()
 
-function sourceCache() {
-	const session = getCompilerSession()
-
-	return session?.external
-		? (session.sucroseCache as SourceCache)
-		: globalSourceCache
-}
-
 let functionCaches = new WeakMap<Function, Sucrose.Inference>()
-
-function rememberInference(
-	caches: SourceCache,
-	key: number,
-	cached: { content: string; inference: Sucrose.Inference } | undefined,
-	content: string,
-	event: unknown,
-	inference: Sucrose.Inference
-) {
-	if (!cached || cached.content !== content) {
-		if (caches.size >= DEFAULT_CACHE_LIMIT) evictOldestHalf(caches)
-
-		caches.set(key, { content, inference })
-	}
-
-	if (typeof event === 'function') functionCaches.set(event, inference)
-}
-
-function clearCache() {
-	globalSourceCache.clear()
-	getCompilerSession()?.sucroseCache.clear()
-	functionCaches = new WeakMap()
-}
 
 export function clearSucroseCache(delay?: number | null) {
 	if (delay === null) return
-	clearCache()
+	globalSourceCache.clear()
+	getCompilerSession()?.sucroseCache.clear()
+	functionCaches = new WeakMap()
 }
 
 export const mergeInference = (
@@ -685,11 +656,6 @@ const emptyInference = Object.freeze(defaultSucrose())
 
 function push(target: unknown[], array: unknown[]) {
 	for (let i = 0; i < array.length; i++) target.push(array[i])
-}
-
-function pushParse(target: unknown[], array: unknown[]) {
-	for (let i = 0; i < array.length; i++)
-		if (typeof array[i] === 'function') target.push(array[i])
 }
 
 // Single-pass token scanner
@@ -1337,7 +1303,12 @@ export function sucrose(
 			if (lifeCycle.beforeHandle?.length)
 				push(events, lifeCycle.beforeHandle)
 
-			if (lifeCycle.parse?.length) pushParse(events, lifeCycle.parse)
+			if (lifeCycle.parse?.length) {
+				const target: unknown[] = events
+				const array: unknown[] = lifeCycle.parse
+				for (let i = 0; i < array.length; i++)
+					if (typeof array[i] === 'function') target.push(array[i])
+			}
 			if (lifeCycle.error?.length) push(events, lifeCycle.error)
 			if (lifeCycle.transform?.length) push(events, lifeCycle.transform)
 
@@ -1351,7 +1322,10 @@ export function sucrose(
 				push(events, lifeCycle.afterResponse)
 		}
 
-		const caches = sourceCache()
+		const session = getCompilerSession()
+		const caches = session?.external
+			? (session.sucroseCache as SourceCache)
+			: globalSourceCache
 
 		for (let i = 0; i < events.length; i++) {
 			const event = events[i]
@@ -1387,14 +1361,18 @@ export function sucrose(
 							functionCaches.set(event, inferred)
 					} else {
 						inferred = Object.freeze(inferFunction(content))
-						rememberInference(
-							caches,
-							key,
-							cached,
-							content,
-							event,
-							inferred
-						)
+						if (!cached || cached.content !== content) {
+							if (caches.size >= DEFAULT_CACHE_LIMIT)
+								evictOldestHalf(caches)
+
+							caches.set(key, {
+								content,
+								inference: inferred
+							})
+						}
+
+						if (typeof event === 'function')
+							functionCaches.set(event, inferred)
 					}
 				}
 			}

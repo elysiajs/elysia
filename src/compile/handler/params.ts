@@ -15,7 +15,12 @@ import {
 } from '../../cookie/utils'
 import { requestId } from '../../utils'
 import { adoptErrorType, fallbackResponse } from '../../handler/error'
-import { finalizeRouteError, forwardError } from '../../handler/utils'
+import {
+	drainDisposables,
+	finalizeRouteError,
+	forwardError,
+	registerDeriveDisposable
+} from '../../handler/utils'
 import type { AnyElysia } from '../../base'
 import {
 	materializeSetHeaders,
@@ -78,6 +83,8 @@ const handlerParams = (): Record<string, Resolver | undefined> =>
 	pe: () => ParseError,
 	es: () => ElysiaStatus,
 	rdc: () => replaceDeriveContext,
+	dsp: () => registerDeriveDisposable,
+	dds: () => drainDisposables,
 	emp: () => emptyResponse,
 	// route-entry abort probe
 	ea: () => armEntryAbort,

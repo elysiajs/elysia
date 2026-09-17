@@ -1,4 +1,4 @@
-import { Elysia, problem } from '../../src'
+import { Elysia, problem, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 
@@ -124,5 +124,89 @@ describe('problem()', () => {
 			status: 500,
 			detail: 'kaboom'
 		})
+	})
+})
+
+describe('context problem', () => {
+	it('is available on the handler context', async () => {
+		const app = new Elysia().get('/', ({ problem }) =>
+			problem(409, { detail: 'x' })
+		)
+
+		const res = await app.handle('/')
+
+		expect(res.status).toBe(409)
+		expect(res.headers.get('content-type')).toBe('application/problem+json')
+		await expect(res.json()).resolves.toEqual({
+			type: 'about:blank',
+			title: 'Conflict',
+			status: 409,
+			detail: 'x'
+		})
+	})
+
+	// `problemBody` fills type/title/status, so a `t.Problem()` response schema
+	// must accept that body without the caller restating them
+	it('satisfies a t.Problem response schema', async () => {
+		const app = new Elysia().get(
+			'/',
+			{
+				response: {
+					409: t.Problem({ sku: t.Number() })
+				}
+			},
+			({ problem }) => problem(409, { sku: 42 })
+		)
+
+		const res = await app.handle('/')
+
+		expect(res.status).toBe(409)
+		await expect(res.json()).resolves.toEqual({
+			type: 'about:blank',
+			title: 'Conflict',
+			status: 409,
+			sku: 42
+		})
+	})
+
+	// `code` is the machine-readable token, it must survive response encoding
+	it('keeps an explicit code', async () => {
+		const app = new Elysia().get(
+			'/',
+			{
+				response: {
+					409: t.Problem({ sku: t.Number() })
+				}
+			},
+			({ problem }) => problem(409, { sku: 42, code: 'oos' })
+		)
+
+		const res = await app.handle('/')
+
+		expect(res.status).toBe(409)
+		await expect(res.json()).resolves.toEqual({
+			type: 'about:blank',
+			code: 'oos',
+			title: 'Conflict',
+			status: 409,
+			sku: 42
+		})
+	})
+
+	it('fails response validation on a mistyped extension member', async () => {
+		const app = new Elysia().get(
+			'/',
+			{
+				response: {
+					409: t.Problem({ sku: t.Number() })
+				}
+			},
+			({ problem }) => problem(409, { sku: 'nope' } as any)
+		)
+
+		const res = await app.handle('/')
+
+		// Response validation failures are server errors.
+		expect(res.status).toBe(500)
 	})
 })

@@ -257,21 +257,6 @@ let programs = new WeakMap<ProgramId, CompiledProgram>()
 
 const programFor = (id?: ProgramId) => (id ? programs.get(id) : undefined)
 
-const fingerprintMismatch = (
-	manifest: CompiledProgramRegistration,
-	actual: AotFingerprint
-) => {
-	const differences: string[] = []
-	const expected = manifest.fingerprint
-
-	if (manifest.bf !== 1)
-		differences.push(`bf (manifest ${manifest.bf}, app 1)`)
-	if (expected.abi !== actual.abi)
-		differences.push(`abi (manifest ${expected.abi}, app ${actual.abi})`)
-
-	return differences
-}
-
 export abstract class Compiled {
 	static register(manifest: CompiledProgramRegistration) {
 		registered = manifest
@@ -282,7 +267,15 @@ export abstract class Compiled {
 		if (!registered || claimed) return false
 
 		const manifest = registered
-		const differences = fingerprintMismatch(manifest, fingerprint)
+		const differences: string[] = []
+		const expected = manifest.fingerprint
+
+		if (manifest.bf !== 1)
+			differences.push(`bf (manifest ${manifest.bf}, app 1)`)
+		if (expected.abi !== fingerprint.abi)
+			differences.push(
+				`abi (manifest ${expected.abi}, app ${fingerprint.abi})`
+			)
 		if (differences.length)
 			throw new Error(
 				`[elysia-aot] Registered manifest fingerprint mismatch: ${differences.join('; ')}.`
@@ -493,28 +486,6 @@ export interface CapturedValidator {
 	bridgeFree?: boolean
 }
 
-function captureEntry({
-	method,
-	path,
-	slot
-}: {
-	method: string
-	path: string
-	slot: ValidatorSlot
-}) {
-	if (!isValidatorCapturing()) return
-
-	const capture = activeSession?.capture
-	if (!capture) return
-
-	const k = `${method}_${path}_${slot}`
-
-	let e = capture.get(k)
-	if (!e) capture.set(k, (e = { method, path, slot }))
-
-	return e
-}
-
 /** @internal shared with `aot-capture.ts` (`beginValidatorCapture`). */
 export const aotActivationError = () =>
 	new Error('Elysia AOT capture module is not activated.')
@@ -538,7 +509,18 @@ function captureSet(
 	loc: { method: string; path: string; slot: ValidatorSlot },
 	partial: Partial<CapturedValidator>
 ) {
-	const e = captureEntry(loc)
+	const { method, path, slot } = loc
+
+	if (!isValidatorCapturing()) return
+
+	const capture = activeSession?.capture
+	if (!capture) return
+
+	const k = `${method}_${path}_${slot}`
+
+	let e = capture.get(k)
+	if (!e) capture.set(k, (e = { method, path, slot }))
+
 	if (e) Object.assign(e, partial)
 }
 

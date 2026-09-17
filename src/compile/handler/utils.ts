@@ -13,7 +13,12 @@ import { ElysiaStatus } from '../../error'
 import { adoptErrorType } from '../../handler/error'
 import { ELYSIA_TYPES } from '../../type/constants'
 import { isSpace, isIdentChar, skipString } from '../lexer'
-export { emptyResponse } from '../../handler/utils'
+import { registerDeriveDisposable } from '../../handler/utils'
+export {
+	emptyResponse,
+	drainDisposables,
+	registerDeriveDisposable
+} from '../../handler/utils'
 
 import type { ElysiaAdapter } from '../../adapter'
 import type { AppEvent, AppHook, MaybeArray } from '../../types'
@@ -26,11 +31,6 @@ export interface TraceReporter {
 		end: (errBinding?: string) => string
 	}
 }
-
-const childName = (fn: unknown) =>
-	(fn as any)?.name && typeof (fn as any).name === 'string'
-		? (fn as any).name
-		: 'anonymous'
 
 const noTrace = { begin: '', end: () => '' } as const
 
@@ -80,7 +80,11 @@ export function armEntryAbort(context: any) {
 }
 
 const trace = (report: TraceReporter | undefined, fn: Function) =>
-	report?.resolveChild(childName(fn)) ?? noTrace
+	report?.resolveChild(
+		(fn as any)?.name && typeof (fn as any).name === 'string'
+			? (fn as any).name
+			: 'anonymous'
+	) ?? noTrace
 
 const toArray = <T>(v: MaybeArray<T>): T[] => (Array.isArray(v) ? v : [v])
 
@@ -116,6 +120,7 @@ export function replaceDeriveContext(context: any, derivative: any) {
 	next.request = context.request
 	next['~sig'] = context['~sig']
 	next['~afterResponse'] = context['~afterResponse']
+	next['~dispose'] = context['~dispose']
 	next.store = context.store
 	next.set = context.set
 	next.body = context.body
@@ -215,7 +220,43 @@ function findReturnedObjectStart(src: string) {
 		// `=> {` is a block body: fall through to the single-return logic below.
 	}
 
-	const { count: returns, firstIndex: idx } = scanReturns(src)
+	let returns = 0
+	let idx = -1
+	for (let i = 0; i < src.length; ) {
+		const ch = src[i]
+		if (ch === '"' || ch === "'" || ch === '`') {
+			i = skipString(src, i)
+			continue
+		}
+
+		if (ch === '/' && src[i + 1] === '/') {
+			const nl = src.indexOf('\n', i)
+			if (nl === -1) break
+			i = nl
+			continue
+		}
+
+		if (ch === '/' && src[i + 1] === '*') {
+			const end = src.indexOf('*/', i)
+			if (end === -1) break
+			i = end + 2
+			continue
+		}
+
+		if (
+			ch === 'r' &&
+			src.startsWith('return', i) &&
+			!isIdentChar(src[i - 1] ?? ' ') &&
+			!isIdentChar(src[i + 6] ?? ' ')
+		) {
+			if (idx === -1) idx = i
+			returns++
+			i += 6
+			continue
+		}
+
+		i++
+	}
 	if (returns !== 1) return -1
 
 	if (idx === -1) return -1
@@ -276,47 +317,6 @@ function topLevelArrowIndex(src: string): number {
 		i++
 	}
 	return -1
-}
-
-function scanReturns(src: string): { count: number; firstIndex: number } {
-	let count = 0
-	let firstIndex = -1
-	for (let i = 0; i < src.length; ) {
-		const ch = src[i]
-		if (ch === '"' || ch === "'" || ch === '`') {
-			i = skipString(src, i)
-			continue
-		}
-
-		if (ch === '/' && src[i + 1] === '/') {
-			const nl = src.indexOf('\n', i)
-			if (nl === -1) break
-			i = nl
-			continue
-		}
-
-		if (ch === '/' && src[i + 1] === '*') {
-			const end = src.indexOf('*/', i)
-			if (end === -1) break
-			i = end + 2
-			continue
-		}
-
-		if (
-			ch === 'r' &&
-			src.startsWith('return', i) &&
-			!isIdentChar(src[i - 1] ?? ' ') &&
-			!isIdentChar(src[i + 6] ?? ' ')
-		) {
-			if (firstIndex === -1) firstIndex = i
-			count++
-			i += 6
-			continue
-		}
-
-		i++
-	}
-	return { count, firstIndex }
 }
 
 function scanObjectLiteralKeys(src: string, open: number): string[] | null {
@@ -468,22 +468,28 @@ export function mapBeforeHandle(
 		code += awaitGuard(fn, isAsync, 'tmp', arm)
 		if (modes?.[i] !== undefined) {
 			needsEs = true
+			link(registerDeriveDisposable, 'dsp')
+
 			if (modes[i]) {
 				link(replaceDeriveContext, 'rdc')
+				// the pre-swap context is the reference for "already there"
 				code +=
 					'if(tmp instanceof es)_r=tmp\n' +
-					"else if(tmp){if(typeof tmp==='object'||typeof tmp==='function')c=rdc(c,tmp);tmp=undefined}\n"
+					"else if(tmp){if(typeof tmp==='object'||typeof tmp==='function'){const _pc=c;c=rdc(c,tmp);for(const _k of Object.keys(tmp))dsp(c,c[_k],_pc)}tmp=undefined}\n"
 			} else {
 				const keys = extractDeriveKeys(fn)
-				const merge =
-					keys && keys.length && !keys.includes('__proto__')
-						? keys
-								.map(
-									(k) =>
-										`c[${JSON.stringify(k)}]=tmp[${JSON.stringify(k)}]`
-								)
-								.join(';')
-						: "Object.hasOwn(tmp,'__proto__')?Object.defineProperties(c,Object.getOwnPropertyDescriptors(tmp)):Object.assign(c,tmp)"
+				const keyed =
+					!!keys && !!keys.length && !keys.includes('__proto__')
+				// keyed: one read per key, registered before assignment, so the
+				// registered instance is the one the context exposes
+				const merge = keyed
+					? keys!
+							.map(
+								(k) =>
+									`_v=tmp[${JSON.stringify(k)}];dsp(c,_v);c[${JSON.stringify(k)}]=_v`
+							)
+							.join(';')
+					: "if(Object.hasOwn(tmp,'__proto__')){for(const _k of Object.keys(tmp))dsp(c,tmp[_k]);Object.defineProperties(c,Object.getOwnPropertyDescriptors(tmp))}else{_v=Object.assign({},tmp);for(const _k of Reflect.ownKeys(_v)){dsp(c,_v[_k]);c[_k]=_v[_k]}}"
 				code +=
 					'if(tmp instanceof es)_r=tmp\n' +
 					`else if(tmp){${merge};tmp=undefined}\n`

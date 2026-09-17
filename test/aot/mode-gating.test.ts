@@ -741,7 +741,7 @@ describe('AOT Vite hook contract', () => {
 		expect(/setupTypebox/.test(vt)).toBe(false)
 		expect(
 			vt.split('\n').filter((l) => l.startsWith('export')).length
-		).toBe(28)
+		).toBe(29)
 
 		await expect(plugin.transform('x', COMPAT)).resolves.toBe(
 			'export function setupTypebox(){}\n'

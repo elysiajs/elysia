@@ -18,7 +18,8 @@ export {
 	type ValidationErrorResponse,
 	HTTPError,
 	type TaggedHTTPError,
-	type SelectiveStatus
+	type SelectiveStatus,
+	type SelectiveProblem
 } from './error'
 export {
 	t,
@@ -58,13 +59,14 @@ export type {
 export type {
 	HTTPHeaders,
 	SSEPayload,
-	UnwrapSchema,
 	DefaultEphemeral,
 	DefaultMetadata,
 	DefaultSingleton,
 	RouteSchema,
 	InputSchema,
+	UnwrapSchema,
 	UnwrapRoute,
+	UnwrapModels,
 	Macro,
 	MacroToProperty,
 	MacroToContext,

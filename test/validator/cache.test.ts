@@ -2,17 +2,19 @@
 // cross-app test drive a real capture session via begin/endValidatorCapture.
 import '../../src/compile/aot-capture'
 import { afterEach, describe, it, expect } from 'bun:test'
-import { Type } from 'typebox'
+import { Type, type TSchema } from 'typebox'
 
 import { Elysia, t } from '../../src'
 import { post, json } from '../utils'
 import { TypeBoxValidatorCache } from '../../src/type/validator'
-import { fnKey, schemaCacheKey } from '../../src/type/validator/validator-cache'
+import { fnKey, computeSchemaMeta } from '../../src/type/validator/validator-cache'
 import { Validator } from '../../src/validator'
 import {
 	beginValidatorCapture,
 	endValidatorCapture
 } from '../../src/compile/aot-capture'
+
+const schemaCacheKey = (schema: TSchema) => computeSchemaMeta(schema, true).key
 
 describe('TypeBoxValidatorCache eviction', () => {
 	const make = (i: number) => Type.Object({ [`k${i}`]: Type.String() })

@@ -943,41 +943,45 @@ export function tee<T>(
 		}
 	})()
 
-	const makeBranch = (me: number): AsyncIterableIterator<T> => ({
-		[Symbol.asyncIterator]() {
-			return this
-		},
+	const makeBranch = (me: number): AsyncIterableIterator<T> =>
+		Object.assign(Object.create(null) as AsyncIterableIterator<T>, {
+			[Symbol.asyncIterator]() {
+				return this
+			},
 
-		next: () =>
-			new Promise<IteratorResult<T>>((resolve, reject) =>
-				serve(me, { resolve, reject })
-			),
+			next: () =>
+				new Promise<IteratorResult<T>>((resolve, reject) =>
+					serve(me, { resolve, reject })
+				),
 
-		// Synchronous-effect return, see the tee() doc comment
-		return: (value?: unknown) => {
-			const p = pending[me]
-			if (p) {
-				pending[me] = null
-				p.resolve(doneResult)
+			// Synchronous-effect return, see the tee() doc comment
+			return: (value?: unknown) => {
+				const p = pending[me]
+				if (p) {
+					pending[me] = null
+					p.resolve(doneResult)
+				}
+
+				closeBranch(me)
+
+				return Promise.resolve({
+					done: true as const,
+					value: value as T
+				})
+			},
+
+			throw: (error?: unknown) => {
+				const p = pending[me]
+				if (p) {
+					pending[me] = null
+					p.resolve(doneResult)
+				}
+
+				closeBranch(me)
+
+				return Promise.reject(error)
 			}
-
-			closeBranch(me)
-
-			return Promise.resolve({ done: true as const, value: value as T })
-		},
-
-		throw: (error?: unknown) => {
-			const p = pending[me]
-			if (p) {
-				pending[me] = null
-				p.resolve(doneResult)
-			}
-
-			closeBranch(me)
-
-			return Promise.reject(error)
-		}
-	})
+		})
 
 	return Array.from({ length: branches }, (_, b) => makeBranch(b))
 }

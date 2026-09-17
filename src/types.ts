@@ -1354,6 +1354,19 @@ export interface UnwrapRoute<
 			: unknown | void
 }
 
+export type UnwrapModels<
+	T extends Record<string, unknown>,
+	Iteration extends number[] = []
+> = Iteration['length'] extends 8
+	? T
+	: {
+			[K in keyof T]: T[K] extends AnySchema
+				? UnwrapSchema<T[K]>
+				: T[K] extends Record<string, unknown>
+					? UnwrapModels<T[K], [...Iteration, 0]>
+					: T[K]
+		}
+
 // ? Macro stuff
 type LocalLifecycleProperty =
 	| 'detail'

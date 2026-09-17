@@ -43,36 +43,6 @@ import type {
 	AppHook
 } from '../../types'
 
-interface MountHandlerMeta {
-	handle: (request: Request) => unknown
-	suffixLen: number
-}
-
-function resolveMountHandler(
-	meta: MountHandlerMeta,
-	path: string
-): (c: Context) => unknown {
-	const { handle, suffixLen } = meta
-
-	const rawRoot = suffixLen ? path.slice(0, path.length - suffixLen) : path
-	const encRoot = encodeURI(rawRoot)
-	const rawLen = rawRoot.length
-	const encLen = encRoot.length
-
-	return (c: Context) =>
-		handle(
-			new Request(
-				replaceUrlPath(
-					c.request.url,
-					c.path.slice(
-						c.path.startsWith(encRoot) ? encLen : rawLen
-					) || '/'
-				),
-				c.request
-			)
-		)
-}
-
 function applyHook(
 	localHook: Partial<AnyLocalHook> | undefined,
 	appHook: Partial<AnyLocalHook> | undefined,
@@ -650,7 +620,29 @@ export function compileHandler(
 
 	const mountMeta =
 		typeof handler === 'function' ? (handler as any)['~mount'] : undefined
-	if (mountMeta) handler = resolveMountHandler(mountMeta, path)
+	if (mountMeta) {
+		const { handle, suffixLen } = mountMeta
+
+		const rawRoot = suffixLen
+			? path.slice(0, path.length - suffixLen)
+			: path
+		const encRoot = encodeURI(rawRoot)
+		const rawLen = rawRoot.length
+		const encLen = encRoot.length
+
+		handler = (c: Context) =>
+			handle(
+				new Request(
+					replaceUrlPath(
+						c.request.url,
+						c.path.slice(
+							c.path.startsWith(encRoot) ? encLen : rawLen
+						) || '/'
+					),
+					c.request
+				)
+			)
+	}
 
 	const reconstructed = liveOnly
 		? undefined

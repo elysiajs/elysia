@@ -11,7 +11,7 @@
 	"module": "./dist/index.mjs",
 	"types": "./dist/index.d.ts",
 	"engines": {
-		"node": ">=20.19 <21 || >=22.12"
+		"node": ">=24"
 	},
 	"files": [
 		"dist"

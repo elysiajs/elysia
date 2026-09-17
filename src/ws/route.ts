@@ -197,9 +197,6 @@ async function applyMapResponse(
 	return value
 }
 
-const isBackpressured = (status: unknown) =>
-	typeof status === 'number' && status <= 0
-
 const isEmptyPayload = (payload: unknown) => {
 	if (payload === '' || payload == null) return true
 	if (typeof payload === 'string') return false
@@ -251,7 +248,11 @@ export async function handleWSResponse(
 				let status = (ws as any).send(mapped)
 				const canBackpressure = !isEmptyPayload(mapped)
 
-				while (canBackpressure && isBackpressured(status)) {
+				while (
+					canBackpressure &&
+					typeof status === 'number' &&
+					status <= 0
+				) {
 					// closing
 					if (ws.readyState >= 2) return
 

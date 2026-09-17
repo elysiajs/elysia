@@ -7,7 +7,8 @@ import {
 	getAsyncIndexes,
 	emptyResponse,
 	getNotFoundBody,
-	getNotFound
+	getNotFound,
+	drainDisposables
 } from './utils'
 
 import { createContext, type Context } from '../context'
@@ -383,7 +384,8 @@ export function createFetchHandler(
 		if (
 			!afterResponses?.length &&
 			!traceAfterResponsePhase &&
-			!queue?.length
+			!queue?.length &&
+			!(context as any)['~dispose']
 		)
 			return
 		;(context as any)._arf = true
@@ -415,6 +417,9 @@ export function createFetchHandler(
 						console.error(e)
 					}
 			}
+
+			// derive values are released after the user's own callbacks
+			await drainDisposables(context)
 
 			if (traceAfterResponsePhase) {
 				let cache = (context as any).trace as any[] | undefined

@@ -21,27 +21,6 @@ export const isBridgeNotInitialized = (error: unknown) =>
 	error instanceof Error &&
 	error.message.startsWith("Typebox module isn't initialized")
 
-function codecCoercionBridgeFree(
-	f: FrozenValidator,
-	coerced: unknown,
-	raw: unknown
-) {
-	return (
-		f.k === 1 &&
-		!!f.dm && // the baked decode transformation
-		!f.em &&
-		!f.ce &&
-		f.a !== 1 &&
-		!(f.d === 1 && f.ps !== 1) &&
-		innerCodecsAligned(f.ic?.length, coerced) &&
-		mirrorUnionsAligned(f.u, raw) &&
-		mirrorUnionsAligned(f.dm.u, coerced)
-	)
-}
-
-const innerCodecsAligned = (icLength: number | undefined, coerced: unknown) =>
-	reconstruct().collectStringCodecNodes(coerced).length === (icLength ?? 0)
-
 function mirrorUnionsAligned(
 	// `u` may be the runtime factory table (`FrozenCheckFactory[][]`) or the
 	// captured source table (`{identifier, code}[][]`), only the dims matter
@@ -66,7 +45,19 @@ function isBridgeFreeComplete(
 ) {
 	if (!f.cm) return false
 
-	if (codecCoercionBridgeFree(f, schema, raw)) return true
+	if (
+		f.k === 1 &&
+		!!f.dm && // the baked decode transformation
+		!f.em &&
+		!f.ce &&
+		f.a !== 1 &&
+		!(f.d === 1 && f.ps !== 1) &&
+		(f.ic?.length ?? 0) ===
+			reconstruct().collectStringCodecNodes(schema).length &&
+		mirrorUnionsAligned(f.u, raw) &&
+		mirrorUnionsAligned(f.dm.u, schema)
+	)
+		return true
 
 	if (
 		f.e === 1 || // needs `collectExternals(coercedSchema)`
@@ -442,10 +433,6 @@ class FrozenSlotValidator {
 		return defaults.clone ? defaults.clone() : structuredClone(value)
 	}
 
-	#applyDefault(value: any) {
-		return this.#defaultFastPath!.merge!(value)
-	}
-
 	From(value: unknown, type?: string): unknown {
 		if (this.#hasDefault) {
 			const defaults = this.#defaultFastPath
@@ -460,7 +447,7 @@ class FrozenSlotValidator {
 					typeof value === 'object' &&
 					defaults.merge !== undefined
 				)
-					value = this.#applyDefault(value)
+					value = this.#defaultFastPath!.merge!(value)
 			}
 		}
 

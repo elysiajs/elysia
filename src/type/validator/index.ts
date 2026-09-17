@@ -367,9 +367,6 @@ export function schemaMayHaveAsyncRefine(
 	return false
 }
 
-const schemaHasCustomError = (schema: any) =>
-	schemaSome(schema, (node) => node.error !== undefined)
-
 async function enforceFileTypeChecks(
 	pending: PendingFileTypeCheck[],
 	type: string | undefined,
@@ -440,15 +437,6 @@ function warnMirrorFailure(schema: unknown, error: unknown) {
 }
 
 let warnedMissingMirror = false
-
-function warnMissingMirror() {
-	if (warnedMissingMirror) return
-	warnedMissingMirror = true
-
-	console.warn(
-		"exact-mirror is unavailable, normalization degraded to TypeBox. Install exact-mirror, or bundle it statically with the AOT build plugin ('elysia/plugin/aot') to restore the fast path. Use normalize: 'typebox' to silence this."
-	)
-}
 
 interface DefaultFastPath {
 	/** `Default(schema, undefined)`; cloned when object-like. */
@@ -598,7 +586,10 @@ export class TypeBoxValidator<
 				!capturing &&
 				!options?.eager &&
 				!schemaMayHaveAsyncRefine(this.schema as any) &&
-				!schemaHasCustomError(this.schema as any)
+				!schemaSome(
+					this.schema as any,
+					(node) => node.error !== undefined
+				)
 
 			if (deferrable) {
 				this.#deferred = true
@@ -745,7 +736,13 @@ export class TypeBoxValidator<
 				if (options?.normalize === 'exactMirror' || options?.sanitize)
 					throw exactMirrorRequired()
 
-				if (options?.normalize === true) warnMissingMirror()
+				if (options?.normalize === true && !warnedMissingMirror) {
+					warnedMissingMirror = true
+
+					console.warn(
+						"exact-mirror is unavailable, normalization degraded to TypeBox. Install exact-mirror, or bundle it statically with the AOT build plugin ('elysia/plugin/aot') to restore the fast path. Use normalize: 'typebox' to silence this."
+					)
+				}
 			}
 
 			try {

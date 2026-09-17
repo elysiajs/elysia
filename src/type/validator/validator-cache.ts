@@ -260,7 +260,10 @@ function walkArray(value: any[], mode: number, state: WalkState): string {
 	return serialized + ']'
 }
 
-function computeSchemaMeta(schema: TSchema, forceKey: boolean): SchemaMeta {
+export function computeSchemaMeta(
+	schema: TSchema,
+	forceKey: boolean
+): SchemaMeta {
 	const state: WalkState = {
 		isOpaque: false,
 		hasRef: false,
@@ -281,9 +284,6 @@ function computeSchemaMeta(schema: TSchema, forceKey: boolean): SchemaMeta {
 		key: forceKey ? key : special ? '' : key
 	}
 }
-
-export const schemaCacheKey = (schema: TSchema) =>
-	computeSchemaMeta(schema, true).key
 
 export const mayHaveFileType = (schema: object) =>
 	!('~standard' in schema) &&
@@ -354,15 +354,6 @@ export class TypeBoxValidatorCache {
 
 	constructor(gcTime: number = DEFAULT_GC_TIME) {
 		this.#gcTime = gcTime
-	}
-
-	#scheduleClear() {
-		if (isCloudflareWorker) return
-
-		if (this.#gc) clearTimeout(this.#gc)
-
-		this.#gc = setTimeout(() => this.clear(), this.#gcTime)
-		;(this.#gc as any).unref?.()
 	}
 
 	get(
@@ -436,7 +427,13 @@ export class TypeBoxValidatorCache {
 		normalize = '',
 		models?: object
 	) {
-		this.#scheduleClear()
+		if (!isCloudflareWorker) {
+			if (this.#gc) clearTimeout(this.#gc)
+
+			this.#gc = setTimeout(() => this.clear(), this.#gcTime)
+			;(this.#gc as any).unref?.()
+		}
+
 		const meta = TypeBoxValidatorCache.meta(schema)
 
 		normalize += TypeBoxValidatorCache.#modelsToken(models, meta.hasRef)

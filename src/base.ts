@@ -46,17 +46,20 @@ import {
 	clonePlainDecorators,
 	coalesceSchemas,
 	createErrorEventHandler,
+	disposeDecorators,
 	eventProperties,
 	fnOrigin,
 	fnv1a,
 	getLoosePath,
 	guardNonPlainLeaves,
 	hookToGuard,
+	isDisposable,
 	isEmpty,
 	isNotEmpty,
 	isRecordNumber,
 	joinPath,
 	macroOrigin,
+	markSingletons,
 	mapDeriveEntry,
 	mergeDeep,
 	mergeResponse,
@@ -202,11 +205,40 @@ const mergeExtCallbacks = <T>(target: T[], incoming: T[]) => {
 	index.indexedLength = target.length
 }
 
+const recordDisposable = (
+	ext: { disposable?: unknown[] },
+	value: unknown
+) => {
+	if (!isDisposable(value)) return
+
+	const disposable = (ext.disposable ??= [])
+	if (!disposable.includes(value)) disposable.push(value)
+}
+
+const recordDisposables = (
+	ext: { disposable?: unknown[]; decorator?: object },
+	source: object
+) => {
+	const stored = ext.decorator as Record<string, unknown> | undefined
+
+	for (const key in source) {
+		const value = stored?.[key]
+		recordDisposable(ext, value)
+
+		if (!isDisposable(value)) recordDisposable(ext, (source as any)[key])
+	}
+}
+
+const markStoredSingletons = (table: object | undefined, source: object) => {
+	if (!table) return
+
+	for (const key in source)
+		markSingletons((table as Record<string, unknown>)[key])
+}
+
 const canRegisterLoose = (path: string, isDynamic: boolean) =>
 	!isDynamic && (path.length === 0 || path.charCodeAt(path.length - 1) === 47)
 
-// Match the schema forms accepted by Validator.create. Raw t.Unsafe schemas
-// have no supported marker and must be rejected.
 const isSchemaValue = (value: unknown) => {
 	if (value == null || typeof value === 'string') return true
 	// A Standard Schema can also be a function.
@@ -359,6 +391,14 @@ export class Elysia<
 		hoc?: WrapFn<any>[]
 		setup?: GracefulHandler<any>[]
 		cleanup?: GracefulHandler<any>[]
+		/**
+		 * Accepted `.decorate()` values implementing an explicit disposer, in
+		 * registration order.
+		 *
+		 * Recorded at registration so the original reference survives a
+		 * `.use()` clone, a same-name merge and a later override
+		 */
+		disposable?: unknown[]
 		cleanupEpoch?: (
 			handler: GracefulHandler<any> | GracefulHandler<any>[]
 		) => boolean
@@ -866,6 +906,19 @@ export class Elysia<
 						)
 					else target[name] = value
 
+					// the value the table kept, mirroring the object form: a
+					// non-override merge keeps the existing object, and
+					// disposing a value the app never adopted is wrong
+					if (field === 'decorator') {
+						const stored = target[name]
+						recordDisposable(ext, stored)
+
+						if (!isDisposable(stored))
+							recordDisposable(ext, value)
+					}
+
+					markSingletons(target[name])
+
 					return this
 				}
 
@@ -878,13 +931,29 @@ export class Elysia<
 						as === 'override'
 					)
 
+				if (field === 'decorator') recordDisposables(ext, value)
+				markStoredSingletons(ext[field], value)
+
 				return this
 
 			case 'function':
 				if (name) {
-					if (as === 'override' || !(name in target))
+					if (as === 'override' || !(name in target)) {
 						target[name] = value
-				} else ext[field] = (value as Function)(target)
+
+						if (field === 'decorator')
+							recordDisposable(ext, value)
+
+						markSingletons(value)
+					}
+				} else {
+					ext[field] = (value as Function)(target)
+
+					if (field === 'decorator')
+						recordDisposables(ext, ext[field] as object)
+
+					markStoredSingletons(ext[field], ext[field] as object)
+				}
 
 				return this
 
@@ -4755,6 +4824,7 @@ export class Elysia<
 			hoc,
 			setup,
 			cleanup,
+			disposable,
 			capability
 		} = app['~ext']!
 
@@ -4773,11 +4843,15 @@ export class Elysia<
 					{ map: undefined }
 				)
 			else ext.decorator = clonePlainDecorators(decorator)
+
+			markStoredSingletons(ext.decorator, decorator)
 		}
 
 		if (store) {
 			if (ext.store) mergeDeep(ext.store, store)
 			else ext.store = Object.assign(nullObject(), store)
+
+			markStoredSingletons(ext.store, store)
 		}
 
 		if (headers) {
@@ -4846,6 +4920,11 @@ export class Elysia<
 		if (cleanup) {
 			if (ext.cleanup) mergeExtCallbacks(ext.cleanup, cleanup)
 			else ext.cleanup = cleanup.slice()
+		}
+
+		if (disposable) {
+			if (ext.disposable) mergeExtCallbacks(ext.disposable, disposable)
+			else ext.disposable = disposable.slice()
 		}
 
 		if (capability) {
@@ -8124,7 +8203,11 @@ export class Elysia<
 		}
 
 		const handlers = this['~ext']?.cleanup
-		if (!errors.length && !handlers?.length)
+		if (
+			!errors.length &&
+			!handlers?.length &&
+			!this['~ext']?.disposable?.length
+		)
 			return result &&
 				typeof (result as Promise<void>).then === 'function'
 				? (result as Promise<void>)
@@ -8144,6 +8227,14 @@ export class Elysia<
 					} catch (error) {
 						errors.push(error)
 					}
+
+			// after every cleanup handler: user cleanup may still use a
+			// decorated singleton
+			try {
+				await disposeDecorators(this)
+			} catch (error) {
+				errors.push(error)
+			}
 
 			throwLifecycleErrors(errors)
 		})()

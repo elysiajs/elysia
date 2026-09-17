@@ -4,6 +4,7 @@ import { WebStandardAdapter } from '../web-standard'
 import { buildNativeStaticResponse } from '../../compile/handler'
 import { routeRow, RouteFlag } from '../../route-table'
 import {
+	disposeDecorators,
 	flattenChain,
 	getLoosePath,
 	isSocketQuiet,
@@ -75,27 +76,6 @@ const unavailableFetch = () =>
 		status: 503
 	})
 
-function reloadServer(server: ReturnType<typeof Bun.serve>, serve: any) {
-	try {
-		server.reload(serve)
-	} catch (error) {
-		if (!serve.routes) throw error
-
-		delete serve.routes
-		console.warn('[Elysia] Native static promotion was skipped:', error)
-
-		try {
-			server.reload(serve)
-		} catch (fallbackError) {
-			console.error(
-				'[Elysia] Failed to reload Bun server:',
-				fallbackError
-			)
-			throw fallbackError
-		}
-	}
-}
-
 function releaseLifecycle(
 	app: AnyElysia,
 	ext: NonNullable<AnyElysia['~ext']>,
@@ -109,10 +89,6 @@ function releaseLifecycle(
 	if (ext.cleanupEpoch === registerCleanup) delete ext.cleanupEpoch
 	if (createdExt && app['~ext'] === ext && !Object.keys(ext).length)
 		app['~ext'] = undefined
-}
-
-function clearAppServer(app: AnyElysia, server: ReturnType<typeof Bun.serve>) {
-	if (app.server === server) app.server = undefined
 }
 
 async function waitForServerRequests(
@@ -627,7 +603,7 @@ export const BunAdapter = createAdapter({
 
 			cancelled = true
 			requestReady.resolve()
-			clearAppServer(app, server)
+			if (app.server === server) app.server = undefined
 
 			let outcome: Promise<void>
 			if (shutdownAttempt) {
@@ -714,6 +690,12 @@ export const BunAdapter = createAdapter({
 										;(cleanupFailures ??= []).push(error)
 									}
 								}
+
+								try {
+									await disposeDecorators(app)
+								} catch (error) {
+									;(cleanupFailures ??= []).push(error)
+								}
 							}
 
 							cleanupCompleted = true
@@ -765,7 +747,27 @@ export const BunAdapter = createAdapter({
 				if (built!.websocket) serve.websocket = built!.websocket
 				if (built!.routes) serve.routes = built!.routes
 
-				reloadServer(server, serve)
+				try {
+					server.reload(serve)
+				} catch (error) {
+					if (!serve.routes) throw error
+
+					delete serve.routes
+					console.warn(
+						'[Elysia] Native static promotion was skipped:',
+						error
+					)
+
+					try {
+						server.reload(serve)
+					} catch (fallbackError) {
+						console.error(
+							'[Elysia] Failed to reload Bun server:',
+							fallbackError
+						)
+						throw fallbackError
+					}
+				}
 
 				if (callback) callback(server)
 			} catch (error) {

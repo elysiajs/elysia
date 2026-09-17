@@ -117,7 +117,11 @@ export abstract class Validator {
 			}
 		}
 
-		if (isCompiledSchema(schema)) {
+		if (
+			schema != null &&
+			typeof (schema as any).Check === 'function' &&
+			'buildResult' in schema
+		) {
 			const message =
 				'[Elysia] Compiled schema detected. Please pass t.Schema instead.'
 
@@ -279,11 +283,6 @@ export abstract class Validator {
 		clearSharedReferenceCaches()
 	}
 }
-
-const isCompiledSchema = (schema: any) =>
-	schema != null &&
-	typeof schema.Check === 'function' &&
-	'buildResult' in schema
 
 // a single TypeBox / Standard / Acl schema vs a `Record<status, schema>` map
 const isSingleSchema = (schema: any) =>
@@ -593,14 +592,6 @@ export class MultiValidator extends Validator {
 		return (compiled as any).Clean(v)
 	}
 
-	#fromTypeBoxAsync(
-		tbv: TypeBoxValidator,
-		value: unknown,
-		type?: string
-	): Promise<unknown> {
-		return (tbv as any).FromAsync(this.#cloneForMember(value), type)
-	}
-
 	From(
 		value: unknown,
 		type?: string,
@@ -655,17 +646,22 @@ export class MultiValidator extends Validator {
 			if (asyncTbv) {
 				if (!allowAsync) throw asyncStandardSchemaError()
 
-				return this.#fromTypeBoxAsync(asyncTbv, value, type).then(
-					// eslint-disable-next-line sonarjs/function-inside-loop
-					(result) =>
-						this.#fromLoop(
-							value,
-							i + 1,
-							MultiValidator.#merge(snapshot, result),
-							type,
-							allowAsync
-						)
-				)
+				return (
+					(asyncTbv as any).FromAsync(
+						this.#cloneForMember(value),
+						type
+					) as Promise<unknown>
+				).then(
+						// eslint-disable-next-line sonarjs/function-inside-loop
+						(result) =>
+							this.#fromLoop(
+								value,
+								i + 1,
+								MultiValidator.#merge(snapshot, result),
+								type,
+								allowAsync
+							)
+					)
 			}
 
 			snapshot = MultiValidator.#merge(

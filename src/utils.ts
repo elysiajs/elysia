@@ -289,13 +289,32 @@ export function flattenChain(
 				? resolveAdded(node)
 				: (node as { added: Partial<AppHook> }).added
 
-			if (added)
-				appendInto(
-					result,
-					added,
-					keep,
-					(node as { scope?: EventScope }).scope
-				)
+			if (added) {
+				const nodeScope = (node as { scope?: EventScope }).scope
+
+				if (!(keep && !keep(nodeScope)))
+					for (const key in added) {
+						const v = (added as any)[key]
+						if (v === undefined || v === null) continue
+
+						if (
+							eventProperties.has(key) ||
+							key === 'schemas' ||
+							key === '~deriveEntries'
+						) {
+							const existing = (result as any)[key]
+
+							if (Array.isArray(v)) {
+								if (existing) {
+									const arr = existing as any[]
+									for (let i = 0; i < v.length; i++)
+										arr.push(v[i])
+								} else (result as any)[key] = v.slice()
+							} else if (existing) (existing as any[]).push(v)
+							else (result as any)[key] = [v]
+						} else (result as any)[key] = v
+					}
+			}
 
 			continue
 		}
@@ -396,36 +415,6 @@ export function flattenChainMemoReadonly(
 	if (!start) return
 
 	return flattenChainCached(root, start, resolveAdded)
-}
-
-function appendInto(
-	target: Partial<AppHook>,
-	src: Partial<AppHook>,
-	keep?: (s: EventScope | undefined) => boolean,
-	nodeScope?: EventScope
-) {
-	if (keep && !keep(nodeScope)) return
-
-	for (const key in src) {
-		const v = (src as any)[key]
-		if (v === undefined || v === null) continue
-
-		if (
-			eventProperties.has(key) ||
-			key === 'schemas' ||
-			key === '~deriveEntries'
-		) {
-			const existing = (target as any)[key]
-
-			if (Array.isArray(v)) {
-				if (existing) {
-					const arr = existing as any[]
-					for (let i = 0; i < v.length; i++) arr.push(v[i])
-				} else (target as any)[key] = v.slice()
-			} else if (existing) (existing as any[]).push(v)
-			else (target as any)[key] = [v]
-		} else (target as any)[key] = v
-	}
 }
 
 // eslint-disable-next-line no-control-regex
@@ -1177,13 +1166,12 @@ export const requestId = isBun
  * path. A fixed offset would let the client-supplied `Host` decide how many
  * leading path bytes are dropped
  */
-export function authorityEnd(url: string) {
-	return url.charCodeAt(4) === 58
+export const authorityEnd = (url: string) =>
+	url.charCodeAt(4) === 58
 		? 7
 		: url.charCodeAt(5) === 58
 			? 8
 			: url.indexOf('://') + 3
-}
 
 export function replaceUrlPath(url: string, path: string) {
 	const i = url.indexOf('/', authorityEnd(url))
@@ -1224,8 +1212,6 @@ export function clonePlainDecorators<T extends Record<string, unknown>>(
 	return out as T
 }
 
-const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
-
 function prefix<T extends string, Models extends Record<string, AnySchema>>(
 	prefix: T,
 	models: Models
@@ -1250,7 +1236,8 @@ prefix.capitalize = function prefixModelsCapitalize<
 	const prefixed: Record<string, AnySchema> = nullObject()
 
 	for (const key in models)
-		prefixed[`${prefix}.${capitalize(key)}`] = models[key]
+		prefixed[`${prefix}.${key.charAt(0).toUpperCase() + key.slice(1)}`] =
+			models[key]
 
 	return prefixed as any
 }
@@ -1287,6 +1274,69 @@ export const throwLifecycleErrors = (errors: unknown[]) => {
 	if (errors.length === 1) throw errors[0]
 	if (errors.length)
 		throw new AggregateError(errors, 'Multiple lifecycle failures')
+}
+
+export const isDisposable = (value: any) => {
+	if (value == null) return false
+
+	const kind = typeof value
+	if (kind !== 'object' && kind !== 'function') return false
+
+	try {
+		return (
+			typeof value[Symbol.asyncDispose] === 'function' ||
+			typeof value[Symbol.dispose] === 'function'
+		)
+	} catch {
+		return false
+	}
+}
+
+const singletons = new WeakSet<object>()
+export const isSingleton = (value: object) => singletons.has(value)
+
+export const markSingletons = (
+	value: unknown,
+	depth = 4,
+	seen = new Set<object>()
+) => {
+	if (value == null) return
+	const kind = typeof value
+	if (kind !== 'object' && kind !== 'function') return
+
+	const object = value as object
+	if (seen.has(object)) return
+	seen.add(object)
+	singletons.add(object)
+
+	if (depth <= 0) return
+
+	for (const key of Object.keys(object)) {
+		const descriptor = Object.getOwnPropertyDescriptor(object, key)
+		if (descriptor && 'value' in descriptor)
+			markSingletons(descriptor.value, depth - 1, seen)
+	}
+}
+
+const disposedDecorators = new WeakSet<object>()
+
+export const disposeDecorators = async (app: {
+	'~ext'?: { disposable?: unknown[] }
+}) => {
+	const values = app['~ext']?.disposable
+	if (!values?.length) return
+
+	const stack = new AsyncDisposableStack()
+
+	for (let i = 0; i < values.length; i++) {
+		const value = values[i] as object
+		if (disposedDecorators.has(value)) continue
+		disposedDecorators.add(value)
+
+		if (isDisposable(value)) stack.use(value as Disposable)
+	}
+
+	await stack.disposeAsync()
 }
 
 export const isSocketQuiet = (socket: {

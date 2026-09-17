@@ -1,4 +1,5 @@
 import { isAsyncFunction, mayReturnPromise } from '../compile/utils'
+import { isDisposable, isSingleton } from '../utils'
 import { isCloudflareWorker, isFastly } from '../universal/constants'
 import { HTTPError, PROBLEM_JSON, problemTypeOf } from '../error'
 import { env } from '../universal'
@@ -67,6 +68,31 @@ export function finalizeRouteError(
 	if (!finalize) throw error
 
 	return finalize(context as Context, error as Error)
+}
+
+export function registerDeriveDisposable(
+	context: any,
+	value: unknown,
+	scan: any = context
+) {
+	if (!isDisposable(value)) return
+	if (isSingleton(value as object)) return
+
+	for (const key in scan) if (scan[key] === value) return
+	;(context['~dispose'] ??= new AsyncDisposableStack()).use(
+		value as Disposable
+	)
+}
+
+export async function drainDisposables(context: any) {
+	const stack = context['~dispose'] as AsyncDisposableStack | undefined
+	if (!stack) return
+
+	try {
+		await stack.disposeAsync()
+	} catch (error) {
+		console.error(error)
+	}
 }
 
 export function getAsyncIndexes(onRequests: Function[]) {

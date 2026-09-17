@@ -1,24 +1,21 @@
 export type CreateMirror = (schema: any, options?: any) => any
 
-function loadExactMirror(): CreateMirror | undefined {
-	try {
-		const meta = import.meta as ImportMeta & {
-			require?: (specifier: string) => any
-		}
-		const require =
-			meta.require ??
-			(globalThis as any).process
-				?.getBuiltinModule?.('module')
-				?.createRequire(import.meta.url)
+let exactMirror: CreateMirror | undefined
+try {
+	const meta = import.meta as ImportMeta & {
+		require?: (specifier: string) => any
+	}
+	const require =
+		meta.require ??
+		(globalThis as any).process
+			?.getBuiltinModule?.('module')
+			?.createRequire(import.meta.url)
 
-		const module = require?.('exact-mirror')
-		const mirror = module?.default ?? module
+	const module = require?.('exact-mirror')
+	const mirror = module?.default ?? module
 
-		return typeof mirror === 'function' ? mirror : undefined
-	} catch {}
-}
-
-let exactMirror = loadExactMirror()
+	exactMirror = typeof mirror === 'function' ? mirror : undefined
+} catch {}
 
 export const getExactMirror = () => exactMirror
 

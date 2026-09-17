@@ -24,7 +24,11 @@ import {
 } from '../../error'
 import { isDynamicRegex, traceEventIndex } from '../../constants'
 import { fallbackResponse } from '../../handler/error'
-import { finalizeRouteError, forwardError } from '../../handler/utils'
+import {
+	drainDisposables,
+	finalizeRouteError,
+	forwardError
+} from '../../handler/utils'
 import { hasHeaderShorthand } from '../../universal/constants'
 
 import { parseQueryFromURL } from '../../parse-query'
@@ -156,7 +160,10 @@ function parse(
 				break
 			}
 
-	const bodyKind = hasFn ? undefined : bodyMediaKind(bodyVali)
+	// 1 structured/form, 2 scalar, 3 file
+	const bodyKind = hasFn
+		? undefined
+		: schemaMediaKind((bodyVali as any)?.schema)
 
 	let code =
 		`let ct=((${hasHeaders ? "c.headers['content-type']" : "c.request.headers.get('content-type')"})||'')\n` +
@@ -233,10 +240,6 @@ function parse(
 
 	return hasFn ? 'let hasBody=false,_bp\n' + code : code
 }
-
-// 1 structured/form, 2 scalar, 3 file
-const bodyMediaKind = (bodyVali: Validator | undefined) =>
-	schemaMediaKind((bodyVali as any)?.schema)
 
 export function schemaMediaKind(schema: any): number | undefined {
 	if (!schema || typeof schema !== 'object' || '~standard' in schema) return
@@ -409,7 +412,13 @@ export function compileHandlerJit({
 		}
 	} = state
 	const hasStaticAfterResponse = !!hook?.afterResponse?.length
-	const hasDynamicAfterResponse = !!inference.afterResponse
+
+	const hasDeriveDispose = !!(hook as { '~deriveEntries'?: unknown[] })?.[
+		'~deriveEntries'
+	]?.length
+
+	const hasDynamicAfterResponse =
+		!!inference.afterResponse || hasDeriveDispose
 
 	const seenKeys = new Set<string>(['rt', 'fre'])
 	const paramValues: unknown[] = [errorRoot, finalizeRouteError]
@@ -441,8 +450,18 @@ export function compileHandlerJit({
 	const abortPeek = "c['~sig']?.aborted"
 	const arm = abortOn ? "_as??=(c['~sig']??=c.request.signal)" : ''
 
+	// A client disconnect is the most common cause of a leaked per-request
+	// resource, so the drain is scheduled before the early return.
+	//
+	// Assigned once `schedule` is known - the parse/transform probes emit
+	// before that and run before any derive value exists
+	let abortSchedule = ''
 	const abortCheck = () =>
-		abortOn ? `if(${abortPeek})return emp.clone()\n` : ''
+		abortOn
+			? abortSchedule
+				? `if(${abortPeek}){${abortSchedule}return emp.clone()}\n`
+				: `if(${abortPeek})return emp.clone()\n`
+			: ''
 
 	const abortChainGuard = () => (abortOn ? abortPeek : undefined)
 
@@ -547,7 +566,10 @@ export function compileHandlerJit({
 		code += `if(ea(c))return emp.clone()\n`
 	}
 
-	if ((hasAfterResponse || hasTrace) && !syncAfterResponse)
+	if (
+		(hasAfterResponse || hasTrace || hasDeriveDispose) &&
+		!syncAfterResponse
+	)
 		code += 'let _stl\n'
 
 	if (asyncCookieSign) code += 'let _sg\n'
@@ -792,9 +814,15 @@ export function compileHandlerJit({
 
 	const traceNeedsSchedule = traceHandleOn || phaseOn('afterResponse')
 
+	if (hasDeriveDispose) link(drainDisposables, 'dds')
+
+	const deriveDisposeOnly = hasDeriveDispose && !hasAfterResponse && !hasTrace
+	const disposeGuard = deriveDisposeOnly ? "c['~dispose']&&" : ''
+
 	const scheduleAfterResponse =
-		hasAfterResponse || traceNeedsSchedule
-			? `c._arf=true\n` +
+		hasAfterResponse || traceNeedsSchedule || hasDeriveDispose
+			? (deriveDisposeOnly ? `if(c['~dispose']){\n` : '') +
+				`c._arf=true\n` +
 				`queueMicrotask(async()=>{` +
 				`if(_stl){try{for await(const v of _stl){}}catch{}}\n` +
 				drainTraceStream +
@@ -815,8 +843,11 @@ export function compileHandlerJit({
 							: '') +
 						`}\n`
 					: '') +
+				// derive values are released after the user's own callbacks
+				(hasDeriveDispose ? `await dds(c)\n` : '') +
 				endTrace('afterResponse') +
-				`})\n`
+				`})\n` +
+				(deriveDisposeOnly ? `}\n` : '')
 			: ''
 
 	// Hoisted error and finalizer helpers cannot call route-scoped `_sc`.
@@ -840,10 +871,16 @@ export function compileHandlerJit({
 			? `_scf(c)\n`
 			: ''
 
+	abortSchedule = hasDeriveDispose
+		? syncAfterResponse
+			? catchSchedule
+			: schedule
+		: ''
+
 	const freThenSchedule = (arg: string) =>
 		catchSchedule
 			? `if(c._arf)return fre(rt,c,${arg})\n` +
-				`c._arf=true\n` +
+				`${deriveDisposeOnly ? `if(c['~dispose'])` : ''}c._arf=true\n` +
 				`const _fr=fre(rt,c,${arg})\n` +
 				`return typeof _fr?.then==='function'` +
 				`?_fr.then((_v)=>{${catchSchedule}return _v\n})` +
@@ -869,7 +906,8 @@ export function compileHandlerJit({
 		hasCookieSign ||
 		hasTrace
 	) {
-		code += `let _r,tmp\n`
+		// `_v` holds a derive value between its registration and its assignment
+		code += `let _r,tmp${hasDeriveDispose ? ',_v' : ''}\n`
 
 		if (hasBeforeHandle || hasTrace) {
 			const bfLen =
@@ -917,11 +955,13 @@ export function compileHandlerJit({
 			if (hasBeforeHandle) code += abortCheck()
 		}
 
-		if (hasAfterResponse || traceHandleOn) link(tee, 'tee')
+		if (hasAfterResponse || traceHandleOn || hasDeriveDispose)
+			link(tee, 'tee')
 
 		const teeBlock =
-			(hasAfterResponse || traceHandleOn) && !syncAfterResponse
-				? `if(_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
+			(hasAfterResponse || traceHandleOn || hasDeriveDispose) &&
+			!syncAfterResponse
+				? `if(${disposeGuard}_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
 					`const _s=tee(_r,2)\n` +
 					`_r=_s[0]\n` +
 					(traceHandleOn ? `_trs=_s[1]\n` : `_stl=_s[1]\n`) +
@@ -1116,8 +1156,7 @@ export function compileHandlerJit({
 
 			// The hook-less lane reaches `fallbackResponse` through `fre`.
 			// This lane has already run the hooks, so it calls the same
-			// function directly — inlining a second copy of it here is what
-			// let the self-describing error contract silently rot
+			// function directly
 			factoryHelpers +=
 				`function _em(c,_r){return typeof _r?.then==='function'?Promise.resolve(_r).catch((_e)=>fre(rt,c,_e)):_r}\n` +
 				`function _fbm(_r,_s,_c){return ${map}(_r,_s,_c.request,true)}\n` +
@@ -1152,8 +1191,9 @@ export function compileHandlerJit({
 								)
 							: '') +
 							endTrace('error') +
-							abortCatch +
-							schedule,
+							(hasDeriveDispose
+								? schedule + abortCatch
+								: abortCatch + schedule),
 						signPrefix,
 						isAsync,
 						arm
@@ -1161,8 +1201,9 @@ export function compileHandlerJit({
 					abortChainGuard()
 				) +
 				endTrace('error') +
-				abortCatch +
-				schedule +
+				(hasDeriveDispose
+					? schedule + abortCatch
+					: abortCatch + schedule) +
 				`return _efb(e,c)\n`
 		} else body += endTrace('error') + freThenSchedule('e')
 

@@ -78,23 +78,6 @@ export function trackWSSettling(
 	result.then(release, release)
 }
 
-const runWSLifecycle = <T, Args extends unknown[]>(
-	data: WSConnectionData,
-	callback: (...args: Args) => T,
-	...args: Args
-) => {
-	const lifecycle = (
-		data as WSConnectionData & {
-			'~lifecycleRun'?: <T, Args extends unknown[]>(
-				callback: (...args: Args) => T,
-				...args: Args
-			) => T
-		}
-	)['~lifecycleRun']
-
-	return lifecycle ? lifecycle(callback, ...args) : callback(...args)
-}
-
 function memoize<T>(view: ElysiaWS<any>, key: string, value: T): T {
 	const self = view.raw.data.elysia ?? view
 
@@ -324,13 +307,20 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		if (!data.closeHandlerInvoked && data.close) {
 			data.closeHandlerInvoked = true
 			try {
-				const result = runWSLifecycle(
-					data,
-					data.close,
-					this,
-					code ?? 1000,
-					reason ?? ''
-				)
+				const close = data.close
+
+				const lifecycle = (
+					data as WSConnectionData & {
+						'~lifecycleRun'?: <T, Args extends unknown[]>(
+							callback: (...args: Args) => T,
+							...args: Args
+						) => T
+					}
+				)['~lifecycleRun']
+
+				const result = lifecycle
+					? lifecycle(close, this, code ?? 1000, reason ?? '')
+					: close(this, code ?? 1000, reason ?? '')
 				if (result instanceof Promise) {
 					const closing = result.catch(() => {})
 					trackWSSettling(data, closing)
