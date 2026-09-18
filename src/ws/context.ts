@@ -12,24 +12,6 @@ import { ValidationError, ElysiaStatus } from '../error'
 import type { RouteSchema } from '../types'
 import { requestId } from '../utils'
 
-function pickValidator(
-	validators:
-		| {
-				[status: number]: {
-					Check(v: unknown): boolean
-					Errors(v: unknown): any[]
-				}
-		  }
-		| undefined,
-	defaultValidator: WSValidatorLike | undefined,
-	data: unknown
-) {
-	if (!validators) return
-	if (data instanceof ElysiaStatus) return validators[data.status]
-
-	return defaultValidator
-}
-
 export interface WSConnectionData {
 	id: string | undefined
 	open?: (elysia: ElysiaWS<any>) => void | Promise<void>
@@ -199,11 +181,13 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 	 */
 	#frame(data: unknown) {
 		const connectionData = this.raw.data
-		const v = pickValidator(
-			connectionData?.validator as any,
-			connectionData?.defaultValidator,
-			data
-		)
+		const validators = connectionData?.validator as any
+		const defaultValidator = connectionData?.defaultValidator
+
+		let v: WSValidatorLike | undefined
+		if (!validators) v = undefined
+		else if (data instanceof ElysiaStatus) v = validators[data.status]
+		else v = defaultValidator
 
 		const status = data instanceof ElysiaStatus ? data : undefined
 		let value = status ? status.response : data

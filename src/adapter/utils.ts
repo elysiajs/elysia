@@ -241,36 +241,6 @@ interface CreateHandlerParameter {
 	): Response
 }
 
-function enqueueBinaryChunk(
-	controller: ReadableStreamDefaultController,
-	chunk: unknown
-) {
-	if (chunk instanceof Blob)
-		return chunk.arrayBuffer().then((buffer) => {
-			controller.enqueue(new Uint8Array(buffer))
-			return true as const
-		})
-
-	if (chunk instanceof Uint8Array) {
-		controller.enqueue(chunk)
-		return true
-	}
-
-	if (chunk instanceof ArrayBuffer) {
-		controller.enqueue(new Uint8Array(chunk))
-		return true
-	}
-
-	if (ArrayBuffer.isView(chunk)) {
-		controller.enqueue(
-			new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength)
-		)
-		return true
-	}
-
-	return false
-}
-
 export function createStreamHandler({
 	mapResponse,
 	mapCompactResponse
@@ -477,7 +447,29 @@ export function createStreamHandler({
 				return
 			}
 
-			const p = enqueueBinaryChunk(controller, value)
+			let p: Promise<true> | boolean
+			if (value instanceof Blob)
+				p = value.arrayBuffer().then((buffer) => {
+					controller.enqueue(new Uint8Array(buffer))
+					return true as const
+				})
+			else if (value instanceof Uint8Array) {
+				controller.enqueue(value)
+				p = true
+			} else if (value instanceof ArrayBuffer) {
+				controller.enqueue(new Uint8Array(value))
+				p = true
+			} else if (ArrayBuffer.isView(value)) {
+				controller.enqueue(
+					new Uint8Array(
+						value.buffer,
+						value.byteOffset,
+						value.byteLength
+					)
+				)
+				p = true
+			} else p = false
+
 			if (p !== false) return void (await p)
 
 			if (typeof value === 'object')

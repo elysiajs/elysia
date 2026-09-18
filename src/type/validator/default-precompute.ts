@@ -202,26 +202,6 @@ function containsRefLike(node: any, seen = new WeakSet()): boolean {
 	return childSchemaSome(node, (child) => containsRefLike(child, seen))
 }
 
-function hasDivergentDefaultBelow(node: any) {
-	const ownKey = 'default' in node ? canonical(node.default) : undefined
-	let bad = false
-
-	const visit = (n: any) => {
-		if (!n || typeof n !== 'object') return false
-		if (
-			'default' in n &&
-			(ownKey === undefined || canonical(n.default) !== ownKey)
-		)
-			return (bad = true)
-
-		return childSchemaSome(n, visit)
-	}
-
-	childSchemaSome(node, visit)
-
-	return bad
-}
-
 function structuralPreallocatable(schema: any, depth = 0) {
 	if (!schema || typeof schema !== 'object') return true
 
@@ -237,8 +217,26 @@ function structuralPreallocatable(schema: any, depth = 0) {
 			schema.if === undefined &&
 			schema.not === undefined
 		)
-	)
-		return !hasDivergentDefaultBelow(schema)
+	) {
+		const ownKey =
+			'default' in schema ? canonical(schema.default) : undefined
+		let bad = false
+
+		const visit = (n: any) => {
+			if (!n || typeof n !== 'object') return false
+			if (
+				'default' in n &&
+				(ownKey === undefined || canonical(n.default) !== ownKey)
+			)
+				return (bad = true)
+
+			return childSchemaSome(n, visit)
+		}
+
+		childSchemaSome(schema, visit)
+
+		return !bad
+	}
 
 	if (depth > 0 && schema.default === undefined && hasDefaultBelow(schema))
 		return false
@@ -533,14 +531,6 @@ function mergeCategory(node: any): MergeCategory {
 	return 'identity'
 }
 
-function presentExpr(child: string, isObject: boolean, varName: string) {
-	if (child === '') return varName
-
-	return isObject
-		? `(${varName}!==null&&typeof ${varName}==='object'&&!Array.isArray(${varName})?${child}(${varName}):${varName})`
-		: `(Array.isArray(${varName})?${child}(${varName}):${varName})`
-}
-
 function mergeExpression(
 	schema: any,
 	varName: string,
@@ -562,7 +552,12 @@ function mergeExpression(
 	if (full !== undefined && absent === undefined) return
 
 	const isObject = mergeCategory(schema) === 'object'
-	const present = presentExpr(child, isObject, varName)
+
+	let present: string
+	if (child === '') present = varName
+	else if (isObject)
+		present = `(${varName}!==null&&typeof ${varName}==='object'&&!Array.isArray(${varName})?${child}(${varName}):${varName})`
+	else present = `(Array.isArray(${varName})?${child}(${varName}):${varName})`
 
 	return { absent, present, child, isObject }
 }
@@ -681,18 +676,6 @@ function emitMerger(
 	return name
 }
 
-function buildMergeSource(schema: any) {
-	const category = mergeCategory(schema)
-	if (category !== 'object' && category !== 'array') return
-
-	const helpers: string[] = []
-	const memo = new WeakMap<object, string>()
-	const root = emitMerger(schema, helpers, memo)
-	if (!root) return
-
-	return `(function(){${helpers.join(';')};return ${root}})()`
-}
-
 // Build-time differential probes (empty containers, sentinel fills) live in
 // build-only `src/compile/aot-capture.ts`
 export interface DefaultProbeImpl {
@@ -779,7 +762,15 @@ export function verifyPreallocatableDefault(schema: TSchema, validate = true) {
 
 	const nullDefault = isPrecomputeSafe(schema as any)
 
-	let ms = buildMergeSource(schema)
+	let ms: string | undefined
+	const category = mergeCategory(schema)
+	if (category !== 'object' && category !== 'array') ms = undefined
+	else {
+		const helpers: string[] = []
+		const memo = new WeakMap<object, string>()
+		const root = emitMerger(schema, helpers, memo)
+		ms = root ? `(function(){${helpers.join(';')};return ${root}})()` : undefined
+	}
 	if (ms !== undefined && validate && !probe().validateMergeSource(schema, ms))
 		ms = undefined
 

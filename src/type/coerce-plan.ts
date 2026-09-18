@@ -68,43 +68,43 @@ const icPlaceholder = () => {
 	)
 }
 
-function ObjectStringShape(property: any, _options?: any) {
-	const [{ properties, ...constraints }, meta] = getMeta(
-		(_options ?? nullObject()) as any
-	)
-	const object = ObjectType(property, constraints)
-
-	const objectString = Decode(
-		Refine(StringType(), icPlaceholder, () => 'must be an object'),
-		icPlaceholder
-	)
-
-	return elyType(
-		ELYSIA_TYPES.ObjectString,
-		Union([object, objectString], meta)
-	)
-}
-
-function ArrayStringShape(property: any, _options?: any) {
-	const [constraints, meta] = getMeta((_options ?? nullObject()) as any)
-	const array = ArrayType(property, constraints)
-
-	const arrayString = Decode(
-		Refine(StringType(), icPlaceholder, () => 'must be an array'),
-		icPlaceholder
-	)
-
-	return elyType(ELYSIA_TYPES.ArrayString, Union([array, arrayString], meta))
-}
-
 // Shape twin of `coerce.ts` `rebuildObjStr`
 // fresh nodes per rebuild, never cached: `reconstructInnerCodecs` mutates them in place
 const rebuildObjStrShape: RebuildObjStr = (original, site) => {
 	const { type, ...rest } = original
-	const node =
-		site.os === ELYSIA_TYPES.ObjectString
-			? ObjectStringShape(rest.properties ?? nullObject(), rest)
-			: ArrayStringShape(rest.items ?? nullObject(), rest)
+
+	let node: any
+	if (site.os === ELYSIA_TYPES.ObjectString) {
+		const property = rest.properties ?? nullObject()
+		const [{ properties, ...constraints }, meta] = getMeta(
+			(rest ?? nullObject()) as any
+		)
+		const object = ObjectType(property, constraints)
+
+		const objectString = Decode(
+			Refine(StringType(), icPlaceholder, () => 'must be an object'),
+			icPlaceholder
+		)
+
+		node = elyType(
+			ELYSIA_TYPES.ObjectString,
+			Union([object, objectString], meta)
+		)
+	} else {
+		const property = rest.items ?? nullObject()
+		const [constraints, meta] = getMeta((rest ?? nullObject()) as any)
+		const array = ArrayType(property, constraints)
+
+		const arrayString = Decode(
+			Refine(StringType(), icPlaceholder, () => 'must be an array'),
+			icPlaceholder
+		)
+
+		node = elyType(
+			ELYSIA_TYPES.ArrayString,
+			Union([array, arrayString], meta)
+		)
+	}
 
 	if ('o' in site)
 		return Object.defineProperty(node, '~optional', {
@@ -120,14 +120,46 @@ const buildCoerceNode = (
 	node: CoerceNode,
 	seen: Set<string>,
 	objStr: RebuildObjStr
-): any =>
-	isCoerceLeaf(node)
-		? coerceLeaf(node, seen)
-		: isCoerceObjStr(node)
-			? objStr(original, node)
-			: isCoerceUnion(node)
-				? rebuildUnion(original, node, seen, objStr)
-				: buildCoercedFromPlan(original, node, seen, objStr)
+): any => {
+	if (isCoerceLeaf(node)) {
+		const key = node.e + (node.c ? JSON.stringify(node.c) : '')
+
+		let leaf: any
+		if (seen.has(key)) {
+			// @ts-expect-error
+			leaf = COERCE_LEAF_CTOR[node.e]!(node.c)
+		} else {
+			seen.add(key)
+			leaf = coerceLeafCache.get(key)
+			if (leaf === undefined) {
+				// @ts-expect-error
+				leaf = COERCE_LEAF_CTOR[node.e]!(node.c)
+
+				if (coerceLeafCache.size >= COERCE_LEAF_CACHE_LIMIT)
+					evictOldestHalf(coerceLeafCache)
+
+				coerceLeafCache.set(key, leaf)
+			} else if (coerceLeafCache.size >= COERCE_LEAF_CACHE_LIMIT) {
+				coerceLeafCache.delete(key)
+				coerceLeafCache.set(key, leaf)
+			}
+		}
+
+		// per-use `~optional` wrapper (don't mutate the shared frozen leaf)
+		if ('o' in node)
+			return Object.defineProperty(Object.create(leaf), '~optional', {
+				value: node.o,
+				enumerable: false
+			})
+
+		return leaf
+	}
+
+	if (isCoerceObjStr(node)) return objStr(original, node)
+	if (isCoerceUnion(node)) return rebuildUnion(original, node, seen, objStr)
+
+	return buildCoercedFromPlan(original, node, seen, objStr)
+}
 
 // clone `original` preserving prototype + non-enumerable markers
 // (`~kind`, `~optional`, `~elyTyp`, ...)
@@ -161,40 +193,6 @@ function rebuildUnion(
 
 /** @internal */
 export const COERCE_LEAF_CACHE_LIMIT = 1024
-
-function coerceLeaf(leaf: CoerceLeaf, seen: Set<string>) {
-	const key = leaf.e + (leaf.c ? JSON.stringify(leaf.c) : '')
-
-	let node: any
-	if (seen.has(key)) {
-		// @ts-expect-error
-		node = COERCE_LEAF_CTOR[leaf.e]!(leaf.c)
-	} else {
-		seen.add(key)
-		node = coerceLeafCache.get(key)
-		if (node === undefined) {
-			// @ts-expect-error
-			node = COERCE_LEAF_CTOR[leaf.e]!(leaf.c)
-
-			if (coerceLeafCache.size >= COERCE_LEAF_CACHE_LIMIT)
-				evictOldestHalf(coerceLeafCache)
-
-			coerceLeafCache.set(key, node)
-		} else if (coerceLeafCache.size >= COERCE_LEAF_CACHE_LIMIT) {
-			coerceLeafCache.delete(key)
-			coerceLeafCache.set(key, node)
-		}
-	}
-
-	// per-use `~optional` wrapper (don't mutate the shared frozen leaf)
-	if ('o' in leaf)
-		return Object.defineProperty(Object.create(node), '~optional', {
-			value: leaf.o,
-			enumerable: false
-		})
-
-	return node
-}
 
 export function buildCoercedFromPlan(
 	original: any,

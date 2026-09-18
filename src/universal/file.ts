@@ -60,13 +60,6 @@ export const mime = {
 	pptx: `${msft365}presentationml.presentation`
 } as const
 
-function getFileExtension(path: string) {
-	const index = path.lastIndexOf('.')
-	if (index === -1) return ''
-
-	return path.slice(index + 1).toLowerCase()
-}
-
 /**
  * Serve a file from a path as the response.
  */
@@ -153,9 +146,13 @@ export class ElysiaFile {
 	}
 
 	get type() {
+		const index = this.path.lastIndexOf('.')
+		const extension =
+			index === -1 ? '' : this.path.slice(index + 1).toLowerCase()
+
 		return (
 			// @ts-ignore
-			mime[getFileExtension(this.path)] || 'application/octet-stream'
+			mime[extension] || 'application/octet-stream'
 		)
 	}
 

@@ -562,36 +562,6 @@ export class MultiValidator extends Validator {
 		return this.From(value)
 	}
 
-	#fromTypeBox(
-		compiled: CompiledTypeBoxValidator,
-		index: number,
-		value: unknown,
-		type?: string
-	): unknown {
-		let v = this.#cloneForMember(value)
-
-		if (this.#hasDefaults[index])
-			v = (compiled as any).Default
-				? (compiled as any).Default(v)
-				: Default(this.#tbSchemas[index]!, v)
-
-		if (this.#codecs[index])
-			try {
-				return (compiled as any).Clean((compiled as any).Decode(v))
-			} catch {
-				throw new ValidationError(type, value, () =>
-					(compiled as CompiledTypeBoxValidator).Errors(value)
-				)
-			}
-
-		if (!(compiled as CompiledTypeBoxValidator).Check(v))
-			throw new ValidationError(type, value, () =>
-				(compiled as CompiledTypeBoxValidator).Errors(v)
-			)
-
-		return (compiled as any).Clean(v)
-	}
-
 	From(
 		value: unknown,
 		type?: string,
@@ -664,15 +634,32 @@ export class MultiValidator extends Validator {
 					)
 			}
 
-			snapshot = MultiValidator.#merge(
-				snapshot,
-				this.#fromTypeBox(
-					validator as CompiledTypeBoxValidator,
-					i,
-					value,
-					type
+			const compiled = validator as CompiledTypeBoxValidator
+			let v = this.#cloneForMember(value)
+
+			if (this.#hasDefaults[i])
+				v = (compiled as any).Default
+					? (compiled as any).Default(v)
+					: Default(this.#tbSchemas[i]!, v)
+
+			let memberValue: unknown
+			if (this.#codecs[i])
+				try {
+					memberValue = (compiled as any).Clean(
+						(compiled as any).Decode(v)
+					)
+				} catch {
+					throw new ValidationError(type, value, () =>
+						(compiled as CompiledTypeBoxValidator).Errors(value)
+					)
+				}
+			else if (!(compiled as CompiledTypeBoxValidator).Check(v))
+				throw new ValidationError(type, value, () =>
+					(compiled as CompiledTypeBoxValidator).Errors(v)
 				)
-			)
+			else memberValue = (compiled as any).Clean(v)
+
+			snapshot = MultiValidator.#merge(snapshot, memberValue)
 		}
 
 		return snapshot!

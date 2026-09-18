@@ -173,36 +173,6 @@ export function compactBeforeHandleConflicts(
 	return false
 }
 
-function appendCompactBeforeHandle(
-	previous: CompactBeforeHandlePrefix,
-	added: readonly Function[]
-): CompactBeforeHandlePrefix {
-	if (!added.length) return previous
-
-	let tail = previous.tail
-	let length = previous.length
-
-	for (let i = 0; i < added.length; i++) {
-		const fn = added[i]!
-		compactBeforeHandleFunctions.add(fn)
-
-		if (tail && tail.values.length < COMPACT_CHUNK_SIZE)
-			tail = {
-				parent: tail.parent,
-				values: [...tail.values, fn]
-			}
-		else tail = { parent: tail, values: [fn] }
-		length++
-	}
-
-	return {
-		tail,
-		length,
-		previous: previous.length ? previous : undefined,
-		added
-	}
-}
-
 export function compactBeforeHandlePrefix(start: ChainNode | undefined) {
 	if (!start) return
 
@@ -247,7 +217,33 @@ export function compactBeforeHandlePrefix(start: ChainNode | undefined) {
 
 	for (let i = pending.length - 1; i >= 0; i--) {
 		const item = pending[i]!
-		prefix = appendCompactBeforeHandle(prefix, item.values)
+		const added = item.values
+
+		if (added.length) {
+			let tail = prefix.tail
+			let length = prefix.length
+
+			for (let j = 0; j < added.length; j++) {
+				const fn = added[j]!
+				compactBeforeHandleFunctions.add(fn)
+
+				if (tail && tail.values.length < COMPACT_CHUNK_SIZE)
+					tail = {
+						parent: tail.parent,
+						values: [...tail.values, fn]
+					}
+				else tail = { parent: tail, values: [fn] }
+				length++
+			}
+
+			prefix = {
+				tail,
+				length,
+				previous: prefix.length ? prefix : undefined,
+				added
+			}
+		}
+
 		compactBeforeHandleMemos.set(item.node, prefix)
 	}
 

@@ -143,25 +143,6 @@ function dropHooksByOrigin(
 	return out
 }
 
-function reconstructNeedsHookState(names: string[]): boolean {
-	for (let i = 0; i < names.length; i++)
-		switch (names[i]) {
-			case 'ho':
-			case 'tf':
-			case 'bf':
-			case 'af':
-			case 'mr':
-			case 'er':
-			case 'ar':
-			case 'va':
-			case 'cc':
-			case 'tr':
-				return true
-		}
-
-	return false
-}
-
 function promoteDerive(hook: any) {
 	const derive = hook.derive
 	if (derive === undefined) return
@@ -358,28 +339,6 @@ export const localMacroRoot = (
 		? instance
 		: root
 
-function composeRootHook(
-	root: AnyElysia,
-	inheritedChain: ChainNode | undefined
-): Partial<AppHook> | undefined {
-	const resolve = chainResolver(root)
-	const locals = flattenChain(
-		frozenRootOf(root)['~hookChain'],
-		isLocalScope,
-		inheritedChain,
-		resolve
-	)
-
-	const inherited = locals
-		? flattenChainMemo(root, inheritedChain, resolve)
-		: flattenChainMemoReadonly(root, inheritedChain, resolve)
-
-	if (!inherited) return locals
-	if (!locals) return inherited
-
-	return mergeHook(inherited, locals as any)
-}
-
 function staticPrimitiveType(response: Response, value: unknown) {
 	if (
 		(typeof value === 'string' ||
@@ -427,10 +386,24 @@ export function buildNativeStaticResponse(
 		appHook as ChainNode,
 		chainResolver(root)
 	)
-	const rootHook =
-		instance !== root
-			? composeRootHook(root, inheritedChain as any)
-			: undefined
+	let rootHook: Partial<AppHook> | undefined
+	if (instance !== root) {
+		const resolve = chainResolver(root)
+		const locals = flattenChain(
+			frozenRootOf(root)['~hookChain'],
+			isLocalScope,
+			inheritedChain as any,
+			resolve
+		)
+
+		const inherited = locals
+			? flattenChainMemo(root, inheritedChain as any, resolve)
+			: flattenChainMemoReadonly(root, inheritedChain as any, resolve)
+
+		if (!inherited) rootHook = locals
+		else if (!locals) rootHook = inherited
+		else rootHook = mergeHook(inherited, locals as any)
+	} else rootHook = undefined
 	const hook = applyHook(ownedHook, flatAppHook as any, rootHook, true)
 
 	if (hook && !isEmptyPipelineHook(hook as any)) return
@@ -588,15 +561,6 @@ export function composeRouteHook(
 const isBareArrow = /^(?:async\s*)?\(\s*\)\s*=>/
 const isSucroseOpaque = /arguments|eval|\[native code\]/
 
-function isContextFreeHandler(handler: Function) {
-	// A forged own `toString` makes sucrose widen every channel (sucrose.ts:1148)
-	if (Object.hasOwn(handler, 'toString')) return false
-
-	const source = Function.prototype.toString.call(handler)
-
-	return isBareArrow.test(source) && !isSucroseOpaque.test(source)
-}
-
 export function compileHandler(
 	route: InternalRoute,
 	root: AnyElysia,
@@ -654,21 +618,40 @@ export function compileHandler(
 		typeof handler === 'function' &&
 		!frozenRoot['~ext']?.macro &&
 		!frozenRootOf(localMacroRoot(macroScope ?? instance, root))['~ext']
-			?.macro &&
-		!reconstructNeedsHookState(reconstructed.a)
-	)
-		return reconstructed.f(
-			handler,
-			...resolveHandlerParams(reconstructed.a, {
-				root,
-				parse: adapter.parse as any,
-				res: adapter.response as any,
-				hook: nullObject() as any,
-				vali: undefined,
-				cookieConfig: undefined,
-				tracers: undefined
-			})
-		) as CompiledHandler
+			?.macro
+	) {
+		let needsHookState = false
+		const names = reconstructed.a
+		hookState: for (let i = 0; i < names.length; i++)
+			switch (names[i]) {
+				case 'ho':
+				case 'tf':
+				case 'bf':
+				case 'af':
+				case 'mr':
+				case 'er':
+				case 'ar':
+				case 'va':
+				case 'cc':
+				case 'tr':
+					needsHookState = true
+					break hookState
+			}
+
+		if (!needsHookState)
+			return reconstructed.f(
+				handler,
+				...resolveHandlerParams(reconstructed.a, {
+					root,
+					parse: adapter.parse as any,
+					res: adapter.response as any,
+					hook: nullObject() as any,
+					vali: undefined,
+					cookieConfig: undefined,
+					tracers: undefined
+				})
+			) as CompiledHandler
+	}
 
 	const hook = composeRouteHook(
 		instance,
@@ -785,11 +768,20 @@ export function compileHandler(
 		root['~config']?.introspect !== true &&
 		!isNotEmpty(frozenRoot['~ext']?.headers) &&
 		!Capture.isAotBuildEnv() &&
-		!Capture.isCapturing() &&
-		isContextFreeHandler(handler as Function)
+		!Capture.isCapturing()
 	) {
-		const compact = adapter.response.compact
-		if (compact) return createInlineHandler(compact as any, handler as any)
+		// A forged own `toString` makes sucrose widen every channel
+		let isContextFree = false
+		if (!Object.hasOwn(handler as Function, 'toString')) {
+			const source = Function.prototype.toString.call(handler)
+			isContextFree =
+				isBareArrow.test(source) && !isSucroseOpaque.test(source)
+		}
+
+		if (isContextFree) {
+			const compact = adapter.response.compact
+			if (compact) return createInlineHandler(compact as any, handler as any)
+		}
 	}
 
 	const state = describeRoute({

@@ -421,7 +421,17 @@ class TraceRecorder {
 				return slot.#end()
 			},
 			get error() {
-				return slot.#error()
+				if (slot.errorPromise) return slot.errorPromise
+				if (slot.ended)
+					return (slot.errorPromise = Promise.resolve(
+						slot.endError
+					))
+
+				const { promise, resolve } = withResolvers<Error | null>()
+				slot.errorPromise = promise
+				slot.errorResolve = resolve
+
+				return promise
 			},
 			onEvent(callback?: Function) {
 				if (callback) (slot.callbacksChild ??= []).push(callback)
@@ -442,18 +452,6 @@ class TraceRecorder {
 		const { promise, resolve } = withResolvers<number>()
 		this.endPromise = promise
 		this.endResolve = resolve
-
-		return promise
-	}
-
-	#error() {
-		if (this.errorPromise) return this.errorPromise
-		if (this.ended)
-			return (this.errorPromise = Promise.resolve(this.endError))
-
-		const { promise, resolve } = withResolvers<Error | null>()
-		this.errorPromise = promise
-		this.errorResolve = resolve
 
 		return promise
 	}

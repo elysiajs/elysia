@@ -106,38 +106,6 @@ interface SlotCheckClean {
 	decode?: (value: unknown) => unknown
 }
 
-function jsTypeMatches(value: unknown, type: string) {
-	switch (type) {
-		case 'string':
-			return typeof value === 'string'
-
-		case 'number':
-			return typeof value === 'number'
-
-		case 'integer':
-			return typeof value === 'number' && Number.isInteger(value)
-
-		case 'boolean':
-			return typeof value === 'boolean'
-
-		case 'null':
-			return value === null
-
-		case 'array':
-			return Array.isArray(value)
-
-		case 'object':
-			return (
-				typeof value === 'object' &&
-				value !== null &&
-				!Array.isArray(value)
-			)
-
-		default:
-			return true
-	}
-}
-
 const typeError = (
 	schema: any,
 	instancePath: string,
@@ -246,37 +214,45 @@ function walkCompactError(
 		return
 	}
 
-	if (typeof type === 'string' && !jsTypeMatches(value, type))
-		return typeError(schema, instancePath, schemaPath)
-}
+	if (typeof type === 'string') {
+		let matches: boolean
+		switch (type) {
+			case 'string':
+				matches = typeof value === 'string'
+				break
 
-function bestEffortCodecError(schema: any, value: unknown): CompactError {
-	if (
-		schema?.type === 'object' &&
-		typeof value === 'object' &&
-		value !== null &&
-		!Array.isArray(value) &&
-		schema.properties
-	)
-		for (const key in schema.properties) {
-			if (!(key in (value as object))) continue
-			if (isCompactDiagnosable(schema.properties[key])) continue
+			case 'number':
+				matches = typeof value === 'number'
+				break
 
-			return {
-				keyword: 'type',
-				schemaPath: `#/properties/${key}`,
-				instancePath: `/${key}`,
-				params: {},
-				message: `must match ${schema.properties[key]?.['~kind'] ?? 'schema'}`
-			}
+			case 'integer':
+				matches = typeof value === 'number' && Number.isInteger(value)
+				break
+
+			case 'boolean':
+				matches = typeof value === 'boolean'
+				break
+
+			case 'null':
+				matches = value === null
+				break
+
+			case 'array':
+				matches = Array.isArray(value)
+				break
+
+			case 'object':
+				matches =
+					typeof value === 'object' &&
+					value !== null &&
+					!Array.isArray(value)
+				break
+
+			default:
+				matches = true
 		}
 
-	return {
-		keyword: 'type',
-		schemaPath: '#',
-		instancePath: '',
-		params: {},
-		message: `must match ${schema?.['~kind'] ?? 'schema'}`
+		if (!matches) return typeError(schema, instancePath, schemaPath)
 	}
 }
 
@@ -413,7 +389,40 @@ class FrozenSlotValidator {
 		const hit = walkCompactError(this.schema, value, '', '#')
 		if (hit) return [hit]
 
-		return [bestEffortCodecError(this.schema, value)]
+		const schema = this.schema as any
+		let error: CompactError | undefined
+
+		if (
+			schema?.type === 'object' &&
+			typeof value === 'object' &&
+			value !== null &&
+			!Array.isArray(value) &&
+			schema.properties
+		)
+			for (const key in schema.properties) {
+				if (!(key in (value as object))) continue
+				if (isCompactDiagnosable(schema.properties[key])) continue
+
+				error = {
+					keyword: 'type',
+					schemaPath: `#/properties/${key}`,
+					instancePath: `/${key}`,
+					params: {},
+					message: `must match ${schema.properties[key]?.['~kind'] ?? 'schema'}`
+				}
+				break
+			}
+
+		if (!error)
+			error = {
+				keyword: 'type',
+				schemaPath: '#',
+				instancePath: '',
+				params: {},
+				message: `must match ${schema?.['~kind'] ?? 'schema'}`
+			}
+
+		return [error]
 	}
 
 	#error(value: unknown, type?: string): ValidationError {

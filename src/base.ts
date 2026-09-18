@@ -5324,33 +5324,31 @@ export class Elysia<
 					console.error(err)
 				}
 			)
-			.finally(() => this.#tryDrain(next))
+			.finally(() => {
+				if (this._pending > 0) return
+				if (this.ready !== next) return
+
+				const previousCompiled = this.compiled
+				const previousJitColdRemaining = this.jitColdRemaining
+
+				this.ready = undefined
+				this.compiled = undefined
+				this.fetchFn = undefined
+				this.routerBuilt = false
+				clearContextCache(this)
+
+				try {
+					this.#buildRouter(false)
+				} catch (error) {
+					this.compiled = previousCompiled
+					this.jitColdRemaining = previousJitColdRemaining
+					this._error ??= { error }
+				}
+			})
 
 		this.ready = next
 
 		return this
-	}
-
-	#tryDrain(sentinel: Promise<void>) {
-		if (this._pending > 0) return
-		if (this.ready !== sentinel) return
-
-		const previousCompiled = this.compiled
-		const previousJitColdRemaining = this.jitColdRemaining
-
-		this.ready = undefined
-		this.compiled = undefined
-		this.fetchFn = undefined
-		this.routerBuilt = false
-		clearContextCache(this)
-
-		try {
-			this.#buildRouter(false)
-		} catch (error) {
-			this.compiled = previousCompiled
-			this.jitColdRemaining = previousJitColdRemaining
-			this._error ??= { error }
-		}
 	}
 
 	#add(
@@ -7278,24 +7276,11 @@ export class Elysia<
 			return handler
 		}
 
-		return this.#jitHandler(
-			index,
-			route ?? (indexedTable ? undefined : this['~routes'][index]),
-			precomputedStatic,
-			aliases,
-			indexedTable
-		)
-	}
+		const jitRoute =
+			route ?? (indexedTable ? undefined : this['~routes'][index])
 
-	#jitHandler(
-		index: number,
-		route: InternalRoute | undefined,
-		precomputedStatic?: Response,
-		aliases?: StaticMapAliases,
-		table?: RouteTable
-	): CompiledHandler {
-		if (table !== undefined) this.jitTable = table
-		if (route !== undefined) (this.jitRoute ??= [])[index] = route
+		if (indexedTable !== undefined) this.jitTable = indexedTable
+		if (jitRoute !== undefined) (this.jitRoute ??= [])[index] = jitRoute
 		if (precomputedStatic !== undefined)
 			(this.jitStatic ??= [])[index] = precomputedStatic
 		if (aliases !== undefined) (this.jitAliases ??= [])[index] = aliases
@@ -7568,81 +7553,6 @@ export class Elysia<
 		return false
 	}
 
-	/**
-	 * Scan each route and its inherited hooks for TypeBox schemas.
-	 * This may warm TypeBox after a closer schema overrides it, avoiding a full
-	 * hook merge during build.
-	 */
-	#hasTypeBoxSchema(table: RouteTable): boolean {
-		const models = this['~ext']?.models as
-			| Record<string, unknown>
-			| undefined
-
-		const resolve = chainResolver(this as unknown as AnyElysia)
-		const rootChain = this['~hookChain']
-		const seen = new Set<ChainNode>()
-
-		const { localHook, appHook, inheritedChain, owner } = table
-
-		for (let i = 0; i < table.length; i++)
-			if (
-				Elysia.#hookHasTypeBox(
-					localHook[i] as Record<string, unknown>,
-					models
-				) ||
-				Elysia.#chainHasTypeBox(appHook[i], models, seen, resolve) ||
-				Elysia.#chainHasTypeBox(
-					inheritedChain[i],
-					models,
-					seen,
-					resolve
-				) ||
-				// The root chain applies only to routes owned by another instance.
-				(owner[i] !== (this as unknown as AnyElysia) &&
-					Elysia.#chainHasTypeBox(rootChain, models, seen, resolve))
-			)
-				return true
-
-		return false
-	}
-
-	#routeMayHaveModelRef(table: RouteTable, i: number): boolean {
-		const macroScope = table.macroScope?.get(i) // route[7]
-		const owner = table.owner[i] // route[3]
-
-		const candidate = ((macroScope as AnyElysia) ??
-			(owner as AnyElysia) ??
-			this) as AnyElysia
-
-		const localRoot = (candidate === (this as unknown as AnyElysia)
-			? this
-			: localMacroRoot(
-					candidate,
-					this as unknown as AnyElysia
-				)) as unknown as { '~ext'?: { macro?: unknown } }
-
-		if (localRoot['~ext']?.macro) return true
-
-		// route[4]: localHook (per-route)
-		if (
-			Elysia.#hookHasString(
-				table.localHook[i] as Record<string, unknown> | undefined
-			)
-		)
-			return true
-
-		// Chain sources: route[5] (appHook), route[6] (inheritedChain).
-		// `~hookChain` is the caller's hoisted third source. Every node carries
-		// the answer for its whole ancestry (`refs`, computed at creation), so
-		// no walk is needed here.
-		const appHook = table.appHook[i] as ChainNode | undefined
-		if (appHook !== undefined && appHook.refs) return true
-
-		const inheritedChain = table.inheritedChain[i] as ChainNode | undefined
-
-		return inheritedChain !== undefined && inheritedChain.refs
-	}
-
 	#assertRouteModelRefs(route: InternalRoute, method: string) {
 		const models = this['~ext']?.models
 		const path = route[1]
@@ -7863,13 +7773,90 @@ export class Elysia<
 			for (let i = 0; i < length; i++)
 				this.#assertRouteModelRefs(routeRow(table, i), method[i])
 		} else
-			for (let i = 0; i < length; i++)
-				if (this.#routeMayHaveModelRef(table, i))
+			for (let i = 0; i < length; i++) {
+				const macroScope = table.macroScope?.get(i) // route[7]
+				const owner = table.owner[i] // route[3]
+
+				const candidate = ((macroScope as AnyElysia) ??
+					(owner as AnyElysia) ??
+					this) as AnyElysia
+
+				const localRoot = (candidate === (this as unknown as AnyElysia)
+					? this
+					: localMacroRoot(
+							candidate,
+							this as unknown as AnyElysia
+						)) as unknown as { '~ext'?: { macro?: unknown } }
+
+				let hasModelRef: boolean
+				if (localRoot['~ext']?.macro) hasModelRef = true
+				// route[4]: localHook (per-route)
+				else if (
+					Elysia.#hookHasString(
+						table.localHook[i] as Record<string, unknown> | undefined
+					)
+				)
+					hasModelRef = true
+				else {
+					// Chain sources: route[5] (appHook), route[6] (inheritedChain).
+					// `~hookChain` is the caller's hoisted third source. Every node
+					// carries the answer for its whole ancestry (`refs`, computed at
+					// creation), so no walk is needed here.
+					const appHook = table.appHook[i] as ChainNode | undefined
+					if (appHook !== undefined && appHook.refs) hasModelRef = true
+					else {
+						const inheritedChain = table.inheritedChain[i] as
+							| ChainNode
+							| undefined
+
+						hasModelRef =
+							inheritedChain !== undefined && inheritedChain.refs
+					}
+				}
+
+				if (hasModelRef)
 					this.#assertRouteModelRefs(routeRow(table, i), method[i])
+			}
 
 		// Load TypeBox before serving to avoid blocking the first validated request.
 		// The scan preserves fast startup for apps that do not use TypeBox.
-		if (length && this.#hasTypeBoxSchema(table))
+		// This may warm TypeBox after a closer schema overrides it, avoiding a
+		// full hook merge during build.
+		let hasTypeBoxSchema = false
+		if (length) {
+			const models = this['~ext']?.models as
+				| Record<string, unknown>
+				| undefined
+
+			const resolve = chainResolver(this as unknown as AnyElysia)
+			const rootChain = this['~hookChain']
+			const seen = new Set<ChainNode>()
+
+			const { localHook, appHook, inheritedChain, owner } = table
+
+			for (let i = 0; i < table.length; i++)
+				if (
+					Elysia.#hookHasTypeBox(
+						localHook[i] as Record<string, unknown>,
+						models
+					) ||
+					Elysia.#chainHasTypeBox(appHook[i], models, seen, resolve) ||
+					Elysia.#chainHasTypeBox(
+						inheritedChain[i],
+						models,
+						seen,
+						resolve
+					) ||
+					// The root chain applies only to routes owned by another instance.
+					(owner[i] !== (this as unknown as AnyElysia) &&
+						Elysia.#chainHasTypeBox(rootChain, models, seen, resolve))
+				) {
+					hasTypeBoxSchema = true
+					break
+				}
+		}
+
+		if (hasTypeBoxSchema)
 			try {
 				warmTypebox()
 			} catch {

@@ -394,26 +394,6 @@ export function findAlias(
 }
 
 /**
- * Whitespace as JavaScript defines it, which is what `\s` matches: everything
- * `String.prototype.trim` removes, not just the three characters that happen to
- * appear in LF-formatted source.
- */
-const isWhitespace = (char: number) =>
-	char === 32 ||
-	// \t \n \v \f \r
-	(char >= 9 && char <= 13) ||
-	// Zs, plus <ZWNBSP> and the two line separators
-	char === 160 ||
-	char === 5760 ||
-	(char >= 8192 && char <= 8202) ||
-	char === 8232 ||
-	char === 8233 ||
-	char === 8239 ||
-	char === 8287 ||
-	char === 12288 ||
-	char === 65279
-
-/**
  * Words that lex as an identifier but are operators, so a `/` after one opens a
  * regex instead of dividing. Padded so a lookup cannot match a substring.
  */
@@ -426,8 +406,30 @@ const operatorKeyword =
  */
 function skipRegexLiteral(parameter: string, start: number, regexEnd: number) {
 	let previous = start - 1
-	while (previous >= 0 && isWhitespace(parameter.charCodeAt(previous)))
-		previous--
+	while (previous >= 0) {
+		const char = parameter.charCodeAt(previous)
+
+		if (
+			// Whitespace as JavaScript defines it, which is what `\s` matches:
+			// everything `String.prototype.trim` removes, not just the three
+			// characters that happen to appear in LF-formatted source.
+			char === 32 ||
+			// \t \n \v \f \r
+			(char >= 9 && char <= 13) ||
+			// Zs, plus <ZWNBSP> and the two line separators
+			char === 160 ||
+			char === 5760 ||
+			(char >= 8192 && char <= 8202) ||
+			char === 8232 ||
+			char === 8233 ||
+			char === 8239 ||
+			char === 8287 ||
+			char === 12288 ||
+			char === 65279
+		)
+			previous--
+		else break
+	}
 
 	if (previous >= 0) {
 		const char = parameter.charCodeAt(previous)
@@ -691,38 +693,6 @@ const isIdentifierStart = (char: number) =>
 const isIdentifierPart = (char: number) =>
 	isIdentifierStart(char) || (char >= 48 && char <= 57)
 
-function decodeIdentifier(value: string): string | undefined {
-	if (!value.includes('\\u')) return value
-
-	let decoded = ''
-	for (let i = 0; i < value.length; i++) {
-		if (value.charCodeAt(i) !== 92 || value.charCodeAt(i + 1) !== 117) {
-			decoded += value[i]
-			continue
-		}
-
-		i += 2
-		let hex: string
-		if (value.charCodeAt(i) === 123) {
-			const end = value.indexOf('}', i + 1)
-			if (end === -1) return
-			hex = value.slice(i + 1, end)
-			// eslint-disable-next-line sonarjs/updated-loop-counter -- scanner resumes past the consumed escape
-			i = end
-		} else {
-			hex = value.slice(i, i + 4)
-			if (hex.length !== 4) return
-			i += 3
-		}
-
-		const codePoint = Number.parseInt(hex, 16)
-		if (!Number.isFinite(codePoint) || codePoint > 0x10ffff) return
-		decoded += String.fromCodePoint(codePoint)
-	}
-
-	return decoded
-}
-
 function scanTokens(source: string): ScanToken[] | undefined {
 	const tokens: ScanToken[] = []
 	let index = 0
@@ -933,7 +903,52 @@ function scanTokens(source: string): ScanToken[] | undefined {
 					break
 				}
 
-				const value = decodeIdentifier(source.slice(start, index))
+				const identifierText = source.slice(start, index)
+				let value: string | undefined
+				if (!identifierText.includes('\\u')) {
+					value = identifierText
+				} else {
+					let decoded = ''
+					let failed = false
+					for (let i = 0; i < identifierText.length; i++) {
+						if (
+							identifierText.charCodeAt(i) !== 92 ||
+							identifierText.charCodeAt(i + 1) !== 117
+						) {
+							decoded += identifierText[i]
+							continue
+						}
+
+						i += 2
+						let hex: string
+						if (identifierText.charCodeAt(i) === 123) {
+							const end = identifierText.indexOf('}', i + 1)
+							if (end === -1) {
+								failed = true
+								break
+							}
+							hex = identifierText.slice(i + 1, end)
+							// eslint-disable-next-line sonarjs/updated-loop-counter -- scanner resumes past the consumed escape
+							i = end
+						} else {
+							hex = identifierText.slice(i, i + 4)
+							if (hex.length !== 4) {
+								failed = true
+								break
+							}
+							i += 3
+						}
+
+						const codePoint = Number.parseInt(hex, 16)
+						if (!Number.isFinite(codePoint) || codePoint > 0x10ffff) {
+							failed = true
+							break
+						}
+						decoded += String.fromCodePoint(codePoint)
+					}
+
+					value = failed ? undefined : decoded
+				}
 				if (value === undefined) return false
 
 				tokens.push({ k: 'i', value })

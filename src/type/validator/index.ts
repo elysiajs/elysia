@@ -62,7 +62,6 @@ import { exactMirrorRequired, getExactMirror } from './exact-mirror'
 export { TypeBoxValidatorCache, mayHaveFileType } from './validator-cache'
 import {
 	isFullyClosedObject,
-	schemaContainsRef,
 	schemaHasDangerousProperties,
 	schemaSome
 } from './clean-safe'
@@ -264,31 +263,6 @@ function collectRefinements(
 	return out
 }
 
-const materializeModels = (models: Record<string, TSchema>) => {
-	const out: Record<string, TSchema> = {}
-
-	for (const name in models) {
-		const schema = models[name]
-		const value: Record<string, unknown> = {}
-		let source = schema
-
-		while (source && source !== Object.prototype) {
-			for (const key of Object.getOwnPropertyNames(source))
-				if (key !== '$id' && !Object.hasOwn(value, key))
-					Object.defineProperty(
-						value,
-						key,
-						Object.getOwnPropertyDescriptor(source, key)!
-					)
-			source = Object.getPrototypeOf(source)
-		}
-
-		out[name] = value as TSchema
-	}
-
-	return out
-}
-
 // Fast path for `schema: 'merge'` when every member is a plain object
 function divergesFromEvaluate(node: any, seen: WeakSet<object>) {
 	if (!node || typeof node !== 'object' || seen.has(node)) return false
@@ -418,21 +392,20 @@ function findInstancePath(
 	}
 }
 
-function reportSchema(schema: unknown) {
+function warnMirrorFailure(schema: unknown, error: unknown) {
+	console.warn(
+		'Failed to create exactMirror. Please report the following to https://github.com/elysiajs/elysia/issues'
+	)
+
+	let report: string
 	try {
-		return JSON.stringify(schema, (key, value) =>
+		report = JSON.stringify(schema, (key, value) =>
 			key === 'secrets' ? '[redacted]' : value
 		)
 	} catch {
-		return '[unserializable schema]'
+		report = '[unserializable schema]'
 	}
-}
-
-function warnMirrorFailure(schema: unknown, error: unknown) {
-	console.warn(
-		'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
-	)
-	console.warn(reportSchema(schema))
+	console.warn(report)
 	console.warn(error)
 }
 
@@ -532,13 +505,40 @@ export class TypeBoxValidator<
 		let schemaHasRef = false
 		if (name && options?.models) {
 			schema = (
-				moduleCache.getOrInsertComputed(options.models, () =>
-					Module(
-						materializeModels(
-							options.models as Record<string, TSchema>
-						)
-					)
-				) as any
+				moduleCache.getOrInsertComputed(options.models, () => {
+					const module = Module
+					const models = options.models as Record<string, TSchema>
+					const out: Record<string, TSchema> = {}
+
+					for (const modelName in models) {
+						const modelSchema = models[modelName]
+						const value: Record<string, unknown> = {}
+						let source = modelSchema
+
+						while (source && source !== Object.prototype) {
+							for (const key of Object.getOwnPropertyNames(
+								source
+							))
+								if (
+									key !== '$id' &&
+									!Object.hasOwn(value, key)
+								)
+									Object.defineProperty(
+										value,
+										key,
+										Object.getOwnPropertyDescriptor(
+											source,
+											key
+										)!
+									)
+							source = Object.getPrototypeOf(source)
+						}
+
+						out[modelName] = value as TSchema
+					}
+
+					return module(out)
+				}) as any
 			)[name]
 
 			if (isIntersectable) {
@@ -547,7 +547,9 @@ export class TypeBoxValidator<
 					Evaluate(Intersect(members as any))) as unknown as T
 			}
 		} else if (options?.models && typeof name !== 'string') {
-			schemaHasRef = frozen ? frozen.r === 1 : schemaContainsRef(schema)
+			schemaHasRef = frozen
+				? frozen.r === 1
+				: schemaSome(schema, (n) => !!n.$ref)
 			if (schemaHasRef) {
 				const id = `inline@${++inlineRefId}`
 				schema = (
@@ -559,7 +561,21 @@ export class TypeBoxValidator<
 			}
 		}
 
-		const isFrozen = this.#reconstruct(options, frozen)
+		let isFrozen: boolean
+		if (
+			!options?.aot ||
+			!options.slot ||
+			options.normalize === 'typebox'
+		)
+			isFrozen = false
+		else if (!frozen?.c && !frozen?.cm) isFrozen = false
+		else {
+			this.isAsync = frozen.a === 1
+			this.hasDefault = frozen.d === 1
+			this.hasCodec = frozen.k === 1
+
+			isFrozen = true
+		}
 
 		this.schema = (
 			isFrozen && frozen!.cp
@@ -746,12 +762,51 @@ export class TypeBoxValidator<
 			}
 
 			try {
-				this.Clean =
-					options?.normalize === false
-						? undefined
-						: options?.normalize === 'typebox'
+				if (options?.normalize === false) this.Clean = undefined
+				else if (options?.normalize === 'typebox')
+					this.Clean = (value) => Clean(this.schema, value)
+				else if (schemaHasDangerousProperties(this.schema))
+					this.Clean = (value) => Clean(this.schema, value)
+				else {
+					const aot = options?.aot
+					const slot = options?.slot
+
+					if (aot && slot && frozen?.m) {
+						const m = frozen.m
+						let clean: ((value: unknown) => unknown) | undefined
+
+						this.Clean = (value: unknown) => {
+							if (clean === undefined)
+								try {
+									clean = reconstruct().instantiateFrozenMirror(
+										m,
+										schema
+									)
+								} catch (error) {
+									warnMirrorFailure(schema, error)
+									clean = (v) => v
+								}
+
+							return clean(value)
+						}
+					} else {
+						if (aot && slot && Capture.isCapturing() && captureImpl)
+							captureImpl.captureMirror(
+								schema,
+								aot,
+								slot,
+								options?.sanitize
+							)
+
+						const createMirror = getExactMirror()
+						this.Clean = !createMirror
 							? (value) => Clean(this.schema, value)
-							: this.#setupMirror(schema, options, frozen)
+							: (createMirror(schema, {
+									Compile,
+									sanitize: options?.sanitize
+								}) as (value: unknown) => unknown)
+					}
+				}
 			} catch (error) {
 				warnMirrorFailure(schema, error)
 
@@ -864,46 +919,6 @@ export class TypeBoxValidator<
 			activeRefineValidation = previous
 			if (usingPool) pool.active = false
 		}
-	}
-
-	#setupMirror(
-		schema: TSchema,
-		options?: ValidatorOptions,
-		frozen?: FrozenValidator
-	): ((value: unknown) => unknown) | undefined {
-		if (schemaHasDangerousProperties(this.schema))
-			return (value) => Clean(this.schema, value)
-
-		const aot = options?.aot
-		const slot = options?.slot
-
-		if (aot && slot && frozen?.m) {
-			const m = frozen.m
-			let clean: ((value: unknown) => unknown) | undefined
-
-			return (value: unknown) => {
-				if (clean === undefined)
-					try {
-						clean = reconstruct().instantiateFrozenMirror(m, schema)
-					} catch (error) {
-						warnMirrorFailure(schema, error)
-						clean = (v) => v
-					}
-
-				return clean(value)
-			}
-		}
-
-		if (aot && slot && Capture.isCapturing() && captureImpl)
-			captureImpl.captureMirror(schema, aot, slot, options?.sanitize)
-
-		const createMirror = getExactMirror()
-		if (!createMirror) return (value) => Clean(this.schema, value)
-
-		return createMirror(schema, {
-			Compile,
-			sanitize: options?.sanitize
-		}) as (value: unknown) => unknown
 	}
 
 	// decode (request) / encode (response) codec mirror. Frozen → instantiate
@@ -1040,22 +1055,6 @@ export class TypeBoxValidator<
 		this.tb = tb
 		this.#dropCompiledSource()
 		this.#deferred = false
-	}
-
-	#reconstruct(
-		options: ValidatorOptions | undefined,
-		frozen: FrozenValidator | undefined
-	): boolean {
-		if (!options?.aot || !options.slot || options.normalize === 'typebox')
-			return false
-
-		if (!frozen?.c && !frozen?.cm) return false
-
-		this.isAsync = frozen.a === 1
-		this.hasDefault = frozen.d === 1
-		this.hasCodec = frozen.k === 1
-
-		return true
 	}
 
 	#dropCompiledSource() {

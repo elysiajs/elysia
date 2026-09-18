@@ -356,16 +356,6 @@ export function subValueAt(value: unknown, path: unknown) {
 	return current
 }
 
-function scopeFound(value: unknown, first: any) {
-	if (jsonLengthWithin(value, FOUND_ECHO_LIMIT) >= 0) return value
-
-	const sub = subValueAt(value, first?.instancePath ?? first?.path)
-	if (sub !== undefined && jsonLengthWithin(sub, FOUND_ECHO_LIMIT) >= 0)
-		return sub
-
-	return FOUND_ECHO_OMITTED
-}
-
 const issueLocator = new Set(['keyword', 'schemaPath', 'instancePath', 'path'])
 
 function scopeIssues(errors: any[]) {
@@ -577,7 +567,33 @@ export class ValidationError extends ElysiaError {
 
 		// need arrow function to preserve `this`
 		return this.#collapseCoercionErrors(this.errors.filter(Boolean)).map(
-			(e) => this.#normalizeIssue(e)
+			(e) => {
+				if (!e) return e
+
+				const path = Array.isArray(e.path)
+					? e.path.length
+						? e.path.map(segmentString).join('.')
+						: 'root'
+					: typeof e.path === 'string'
+						? e.path.replace(/^\//, '').replace(/\//g, '.') || 'root'
+						: 'root'
+
+				const issue = {
+					path,
+					message: e.message ?? '',
+					schemaPath: e.schemaPath,
+					params: e.params
+				}
+
+				Object.defineProperty(issue, 'value', {
+					value: this.value,
+					writable: true,
+					enumerable: false,
+					configurable: true
+				})
+
+				return issue
+			}
 		)
 	}
 
@@ -633,34 +649,6 @@ export class ValidationError extends ElysiaError {
 		}
 
 		return out ?? errors
-	}
-
-	#normalizeIssue(e: any) {
-		if (!e) return e
-
-		const path = Array.isArray(e.path)
-			? e.path.length
-				? e.path.map(segmentString).join('.')
-				: 'root'
-			: typeof e.path === 'string'
-				? e.path.replace(/^\//, '').replace(/\//g, '.') || 'root'
-				: 'root'
-
-		const issue = {
-			path,
-			message: e.message ?? '',
-			schemaPath: e.schemaPath,
-			params: e.params
-		}
-
-		Object.defineProperty(issue, 'value', {
-			value: this.value,
-			writable: true,
-			enumerable: false,
-			configurable: true
-		})
-
-		return issue
 	}
 
 	get #productionDetail() {
@@ -758,6 +746,17 @@ export class ValidationError extends ElysiaError {
 				} catch {}
 			}
 
+		const value = this.value
+		let found: unknown
+		if (jsonLengthWithin(value, FOUND_ECHO_LIMIT) >= 0)
+			found = value
+		else {
+			const sub = subValueAt(value, first?.instancePath ?? first?.path)
+			if (sub !== undefined && jsonLengthWithin(sub, FOUND_ECHO_LIMIT) >= 0)
+				found = sub
+			else found = FOUND_ECHO_OMITTED
+		}
+
 		return {
 			...(server
 				? internalServerErrorProblem()
@@ -769,7 +768,7 @@ export class ValidationError extends ElysiaError {
 			detail,
 			on: this.type,
 			property,
-			found: scopeFound(this.value, first),
+			found,
 			expected,
 			errors
 		}

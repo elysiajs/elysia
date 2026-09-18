@@ -55,14 +55,6 @@ function getAttributes(source: Partial<BaseCookie> | undefined) {
 	return out
 }
 
-function normalizeSign(sign: true | string | string[] | undefined) {
-	if (sign === undefined) return
-	if (sign === true) return true
-	if (Array.isArray(sign)) return sign.length ? sign : undefined
-
-	return [sign]
-}
-
 // an empty secret is a real HMAC under a zero-length key, which anyone can
 // reproduce — treat it as absent so signing fails loudly
 const hasUsableSecret = (
@@ -92,7 +84,13 @@ export function compileCookieConfig(
 
 	if (!defaults.path) defaults.path = '/'
 
-	const globalSign = normalizeSign(routeConfig?.sign ?? appConfig?.sign)
+	const rawSign = routeConfig?.sign ?? appConfig?.sign
+	let globalSign: true | string[] | undefined
+	if (rawSign === undefined) globalSign = undefined
+	else if (rawSign === true) globalSign = true
+	else if (Array.isArray(rawSign))
+		globalSign = rawSign.length ? rawSign : undefined
+	else globalSign = [rawSign]
 	const globalSecrets =
 		routeConfig?.secrets !== undefined
 			? routeConfig.secrets

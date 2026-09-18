@@ -15,7 +15,7 @@ import { elyType, getMeta } from './utils'
 // Single-pass charCode scan of `/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/`, which is
 // hot on every query/params coercion. `\d` without `u` is ASCII `[0-9]`, so
 // fullwidth/arabic-indic digits stay rejected
-function isDecimalString(value: string): boolean {
+function isDecimalString(value: string) {
 	const length = value.length
 
 	let index = 0
@@ -62,21 +62,6 @@ type NumericSchema = Type.TUnion<
 >
 let emptyNumeric: Readonly<NumericSchema>
 
-function passesConstraints(n: number, c: TNumberOptions): boolean {
-	if (typeof c.minimum === 'number' && n < c.minimum) return false
-	if (typeof c.maximum === 'number' && n > c.maximum) return false
-
-	if (typeof c.exclusiveMinimum === 'number' && n <= c.exclusiveMinimum)
-		return false
-
-	if (typeof c.exclusiveMaximum === 'number' && n >= c.exclusiveMaximum)
-		return false
-
-	if (typeof c.multipleOf === 'number' && n % c.multipleOf !== 0) return false
-
-	return true
-}
-
 export function Numeric(property?: TNumberOptions) {
 	StringifiedNumber ??= pureRefine(
 		Decode(
@@ -100,7 +85,29 @@ export function Numeric(property?: TNumberOptions) {
 			StringType(),
 			(value) => {
 				if (!isDecimalString(value)) return false
-				return passesConstraints(+value, constraints as any)
+
+				const n = +value
+				const c = constraints as any
+
+				if (typeof c.minimum === 'number' && n < c.minimum) return false
+				if (typeof c.maximum === 'number' && n > c.maximum) return false
+
+				if (
+					typeof c.exclusiveMinimum === 'number' &&
+					n <= c.exclusiveMinimum
+				)
+					return false
+
+				if (
+					typeof c.exclusiveMaximum === 'number' &&
+					n >= c.exclusiveMaximum
+				)
+					return false
+
+				if (typeof c.multipleOf === 'number' && n % c.multipleOf !== 0)
+					return false
+
+				return true
 			},
 			() => 'must be number'
 		),

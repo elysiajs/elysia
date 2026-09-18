@@ -311,38 +311,6 @@ export const createInlineHandler = (
 		return map(r, c.request, true)
 	}) as CompiledHandler
 
-const createInlineHandlerWithSet = (
-	map: (value: unknown, ...rest: unknown[]) => unknown,
-	h: (context: Context) => unknown
-) =>
-	((c: Context) => {
-		const r = h(c)
-		if (r instanceof Error) throw r
-		if (typeof (r as any)?.then === 'function')
-			return Promise.resolve(r).then((v) =>
-				map(forwardError(v), c.set, c.request, true)
-			)
-
-		return map(r, c.set, c.request, true)
-	}) as CompiledHandler
-
-const createInlineHandlerWithDefaultHeaders = (
-	map: (value: unknown, ...rest: unknown[]) => unknown,
-	h: (context: Context) => unknown
-) =>
-	((c: Context) => {
-		materializeSetHeaders(c.set)
-		const r = h(c)
-
-		if (r instanceof Error) throw r
-		if (typeof (r as any)?.then === 'function')
-			return Promise.resolve(r).then((v) =>
-				map(forwardError(v), c.set, c.request, true)
-			)
-
-		return map(r, c.set, c.request, true)
-	}) as CompiledHandler
-
 export interface CompileHandlerJitOptions {
 	method: string
 	path: string
@@ -1247,13 +1215,37 @@ export function compileHandlerJit({
 			(!isAsync &&
 				!syncErrorHook &&
 				(alias === 'rm,fe' || alias === 'msh,rm,fe'))
-		)
-			return responseMode === 'set-with-default-headers' && inference.set
-				? createInlineHandlerWithDefaultHeaders(
-						responseMap as any,
-						handler as any
-					)
-				: createInlineHandlerWithSet(responseMap as any, handler as any)
+		) {
+			const rmap = responseMap as any
+			const h = handler as any
+			let inlineHandler: CompiledHandler
+			if (responseMode === 'set-with-default-headers' && inference.set)
+				inlineHandler = ((c: Context) => {
+					materializeSetHeaders(c.set)
+					const r = h(c)
+
+					if (r instanceof Error) throw r
+					if (typeof (r as any)?.then === 'function')
+						return Promise.resolve(r).then((v) =>
+							rmap(forwardError(v), c.set, c.request, true)
+						)
+
+					return rmap(r, c.set, c.request, true)
+				}) as CompiledHandler
+			else
+				inlineHandler = ((c: Context) => {
+					const r = h(c)
+					if (r instanceof Error) throw r
+					if (typeof (r as any)?.then === 'function')
+						return Promise.resolve(r).then((v) =>
+							rmap(forwardError(v), c.set, c.request, true)
+						)
+
+					return rmap(r, c.set, c.request, true)
+				}) as CompiledHandler
+
+			return inlineHandler
+		}
 	}
 
 	JITProbe.record('handler:new-function')

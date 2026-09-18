@@ -1,32 +1,6 @@
 // Parse hooks receive the per-message ElysiaWS view (matching the declared
 // `WSParseHandler` type), passed through opaquely here.
 
-function isNumericString(s: string) {
-	if (s.length === 0) return false
-
-	let sawDigit = false
-	let sawDot = false
-
-	for (let i = 0; i < s.length; i++) {
-		const c = s.charCodeAt(i)
-
-		if (i === 0 && (c === 43 || c === 45)) continue
-		if (c >= 48 && c <= 57) {
-			sawDigit = true
-			continue
-		}
-
-		if (c === 46 && !sawDot) {
-			sawDot = true
-			continue
-		}
-
-		return false
-	}
-
-	return sawDigit
-}
-
 export function defaultWSParse(message: string | Buffer | Uint8Array): unknown {
 	if (typeof message !== 'string') return message
 
@@ -40,7 +14,36 @@ export function defaultWSParse(message: string | Buffer | Uint8Array): unknown {
 		}
 	}
 
-	if (isNumericString(message)) {
+	let isNumeric: boolean
+	if (message.length === 0) {
+		isNumeric = false
+	} else {
+		let sawDigit = false
+		let sawDot = false
+		let invalid = false
+
+		for (let i = 0; i < message.length; i++) {
+			const c = message.charCodeAt(i)
+
+			if (i === 0 && (c === 43 || c === 45)) continue
+			if (c >= 48 && c <= 57) {
+				sawDigit = true
+				continue
+			}
+
+			if (c === 46 && !sawDot) {
+				sawDot = true
+				continue
+			}
+
+			invalid = true
+			break
+		}
+
+		isNumeric = invalid ? false : sawDigit
+	}
+
+	if (isNumeric) {
 		// Don't coerce values that would lose precision (Snowflakes, long IDs):
 		// <16 chars is always safe; a 16-char value only if it round-trips.
 		if (message.length < 16) return +message

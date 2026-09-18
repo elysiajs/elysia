@@ -15,7 +15,7 @@ import { frozenRootOf, resolvedWsOf } from '../../generation'
 import { origin } from '../origin'
 
 import type { AnyElysia } from '../../base'
-import type { GracefulHandler } from '../../types'
+import type { BunHTMLBundlelike, GracefulHandler } from '../../types'
 
 type LifecycleStop = (
 	closeActiveConnections?: boolean,
@@ -130,26 +130,6 @@ async function settleServerWebSockets(
 	return true
 }
 
-const closeServerIdle = (
-	server: ReturnType<typeof Bun.serve>,
-	errors: unknown[]
-) => {
-	const close = (
-		server as typeof server & {
-			closeIdleConnections?(): void
-		}
-	).closeIdleConnections
-	if (!close) return true
-
-	try {
-		close.call(server)
-		return true
-	} catch (error) {
-		errors.push(error)
-		return false
-	}
-}
-
 /**
  * ! This may looks like it would cause race condition, but it is not
  * Bun is single-threaded and synchronous, so the `finally` block will
@@ -179,19 +159,23 @@ const isNativeStaticMethod = (method: string) =>
 	method === 'HEAD' ||
 	method === 'OPTIONS'
 
-export function collectStaticRoutes(app: AnyElysia) {
-	if (app['~config']?.nativeStaticResponse === false) return
+export const isHTMLBundle = (value: unknown): value is BunHTMLBundlelike =>
+	typeof value === 'object' &&
+	value !== null &&
+	typeof (value as BunHTMLBundlelike).index === 'string'
 
+export function collectStaticRoutes(app: AnyElysia) {
 	void app.fetch
 
 	const frozenRoot = frozenRootOf(app)
 	const fetchLevelHook = flattenChain(frozenRoot['~hookChain'])
-	if (
-		fetchLevelHook?.request?.length ||
-		fetchLevelHook?.trace?.length ||
-		frozenRoot['~ext']?.hoc?.length
-	)
-		return
+	// Static Response promotion must yield to fetch-level hooks; HTML bundles
+	// cannot run on the JS lane at all, so they are promoted regardless.
+	const promoteResponses =
+		app['~config']?.nativeStaticResponse !== false &&
+		!fetchLevelHook?.request?.length &&
+		!fetchLevelHook?.trace?.length &&
+		!frozenRoot['~ext']?.hoc?.length
 
 	const table = app['~generation']?.routeTable ?? app['~routeTable']
 	const length = table?.length ?? 0
@@ -209,9 +193,11 @@ export function collectStaticRoutes(app: AnyElysia) {
 
 		const h = handlers[i]
 		if (
-			typeof h !== 'function' &&
-			!(h instanceof Error) &&
-			!(h instanceof Promise)
+			isHTMLBundle(h) ||
+			(promoteResponses &&
+				typeof h !== 'function' &&
+				!(h instanceof Error) &&
+				!(h instanceof Promise))
 		) {
 			hasCandidate = true
 			break
@@ -244,12 +230,15 @@ export function collectStaticRoutes(app: AnyElysia) {
 		}
 	}
 
-	const ready: Record<string, Record<string, Response>> = nullObject()
+	const ready: Record<
+		string,
+		Record<string, Response | BunHTMLBundlelike>
+	> = nullObject()
 	let hasReady = false
 	const add = (
 		method: string,
 		path: string,
-		value: Response,
+		value: Response | BunHTMLBundlelike,
 		needsEncode: boolean
 	) => {
 		if (needsEncode) path = encodeURI(path)
@@ -271,14 +260,17 @@ export function collectStaticRoutes(app: AnyElysia) {
 		if (pathsByMethod.get(path) !== i) continue
 
 		const h = handlers[i]
-		if (
+		let value: Response | BunHTMLBundlelike | undefined
+		if (isHTMLBundle(h)) value = h
+		else if (
+			!promoteResponses ||
 			typeof h === 'function' ||
 			h instanceof Error ||
 			h instanceof Promise
 		)
 			continue
+		else value = buildNativeStaticResponse(routeRow(table, i), app)
 
-		const value = buildNativeStaticResponse(routeRow(table, i), app)
 		if (!value) continue
 
 		const needsEncode = (routeFlags & RouteFlag.Encode) !== 0
@@ -542,7 +534,20 @@ export const BunAdapter = createAdapter({
 
 			let idleClosed = true
 			if (idleRequired) {
-				idleClosed = closeServerIdle(server, errors)
+				const closeIdle = (
+					server as typeof server & {
+						closeIdleConnections?(): void
+					}
+				).closeIdleConnections
+
+				if (closeIdle)
+					try {
+						closeIdle.call(server)
+					} catch (error) {
+						errors.push(error)
+						idleClosed = false
+					}
+
 				if (idleClosed && !gateFailure) idleRequired = false
 			}
 

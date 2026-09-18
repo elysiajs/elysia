@@ -13,18 +13,6 @@ import { cloneSchema, createSharedReference, elyType, getMeta } from './utils'
 const ISO8601 = /T\d\d(?::\d\d){1,2} \d\d:\d\d$/
 const removeTime = / (\d{2}:\d{2})$/
 
-const toTimestamp = (value: Date | string | number) => {
-	if (value instanceof Date) return value.getTime()
-	let t = new Date(value).getTime()
-	if (
-		isNaN(t) &&
-		typeof value === 'string' &&
-		/T\d{2}:\d{2}(:\d{2})? \d{2}:\d{2}$/.test(value)
-	)
-		t = new Date(value.replace(/ (\d{2}:\d{2})$/, '+$1')).getTime()
-	return t
-}
-
 let StringifiedDate: Type.TCodec<
 	Type.TUnion<[Type.TUnsafe<Date>, Type.TString, Type.TNumber]>,
 	Date
@@ -138,7 +126,19 @@ function DateWithProperty(options: DateOptions) {
 		schema = Refine(
 			schema,
 			(value: Date | string | number) => {
-				const t = toTimestamp(value)
+				let t: number
+				if (value instanceof Date) t = value.getTime()
+				else {
+					t = new Date(value).getTime()
+					if (
+						isNaN(t) &&
+						typeof value === 'string' &&
+						/T\d{2}:\d{2}(:\d{2})? \d{2}:\d{2}$/.test(value)
+					)
+						t = new Date(
+							value.replace(/ (\d{2}:\d{2})$/, '+$1')
+						).getTime()
+				}
 
 				if (minMessage && t < (min as number)) {
 					failed = minMessage

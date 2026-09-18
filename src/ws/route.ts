@@ -104,7 +104,54 @@ function handlerMayTouchBody(fn: AnyFn | undefined): boolean {
 	if (source.indexOf('[') !== -1) return true
 	if (source.indexOf('...') !== -1) return true
 
-	const parsed = firstParamIdentifier(source)
+	let parsed:
+		| { name: string; bodyStart: number; paramsEnd: number }
+		| undefined
+
+	const open = source.indexOf('(')
+	if (open === -1) {
+		const m = /^\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*=>/.exec(source)
+		if (m) {
+			const end = m.index + m[0].length
+			parsed = { name: m[1], bodyStart: end, paramsEnd: end }
+		}
+	} else {
+		// Find the matching close paren of the parameter list.
+		let depth = 0
+		let close = -1
+		for (let i = open; i < source.length; i++) {
+			const c = source[i]
+			if (c === '(') depth++
+			else if (c === ')') {
+				depth--
+				if (depth === 0) {
+					close = i
+					break
+				}
+			}
+		}
+
+		if (close !== -1) {
+			const params = source.slice(open + 1, close).trim()
+			if (params.length > 0) {
+				// First param up to the first top-level comma.
+				let first = params
+				const comma = params.indexOf(',')
+				if (comma !== -1) first = params.slice(0, comma).trim()
+
+				// Destructuring patterns handled by the `body`/`...`/`[` checks above.
+				if (first[0] !== '{' && first[0] !== '[') {
+					const m = /^([A-Za-z_$][\w$]*)/.exec(first)
+					if (m)
+						parsed = {
+							name: m[1],
+							bodyStart: close + 1,
+							paramsEnd: close + 1
+						}
+				}
+			}
+		}
+	}
 	if (parsed === undefined) return true
 
 	const { name: wsName, bodyStart, paramsEnd } = parsed
@@ -119,50 +166,6 @@ function handlerMayTouchBody(fn: AnyFn | undefined): boolean {
 	if (escaped.test(body)) return true
 
 	return false
-}
-
-function firstParamIdentifier(
-	source: string
-): { name: string; bodyStart: number; paramsEnd: number } | undefined {
-	const open = source.indexOf('(')
-	if (open === -1) {
-		const m = /^\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*=>/.exec(source)
-		if (!m) return undefined
-		const end = m.index + m[0].length
-		return { name: m[1], bodyStart: end, paramsEnd: end }
-	}
-
-	// Find the matching close paren of the parameter list.
-	let depth = 0
-	let close = -1
-	for (let i = open; i < source.length; i++) {
-		const c = source[i]
-		if (c === '(') depth++
-		else if (c === ')') {
-			depth--
-			if (depth === 0) {
-				close = i
-				break
-			}
-		}
-	}
-	if (close === -1) return undefined
-
-	const params = source.slice(open + 1, close).trim()
-	if (params.length === 0) return undefined
-
-	// First param up to the first top-level comma.
-	let first = params
-	const comma = params.indexOf(',')
-	if (comma !== -1) first = params.slice(0, comma).trim()
-
-	// Destructuring patterns handled by the `body`/`...`/`[` checks above.
-	if (first[0] === '{' || first[0] === '[') return undefined
-
-	const m = /^([A-Za-z_$][\w$]*)/.exec(first)
-	if (!m) return undefined
-
-	return { name: m[1], bodyStart: close + 1, paramsEnd: close + 1 }
 }
 
 function concatHooks(
@@ -281,6 +284,77 @@ export async function handleWSResponse(
 	;(ws as any).send(mapped)
 }
 
+function wsErrorFrameFallback(error: any): string | Promise<string> {
+	if (claimsProblemType(error))
+		try {
+			const status = resolveStatus(error.status)
+			const served =
+				typeof status === 'number' && status >= 100 ? status : 500
+
+			const stringify = (value: unknown) =>
+				typeof value === 'object' && value !== null
+					? JSON.stringify(value)
+					: String(value)
+
+			const problemFrame = (detail: unknown) =>
+				JSON.stringify(
+					problemBody({
+						type: error.type ?? 'about:blank',
+						...(typeof error.code === 'string'
+							? { code: error.code }
+							: {}),
+						detail: detail as string,
+						status: served
+					})
+				)
+
+			const serveMessage = () =>
+				problemFrame(statusFallbackBody(error, served))
+			const serveDetail = () => {
+				const detail = readAnnotation(error, 'detail', true)
+
+				if (detail === undefined) return serveMessage()
+
+				if (detail instanceof Promise)
+					return detail
+						.then((resolved: unknown) =>
+							resolved === undefined
+								? serveMessage()
+								: problemFrame(resolved)
+						)
+						.catch(() => wsLegacyFrame(error))
+
+				return problemFrame(detail)
+			}
+
+			const value = readAnnotation(error, 'value', true)
+			if (value === undefined) return serveDetail()
+
+			if (value instanceof Promise)
+				return value
+					.then((resolved: unknown) =>
+						resolved === undefined
+							? serveDetail()
+							: stringify(resolved)
+					)
+					.catch(() => wsLegacyFrame(error))
+
+			return stringify(value)
+		} catch {}
+
+	return wsLegacyFrame(error)
+}
+
+function wsLegacyFrame(error: any) {
+	if (error?.status) {
+		const body = statusFallbackBody(error, error.status)
+
+		return typeof body === 'object' ? JSON.stringify(body) : String(body)
+	}
+
+	return internalServerErrorBodyString(error)
+}
+
 function wsErrorFrame(error: any): string | Promise<string> {
 	if (error instanceof ValidationError)
 		try {
@@ -317,86 +391,9 @@ function wsErrorFrame(error: any): string | Promise<string> {
 	return wsErrorFrameFallback(error)
 }
 
-/**
- * Frame served by an error that claims an RFC 9457 problem document, mirroring
- * the HTTP tiers in `handler/error.ts`: `value` replaces the whole frame,
- * `detail` fills the `detail` member, the message is the last resort.
- *
- * A frame carries no headers, so a `headers` annotation is ignored outright
- * rather than half-applied
- */
-function wsProblemFrame(error: any): string | Promise<string> {
-	const status = resolveStatus(error.status)
-	const served = typeof status === 'number' && status >= 100 ? status : 500
-
-	const stringify = (value: unknown) =>
-		typeof value === 'object' && value !== null
-			? JSON.stringify(value)
-			: String(value)
-
-	const problemFrame = (detail: unknown) =>
-		JSON.stringify(
-			problemBody({
-				type: error.type ?? 'about:blank',
-				...(typeof error.code === 'string' ? { code: error.code } : {}),
-				detail: detail as string,
-				status: served
-			})
-		)
-
-	const serveMessage = () => problemFrame(statusFallbackBody(error, served))
-	const serveDetail = () => {
-		const detail = readAnnotation(error, 'detail', true)
-
-		if (detail === undefined) return serveMessage()
-
-		if (detail instanceof Promise)
-			return detail
-				.then((resolved: unknown) =>
-					resolved === undefined
-						? serveMessage()
-						: problemFrame(resolved)
-				)
-				.catch(() => wsLegacyFrame(error))
-
-		return problemFrame(detail)
-	}
-
-	const value = readAnnotation(error, 'value', true)
-	if (value === undefined) return serveDetail()
-
-	if (value instanceof Promise)
-		return value
-			.then((resolved: unknown) =>
-				resolved === undefined ? serveDetail() : stringify(resolved)
-			)
-			.catch(() => wsLegacyFrame(error))
-
-	return stringify(value)
-}
-
-function wsErrorFrameFallback(error: any): string | Promise<string> {
-	if (claimsProblemType(error))
-		try {
-			return wsProblemFrame(error)
-		} catch {}
-
-	return wsLegacyFrame(error)
-}
-
-/** Frame an error that never self-described has always served */
-function wsLegacyFrame(error: any): string {
-	if (error?.status) {
-		const body = statusFallbackBody(error, error.status)
-
-		return typeof body === 'object' ? JSON.stringify(body) : String(body)
-	}
-
-	return internalServerErrorBodyString(error)
-}
-
 function sendErrorFrame(ws: ElysiaWS<any>, error: unknown) {
 	const frame = wsErrorFrame(error)
+
 	if (typeof frame === 'string') {
 		try {
 			ws.raw.send(frame)

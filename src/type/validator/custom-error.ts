@@ -118,50 +118,6 @@ const literalOf = (propSchema: any) => {
 		return { value: propSchema.enum[0] }
 }
 
-function computeDiscriminators(
-	branches: any[]
-): Array<Record<string, unknown>> | undefined {
-	// candidate keys present with a single-literal in every object branch
-	let candidates: Set<string> | undefined
-
-	for (const branch of branches) {
-		if (!branch || !branch.properties) return
-
-		const keys = new Set<string>()
-		for (const k in branch.properties)
-			if (literalOf(branch.properties[k])) keys.add(k)
-
-		if (!keys.size) return
-
-		if (!candidates) candidates = keys
-		else
-			for (const c of [...candidates])
-				if (!keys.has(c)) candidates.delete(c)
-
-		if (!candidates.size) return
-	}
-
-	if (!candidates || !candidates.size) return
-
-	const perBranch: Array<Record<string, unknown>> = branches.map(nullObject)
-	let hasDisambiguating = false
-
-	for (const key of candidates) {
-		const seenValues: unknown[] = []
-		for (let i = 0; i < branches.length; i++) {
-			const lit = literalOf(branches[i].properties[key])!
-			perBranch[i][key] = lit.value
-			seenValues.push(lit.value)
-		}
-
-		// distinct across all branches → this key can disambiguate
-		if (new Set(seenValues).size === branches.length)
-			hasDisambiguating = true
-	}
-
-	return hasDisambiguating ? perBranch : undefined
-}
-
 export function buildFindCustomError(
 	schema: unknown,
 	frozen?: FrozenValidator
@@ -198,7 +154,62 @@ export function buildFindCustomError(
 		if (discriminatorCache.has(node))
 			return discriminatorCache.get(node) ?? undefined
 
-		const d = computeDiscriminators(branches) ?? null
+		let discriminators: Array<Record<string, unknown>> | undefined
+		let rejected = false
+
+		// candidate keys present with a single-literal in every object branch
+		let candidates: Set<string> | undefined
+
+		for (const branch of branches) {
+			if (!branch || !branch.properties) {
+				rejected = true
+				break
+			}
+
+			const keys = new Set<string>()
+			for (const k in branch.properties)
+				if (literalOf(branch.properties[k])) keys.add(k)
+
+			if (!keys.size) {
+				rejected = true
+				break
+			}
+
+			if (!candidates) candidates = keys
+			else
+				for (const c of [...candidates])
+					if (!keys.has(c)) candidates.delete(c)
+
+			if (!candidates.size) {
+				rejected = true
+				break
+			}
+		}
+
+		if (rejected || !candidates || !candidates.size) {
+			discriminators = undefined
+		} else {
+			const perBranch: Array<Record<string, unknown>> =
+				branches.map(nullObject)
+			let hasDisambiguating = false
+
+			for (const key of candidates) {
+				const seenValues: unknown[] = []
+				for (let i = 0; i < branches.length; i++) {
+					const lit = literalOf(branches[i].properties[key])!
+					perBranch[i][key] = lit.value
+					seenValues.push(lit.value)
+				}
+
+				// distinct across all branches → this key can disambiguate
+				if (new Set(seenValues).size === branches.length)
+					hasDisambiguating = true
+			}
+
+			discriminators = hasDisambiguating ? perBranch : undefined
+		}
+
+		const d = discriminators ?? null
 		discriminatorCache.set(node, d)
 
 		return d ?? undefined

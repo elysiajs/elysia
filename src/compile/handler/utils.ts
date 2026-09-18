@@ -106,7 +106,22 @@ function extractDeriveKeys(fn: Function) {
 	const cached = deriveKeyCache.get(fn)
 	if (cached !== undefined) return cached
 
-	const result = scanDeriveKeys(fn)
+	let src: string | undefined
+	try {
+		src = Function.prototype.toString.call(fn)
+	} catch {
+		src = undefined
+	}
+
+	let result: string[] | null
+	if (src === undefined) result = null
+	else if (src.includes('[native code]')) result = null
+	else if (src.includes('...')) result = null
+	else {
+		const objStart = findReturnedObjectStart(src)
+		result = objStart === -1 ? null : scanObjectLiteralKeys(src, objStart)
+	}
+
 	deriveKeyCache.set(fn, result)
 	return result
 }
@@ -142,29 +157,24 @@ export function replaceDeriveContext(context: any, derivative: any) {
 	return next
 }
 
-function deriveModeQueues(entries?: readonly DeriveEntry[]) {
-	if (!entries?.length) return
-
-	const queues = new Map<Function, boolean[]>()
-
-	for (let i = 0; i < entries.length; i++) {
-		const entry = entries[i]
-		const fn = deriveEntryFn(entry)
-		const queue = queues.get(fn)
-		const mode = isMapDeriveEntry(entry)
-
-		if (queue) queue.push(mode)
-		else queues.set(fn, [mode])
-	}
-
-	return queues
-}
-
 export function deriveModes(
 	hooks: Function[],
 	entries?: readonly DeriveEntry[]
 ) {
-	const queues = deriveModeQueues(entries)
+	let queues: Map<Function, boolean[]> | undefined
+	if (entries?.length) {
+		queues = new Map<Function, boolean[]>()
+
+		for (let i = 0; i < entries.length; i++) {
+			const entry = entries[i]
+			const fn = deriveEntryFn(entry)
+			const queue = queues.get(fn)
+			const mode = isMapDeriveEntry(entry)
+
+			if (queue) queue.push(mode)
+			else queues.set(fn, [mode])
+		}
+	}
 	if (!queues) return
 
 	let found = false
@@ -182,25 +192,58 @@ export function deriveModes(
 	return found ? modes : undefined
 }
 
-function scanDeriveKeys(fn: Function) {
-	let src: string
-	try {
-		src = Function.prototype.toString.call(fn)
-	} catch {
-		return null
+function findReturnedObjectStart(src: string) {
+	let arrow = -1
+	let depth = 0
+	for (let i = 0; i < src.length; ) {
+		const ch = src[i]
+		if (ch === '"' || ch === "'" || ch === '`') {
+			i = skipString(src, i)
+			continue
+		}
+
+		if (ch === '/' && src[i + 1] === '/') {
+			const nl = src.indexOf('\n', i)
+			if (nl === -1) break
+			i = nl + 1
+			continue
+		}
+
+		if (ch === '/' && src[i + 1] === '*') {
+			const end = src.indexOf('*/', i)
+			if (end === -1) break
+			i = end + 2
+			continue
+		}
+
+		if (
+			depth === 0 &&
+			ch === 'f' &&
+			src.startsWith('function', i) &&
+			!isIdentChar(src[i - 1] ?? ' ') &&
+			!isIdentChar(src[i + 8] ?? ' ')
+		)
+			break
+
+		if (ch === '(' || ch === '[' || ch === '{') {
+			depth++
+			i++
+			continue
+		}
+
+		if (ch === ')' || ch === ']' || ch === '}') {
+			depth--
+			i++
+			continue
+		}
+
+		if (depth === 0 && ch === '=' && src[i + 1] === '>') {
+			arrow = i
+			break
+		}
+		i++
 	}
 
-	if (src.includes('[native code]')) return null
-	if (src.includes('...')) return null
-
-	const objStart = findReturnedObjectStart(src)
-	if (objStart === -1) return null
-
-	return scanObjectLiteralKeys(src, objStart)
-}
-
-function findReturnedObjectStart(src: string) {
-	const arrow = topLevelArrowIndex(src)
 	if (arrow !== -1) {
 		let i = arrow + 2
 		while (i < src.length && isSpace(src[i])) i++
@@ -269,56 +312,6 @@ function findReturnedObjectStart(src: string) {
 	return src[i] === '{' ? i : -1
 }
 
-function topLevelArrowIndex(src: string): number {
-	let depth = 0
-	for (let i = 0; i < src.length; ) {
-		const ch = src[i]
-		if (ch === '"' || ch === "'" || ch === '`') {
-			i = skipString(src, i)
-			continue
-		}
-
-		if (ch === '/' && src[i + 1] === '/') {
-			const nl = src.indexOf('\n', i)
-			if (nl === -1) return -1
-			i = nl + 1
-			continue
-		}
-
-		if (ch === '/' && src[i + 1] === '*') {
-			const end = src.indexOf('*/', i)
-			if (end === -1) return -1
-			i = end + 2
-			continue
-		}
-
-		if (
-			depth === 0 &&
-			ch === 'f' &&
-			src.startsWith('function', i) &&
-			!isIdentChar(src[i - 1] ?? ' ') &&
-			!isIdentChar(src[i + 8] ?? ' ')
-		)
-			return -1
-
-		if (ch === '(' || ch === '[' || ch === '{') {
-			depth++
-			i++
-			continue
-		}
-
-		if (ch === ')' || ch === ']' || ch === '}') {
-			depth--
-			i++
-			continue
-		}
-
-		if (depth === 0 && ch === '=' && src[i + 1] === '>') return i
-		i++
-	}
-	return -1
-}
-
 function scanObjectLiteralKeys(src: string, open: number): string[] | null {
 	const keys: string[] = []
 	let i = open + 1
@@ -373,7 +366,63 @@ function scanObjectLiteralKeys(src: string, open: number): string[] | null {
 
 			keys.push(key)
 			i = j + 1
-			i = skipValue(src, i)
+
+			let depth = 0
+			let found = false
+			while (i < src.length) {
+				const ch = src[i]
+				if (ch === '"' || ch === "'" || ch === '`') {
+					i = skipString(src, i)
+					continue
+				}
+
+				if (ch === '/' && src[i + 1] === '/') {
+					const nl = src.indexOf('\n', i)
+					if (nl === -1) {
+						i = -1
+						found = true
+						break
+					}
+					i = nl + 1
+					continue
+				}
+
+				if (ch === '/' && src[i + 1] === '*') {
+					const end = src.indexOf('*/', i)
+					if (end === -1) {
+						i = -1
+						found = true
+						break
+					}
+					i = end + 2
+					continue
+				}
+
+				if (ch === '{' || ch === '(' || ch === '[') {
+					depth++
+					i++
+					continue
+				}
+
+				if (ch === '}' || ch === ')' || ch === ']') {
+					if (depth === 0) {
+						if (ch !== '}') i = -1
+						found = true
+						break
+					}
+
+					depth--
+					i++
+					continue
+				}
+
+				if (ch === ',' && depth === 0) {
+					found = true
+					break
+				}
+				i++
+			}
+			if (!found) i = -1
 
 			if (i === -1) return null
 			expectKey = false
@@ -391,52 +440,6 @@ function scanObjectLiteralKeys(src: string, open: number): string[] | null {
 	}
 
 	return null
-}
-
-function skipValue(src: string, i: number): number {
-	let depth = 0
-	while (i < src.length) {
-		const ch = src[i]
-		if (ch === '"' || ch === "'" || ch === '`') {
-			i = skipString(src, i)
-			continue
-		}
-
-		if (ch === '/' && src[i + 1] === '/') {
-			const nl = src.indexOf('\n', i)
-			if (nl === -1) return -1
-			i = nl + 1
-			continue
-		}
-
-		if (ch === '/' && src[i + 1] === '*') {
-			const end = src.indexOf('*/', i)
-			if (end === -1) return -1
-			i = end + 2
-			continue
-		}
-
-		if (ch === '{' || ch === '(' || ch === '[') {
-			depth++
-			i++
-			continue
-		}
-
-		if (ch === '}' || ch === ')' || ch === ']') {
-			if (depth === 0) {
-				if (ch === '}') return i
-				return -1
-			}
-
-			depth--
-			i++
-			continue
-		}
-
-		if (ch === ',' && depth === 0) return i
-		i++
-	}
-	return -1
 }
 
 export function mapBeforeHandle(

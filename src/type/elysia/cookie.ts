@@ -21,32 +21,6 @@ const COOKIE_OPTION_KEYS = [
 	'legacySignature'
 ] as const
 
-function extractConfig(options: Record<string, unknown> | undefined): {
-	config: CookieSchemaConfig | undefined
-	rest: Record<string, unknown> | undefined
-} {
-	if (!options) return { config: undefined, rest: undefined }
-
-	let config: Record<string, unknown> | undefined
-	let rest: Record<string, unknown> | undefined
-
-	for (const key in options) {
-		const value = (options as Record<string, unknown>)[key]
-		if (value === undefined) continue
-
-		if ((COOKIE_OPTION_KEYS as readonly string[]).includes(key)) {
-			;(config ??= {})[key] = value
-		} else {
-			;(rest ??= {})[key] = value
-		}
-	}
-
-	return {
-		config: config as CookieSchemaConfig | undefined,
-		rest
-	}
-}
-
 const isSchema = (value: unknown): value is TSchema =>
 	!!value && typeof value === 'object' && '~kind' in (value as object)
 
@@ -70,9 +44,24 @@ export function Cookie(
 	first: TProperties | TSchema,
 	options?: CookieValidatorOptions
 ): any {
-	const { config, rest } = extractConfig(
-		options as Record<string, unknown> | undefined
-	)
+	const raw = options as Record<string, unknown> | undefined
+
+	let configRaw: Record<string, unknown> | undefined
+	let rest: Record<string, unknown> | undefined
+
+	if (raw)
+		for (const key in raw) {
+			const value = raw[key]
+			if (value === undefined) continue
+
+			if ((COOKIE_OPTION_KEYS as readonly string[]).includes(key)) {
+				;(configRaw ??= {})[key] = value
+			} else {
+				;(rest ??= {})[key] = value
+			}
+		}
+
+	const config = configRaw as CookieSchemaConfig | undefined
 
 	if (isSchema(first)) {
 		if (!config) return first

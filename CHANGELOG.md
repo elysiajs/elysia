@@ -110,6 +110,7 @@ Bug fix:
 - `normalize: false` returned the precomputed default object by reference, so one request's handler mutation of a defaulted body/query leaked into subsequent requests
 - a standalone `response` schema without a `200` entry threw `'~kind' in undefined`
 - dynamic (parameterized) routes did not match a trailing slash under the default `strictPath: false`
+- Bun HTML import handlers (`app.get('/', index)` with `import index from './index.html'`) were serialized as `{}`; they are now promoted to Bun's native routes even when a `request`/`trace` hook or `nativeStaticResponse: false` blocks static Response promotion
 - per-app `loosePath`/decoded-path caches grew without bound on attacker-controlled request paths
 - an `onError` returning a `File`/`Blob` threw a `TypeError`
 - response headers were dropped on non-Bun runtimes when re-streaming a returned `Response`
