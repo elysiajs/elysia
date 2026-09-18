@@ -111,6 +111,7 @@ Bug fix:
 - a standalone `response` schema without a `200` entry threw `'~kind' in undefined`
 - dynamic (parameterized) routes did not match a trailing slash under the default `strictPath: false`
 - Bun HTML import handlers (`app.get('/', index)` with `import index from './index.html'`) were serialized as `{}`; they are now promoted to Bun's native routes even when a `request`/`trace` hook or `nativeStaticResponse: false` blocks static Response promotion
+- Bun HTML import routes lost HMR: Bun starts its HTML dev server only for bundle routes present at `Bun.serve()` creation, and `listen()` installed every route through `server.reload()`; bundle routes are now passed to the initial `Bun.serve()` call
 - per-app `loosePath`/decoded-path caches grew without bound on attacker-controlled request paths
 - an `onError` returning a `File`/`Blob` threw a `TypeError`
 - response headers were dropped on non-Bun runtimes when re-streaming a returned `Response`

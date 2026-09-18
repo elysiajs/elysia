@@ -1,7 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
-	"version": "2.0.0-beta.15",
+	"version": "2.0.0-beta.16",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
@@ -297,5 +297,8 @@
 		"typescript": {
 			"optional": true
 		}
+	},
+	"volta": {
+		"node": "24.21.0"
 	}
 }

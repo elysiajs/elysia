@@ -39,6 +39,21 @@ describe('Bun HTML import route', () => {
 		expect(body).not.toBe('{}')
 	})
 
+	it("keeps Bun's HMR dev server for bundle routes", async () => {
+		// Bun only starts the HTML dev server for bundle routes present when
+		// Bun.serve() is created; a bundle first installed through
+		// server.reload() is served prebundled without hot reloading
+		const { response, body } = await serve(
+			new Elysia({ serve: { development: { hmr: true } } }).get(
+				'/',
+				index
+			)
+		)
+
+		expect(response.status).toBe(200)
+		expect(body).toContain('data-bun-dev-server-script')
+	})
+
 	it('still serves the page when a request hook blocks Response promotion', async () => {
 		// a fetch-level hook must not push the bundle onto the JS lane,
 		// where it cannot be served at all

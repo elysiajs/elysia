@@ -164,6 +164,23 @@ export const isHTMLBundle = (value: unknown): value is BunHTMLBundlelike =>
 	value !== null &&
 	typeof (value as BunHTMLBundlelike).index === 'string'
 
+export function collectHTMLBundleRoutes(app: AnyElysia) {
+	let routes: Record<string, Record<string, BunHTMLBundlelike>> | undefined
+
+	for (const [method, path, handler] of app['~routes']) {
+		if (
+			!isNativeStaticMethod(method) ||
+			!isHTMLBundle(handler) ||
+			path.indexOf(':') !== -1 ||
+			path.indexOf('*') !== -1
+		)
+			continue
+		;((routes ??= nullObject())[path] ??= nullObject())[method] = handler
+	}
+
+	return routes
+}
+
 export function collectStaticRoutes(app: AnyElysia) {
 	void app.fetch
 
@@ -325,9 +342,16 @@ export const BunAdapter = createAdapter({
 
 		const _config = (app['~config'] as any)?.serve
 		const serve = _config ? { ..._config, ..._options } : _options
+
+		const htmlRoutes = collectHTMLBundleRoutes(app as AnyElysia)
+
 		const server = (app.server = Bun.serve(
-			serve.routes || serve.error
-				? { ...serve, error: unavailableFetch, routes: {} }
+			serve.routes || serve.error || htmlRoutes
+				? {
+						...serve,
+						error: unavailableFetch,
+						routes: htmlRoutes ?? {}
+					}
 				: serve
 		))
 
