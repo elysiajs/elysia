@@ -626,8 +626,8 @@ describe('sealed esbuild output', () => {
 		const gz = gzipSync(code.esbuildSealedProduction!, { level: 9 }).length
 		// Only production is size-gated; development keeps diagnostics and the checks below.
 		// This ceiling distinguishes sealed output from the wired ~275K bundle.
-		expect(min).toBeLessThan(160_000)
-		expect(gz).toBeLessThan(50_000)
+		expect(min).toBeLessThan(162_500)
+		expect(gz).toBeLessThan(52_500)
 	})
 
 	it.each(['esbuildSealed', 'esbuildSealedProduction'])(

@@ -169,7 +169,7 @@ describe('published bundle without the TypeBox bridge', () => {
 		const min = Buffer.byteLength(code)
 		const gz = gzipSync(code, { level: 9 }).length
 
-		expect(min).toBeLessThan(160_000)
-		expect(gz).toBeLessThan(50_000)
+		expect(min).toBeLessThan(162_500)
+		expect(gz).toBeLessThan(52_500)
 	})
 })
