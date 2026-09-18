@@ -1,34 +1,39 @@
-import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+import { t } from '../src'
+import { Elysia } from '../src/base'
 
-const app = new Elysia()
-	.get('/', async () => {
-		const file = Bun.file('test/kyuukurarin.mp4')
+class Dependency {
+	doThing() {
+		return 'Hi!'
+	}
+}
 
-		// Wrap the stream in another ReadableStream
-		// perhaps we are concatenating streams or whatever
-		const body = new ReadableStream({
-			async start(controller) {
-				const reader = file.stream().getReader()
-				try {
-					while (true) {
-						const { done, value } = await reader.read()
-						if (done) break
-						controller.enqueue(value)
-					}
-					controller.close()
-				} catch (err) {
-					controller.error(err)
-				} finally {
-					reader.releaseLock()
-				}
-			}
-		})
+class Service {
+	constructor(protected dependency: Dependency) {}
 
-		// Returning the stream uses 100% for several minutes
-		return body
+	doSomething() {
+		return this.dependency.doThing()
+	}
+}
 
-		// Returning the same stream wrapped in a Response servers the stream in a fraction of a second
-		// return new Response(body);
+new Elysia()
+	.decorate({
+		dependency: new Dependency()
 	})
+	.decorate((rest) => ({
+		...rest,
+		service: new Service(rest.dependency)
+	}))
+	// use derive for per request instances
+	.derive(({ dependency }) => ({
+		service: new Service(dependency)
+	}))
+	.get(
+		'/',
+		{
+			response: {
+				418: t.Literal('a')
+			}
+		},
+		({ service, status }) => service.doSomething()
+	)
 	.listen(3000)

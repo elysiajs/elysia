@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { inferBodyReference, removeColonAlias } from '../../src/sucrose'
+import { removeColonAlias } from '../../src/sucrose'
 
 describe('remove colon alias', () => {
 	it('remove aliased name', () => {

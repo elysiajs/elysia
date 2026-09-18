@@ -1,0 +1,237 @@
+import { Elysia, t } from '../../src'
+import { frozenRootOf } from '../../src/generation'
+import { describe, expect, it } from 'bun:test'
+
+const req = (path: string, init?: RequestInit) =>
+	new Request(`http://e.ly${path}`, init)
+
+describe('sealed generation publication', () => {
+	it('frozenRootOf returns the live app before sealing', () => {
+		const app = new Elysia().get('/', () => 'ok')
+
+		expect(app['~generation']).toBeUndefined()
+		expect(frozenRootOf(app)).toBe(app)
+	})
+
+	it('the first handle publishes one generation and later handles reuse it', async () => {
+		const app = new Elysia().get('/', () => 'ok')
+
+		await app.handle('/')
+
+		const generation = app['~generation']!
+		expect(generation['~config']).toBe(app['~config'])
+		expect(generation['~ext']).toBe(app['~ext'])
+		expect(generation.routeTable).toBe(app['~routeTable'])
+		expect(frozenRootOf(app)).toBe(generation)
+
+		const same = app['~generation']
+		await app.handle('/')
+		expect(app['~generation']).toBe(same)
+	})
+
+	it('.compile publishes a generation', () => {
+		const app = new Elysia().get('/', () => 'ok')
+		expect(app['~generation']).toBeUndefined()
+
+		app.compile()
+		expect(app['~generation']).toBeDefined()
+	})
+})
+
+describe('sealed generation plugin resolution', () => {
+	it('resolving an async plugin stays authorable until its first request seals the app', async () => {
+		const app = new Elysia().use(
+			Promise.resolve(new Elysia().get('/late', () => 'late'))
+		)
+
+		await app.modules
+		expect(app['~generation']).toBeUndefined()
+
+		const res = await app.handle('/late')
+		expect(res.status).toBe(200)
+		await expect(res.text()).resolves.toBe('late')
+
+		expect(app['~generation']).toBeDefined()
+	})
+})
+
+describe('sealed generation root isolation', () => {
+	it('keeps root-specific state separate when two apps use the same plugin', async () => {
+		const shared = () => (app: Elysia) =>
+			app
+				.decorate('who', 'shared')
+				.model('M', t.Object({ a: t.String() }))
+				.get('/p', ({ who }: any) => who)
+
+		const a = new Elysia().decorate('root', 'A').use(shared())
+		const b = new Elysia().decorate('root', 'B').use(shared())
+
+		await a.handle('/p')
+		await b.handle('/p')
+
+		const ga = a['~generation']!
+		const gb = b['~generation']!
+
+		expect(ga['~ext']).not.toBe(gb['~ext'])
+		expect((ga['~ext'] as any).decorator.root).toBe('A')
+		expect((gb['~ext'] as any).decorator.root).toBe('B')
+		expect((ga['~ext'] as any).decorator.who).toBe('shared')
+		expect((gb['~ext'] as any).decorator.who).toBe('shared')
+		expect((ga['~ext'] as any).models.M).toBeDefined()
+	})
+})
+
+describe('sealed generation replacement', () => {
+	it('~newGeneration publishes routes added since the previous generation', async () => {
+		const app = new Elysia().get('/a', () => 'a')
+		await app.handle('/a')
+		const previous = app['~generation']
+
+		;(app as any)['~generation'] = undefined
+		app.get('/b', () => 'b')
+		app['~newGeneration']()
+
+		expect(app['~generation']).not.toBe(previous)
+		expect((await app.handle('/b')).status).toBe(200)
+		expect((await app.handle('/a')).status).toBe(200)
+	})
+
+	it('requests around a swap observe complete old or new generations', async () => {
+		const app = new Elysia().get('/a', () => 'a')
+		await app.handle('/a')
+		const previous = app['~generation']
+
+		const before = Promise.all(
+			Array.from({ length: 8 }, () => app.handle('/a'))
+		)
+		;(app as any)['~generation'] = undefined
+		app.get('/b', () => 'b')
+		app['~newGeneration']()
+		const after = Promise.all(
+			Array.from({ length: 8 }, () => app.handle('/b'))
+		)
+
+		for (const r of await before) expect(r.status).toBe(200)
+		for (const r of await after) expect(r.status).toBe(200)
+		expect(app['~generation']).not.toBe(previous)
+	})
+})
+
+describe('sealed generation setup failure', () => {
+	it('a synchronous throw during a functional plugin leaves no generation', () => {
+		const boom = () => {
+			throw new Error('setup boom')
+		}
+		const app = new Elysia().get('/', () => 'ok')
+
+		expect(() =>
+			app.use(() => {
+				boom()
+				return new Elysia()
+			})
+		).toThrow('setup boom')
+
+		expect(app['~generation']).toBeUndefined()
+	})
+
+	it('an async build failure publishes no generation and no server', async () => {
+		let reject!: (e: unknown) => void
+		const pending = new Promise<Elysia>((_, r) => (reject = r))
+		const app = new Elysia().get('/x', () => 'x').use(pending)
+
+		reject(new Error('async setup boom'))
+		try {
+			await app.modules
+		} catch {}
+
+		expect(app['~generation']).toBeUndefined()
+		expect(app.server).toBeUndefined()
+	})
+})
+
+// mirrors the `config.introspect === true || app['~introspect'] === true`
+// check base.ts used to snapshot onto the (now-removed, write-only)
+// `Generation.introspect` field at seal time
+const isIntrospectResolved = (app: any) =>
+	app['~config']?.introspect === true || app['~introspect'] === true
+
+describe('sealed generation introspection', () => {
+	it('copies app config.introspect to the resolved introspect flag', async () => {
+		const app = new Elysia({ introspect: true }).get('/', () => 'ok')
+		await app.handle('/')
+		expect(isIntrospectResolved(app)).toBe(true)
+	})
+
+	it('enables introspection when a plugin requests it', async () => {
+		const plugin = new Elysia({
+			name: 'introspected',
+			introspect: true
+		})
+
+		const app = new Elysia().use(plugin).get('/', () => 'ok')
+		await app.handle('/')
+		expect(isIntrospectResolved(app)).toBe(true)
+	})
+
+	it('introspect defaults to false', async () => {
+		const app = new Elysia().get('/', () => 'ok')
+		await app.handle('/')
+		expect(isIntrospectResolved(app)).toBe(false)
+	})
+})
+
+describe('sealed generation immutability', () => {
+	const sealed = async () => {
+		const app = new Elysia().get('/', () => 'ok')
+		await app.handle('/')
+		return app
+	}
+
+	it('every authoring API family throws after first handle', async () => {
+		const cases: Array<[string, (a: any) => unknown]> = [
+			['get (verb)', (a) => a.get('/x', () => 'x')],
+			['post (verb)', (a) => a.post('/x', () => 'x')],
+			['use', (a) => a.use(new Elysia().get('/u', () => 'u'))],
+			['decorate', (a) => a.decorate('d', 1)],
+			['state', (a) => a.state('s', 1)],
+			['model', (a) => a.model('M', t.Object({}))],
+			['beforeHandle', (a) => a.beforeHandle(() => {})],
+			['transform', (a) => a.transform(() => {})],
+			['parse', (a) => a.parse(() => {})],
+			['mapResponse', (a) => a.mapResponse(() => {})],
+			['guard', (a) => a.guard({ query: t.Object({}) }, (x: any) => x)],
+			['as', (a) => a.as('global')],
+			['macro', (a) => a.macro({ m: { resolve: () => ({}) } })],
+			['error', (a) => a.error({ E: class extends Error {} })],
+			['headers', (a) => a.headers({ 'x-a': '1' })],
+			['parser', (a) => a.parser('p', () => ({}))],
+			['wrap', (a) => a.wrap((f: any) => f)],
+			['setup', (a) => a.setup(() => {})],
+			['cleanup', (a) => a.cleanup(() => {})]
+		]
+
+		for (const [name, mutate] of cases) {
+			const app = await sealed()
+			expect(() => mutate(app), name).toThrow('after the app was sealed')
+		}
+	})
+
+	it('authoring mutations throw after .compile and .listen', async () => {
+		const compiled = new Elysia().get('/', () => 'ok')
+		compiled.compile()
+		expect(() => compiled.get('/x', () => 'x')).toThrow(
+			'after the app was sealed'
+		)
+
+		const listening = new Elysia().get('/', () => 'ok')
+		try {
+			listening.listen(0)
+			await (listening as any).modules
+			expect(() => listening.decorate('d', 1)).toThrow(
+				'after the app was sealed'
+			)
+		} finally {
+			await listening.stop?.(true)
+		}
+	})
+})

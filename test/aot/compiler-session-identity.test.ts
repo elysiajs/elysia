@@ -1,0 +1,249 @@
+import '../../src/compile/aot-capture'
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+
+import { Elysia, t } from '../../src'
+import { Compiled, createAotFingerprint } from '../../src/compile/aot'
+import { abortCapture } from '../../src/compile/aot-capture'
+import { captureArtifacts } from '../../src/plugin/aot/source'
+import { Validator } from '../../src/validator'
+import { post, json } from '../utils'
+import { materialise, materialiseHandlers, registerManifest } from './_manifest'
+
+const buildA = () =>
+	new Elysia({ precompile: true }).post(
+		'/x',
+		{ body: t.Object({ a: t.String() }) },
+		({ body }) => body
+	)
+
+const register = async () => {
+	const artifacts = await captureArtifacts(buildA())
+	const validators = materialise(artifacts.validators)
+	const handlers = materialiseHandlers(artifacts.handlers)
+
+	Compiled.clear()
+	Compiled.register({
+		bf: 1,
+		fingerprint: artifacts.fingerprint,
+		validators,
+		handlers
+	})
+
+	return { artifacts, validators, handlers }
+}
+
+beforeEach(() => {
+	abortCapture()
+	Compiled.clear()
+	Validator.clear()
+})
+
+afterEach(() => {
+	abortCapture()
+	Compiled.clear()
+	Validator.clear()
+})
+
+describe('AOT manifest ownership and compiler sessions', () => {
+	it('keeps sequentially claimed app programs isolated', () => {
+		const appA = new Elysia()
+		const appB = new Elysia()
+		const path = '/__program-identity-probe'
+		const handlerA = { a: [], f: () => () => new Response('a') }
+		const handlerB = { a: [], f: () => () => new Response('b') }
+
+		registerManifest({ handlers: { GET: { [path]: handlerA } } })
+		expect(Compiled.claim(appA['~programId'], createAotFingerprint())).toBe(
+			true
+		)
+
+		registerManifest({ handlers: { GET: { [path]: handlerB } } })
+		expect(Compiled.claim(appB['~programId'], createAotFingerprint())).toBe(
+			true
+		)
+
+		// Production claims through ~programId; raw app lookup proves that key is
+		// the app itself rather than a second per-instance token.
+		expect(Compiled.getHandler(appA as any, 'GET', path)).toBe(handlerA)
+		expect(Compiled.getHandler(appB as any, 'GET', path)).toBe(handlerB)
+	})
+
+	// A manifest is consumed exactly once. The second app used to fall back to
+	// JIT in silence — and that silence is the whole hazard, because the app
+	// that *did* claim may be the wrong one and is then running foreign frozen
+	// validators. Binding is ABI-only by design, so nothing downstream can
+	// notice; the only place to fail is the denied build.
+	it('refuses a second app once the manifest is consumed', async () => {
+		const { handlers } = await register()
+		const original = handlers.POST!['/x']!.f
+		let frozenFactoryCalls = 0
+		handlers.POST!['/x']!.f = (...args: unknown[]) => {
+			frozenFactoryCalls++
+			return original(...args)
+		}
+
+		const appA = buildA()
+		const a = await appA.handle('/x', json({ a: 'ok' }))
+		expect(a.status).toBe(200)
+		expect(frozenFactoryCalls).toBe(1)
+
+		const appB = new Elysia({ precompile: true }).post(
+			'/x',
+			{ body: t.Object({ b: t.Number() }) },
+			({ body }) => body
+		)
+		expect(() => void appB.fetch).toThrow('one app per process')
+
+		// an app with the *same* routes is still a second app: there is no
+		// content comparison to fall back on
+		expect(() => void buildA().fetch).toThrow('one app per process')
+
+		// neither reached the frozen factory, so the program stayed appA's
+		expect(frozenFactoryCalls).toBe(1)
+	})
+
+	// The reachable bypass: whichever app builds first claims, whoever it is.
+	// A foreign claimant then rejects its own valid body and accepts the
+	// manifest owner's — a silent request-validation bypass in exactly the
+	// configuration AOT exists for. The owner always builds at boot, so that
+	// is where the process is made to die.
+	it('fails the displaced owner when a foreign app claimed first', async () => {
+		await register()
+
+		const foreign = new Elysia({ precompile: true }).post(
+			'/x',
+			{ body: t.Object({ b: t.Number() }) },
+			({ body }) => body
+		)
+		void foreign.fetch
+
+		// the symptom being guarded: `foreign` runs appA's frozen validator
+		expect((await foreign.handle('/x', json({ b: 1 }))).status).toBe(422)
+		expect((await foreign.handle('/x', json({ a: 'x' }))).status).toBe(200)
+
+		expect(() => void buildA().fetch).toThrow('one app per process')
+	})
+
+	// A routeless app never attempts a claim, so it can never contest one.
+	// Elysia instances with no routes are ordinary (plugin shells, test
+	// scaffolding) and must not be turned into a boot failure.
+	it('leaves a routeless second app alone after a claim', async () => {
+		await register()
+		expect((await buildA().handle('/x', json({ a: 'ok' }))).status).toBe(
+			200
+		)
+
+		expect(() => void new Elysia({ precompile: true }).fetch).not.toThrow()
+	})
+
+	it('rejects a manifest built by an incompatible framework ABI', async () => {
+		const { artifacts, validators, handlers } = await register()
+
+		Compiled.clear()
+		Compiled.register({
+			bf: 1,
+			fingerprint: {
+				...artifacts.fingerprint,
+				abi: 'from-the-future:99'
+			},
+			validators,
+			handlers
+		})
+
+		expect(() => void buildA().fetch).toThrow('abi')
+	})
+
+	it('binds by program ID and ABI without comparing route tables', async () => {
+		await register()
+
+		const other = new Elysia({ precompile: true }).get(
+			'/other',
+			() => 'other'
+		)
+		expect(() => void other.fetch).not.toThrow()
+		await expect(
+			(await other.handle(new Request('http://localhost/other'))).text()
+		).resolves.toBe('other')
+	})
+
+	it('uses the manifest for captured routes and JIT for later routes', async () => {
+		const { handlers } = await register()
+		const original = handlers.POST!['/x']!.f
+		let frozenFactoryCalls = 0
+		handlers.POST!['/x']!.f = (...args: unknown[]) => {
+			frozenFactoryCalls++
+			return original(...args)
+		}
+
+		const app = buildA().get('/late', () => 'late')
+		expect((await app.handle('/x', json({ a: 'ok' }))).status).toBe(200)
+		await expect(
+			(await app.handle(new Request('http://localhost/late'))).text()
+		).resolves.toBe('late')
+		expect(frozenFactoryCalls).toBe(1)
+	})
+
+	it('leaves a registered manifest available after compiling a routeless app', async () => {
+		const { handlers } = await register()
+		const original = handlers.POST!['/x']!.f
+		let frozenFactoryCalls = 0
+		handlers.POST!['/x']!.f = (...args: unknown[]) => {
+			frozenFactoryCalls++
+			return original(...args)
+		}
+
+		void new Elysia({ precompile: true }).fetch
+
+		const response = await buildA().handle('/x', json({ a: 'ok' }))
+		expect(response.status).toBe(200)
+		expect(frozenFactoryCalls).toBe(1)
+	})
+
+	it('ignores a stale registration after an app claims its manifest', async () => {
+		const stale = await captureArtifacts(
+			new Elysia({ precompile: true }).get('/late', () => 'stale')
+		)
+		await register()
+
+		const app = buildA().get('/late', () => 'fresh')
+		expect((await app.handle('/x', json({ a: 'ok' }))).status).toBe(200)
+
+		// a registration arriving after the claim must never rebind the app
+		Compiled.register({
+			bf: 1,
+			fingerprint: stale.fingerprint,
+			handlers: materialiseHandlers(stale.handlers)
+		})
+
+		const response = await app.handle(new Request('http://localhost/late'))
+		await expect(response.text()).resolves.toBe('fresh')
+	})
+
+	it('releases sessions after successful and failed builds', async () => {
+		const expectFreshCapture = async (path: string) => {
+			const app = new Elysia({ precompile: true }).get(path, () => path)
+			const artifacts = await captureArtifacts(app)
+
+			expect(artifacts.handlers.some((handler) => handler.path === path)).toBe(
+				true
+			)
+			await expect(
+				app.handle(path).then((response) => response.text())
+			).resolves.toBe(path)
+		}
+
+		const good = new Elysia({ precompile: true }).get('/ok', () => 'ok')
+		void good.fetch
+		expect(good['~compilerSession']).toBeUndefined()
+		await expectFreshCapture('/after-good')
+
+		const bad = new Elysia({ precompile: true }).post(
+			'/bad',
+			{ body: 'missing' as any },
+			() => 'bad'
+		)
+		expect(() => void bad.fetch).toThrow('Unknown model reference')
+		expect(bad['~compilerSession']).toBeUndefined()
+		await expectFreshCapture('/after-failure')
+	})
+})
