@@ -28,6 +28,7 @@ import {
 	compile,
 	createType,
 	loadFileType,
+	parseFileUnit,
 	tryParse,
 	validateFile
 } from './utils'
@@ -79,10 +80,32 @@ const internalFiles = createType<FilesOptions, File[]>(
 		if (options.minItems && options.minItems > 1 && !Array.isArray(value))
 			return false
 
-		if (!Array.isArray(value)) return validateFile(options, value)
+		if (!Array.isArray(value))
+			return validateFile(
+				{
+					...options,
+					minSize: options.minSize ?? options.minTotalSize,
+					maxSize: options.maxSize ?? options.maxTotalSize
+				},
+				value
+			)
 
 		if (options.minItems && value.length < options.minItems) return false
 		if (options.maxItems && value.length > options.maxItems) return false
+
+		const totalSize = value.reduce((sum, file) => sum + file.size, 0)
+
+		if (
+			options.minTotalSize !== undefined &&
+			totalSize < parseFileUnit(options.minTotalSize)
+		)
+			return false
+
+		if (
+			options.maxTotalSize !== undefined &&
+			totalSize > parseFileUnit(options.maxTotalSize)
+		)
+			return false
 
 		for (let i = 0; i < value.length; i++)
 			if (!validateFile(options, value[i])) return false

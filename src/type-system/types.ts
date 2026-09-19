@@ -96,6 +96,18 @@ export interface FileOptions extends SchemaOptions {
 export interface FilesOptions extends FileOptions {
 	minItems?: number
 	maxItems?: number
+	/**
+	 * The total file size must be at least the specified size.
+	 *
+	 * @example '600k' (600 kilobytes), '3m' (3 megabytes)
+	 */
+	minTotalSize?: FileUnit
+	/**
+	 * The total file size must be less than or equal to the specified size.
+	 *
+	 * @example '3m' (3 megabytes), '600k' (600 kilobytes)
+	 */
+	maxTotalSize?: FileUnit
 }
 
 export interface CookieValidatorOptions<T extends Object = {}>

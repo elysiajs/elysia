@@ -120,4 +120,103 @@ describe('Files', () => {
 
 		expect(response.status).toBe(200)
 	})
+
+	it('validate minSize, maxSize', async () => {
+		const app = new Elysia().post('/', () => 'ok', {
+			body: t.Object({
+				file: t.Files({
+					minSize: '50k',
+					maxSize: '400k'
+				})
+			})
+		})
+
+		// single file size limits are kept if total size filters are undefined
+		{
+			const body = new FormData()
+			body.append('file', Bun.file('test/images/millenium.jpg'))
+
+			const response = await app.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					body
+				})
+			)
+
+			expect(response.status).toBe(422)
+		}
+
+		{
+			const body = new FormData()
+			body.append('file', Bun.file('test/images/kozeki-ui.webp'))
+
+			const response = await app.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					body
+				})
+			)
+
+			expect(response.status).toBe(422)
+		}
+	})
+
+	it('validate minTotalSize, maxTotalSize', async () => {
+		const app = new Elysia().post('/', () => 'ok', {
+			body: t.Object({
+				file: t.Files({
+					minTotalSize: '70k',
+					maxTotalSize: '500k'
+				})
+			})
+		})
+
+		// case 1 fail: single file (30.2 KiB)
+		{
+			const body = new FormData()
+			body.append('file', Bun.file('test/images/kozeki-ui.webp'))
+
+			const response = await app.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					body
+				})
+			)
+
+			expect(response.status).toBe(422)
+		}
+
+		// case 2 pass: two files (30.2 KiB and 70.9 KiB -> 101.1 KiB)
+		{
+			const body = new FormData()
+			body.append('file', Bun.file('test/images/kozeki-ui.webp'))
+			body.append('file', Bun.file('test/images/midori.png'))
+
+			const response = await app.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					body
+				})
+			)
+
+			expect(response.status).toBe(200)
+		}
+
+		// case 3 fail: three files (30.2 KiB, 70.9 KiB and 480.1 KiB -> 581.2 KiB)
+		{
+			const body = new FormData()
+			body.append('file', Bun.file('test/images/kozeki-ui.webp'))
+			body.append('file', Bun.file('test/images/midori.png'))
+			body.append('file', Bun.file('test/images/millenium.jpg'))
+
+			const response = await app.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					body
+				})
+			)
+
+			expect(response.status).toBe(422)
+		}
+	})
 })
