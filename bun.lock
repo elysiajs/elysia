@@ -34,7 +34,7 @@
       "peerDependencies": {
         "@sinclair/typebox": ">= 0.34.0 < 1",
         "@types/bun": ">= 1.2.0",
-        "exact-mirror": "^0.2.6",
+        "exact-mirror": ">= 0.0.9",
         "file-type": ">= 20.0.0",
         "openapi-types": ">= 12.0.0",
         "typescript": ">= 5.0.0",

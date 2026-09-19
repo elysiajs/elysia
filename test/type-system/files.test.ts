@@ -121,6 +121,46 @@ describe('Files', () => {
 		expect(response.status).toBe(200)
 	})
 
+	it('validate minSize, maxSize', async () => {
+		const app = new Elysia().post('/', () => 'ok', {
+			body: t.Object({
+				file: t.Files({
+					minSize: '50k',
+					maxSize: '400k'
+				})
+			})
+		})
+
+		// single file size limits are kept if total size filters are undefined
+		{
+			const body = new FormData()
+			body.append('file', Bun.file('test/images/millenium.jpg'))
+
+			const response = await app.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					body
+				})
+			)
+
+			expect(response.status).toBe(422)
+		}
+
+		{
+			const body = new FormData()
+			body.append('file', Bun.file('test/images/kozeki-ui.webp'))
+
+			const response = await app.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					body
+				})
+			)
+
+			expect(response.status).toBe(422)
+		}
+	})
+
 	it('validate minTotalSize, maxTotalSize', async () => {
 		const app = new Elysia().post('/', () => 'ok', {
 			body: t.Object({

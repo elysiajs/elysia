@@ -84,8 +84,8 @@ const internalFiles = createType<FilesOptions, File[]>(
 			return validateFile(
 				{
 					...options,
-					minSize: options.minTotalSize,
-					maxSize: options.maxTotalSize
+					minSize: options.minSize ?? options.minTotalSize,
+					maxSize: options.maxSize ?? options.maxTotalSize
 				},
 				value
 			)
@@ -96,13 +96,13 @@ const internalFiles = createType<FilesOptions, File[]>(
 		const totalSize = value.reduce((sum, file) => sum + file.size, 0)
 
 		if (
-			options.minTotalSize &&
+			options.minTotalSize !== undefined &&
 			totalSize < parseFileUnit(options.minTotalSize)
 		)
 			return false
 
 		if (
-			options.maxTotalSize &&
+			options.maxTotalSize !== undefined &&
 			totalSize > parseFileUnit(options.maxTotalSize)
 		)
 			return false
