@@ -2498,6 +2498,60 @@ type a = keyof {}
 	})
 }
 
+// A plain return from onError keeps the status of the error that triggered it
+// (NOT_FOUND 404, PARSE 400, VALIDATION 422, INTERNAL_SERVER_ERROR 500), so a
+// JSON error body is exposed under those statuses instead of 200. This is what
+// lets Eden type `error.value` as the custom JSON body.
+{
+	const app = new Elysia()
+		.onError(({ error }) => ({
+			failure: error instanceof Error ? error.message : String(error)
+		}))
+		.get('/', () => ({ message: 'Hello World' as const }))
+
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['response']
+	>().toEqualTypeOf<{
+		200: { message: 'Hello World' }
+		400: { failure: string }
+		404: { failure: string }
+		422: { failure: string }
+		500: { failure: string }
+	}>()
+}
+
+// Explicit status(...) inside onError keeps its exact status code instead of
+// being widened to the built-in error statuses.
+{
+	const app = new Elysia()
+		.onError(({ status }) => status(418, 'I am a teapot'))
+		.get('/', () => ({ message: 'Hello World' as const }))
+
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['response']
+	>().toEqualTypeOf<{
+		200: { message: 'Hello World' }
+		418: 'I am a teapot'
+	}>()
+}
+
+// A global onError return is reflected on same-chain route types too
+{
+	const app = new Elysia()
+		.onError({ as: 'global' }, () => ({ failure: 'oops' }))
+		.get('/global-error', () => ({ message: 'ok' as const }))
+
+	expectTypeOf<
+		(typeof app)['~Routes']['global-error']['get']['response']
+	>().toEqualTypeOf<{
+		200: { message: 'ok' }
+		400: { failure: string }
+		404: { failure: string }
+		422: { failure: string }
+		500: { failure: string }
+	}>()
+}
+
 // onAfterHandle should have response
 {
 	new Elysia().onAfterHandle(

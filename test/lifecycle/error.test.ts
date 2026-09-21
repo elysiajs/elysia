@@ -124,6 +124,27 @@ describe('error', () => {
 		expect(response.status).toBe(500)
 	})
 
+	it('return plain object from onError as JSON with preserved status', async () => {
+		const app = new Elysia()
+			.onError(({ error }) => ({
+				failure:
+					error instanceof Error ? error.message : String(error)
+			}))
+			.get('/', () => {
+				throw new Error('Server is during maintenance')
+			})
+
+		const response = await app.handle(req('/'))
+
+		expect(response.status).toBe(500)
+		expect(response.headers.get('content-type')).toContain(
+			'application/json'
+		)
+		expect(await response.json()).toEqual({
+			failure: 'Server is during maintenance'
+		})
+	})
+
 	it.each([true, false])(
 		'return correct number status on error function with aot: %p',
 		async (aot) => {
