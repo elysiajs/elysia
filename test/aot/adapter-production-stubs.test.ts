@@ -303,7 +303,7 @@ describe('Vite plugin: adapter/bun stub parity', () => {
 
 		await plugin.buildStart()
 
-		const result = await plugin.transform(
+		const result = plugin.transform(
 			'// original bun adapter code\nBun.serve({})',
 			bunIndexId
 		)
@@ -320,7 +320,7 @@ describe('Vite plugin: adapter/bun stub parity', () => {
 
 		await plugin.buildStart()
 
-		const result = await plugin.transform(
+		const result = plugin.transform(
 			'// original bun adapter code\nBun.serve({})',
 			bunIndexId
 		)
@@ -334,7 +334,7 @@ describe('Vite plugin: adapter/bun stub parity', () => {
 
 		await plugin.buildStart()
 
-		const result = await plugin.transform(
+		const result = plugin.transform(
 			'// original bun adapter code\nBun.serve({})',
 			bunIndexId
 		)

@@ -13,14 +13,14 @@ describe('AOT plugin source transforms', () => {
 	// Sealed builds still run user `t.*()`, so typebox-type must always resolve
 	// to its statically-importing `-live` mirror; a loader-less runtime crashes
 	// at startup otherwise
-	it('always re-routes typebox-type to its live mirror', async () => {
+	it('always re-routes typebox-type to its live mirror', () => {
 		const packageRoot = resolve(import.meta.dir, '../..')
 		const hooks = createAotPluginHooks(resolve(packageRoot, 'src/index.ts'))
 
 		for (const leaf of ['src/type/typebox-type.ts', 'dist/type/typebox-type.mjs'])
-			expect(
-				await hooks.transform('', resolve(packageRoot, leaf))
-			).toContain(`export * from './typebox-type-live`)
+			expect(hooks.transform('', resolve(packageRoot, leaf))).toContain(
+				`export * from './typebox-type-live`
+			)
 	})
 
 	it('refreshes static clone omission without touching a nested package', async () => {
@@ -55,10 +55,10 @@ describe('AOT plugin source transforms', () => {
 				'dist/compile/handler/static-clone-resolver.js'
 			]) {
 				expect(
-					await hooks.transform(input, resolve(packageRoot, suffix))
+					hooks.transform(input, resolve(packageRoot, suffix))
 				).toBe(omitted)
 				expect(
-					await hooks.transform(
+					hooks.transform(
 						input,
 						resolve(packageRoot, 'node_modules/elysia', suffix)
 					)
@@ -68,11 +68,11 @@ describe('AOT plugin source transforms', () => {
 			// A later route's alias must retain the resolver on this same hook instance.
 			process.env.ELYSIA_AOT_STATIC_CLONE_MODE = 'mixed'
 			await hooks.buildStart()
-			expect(await hooks.transform(input, leaf)).toBeUndefined()
+			expect(hooks.transform(input, leaf)).toBeUndefined()
 
 			process.env.ELYSIA_AOT_STATIC_CLONE_MODE = 'plain'
 			await hooks.buildStart()
-			expect(await hooks.transform(input, leaf)).toBe(omitted)
+			expect(hooks.transform(input, leaf)).toBe(omitted)
 
 			process.env.ELYSIA_AOT_STATIC_CLONE_MODE = 'throw'
 			await expect(hooks.buildStart()).rejects.toThrow(
@@ -81,7 +81,7 @@ describe('AOT plugin source transforms', () => {
 
 			process.env.ELYSIA_AOT_STATIC_CLONE_MODE = 'mixed'
 			await hooks.buildStart()
-			expect(await hooks.transform(input, leaf)).toBeUndefined()
+			expect(hooks.transform(input, leaf)).toBeUndefined()
 		} finally {
 			if (previousMode === undefined)
 				delete process.env.ELYSIA_AOT_STATIC_CLONE_MODE
@@ -93,12 +93,12 @@ describe('AOT plugin source transforms', () => {
 	})
 
 	describe('registerFrom must not disable tree-shaking', () => {
-		it('vite transform still rewrites t when registerFrom is custom', async () => {
+		it('vite transform still rewrites t when registerFrom is custom', () => {
 			const plugin = viteAot('src/index.ts', {
 				registerFrom: './elysia-wrapper'
 			})
 
-			const out = await plugin.transform(
+			const out = plugin.transform(
 				`import { Elysia, t } from 'elysia'\nt.Object({ a: t.String() })`,
 				'/project/src/handlers.ts'
 			)

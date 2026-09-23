@@ -18,10 +18,15 @@ export namespace Sucrose {
 	export type LifeCycle = Partial<Partial<AppHook>>
 }
 
-function markAllAccessed(i: Sucrose.Inference) {
-	i.query = i.headers = i.body = i.cookie = i.set = i.route = true
-	i.afterResponse = true
-}
+const allAccessed = Object.freeze({
+	query: true,
+	headers: true,
+	body: true,
+	cookie: true,
+	set: true,
+	route: true,
+	afterResponse: true
+})
 
 const isAllAccessed = (i: Sucrose.Inference) =>
 	i.query &&
@@ -376,7 +381,6 @@ export function sucrose(
 	lifeCycle: Sucrose.LifeCycle | undefined
 ): Sucrose.Inference {
 	let inference: Sucrose.Inference | undefined
-	let merged = false
 
 	const events: Handler[] = []
 	if (handler && typeof handler === 'function') events.push(handler)
@@ -407,10 +411,7 @@ export function sucrose(
 				// An own `toString` is a forged source: the real behavior
 				// cannot be trusted from it, so widen every channel and memo
 				// by identity only, never by content
-				const forged = defaultSucrose()
-				markAllAccessed(forged)
-
-				inferred = Object.freeze(forged)
+				inferred = allAccessed
 			} else {
 				const content = event.toString()
 				const key = fnv1a(content)
@@ -424,11 +425,12 @@ export function sucrose(
 					}
 				} else {
 					const channels = inferFunction(content, channel)
-					const fresh = defaultSucrose()
-					if (channels) for (const c of channels) fresh[c] = true
-					else markAllAccessed(fresh)
+					if (channels) {
+						const fresh = defaultSucrose()
+						for (const c of channels) fresh[c] = true
+						inferred = Object.freeze(fresh)
+					} else inferred = allAccessed
 
-					inferred = Object.freeze(fresh)
 					if (caches.size >= DEFAULT_CACHE_LIMIT)
 						evictOldestHalf(caches)
 
@@ -439,17 +441,10 @@ export function sucrose(
 			if (typeof event === 'function') functionCaches.set(event, inferred)
 		}
 
-		if (inference) {
-			inference = mergeInference(inference, inferred)
-			merged = true
-		} else inference = inferred
+		inference = inference ? mergeInference(inference, inferred) : inferred
 
 		if (isAllAccessed(inference)) break
 	}
 
-	// every `inferred` is already frozen, so a single-event result is returned as-is
-	// Only new allocations still need sealing
-	if (!inference) return emptyInference
-
-	return merged ? Object.freeze(inference) : inference
+	return inference ? Object.freeze(inference) : emptyInference
 }

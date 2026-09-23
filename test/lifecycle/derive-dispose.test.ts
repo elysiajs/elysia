@@ -609,7 +609,7 @@ describe('derive dispose: derive-only guard', () => {
 		// Shape, not behaviour, and deliberately so: in derive-only mode
 		// nothing in userland can populate that queue (reaching `defer`, or
 		// passing the context to an opaque callee, sets
-		// `inference.afterResponse` via `markAllAccessed` and the route leaves
+		// `inference.afterResponse` via `allAccessed` and the route leaves
 		// the mode), and nothing can observe `_arf` either - this lane is only
 		// emitted when there is no error hook, and an `afterResponse` handler
 		// would also leave the mode. The invariant is real; only its emitted

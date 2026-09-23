@@ -67,8 +67,6 @@ function decodeParams(params: Record<string, string>) {
 	return params
 }
 
-const notFoundBody = Object.freeze({ code: 'NOT_FOUND' })
-
 // Warn once per app, even when its fetch handler is rebuilt.
 const warnedPathMutation = new WeakSet<AnyElysia>()
 
@@ -87,8 +85,6 @@ function finalizeError(
 	afterResponse: ((context: Context, status?: number) => void) | undefined,
 	error: Error
 ) {
-	if ((error as unknown) === notFoundBody) error = new NotFound()
-
 	let resp: Response | Promise<Response>
 	try {
 		resp = handleError(context, error) as Response | Promise<Response>
@@ -238,7 +234,7 @@ function findRoute(
 			context,
 			handleError,
 			afterResponse,
-			notFoundBody as unknown as Error
+			new NotFound()
 		)
 
 	afterResponse?.(context, 404)
@@ -342,7 +338,6 @@ export function createFetchHandler(
 	const handleError = createErrorHandler(
 		hook?.error,
 		mapResponse as any,
-		undefined,
 		app['~config']?.allowUnsafeValidationDetails
 	)
 
@@ -451,11 +446,7 @@ export function createFetchHandler(
 			await drainDisposables(context)
 
 			if (reports)
-				for (let i = 0; i < reports.length; i++) {
-					const report = reports[i] as { resolve?: () => void }
-					if (typeof report.resolve === 'function') report.resolve()
-					else cache![i].r(report)
-				}
+				for (let i = 0; i < reports.length; i++) cache![i].r(reports[i])
 		})
 	}
 

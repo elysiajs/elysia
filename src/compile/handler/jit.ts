@@ -41,11 +41,10 @@ import {
 	cloneStaticValue,
 	getQueryParseChannels,
 	hasRequestBody,
-	mapAfterHandle,
 	mapAfterResponse,
 	mapBeforeHandle,
+	mapChainHook,
 	mapError,
-	mapMapResponse,
 	mapTransform,
 	resumeRoute,
 	runBeforeHandlePrefix,
@@ -136,14 +135,17 @@ function builtinParser(
 
 function parse(
 	adapter: ElysiaAdapter['parse'],
-	// `describeRoute` already wrapped a bare function parser in an array
-	parsers: ContentType | (ContentType | BodyHandler)[] | undefined,
+	hook: AnyLocalHook | undefined,
 	bodyVali: Validator | undefined,
 	hasHeaders: boolean,
 	link: Link,
 	report: TraceReporter | undefined,
 	arm: string
 ) {
+	// `describeRoute` already wrapped a bare function parser in an array
+	let parsers: ContentType | (ContentType | BodyHandler)[] | undefined =
+		hook?.parse
+
 	if (
 		typeof parsers === 'string' ||
 		// is probably array
@@ -186,7 +188,7 @@ function parse(
 			const parser = parsers[i]
 
 			if (typeof parser === 'function') {
-				link(0, '')
+				link(hook, 'ho')
 
 				const child = report?.resolveChild(
 					(parser as any).name || 'anonymous'
@@ -238,7 +240,7 @@ function parse(
 			link(ElysiaStatus, 'es')
 		}
 
-		const value = `c.body=cj?${awaitValue('pj(c)', arm)}:${awaitValue('pd(c,ce,true)', arm)}\n`
+		const value = `c.body=cj?${awaitValue('pj(c)', arm)}:${awaitValue('pd(c,ce)', arm)}\n`
 		code += hasFn
 			? `if(!hasBody&&${guard}){${begin}${value}${end}}\n`
 			: `if(${guard}){${begin}${value}${end}}\n`
@@ -406,16 +408,6 @@ export function compileHandlerJit({
 
 	const aliasKeys: string[] = []
 	function link(v: unknown, key: string) {
-		if (v === 0) {
-			if (!seenKeys.has('ho')) {
-				seenKeys.add('ho')
-				paramValues.push(hook)
-				aliasKeys.push('ho')
-			}
-
-			return
-		}
-
 		if (!seenKeys.has(key)) {
 			seenKeys.add(key)
 			paramValues.push(v)
@@ -626,7 +618,7 @@ export function compileHandlerJit({
 
 		const parseCode = parse(
 			adapter.parse,
-			hook?.parse,
+			hook,
 			vali?.body,
 			hasHeaders,
 			link,
@@ -729,10 +721,9 @@ export function compileHandlerJit({
 		compactEligible && (Capture.isAotBuildEnv() || Capture.isCapturing())
 	const hasSet = !compactEligible || (!responseCompact && !portableCompact)
 
-	/* eslint-disable sonarjs/no-use-of-empty-return-value */
-	const map = hasSet
-		? (link(responseMap, 'rm') ?? 'rm')
-		: (link(responseCompact, 'rc') ?? 'rc')
+	if (hasSet) link(responseMap, 'rm')
+	else link(responseCompact, 'rc')
+	const map = hasSet ? 'rm' : 'rc'
 	if (portableCompact) link(responseMap, 'rm')
 
 	const mapValue = (value: string) =>
@@ -744,33 +735,19 @@ export function compileHandlerJit({
 
 	if (isStaticResponse || isPromiseHandler) link(cloneResponse, 'cr')
 
-	const handleInstruction = isHandleFunction
-		? 'h(c)'
-		: isStaticResponse
-			? 'cr(h)'
-			: isPromiseHandler
-				? 'h.then(cr)'
-				: 'h'
-
-	const mapReturn = `${mapValue(handleInstruction)}\n`
-
 	if (hasStaticAfterResponse) link(hook!.afterResponse!, 'ar')
 
 	const drainTraceStream = traceHandleOn
 		? `let _ser\nif(_trs){try{for await(const v of _trs){}}catch(_te){_ser=_te}}\n`
 		: ''
 
-	const resolveHandlePostDrain = traceHandleOn
-		? (() => {
-				let s = ''
-				// `r()` resolves either shape (numeric fast-path token or
-				// recorder) and tolerates undefined (_hr only set when the
-				// response streamed)
-				for (let i = 0; i < traceCount; i++)
-					s += `tr${i}.r(_hr${i},_ser)\n`
-				return s
-			})()
-		: ''
+	let resolveHandlePostDrain = ''
+	// `r()` resolves either shape (numeric fast-path token or
+	// recorder) and tolerates undefined (_hr only set when the
+	// response streamed)
+	if (traceHandleOn)
+		for (let i = 0; i < traceCount; i++)
+			resolveHandlePostDrain += `tr${i}.r(_hr${i},_ser)\n`
 
 	const traceNeedsSchedule = traceHandleOn || phaseOn('afterResponse')
 
@@ -1004,8 +981,9 @@ export function compileHandlerJit({
 				code += beginTrace('afterHandle', afLen)
 				if (hasAfterHandle) {
 					link(hook!.afterHandle!, 'af')
-					code += mapAfterHandle(
+					code += mapChainHook(
 						hook!.afterHandle!,
+						'af',
 						asyncMode,
 						buildReport('afterHandle'),
 						abortChainGuard(),
@@ -1021,8 +999,9 @@ export function compileHandlerJit({
 				code += beginTrace('mapResponse', mrLen)
 				if (hasMapResponse) {
 					link(hook!.mapResponse!, 'mr')
-					code += mapMapResponse(
+					code += mapChainHook(
 						hook!.mapResponse!,
+						'mr',
 						asyncMode,
 						buildReport('mapResponse'),
 						abortChainGuard(),
@@ -1103,7 +1082,7 @@ export function compileHandlerJit({
 					: `if(typeof _r?.then==='function')_r=Promise.resolve(_r).then(fe)\nconst _m=${finalMap}\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>${syncErrorHook ? '_ce(_e,c)' : 'fre(rt,c,_e)'}):_m\n`)
 	} else {
 		code +=
-			`const _m=${mapReturn.trim()}\n` +
+			`const _m=${mapValue(isStaticResponse ? 'cr(h)' : isPromiseHandler ? 'h.then(cr)' : 'h')}\n` +
 			`return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n`
 	}
 
@@ -1154,8 +1133,9 @@ export function compileHandlerJit({
 						responseMap,
 						(hasMapResponse
 							? `c.responseValue=_r\n` +
-								mapMapResponse(
+								mapChainHook(
 									hook!.mapResponse!,
+									'mr',
 									asyncMode,
 									undefined,
 									abortChainGuard(),

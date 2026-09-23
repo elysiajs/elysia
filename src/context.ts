@@ -10,7 +10,7 @@ import { defaultHeaders } from './adapter/default-headers'
 import type { AnyElysia } from './base'
 import type { Server } from './universal/server'
 import type { StatusMap } from './constants'
-import type { Cookie } from './cookie'
+import type { Cookie } from './cookie/cookie'
 import type { BaseCookie } from './cookie/types'
 
 import type {

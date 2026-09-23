@@ -74,7 +74,7 @@ export const schemaHasDangerousProperties = (schema: any) =>
 		return false
 	})
 
-export function isCleanSafeNode(
+function isCleanSafeNode(
 	node: any,
 	visiting: WeakSet<object>,
 	clean: WeakSet<object>

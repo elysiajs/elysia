@@ -454,11 +454,9 @@ export const BunAdapter = createAdapter({
 		let cancelled = false
 		let shutdownAttempt: Promise<void> | undefined
 
-		let ready: Promise<unknown> | undefined
 		let wsLifecycle: WSLifecycle | undefined
 		let modulesReady: Promise<void> | undefined
 
-		let built: ReturnType<typeof build> | undefined
 		let pendingSetups: Promise<unknown>[] | undefined
 
 		const build = () => {
@@ -871,12 +869,12 @@ export const BunAdapter = createAdapter({
 			}
 
 			try {
-				built ??= build()
+				const built = build()
 
-				live = serve.fetch = withOrigin(built!.fetch)
+				live = serve.fetch = withOrigin(built.fetch)
 				published = true
-				if (built!.websocket) serve.websocket = built!.websocket
-				if (built!.routes) serve.routes = built!.routes
+				if (built.websocket) serve.websocket = built.websocket
+				if (built.routes) serve.routes = built.routes
 
 				try {
 					server.reload(serve)
@@ -917,11 +915,7 @@ export const BunAdapter = createAdapter({
 			}
 
 			const setupReady = setup()
-			if (
-				setupReady &&
-				typeof (setupReady as Promise<unknown>).then === 'function'
-			)
-				return Promise.resolve(setupReady).then(publish)
+			if (setupReady) return setupReady.then(publish)
 
 			publish()
 		}
@@ -933,13 +927,13 @@ export const BunAdapter = createAdapter({
 			// overlaps async plugins instead of stalling the first request
 			const preload = preloadTypebox()
 
-			ready = (preload ? Promise.all([modules, preload]) : modules)
+			;(preload ? Promise.all([modules, preload]) : modules)
 				.then(start)
 				.catch((error) => stop(true, { error }))
-			ready.catch((error) => {
-				console.error('[Elysia] listen() failed:', error)
-				if (typeof process !== 'undefined') process.exitCode = 1
-			})
+				.catch((error) => {
+					console.error('[Elysia] listen() failed:', error)
+					if (typeof process !== 'undefined') process.exitCode = 1
+				})
 		} catch (error) {
 			stop(true, { error }).catch(console.error)
 

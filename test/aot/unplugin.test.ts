@@ -111,7 +111,7 @@ describe('AOT unplugin Vite adapter', () => {
 		)
 		expect(injected).toBe("import 'elysia/compiled'\nexport const app = 1")
 		expect(injected).toBe(
-			await native.transform('export const app = 1', SEALED_VITE_APP)
+			native.transform('export const app = 1', SEALED_VITE_APP)
 		)
 
 		expect(

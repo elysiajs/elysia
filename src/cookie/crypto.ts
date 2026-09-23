@@ -26,18 +26,13 @@ type BunCryptoHasher = new (algorithm: 'sha256', key: string) => BunKeyedHasher
 // surface at import. Resolve it on demand: under Bun the keyed-hasher probe
 // below settles the provider without it, so it is never touched.
 let _nodeCrypto: NodeCrypto | undefined
-let _nodeCryptoResolved = false
 
 function nodeCrypto() {
-	if (!_nodeCryptoResolved) {
-		_nodeCryptoResolved = true
-
-		try {
-			_nodeCrypto = (globalThis.process as any)?.getBuiltinModule?.(
-				'node:crypto'
-			) as NodeCrypto
-		} catch {}
-	}
+	try {
+		_nodeCrypto ??= (globalThis.process as any)?.getBuiltinModule?.(
+			'node:crypto'
+		)
+	} catch {}
 
 	return _nodeCrypto
 }

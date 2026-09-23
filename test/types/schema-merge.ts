@@ -1,6 +1,6 @@
 import { Elysia, t } from '../../src'
 import { expectTypeOf } from 'expect-type'
-import { Cookie } from '../../src/cookie'
+import { Cookie } from '../../src/cookie/cookie'
 
 // Local scope
 {

@@ -571,12 +571,7 @@ export class ValidationError extends ElysiaError {
 					params: e.params
 				}
 
-				Object.defineProperty(issue, 'value', {
-					value: this.value,
-					writable: true,
-					enumerable: false,
-					configurable: true
-				})
+				defineData(issue, 'value', this.value, false)
 
 				return issue
 			}
@@ -642,26 +637,21 @@ export class ValidationError extends ElysiaError {
 	}
 
 	detail(message: unknown) {
-		if (this.#productionDetail) {
-			if (this.type === 'response')
-				return {
-					type: 'internal-server-error',
-					on: this.type,
-					message
-				}
-
+		if (!this.#productionDetail)
 			return {
 				type: 'validation',
 				on: this.type,
-				message
+				message,
+				errors: this.all
 			}
-		}
 
 		return {
-			type: 'validation',
+			type:
+				this.type === 'response'
+					? 'internal-server-error'
+					: 'validation',
 			on: this.type,
-			message,
-			errors: this.all
+			message
 		}
 	}
 

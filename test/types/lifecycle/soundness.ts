@@ -1,5 +1,5 @@
 import { Elysia, t } from '../../../src'
-import type { Cookie } from '../../../src/cookie'
+import type { Cookie } from '../../../src/cookie/cookie'
 import { expectTypeOf } from 'expect-type'
 import { Prettify } from '../../../src/types'
 

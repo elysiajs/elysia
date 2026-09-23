@@ -38,7 +38,7 @@ it('refreshes Vite build artifacts in terminated workers', async () => {
 		expect(
 			warnings.filter((value) => value.includes('isolated worker'))
 		).toHaveLength(1)
-		await plugin.transform('export const app = 1', resolveEntry(entry))
+		plugin.transform('export const app = 1', resolveEntry(entry))
 		plugin.buildEnd()
 	} finally {
 		console.warn = warn

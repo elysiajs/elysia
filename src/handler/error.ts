@@ -91,8 +91,7 @@ export function fallbackResponse(
 		response: unknown,
 		set: Context['set'],
 		context?: Context
-	) => unknown,
-	defaultError?: Response
+	) => unknown
 ): unknown {
 	if (typeof error?.toResponse === 'function')
 		try {
@@ -106,23 +105,16 @@ export function fallbackResponse(
 							: fallbackErrorResponse(
 									context,
 									error,
-									mapResponse,
-									defaultError
+									mapResponse
 								),
-					() =>
-						fallbackErrorResponse(
-							context,
-							error,
-							mapResponse,
-							defaultError
-						)
+					() => fallbackErrorResponse(context, error, mapResponse)
 				)
 
 			if (r instanceof Response)
 				return mapResponse(r, context.set, context)
 		} catch {}
 
-	return fallbackErrorResponse(context, error, mapResponse, defaultError)
+	return fallbackErrorResponse(context, error, mapResponse)
 }
 
 /**
@@ -202,8 +194,7 @@ function fallbackErrorResponse(
 		response: unknown,
 		set: Context['set'],
 		context?: Context
-	) => unknown,
-	defaultError?: Response
+	) => unknown
 ): unknown {
 	if (error instanceof ElysiaStatus)
 		return mapResponse(error, context.set, context)
@@ -268,20 +259,13 @@ function fallbackErrorResponse(
 			)
 		}
 
-		// Through the mapper, not bare: an error with neither a status nor a
-		// message still has to serve what the handler wrote onto `set`
-		// (headers, cookies) — `mapResponse`'s Response lane merges them
 		return mapResponse(
-			defaultError
-				? defaultError.clone()
-				: internalServerErrorResponse(error),
+			internalServerErrorResponse(error),
 			context.set,
 			context
 		)
 	}
 
-	// Tier 3: nothing annotated, the message is the problem `detail`.
-	// A duck error that claimed nothing falls back to the legacy lane
 	const serveMessage = () => {
 		if (!claimsProblem) return legacy()
 
@@ -299,10 +283,6 @@ function fallbackErrorResponse(
 		)
 	}
 
-	// Tier 1: `value` replaces the whole response. No envelope and no
-	// problem+json — the annotated `status` and `headers` still apply,
-	// only the content is the error's to choose.
-	// Tier 2: `detail` fills the `detail` member of a problem document
 	const tier = (key: 'value' | 'detail'): unknown => {
 		let annotation: unknown
 
@@ -383,7 +363,6 @@ export function createErrorHandler(
 		set: Context['set'],
 		...any: unknown[]
 	) => unknown,
-	defaultError?: Response,
 	allowUnsafe = false
 ) {
 	const enter = (context: Context, error: Error) => {
@@ -399,7 +378,7 @@ export function createErrorHandler(
 	if (!onErrors)
 		return (context: Context, error: Error) => {
 			enter(context, error)
-			return fallbackResponse(context, error, mapResponse, defaultError)
+			return fallbackResponse(context, error, mapResponse)
 		}
 
 	const respond = (context: Context, error: Error, result: unknown) => {
@@ -414,7 +393,7 @@ export function createErrorHandler(
 	const settle = (context: Context, error: Error) =>
 		isPristineNotFound(context, error)
 			? getNotFound()
-			: fallbackResponse(context, error, mapResponse, defaultError)
+			: fallbackResponse(context, error, mapResponse)
 
 	if (hasAsync(onErrors))
 		return async (context: Context, error: Error) => {

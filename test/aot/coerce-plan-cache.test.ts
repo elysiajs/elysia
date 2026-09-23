@@ -77,3 +77,21 @@ describe('coercion leaf cache policy', () => {
 		expect(Check(schema, { value: '1' })).toBe(false)
 	})
 })
+
+describe('custom ObjectString rebuilder', () => {
+	// `RebuildObjStr` is public (elysia/coerce-plan): the callback owns the node
+	// it returns, `~optional` included, so it may hand back a frozen/shared node
+	it('returns the rebuilder node without writing to it', () => {
+		const frozen = Object.freeze({ type: 'object' })
+		const plain = { type: 'object' }
+		const site = { os: ELYSIA_TYPES.ObjectString, o: true }
+
+		expect(
+			buildCoercedFromPlan(original, site, new Set(), () => frozen)
+		).toBe(frozen)
+		expect(
+			buildCoercedFromPlan(original, site, new Set(), () => plain)
+		).toBe(plain)
+		expect(Object.hasOwn(plain, '~optional')).toBe(false)
+	})
+})

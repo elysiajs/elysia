@@ -66,10 +66,6 @@ export class Cookie<T = any> implements BaseCookie {
 		return entry
 	}
 
-	protected set setCookie(jar: BaseCookie) {
-		this.cookie = jar
-	}
-
 	get value(): T {
 		const cookie = this.cookie
 		const value = cookie.value as T
@@ -104,7 +100,7 @@ export class Cookie<T = any> implements BaseCookie {
 
 		delete (cookie as any)['~raw']
 
-		this.setCookie = cookie
+		this.cookie = cookie
 
 		return this
 	}
@@ -119,7 +115,7 @@ export class Cookie<T = any> implements BaseCookie {
 
 		delete (cookie as any)['~raw']
 
-		this.setCookie = cookie
+		this.cookie = cookie
 
 		return this
 	}

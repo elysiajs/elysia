@@ -34,7 +34,6 @@ import {
 	getQueryParseChannels,
 	hasRequestBody,
 	replaceDeriveContext,
-	runBeforeHandlePrefix,
 	armEntryAbort,
 	resumeRoute
 } from './utils'
@@ -119,12 +118,9 @@ const handlerParams = (): Record<string, Resolver | undefined> =>
 	aet: () => adoptErrorType,
 	rt: (c) => c.root,
 	// route hook
-	// `link(0, '')`
 	ho: (c) => c.hook,
 	tf: (c) => c.hook.transform,
 	bf: (c) => c.hook.beforeHandle,
-	bp: (c) => c.hook['~beforeHandlePrefix'],
-	rbp: () => runBeforeHandlePrefix,
 	af: (c) => c.hook.afterHandle,
 	mr: (c) => c.hook.mapResponse,
 	er: (c) => c.hook.error,

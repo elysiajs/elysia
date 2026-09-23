@@ -90,7 +90,7 @@ describe('case-insensitive content-type parse', () => {
 		expect(src).toContain(
 			"let cj=(ce.charCodeAt(12)===106&&ce==='application/json')||ce.endsWith('+json')"
 		)
-		expect(src).toContain('c.body=cj?await pj(c):await pd(c,ce,true)')
+		expect(src).toContain('c.body=cj?await pj(c):await pd(c,ce)')
 		expect(src).not.toContain('ctlc')
 		expect(src).not.toContain('_ctl')
 		expect(src).not.toContain('pmrc')

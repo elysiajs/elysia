@@ -184,12 +184,10 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		const validators = connectionData?.validator as any
 		const defaultValidator = connectionData?.defaultValidator
 
-		let v: WSValidatorLike | undefined
-		if (!validators) v = undefined
-		else if (data instanceof ElysiaStatus) v = validators[data.status]
-		else v = defaultValidator
-
 		const status = data instanceof ElysiaStatus ? data : undefined
+		const v: WSValidatorLike | undefined =
+			validators &&
+			(status ? validators[status.status] : defaultValidator)
 		let value = status ? status.response : data
 
 		if (v) {

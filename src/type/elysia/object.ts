@@ -2,10 +2,7 @@ import type { TObject, TObjectOptions, TProperties } from 'typebox'
 
 import { isEmpty } from '../../utils'
 
-let objectKind: {
-	value: 'Object'
-	enumerable: false
-}
+const objectKind = { value: 'Object', enumerable: false } as const
 let objectProto: { '~kind': 'Object' }
 export function ObjectType<T extends TProperties>(
 	properties: T,
@@ -32,21 +29,15 @@ export function ObjectType<T extends TProperties>(
 	}
 
 	if (!options || isEmpty(options)) {
-		objectProto ??= Object.defineProperty({}, '~kind', {
-			value: 'Object',
-			enumerable: false
-		}) as { '~kind': 'Object' }
+		objectProto ??= Object.defineProperty({}, '~kind', objectKind) as {
+			'~kind': 'Object'
+		}
 
 		const schema = Object.create(objectProto) as TObject<T>
 		;(schema as any).type = 'object'
 		;(schema as any).properties = properties
 		;(schema as any).required = required
 		return schema
-	}
-
-	objectKind ??= {
-		value: 'Object',
-		enumerable: false
 	}
 
 	const schema: any = { ...options, type: 'object', properties, required }

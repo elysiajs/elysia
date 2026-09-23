@@ -155,15 +155,6 @@ export class ElysiaFile {
 			mime[extension] || 'application/octet-stream'
 		)
 	}
-
-	get length() {
-		if (isBun) return this.#value!.size
-
-		const value = this.stats?.then((x) => x.size)
-		value?.catch(() => {})
-
-		return value ?? 0
-	}
 }
 
 Object.defineProperty(ElysiaFile, 'name', { value: 'ElysiaFile' })

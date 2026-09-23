@@ -1,7 +1,8 @@
 import { bench, group, run, summary } from 'mitata'
 
-import { Cookie, serializeCookie } from '../src/cookie'
-import type { BaseCookie } from '../src/cookie'
+import { Cookie } from '../src/cookie/cookie'
+import { serializeCookie } from '../src/cookie/serialize'
+import type { BaseCookie } from '../src/cookie/types'
 
 type CookieSet = { cookie?: Record<string, BaseCookie> }
 type PreparedElysia = { set: CookieSet; cookies: Cookie[] }

@@ -3,9 +3,6 @@ import type { TObject, TProperties, TSchema } from 'typebox'
 import { ObjectType } from './object'
 import type { CookieValidatorOptions } from '../types'
 
-export type { CookieValidatorOptions } from '../types'
-export interface CookieSchemaConfig extends CookieValidatorOptions {}
-
 const COOKIE_OPTION_KEYS = [
 	'domain',
 	'expires',
@@ -25,11 +22,11 @@ const isSchema = (value: unknown): value is TSchema =>
 	!!value && typeof value === 'object' && '~kind' in (value as object)
 
 export interface TCookieObject<T extends TProperties> extends TObject<T> {
-	config?: CookieSchemaConfig
+	config?: CookieValidatorOptions
 }
 
 export interface TCookieField {
-	config?: CookieSchemaConfig
+	config?: CookieValidatorOptions
 }
 
 export function Cookie<T extends TProperties>(
@@ -44,24 +41,20 @@ export function Cookie(
 	first: TProperties | TSchema,
 	options?: CookieValidatorOptions
 ): any {
-	const raw = options as Record<string, unknown> | undefined
-
-	let configRaw: Record<string, unknown> | undefined
+	let config: Record<string, unknown> | undefined
 	let rest: Record<string, unknown> | undefined
 
-	if (raw)
-		for (const key in raw) {
-			const value = raw[key]
+	if (options)
+		for (const key in options) {
+			const value = options[key]
 			if (value === undefined) continue
 
 			if ((COOKIE_OPTION_KEYS as readonly string[]).includes(key)) {
-				;(configRaw ??= {})[key] = value
+				;(config ??= {})[key] = value
 			} else {
 				;(rest ??= {})[key] = value
 			}
 		}
-
-	const config = configRaw as CookieSchemaConfig | undefined
 
 	if (isSchema(first)) {
 		if (!config) return first

@@ -23,7 +23,7 @@ import type {
 import type { AnyElysia, Elysia } from './base'
 import type { ElysiaAdapter } from './adapter'
 import type { Serve } from './universal'
-import type { CookieOptions } from './cookie'
+import type { CookieOptions } from './cookie/types'
 import type {
 	Context,
 	LifecycleContext,

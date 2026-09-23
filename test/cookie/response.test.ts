@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia, t } from '../../src'
-import { signCookie } from '../../src/cookie'
+import { signCookie } from '../../src/cookie/crypto'
 
 const secrets = 'We long for the seven wailings. We bear the koan of Jericho.'
 

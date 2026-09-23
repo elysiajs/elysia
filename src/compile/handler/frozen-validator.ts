@@ -260,7 +260,6 @@ class FrozenSlotValidator {
 	#decode?: (value: unknown) => unknown
 	schema: unknown
 
-	#hasDefault: boolean
 	#defaultFastPath?: DefaultFastPath
 
 	#hasOptional: boolean
@@ -303,7 +302,6 @@ class FrozenSlotValidator {
 		this.#noValidate =
 			(schema as any)?.['~elyTyp'] === ELYSIA_TYPES.NoValidate
 
-		this.#hasDefault = frozen.d === 1
 		if (frozen.ps === 1)
 			this.#defaultFastPath = {
 				value: frozen.pd,
@@ -375,21 +373,19 @@ class FrozenSlotValidator {
 	}
 
 	From(value: unknown, type?: string): unknown {
-		if (this.#hasDefault) {
-			const defaults = this.#defaultFastPath
-			if (defaults) {
-				if (
-					value === undefined ||
-					(value === null && defaults.appliesToNull)
-				)
-					value = this.#cloneSharedDefault()
-				else if (
-					value !== null &&
-					typeof value === 'object' &&
-					defaults.merge !== undefined
-				)
-					value = this.#defaultFastPath!.merge!(value)
-			}
+		const defaults = this.#defaultFastPath
+		if (defaults) {
+			if (
+				value === undefined ||
+				(value === null && defaults.appliesToNull)
+			)
+				value = this.#cloneSharedDefault()
+			else if (
+				value !== null &&
+				typeof value === 'object' &&
+				defaults.merge !== undefined
+			)
+				value = defaults.merge(value)
 		}
 
 		if (this.#hasOptional) {

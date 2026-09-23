@@ -4,7 +4,7 @@ import { Elysia, t } from '../../../src'
 import z from 'zod'
 
 import { expectTypeOf } from 'expect-type'
-import { Cookie } from '../../../src/cookie'
+import { Cookie } from '../../../src/cookie/cookie'
 
 // ? handle standard schema
 {

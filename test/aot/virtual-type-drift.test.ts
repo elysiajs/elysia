@@ -51,7 +51,7 @@ describe('virtual type export coverage', () => {
 	})
 
 	it('generated virtual module is a pure re-export surface (no setupTypebox)', async () => {
-		const src = await generateVirtualType('elysia/type')
+		const src = await generateVirtualType()
 
 		const exportLines = src
 			.split('\n')

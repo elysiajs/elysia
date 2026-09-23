@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'bun:test'
-import { Cookie, signCookie, unsignCookie } from '../../src/cookie'
-import { signCookieSubtle } from '../../src/cookie/crypto'
+import { Cookie } from '../../src/cookie/cookie'
+import {
+	signCookie,
+	signCookieSubtle,
+	unsignCookie
+} from '../../src/cookie/crypto'
 import { parseCookie } from '../utils/parse-cookie'
 
 describe('Parse Cookie', () => {

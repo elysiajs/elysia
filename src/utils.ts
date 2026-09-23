@@ -355,11 +355,13 @@ export function clearFlattenChainMemo(root: object) {
 
 const emptyFlatten = Object.freeze(nullObject()) as Partial<AppHook>
 
-function flattenChainCached(
+export function flattenChainMemoReadonly(
 	root: object,
-	start: ChainNode,
+	start: ChainNode | undefined,
 	resolveAdded?: (node: ChainNode) => Partial<AppHook> | undefined
 ): Partial<AppHook> | undefined {
+	if (!start) return
+
 	let bucket = flattenChainMemos.get(root)
 	if (!bucket || bucket.e !== macroTableEpoch) {
 		bucket = { e: macroTableEpoch, per: new WeakMap() }
@@ -386,22 +388,8 @@ export function flattenChainMemo(
 	start: ChainNode | undefined,
 	resolveAdded?: (node: ChainNode) => Partial<AppHook> | undefined
 ): Partial<AppHook> | undefined {
-	if (!start) return
-
-	const cached = flattenChainCached(root, start, resolveAdded)
-	if (cached === undefined) return
-
-	return cloneHook(cached)
-}
-
-export function flattenChainMemoReadonly(
-	root: object,
-	start: ChainNode | undefined,
-	resolveAdded?: (node: ChainNode) => Partial<AppHook> | undefined
-) {
-	if (!start) return
-
-	return flattenChainCached(root, start, resolveAdded)
+	const cached = flattenChainMemoReadonly(root, start, resolveAdded)
+	if (cached) return cloneHook(cached)
 }
 
 // eslint-disable-next-line no-control-regex
@@ -623,10 +611,6 @@ const _resolveConstantTimeEqual = (): ((a: string, b: string) => boolean) => {
 				b: Uint8Array
 			) => boolean
 	} catch {}
-
-	if (!native && typeof (crypto as any)?.timingSafeEqual === 'function')
-		native = (a: Uint8Array, b: Uint8Array) =>
-			(crypto as any).timingSafeEqual(a, b)
 
 	if (!native)
 		return (a: string, b: string) => {
@@ -1107,14 +1091,13 @@ export function joinPath(base: string, path: string) {
 export function pushField<K extends keyof any>(
 	target: Record<K, unknown>,
 	key: K,
-	item: unknown,
-	defaultArray = false
+	item: unknown
 ) {
 	const v = target[key]
 	if (v) {
 		if (Array.isArray(v)) (target[key] as unknown[]).push(item)
 		else target[key] = [v, item]
-	} else target[key] = defaultArray ? [item] : item
+	} else target[key] = item
 }
 
 export const requestId = isBun

@@ -414,14 +414,15 @@ export async function runBeforeHandlePrefixAsync(
 	}
 }
 
-function mapChainHook(
-	hooks: Function[],
+export function mapChainHook(
+	_hooks: Function | Function[],
 	prefix: string,
 	isAsync: AsyncMode,
 	report?: TraceReporter,
 	abortGuard?: string,
 	arm?: string
 ) {
+	const hooks = toArray(_hooks)
 	let code = ''
 	let depth = 0
 
@@ -443,22 +444,6 @@ function mapChainHook(
 	code += `if(tmp!==undefined)_r=c.responseValue=tmp\n`
 	return code
 }
-
-export const mapAfterHandle = (
-	_hooks: AppHook['afterHandle'] | AppHook['afterHandle'][0],
-	isAsync: AsyncMode,
-	report?: TraceReporter,
-	abortGuard?: string,
-	arm?: string
-) => mapChainHook(toArray(_hooks), 'af', isAsync, report, abortGuard, arm)
-
-export const mapMapResponse = (
-	_hooks: AppHook['mapResponse'] | AppHook['mapResponse'][0],
-	isAsync: AsyncMode,
-	report?: TraceReporter,
-	abortGuard?: string,
-	arm?: string
-) => mapChainHook(toArray(_hooks), 'mr', isAsync, report, abortGuard, arm)
 
 export const mapAfterResponse = /*#__PURE__*/ map<
 	'afterResponse',

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia, t, InvalidCookie } from '../../src'
-import { signCookie } from '../../src/cookie'
+import { signCookie } from '../../src/cookie/crypto'
 
 describe('Cookie Per-field Configuration', () => {
 	it('auto-signs a field that has its own secrets', async () => {

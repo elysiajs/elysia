@@ -292,27 +292,15 @@ export const mayHaveFileType = (schema: object) =>
 type ClearWeak = (ref: WeakRef<TypeBoxValidatorCache>) => void
 let clearWeak: ClearWeak | undefined
 
+type Coercions = CoerceOption[] | {}
+type Bucket = WeakMap<Coercions, BaseTypeBoxValidator>
+
 export class TypeBoxValidatorCache {
 	private static EMPTY = nullObject() as {}
 
-	#cache = new Map<
-		string,
-		WeakMap<
-			CoerceOption[] | typeof TypeBoxValidatorCache.EMPTY,
-			BaseTypeBoxValidator
-		>
-	>()
+	#cache = new Map<string, Bucket>()
 
-	#referenceCache = new WeakMap<
-		TSchema,
-		Map<
-			string,
-			WeakMap<
-				CoerceOption[] | typeof TypeBoxValidatorCache.EMPTY,
-				BaseTypeBoxValidator
-			>
-		>
-	>()
+	#referenceCache = new WeakMap<TSchema, Map<string, Bucket>>()
 
 	#gc: ReturnType<typeof setTimeout> | undefined
 	#gcTime: number
@@ -361,9 +349,7 @@ export class TypeBoxValidatorCache {
 
 	get(
 		schema: TSchema,
-		coercions:
-			| CoerceOption[]
-			| typeof TypeBoxValidatorCache.EMPTY = TypeBoxValidatorCache.EMPTY,
+		coercions: Coercions = TypeBoxValidatorCache.EMPTY,
 		normalize = '',
 		models?: object
 	) {
@@ -398,14 +384,7 @@ export class TypeBoxValidatorCache {
 		}
 	}
 
-	#setRefBucket(
-		schema: TSchema,
-		normalize: string,
-		cache: WeakMap<
-			CoerceOption[] | typeof TypeBoxValidatorCache.EMPTY,
-			BaseTypeBoxValidator
-		>
-	) {
+	#setRefBucket(schema: TSchema, normalize: string, cache: Bucket) {
 		let byNormalize = this.#referenceCache.get(schema)
 		if (!byNormalize) {
 			byNormalize = new Map()
@@ -423,9 +402,7 @@ export class TypeBoxValidatorCache {
 
 	set(
 		schema: TSchema,
-		coercions:
-			| CoerceOption[]
-			| typeof TypeBoxValidatorCache.EMPTY = TypeBoxValidatorCache.EMPTY,
+		coercions: Coercions = TypeBoxValidatorCache.EMPTY,
 		validator?: BaseTypeBoxValidator,
 		normalize = '',
 		models?: object
@@ -452,10 +429,7 @@ export class TypeBoxValidatorCache {
 		normalize += TypeBoxValidatorCache.#modelsToken(models, meta.hasRef)
 
 		if (meta.special) {
-			const cache = new WeakMap().set(coercions, validator) as WeakMap<
-				CoerceOption[] | typeof TypeBoxValidatorCache.EMPTY,
-				BaseTypeBoxValidator
-			>
+			const cache = new WeakMap().set(coercions, validator) as Bucket
 			this.#setRefBucket(schema, normalize, cache)
 
 			return
@@ -476,10 +450,7 @@ export class TypeBoxValidatorCache {
 		if (this.#cache.size >= DEFAULT_CACHE_LIMIT)
 			evictOldestHalf(this.#cache)
 
-		const cache = new WeakMap().set(coercions, validator) as WeakMap<
-			CoerceOption[] | typeof TypeBoxValidatorCache.EMPTY,
-			BaseTypeBoxValidator
-		>
+		const cache = new WeakMap().set(coercions, validator) as Bucket
 		this.#cache.set(key, cache)
 		this.#setRefBucket(schema, normalize, cache)
 	}

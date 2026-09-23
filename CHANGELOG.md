@@ -71,6 +71,12 @@ Breaking Change:
 - remove `fallbackRequestId` from `elysia/utils`; `requestId` is `Bun.randomUUIDv7` on Bun and `crypto.randomUUID` elsewhere
 - `WSCapability.accumulateOptions(target, routeOptions)` drops its unused `path` parameter
 - `app.handler()` drops its unused 4th `precomputedStatic` parameter: `handler(index, immediate?, route?, aliases?, table?)`
+- remove the `ElysiaFile#length` getter (never read); read `value.size` on Bun (`value` is the `BunFile`) or `(await stats).size` elsewhere
+- `pushField` from `elysia/utils` drops its unused 4th `defaultArray` parameter
+- adapter `parse.default(context, contentType)` drops its 3rd `normalized` parameter: `contentType` must already be normalized (the framework always passes it normalized), `WebStandardAdapter.parse.default` no longer normalizes it
+- remove the phantom `'~Scope'` type member from `Elysia`
+- remove the protected `Cookie#setCookie` setter (the getter stays)
+- AOT: an entry whose default export is not an Elysia 2 app now throws instead of emitting an empty manifest with `strip: false`
 
 Behavior Change:
 

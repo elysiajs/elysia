@@ -72,39 +72,34 @@ const icPlaceholder = () => {
 // fresh nodes per rebuild, never cached: `reconstructInnerCodecs` mutates them in place
 const rebuildObjStrShape: RebuildObjStr = (original, site) => {
 	const { type, ...rest } = original
+	const isObject = site.os === ELYSIA_TYPES.ObjectString
 
-	let node: any
-	if (site.os === ELYSIA_TYPES.ObjectString) {
-		const property = rest.properties ?? nullObject()
-		const [{ properties, ...constraints }, meta] = getMeta(
-			(rest ?? nullObject()) as any
-		)
-		const object = ObjectType(property, constraints)
-
-		const objectString = Decode(
-			Refine(StringType(), icPlaceholder, () => 'must be an object'),
-			icPlaceholder
-		)
-
-		node = elyType(
-			ELYSIA_TYPES.ObjectString,
-			Union([object, objectString], meta)
-		)
+	let inner, meta
+	if (isObject) {
+		const [{ properties, ...constraints }, m] = getMeta(rest)
+		inner = ObjectType(rest.properties ?? nullObject(), constraints)
+		meta = m
 	} else {
-		const property = rest.items ?? nullObject()
-		const [constraints, meta] = getMeta((rest ?? nullObject()) as any)
-		const array = ArrayType(property, constraints)
-
-		const arrayString = Decode(
-			Refine(StringType(), icPlaceholder, () => 'must be an array'),
-			icPlaceholder
-		)
-
-		node = elyType(
-			ELYSIA_TYPES.ArrayString,
-			Union([array, arrayString], meta)
-		)
+		const [constraints, m] = getMeta(rest)
+		inner = ArrayType(rest.items ?? nullObject(), constraints)
+		meta = m
 	}
+
+	const node = elyType(
+		isObject ? ELYSIA_TYPES.ObjectString : ELYSIA_TYPES.ArrayString,
+		Union(
+			[
+				inner,
+				Decode(
+					Refine(StringType(), icPlaceholder, () =>
+						isObject ? 'must be an object' : 'must be an array'
+					),
+					icPlaceholder
+				)
+			],
+			meta
+		)
+	)
 
 	if ('o' in site)
 		return Object.defineProperty(node, '~optional', {

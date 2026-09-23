@@ -207,16 +207,8 @@ export interface StubPlan {
 	 * codegen, frozen reconstruct) only calls in when trace handlers exist, so
 	 * a throwing stub is unreachable once detection proves trace is unused
 	 *
-	 * NOT moot after the `elysia/trace` capability severance. The reachable
-	 * post-severance case is: an app that `.use(trace())` (so the capability
-	 * is registered and `dist/trace.mjs` IS in the bundle graph via
-	 * `dist/plugin/trace.mjs`) but never attaches `.trace(fn)` (no trace
-	 * hooks, so `tr` is unaliased and `mayTrace` is false). Under the frozen
-	 * path (`jit`) this flag is still `true`, so the stub replaces the real
-	 * trace module with the non-throwing `unionTracePhases(){return new Set()}`
-	 * fallback (+ throwing `createTracer`, unreachable with zero hooks).
-	 * traceless app that never imports the capability (Fixture B) has no
-	 * trace module in the graph, so the stub is a no-op there.
+	 * Also applies when `.use(trace())` is registered but no `.trace(fn)`
+	 * exists: `unionTracePhases` stays a non-throwing `new Set()`
 	 */
 	trace: boolean
 
@@ -359,8 +351,7 @@ export function planFromReport(
 				` Use strip: 'auto' to skip stubbing when the app is not fully precompiled.`
 		)
 
-	const frozenActive = jit
-	const mode: BridgeMode = !frozenActive
+	const mode: BridgeMode = !jit
 		? 'off'
 		: allBridgeFree
 			? 'sealed'
@@ -422,7 +413,7 @@ export const TYPEBOX_TYPE_FILTER =
 export const ELYSIA_MODULE_FILTER =
 	/[\\/]elysia[\\/](dist|src)[\\/].+\.(m?js|ts)x?$/
 
-export function resolveElysiaRoot(from: string = process.cwd()): string {
+export function resolveElysiaRoot(from: string): string {
 	try {
 		const req = createRequire(join(from, 'package.json'))
 		const pkgJson = req.resolve('elysia/package.json')
@@ -432,7 +423,7 @@ export function resolveElysiaRoot(from: string = process.cwd()): string {
 	}
 }
 
-export function resolveExactMirror(from: string = process.cwd()): boolean {
+export function resolveExactMirror(from: string): boolean {
 	try {
 		createRequire(join(resolveElysiaRoot(from), 'package.json')).resolve(
 			'exact-mirror'
@@ -535,8 +526,7 @@ export const STUB_SOURCES: Record<
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]config\.(m?js|ts)$/,
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a route used cookies. Rebuild with strip:false.")}\n` +
-				`export function compileCookieConfig(){return e()}\n` +
-				`export function isCookieSigned(){return e()}\n`
+				`export function compileCookieConfig(){return e()}\n`
 		}
 	],
 	trace: [
@@ -668,10 +658,9 @@ const resolveSpecifier = (
 }
 
 export async function generateVirtualType(
-	typeSpecifier = 'elysia/type',
 	moduleCondition?: AotModuleCondition
 ) {
-	const typePath = resolveSpecifier(typeSpecifier, moduleCondition)
+	const typePath = resolveSpecifier('elysia/type', moduleCondition)
 	const typeboxPath = resolveSpecifier('typebox/type', moduleCondition)
 
 	const ext = typePath.slice(typePath.lastIndexOf('.'))
@@ -840,7 +829,6 @@ const assertNoMount = (
 	entry: string
 ) => {
 	const routes = app['~routes']
-	if (!routes) return
 
 	const mounted: string[] = []
 	for (const route of routes) {
@@ -946,14 +934,13 @@ export async function generateCompiledArtifacts(
 			if (handler.alias)
 				for (const name of handler.alias.split(',')) aliases.add(name)
 
-		const hasWS =
-			!!(typedApp as { ['~hasWS']?: unknown })['~hasWS'] ||
-			!!typedApp['~routes']?.some((route: any) => route?.[0] === 'WS')
+		const history = typedApp['~routes']
 
-		const history = typedApp['~routes'] ?? []
+		const hasWS =
+			!!typedApp['~hasWS'] || history.some((route) => route[0] === 'WS')
 
 		const mayTrace =
-			!!(typedApp as { ['~hasTrace']?: unknown })['~hasTrace'] ||
+			!!typedApp['~hasTrace'] ||
 			history.some(
 				(route: any) =>
 					(route?.[4] as { trace?: unknown[] } | undefined)?.trace
@@ -1046,10 +1033,7 @@ export async function generateCompiledArtifacts(
 		}
 
 		// `normalize: 'typebox'` need 'typebox/value'
-		if (
-			(typedApp as { ['~config']?: { normalize?: unknown } })['~config']
-				?.normalize === 'typebox'
-		)
+		if (typedApp['~config']?.normalize === 'typebox')
 			routesForbidSeal = true
 
 		const validatorSlotsMatch = validatorSlotSetsMatch(
@@ -1098,7 +1082,7 @@ export async function generateCompiledArtifacts(
 		const virtualType =
 			mode === 'off'
 				? undefined
-				: await generateVirtualType('elysia/type', moduleCondition)
+				: await generateVirtualType(moduleCondition)
 
 		return {
 			source: artifacts.source,

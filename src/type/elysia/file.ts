@@ -22,7 +22,7 @@ import {
 	type FileTypeBudget
 } from './file-type'
 
-export let BaseFile: Type.TRefine<Type.TUnsafe<File>>
+let BaseFile: Type.TRefine<Type.TUnsafe<File>>
 let emptyFile: Readonly<Type.TRefine<Type.TUnsafe<File>>>
 let sharedFile: ReturnType<
 	typeof createSharedReference<

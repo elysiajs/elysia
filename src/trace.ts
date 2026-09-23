@@ -201,7 +201,6 @@ class TraceRecorder {
 	callbacksBegin?: Function[]
 	callbacksEnd?: Function[]
 	callbacksChild?: Function[]
-	pendingPromise?: Promise<TraceProcess<'begin'>>
 	pendingResolve?: (result: TraceProcess<'begin'>) => void
 	endPromise?: Promise<number>
 	endResolve?: (end: number) => void
@@ -224,13 +223,12 @@ class TraceRecorder {
 		// pre-subscription: settle at `begin()`
 		const { promise, resolve } =
 			Promise.withResolvers<TraceProcess<'begin'>>()
-		this.pendingPromise = promise
 		this.pendingResolve = resolve
 
 		return (this.listenFn = (callback?: Function) => {
 			if (callback) (this.callbacksBegin ??= []).push(callback)
 
-			return this.pendingPromise!
+			return promise
 		})
 	}
 

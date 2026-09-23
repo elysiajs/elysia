@@ -28,7 +28,7 @@ import {
 } from '../coerce'
 
 import { ELYSIA_TYPES } from '../constants'
-import { isPureRefinement } from '../shared'
+import { dropCompiledSource, isPureRefinement } from '../shared'
 import { Validator, type ValidatorOptions } from '../../validator'
 
 import {
@@ -634,7 +634,7 @@ export class TypeBoxValidator<
 						// @ts-expect-error private property
 						buildResult: this.tb!.buildResult
 					})
-				else if (!capturing) this.#dropCompiledSource()
+				else if (!capturing) dropCompiledSource(this.tb)
 			}
 		}
 
@@ -1041,15 +1041,8 @@ export class TypeBoxValidator<
 		const tb = Compile(this.schema as TSchema)
 
 		this.tb = tb
-		this.#dropCompiledSource()
+		dropCompiledSource(tb)
 		this.#deferred = false
-	}
-
-	#dropCompiledSource() {
-		const tb = this.tb as any
-		if (!tb) return
-		if (tb.evaluateResult) tb.evaluateResult.code = undefined
-		if (tb.buildResult) tb.buildResult.functions = undefined
 	}
 
 	Errors(value: unknown): TLocalizedValidationError[] {

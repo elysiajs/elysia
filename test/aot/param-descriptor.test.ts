@@ -22,12 +22,14 @@ const linkedNames = () => {
 		/\blink\([^,]+,\s*'([a-z0-9]+)'\)/g
 	))
 		names.add(m[1]!)
-	if (compilerSource.includes("seenKeys.add('ho')")) names.add('ho')
 	// `rt`/`fre` are seeded into `seenKeys`/`paramValues` rather than linked
 	for (const m of compilerSource.matchAll(
 		/\bnew Set<string>\(\[([^\]]+)\]\)/g
 	))
 		for (const n of m[1]!.matchAll(/'([a-z0-9]+)'/g)) names.add(n[1]!)
+	// compact prefix is never built under capture (composeRouteHook)
+	names.delete('bp')
+	names.delete('rbp')
 	return names
 }
 

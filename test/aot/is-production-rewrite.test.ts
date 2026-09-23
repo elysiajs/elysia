@@ -212,7 +212,7 @@ describe('Vite production transforms', () => {
 		await plugin.buildStart()
 
 		const fetchSrc = await Bun.file(ELYSIA_DIST_FETCH).text()
-		const result = await plugin.transform(fetchSrc, ELYSIA_DIST_FETCH)
+		const result = plugin.transform(fetchSrc, ELYSIA_DIST_FETCH)
 
 		expect(result).toBeDefined()
 		expect(result as string).not.toContain('isProduction()')
@@ -228,7 +228,7 @@ describe('Vite production transforms', () => {
 		await plugin.buildStart()
 
 		const fetchSrc = await Bun.file(ELYSIA_DIST_FETCH).text()
-		const result = await plugin.transform(fetchSrc, ELYSIA_DIST_FETCH)
+		const result = plugin.transform(fetchSrc, ELYSIA_DIST_FETCH)
 
 		const out = (result ?? fetchSrc) as string
 		expect(out).toContain('isProduction()')
@@ -245,7 +245,7 @@ describe('Vite production transforms', () => {
 		const userSrc =
 			'import { isProduction } from "elysia"\nconst x = isProduction()'
 
-		const result = await plugin.transform(userSrc, userModuleId)
+		const result = plugin.transform(userSrc, userModuleId)
 		const out = (result ?? userSrc) as string
 		expect(out).toContain('isProduction()')
 	})
@@ -260,7 +260,7 @@ describe('Vite production transforms', () => {
 		const userModuleId = '/Users/me/elysia/src/routes/index.ts'
 		const userSrc = 'const check = isProduction()'
 
-		const result = await plugin.transform(userSrc, userModuleId)
+		const result = plugin.transform(userSrc, userModuleId)
 		const out = (result ?? userSrc) as string
 		expect(out).toContain('isProduction()')
 	})

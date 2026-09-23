@@ -19,7 +19,7 @@ export type AssertNumericEnum<T extends Record<string, string | number>> = {
 
 /**
  * Numeric enum: accepts a numeric string or a number, decodes to the
- * matching enum value. Mirrors src-old `t.NumericEnum`.
+ * matching enum value.
  */
 export function NumericEnum<T extends AssertNumericEnum<T>>(
 	item: T,

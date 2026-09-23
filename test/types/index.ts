@@ -3,7 +3,7 @@
 import { bytes, Elysia, file, form, sse, status, t } from '../../src'
 
 import { expectTypeOf } from 'expect-type'
-import { Cookie } from '../../src/cookie'
+import { Cookie } from '../../src/cookie/cookie'
 
 const app = new Elysia()
 

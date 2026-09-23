@@ -443,13 +443,7 @@ export function buildWSRoute(
 			route[7] as AnyElysia | undefined
 		) as Partial<AppHook> | undefined) ?? ({} as Partial<AppHook>)
 
-	const parseHooks = (
-		hook.parse == null
-			? []
-			: Array.isArray(hook.parse)
-				? hook.parse
-				: [hook.parse]
-	) as any[]
+	const parseHooks = concatHooks(hook.parse as any) as any[]
 
 	const transforms = concatHooks(
 		flatAppHook.transform as any,
@@ -461,13 +455,10 @@ export function buildWSRoute(
 		hook.beforeHandle as any
 	)
 
-	const deriveEntries = [
-		...(((flatAppHook as any)['~deriveEntries'] as
-			| DeriveEntry[]
-			| undefined) ?? []),
-		...(((hook as any)['~deriveEntries'] as DeriveEntry[] | undefined) ??
-			[])
-	] as DeriveEntry[]
+	const deriveEntries = concatHooks(
+		(flatAppHook as any)['~deriveEntries'],
+		(hook as any)['~deriveEntries']
+	) as unknown as DeriveEntry[]
 
 	const deriveSet = deriveEntries.length
 		? new Set<Function>(deriveEntries.map(deriveEntryFn))
@@ -540,7 +531,6 @@ export function buildWSRoute(
 				set,
 				(context as { request?: Request } | undefined)?.request
 			)) as any,
-		undefined,
 		frozenRootOf(app)['~config']?.allowUnsafeValidationDetails
 	)
 

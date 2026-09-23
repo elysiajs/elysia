@@ -294,7 +294,7 @@ describe('AOT plugin', () => {
 		expect(plugin.load('\0not-ours')).toBeUndefined()
 
 		// transform injects the autoload import into the ENTRY only
-		const injected = await plugin.transform(
+		const injected = plugin.transform(
 			'export const app = 1',
 			resolveEntry(VITE_APP)
 		)

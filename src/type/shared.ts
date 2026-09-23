@@ -71,6 +71,12 @@ export function cloneNode(node: BaseSchema, out: any) {
 	return Object.defineProperty(target, '~kind', noEnumerable)
 }
 
+// since it's private, we can drop unused field to reduce memory usage
+export function dropCompiledSource(tb: any) {
+	if (tb.evaluateResult) tb.evaluateResult.code = undefined
+	if (tb.buildResult) tb.buildResult.functions = undefined
+}
+
 export function nonAdditionalProperties(
 	node: BaseSchema,
 	seen: WeakSet<object> = new WeakSet()
@@ -80,114 +86,50 @@ export function nonAdditionalProperties(
 
 	let out: any = node
 
-	if (node.properties) {
-		let newProps: Record<string, BaseSchema> | undefined
-		for (const k in node.properties) {
-			const v = node.properties[k] as BaseSchema
+	const set = (key: string, value: unknown) => {
+		out = cloneNode(node, out)
+		out[key] = value
+	}
+
+	const single = (key: string) => {
+		const v = (node as any)[key]
+		const r = nonAdditionalProperties(v, seen)
+		if (r !== v) set(key, r)
+	}
+
+	const record = (key: string) => {
+		const children = (node as any)[key]
+		let copy: Record<string, BaseSchema> | undefined
+		for (const k in children) {
+			const v = children[k]
 			const r = nonAdditionalProperties(v, seen)
-			if (r !== v) {
-				newProps ??= { ...node.properties }
-				newProps[k] = r
-			}
+			if (r !== v) (copy ??= { ...children })[k] = r
 		}
-		if (newProps) {
-			out = cloneNode(node, out)
-			out.properties = newProps
-		}
+		if (copy) set(key, copy)
 	}
 
-	if (node.items) {
-		if (Array.isArray(node.items)) {
-			let newItems: BaseSchema[] | undefined
-			for (let i = 0; i < node.items.length; i++) {
-				const r = nonAdditionalProperties(
-					node.items[i] as BaseSchema,
-					seen
-				)
-				if (r !== node.items[i]) {
-					newItems ??= [...(node.items as BaseSchema[])]
-					newItems[i] = r
-				}
-			}
-			if (newItems) {
-				out = cloneNode(node, out)
-				out.items = newItems
-			}
-		} else {
-			const r = nonAdditionalProperties(
-				node.items as BaseSchema,
-				seen
-			)
-			if (r !== node.items) {
-				out = cloneNode(node, out)
-				out.items = r
-			}
-		}
-	}
+	if (node.properties) record('properties')
+	if (node.items && !Array.isArray(node.items)) single('items')
 
-	for (const key of ['anyOf', 'allOf', 'oneOf'] as const) {
+	for (const key of ['items', 'anyOf', 'allOf', 'oneOf'] as const) {
 		const arr = (node as any)[key]
 		if (!Array.isArray(arr)) continue
-		let newArr: BaseSchema[] | undefined
+		let copy: BaseSchema[] | undefined
 		for (let i = 0; i < arr.length; i++) {
 			const r = nonAdditionalProperties(arr[i], seen)
-			if (r !== arr[i]) {
-				newArr ??= [...arr]
-				newArr[i] = r
-			}
+			if (r !== arr[i]) (copy ??= [...arr])[i] = r
 		}
-		if (newArr) {
-			out = cloneNode(node, out)
-			out[key] = newArr
-		}
+		if (copy) set(key, copy)
 	}
 
 	if (
 		node.additionalProperties &&
 		typeof node.additionalProperties === 'object'
-	) {
-		const r = nonAdditionalProperties(
-			node.additionalProperties as BaseSchema,
-			seen
-		)
-		if (r !== node.additionalProperties) {
-			out = cloneNode(node, out)
-			out.additionalProperties = r
-		}
-	}
+	)
+		single('additionalProperties')
 
-	if (node.patternProperties) {
-		let newPP: Record<string, BaseSchema> | undefined
-		for (const k in node.patternProperties) {
-			const v = node.patternProperties[k] as BaseSchema
-			const r = nonAdditionalProperties(v, seen)
-			if (r !== v) {
-				newPP ??= { ...node.patternProperties }
-				newPP[k] = r
-			}
-		}
-		if (newPP) {
-			out = cloneNode(node, out)
-			out.patternProperties = newPP
-		}
-	}
-
-	if (node.$defs) {
-		let newDefs: Record<string, BaseSchema> | undefined
-		for (const k in node.$defs) {
-			const v = node.$defs[k] as BaseSchema
-			const r = nonAdditionalProperties(v, seen)
-			if (r !== v) {
-				newDefs ??= { ...node.$defs }
-				newDefs[k] = r
-			}
-		}
-
-		if (newDefs) {
-			out = cloneNode(node, out)
-			out.$defs = newDefs
-		}
-	}
+	if (node.patternProperties) record('patternProperties')
+	if (node.$defs) record('$defs')
 
 	if (
 		(node.type === 'object' || (node as any)['~kind'] === 'Object') &&

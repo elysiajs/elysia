@@ -365,7 +365,6 @@ export class Elysia<
 	declare '~config'?: ElysiaConfig<BasePath, Scope>
 
 	'~Prefix': BasePath
-	declare '~Scope': Scope
 	declare '~Singleton': Singleton
 	declare '~Definitions': Definitions
 	declare '~Metadata': Metadata
@@ -1287,10 +1286,7 @@ export class Elysia<
 	setup(handler: MaybeArray<GracefulHandler<this>>): this {
 		this.#assertMutable('setup')
 		const arr = (this.ext.setup ??= [])
-
-		if (Array.isArray(handler))
-			arr.push(...(handler as GracefulHandler<any>[]))
-		else arr.push(handler as GracefulHandler<any>)
+		arr.push(...([] as GracefulHandler<any>[]).concat(handler))
 
 		return this
 	}
@@ -3797,33 +3793,14 @@ export class Elysia<
 		let hook = _hook as any
 
 		if (hook.derive) {
-			const promoted = nullObject() as any
-
-			for (const key of Object.keys(hook)) {
-				if (key === 'derive') continue
-
-				promoted[key] = (hook as any)[key]
-			}
-
-			const extras: Function[] = []
-
-			if (Array.isArray(hook.derive)) extras.push(...hook.derive)
-			else extras.push(hook.derive)
+			const { derive, ...rest } = hook
+			const extras: Function[] = [].concat(derive)
+			hook = Object.assign(nullObject(), rest)
 
 			if (extras.length) {
-				const existing = promoted.beforeHandle
-				if (existing) {
-					promoted.beforeHandle = Array.isArray(existing)
-						? [...extras, ...existing]
-						: [...extras, existing]
-				} else {
-					promoted.beforeHandle = extras
-				}
-
-				;(promoted['~deriveEntries'] ??= []).push(...extras)
+				hook.beforeHandle = extras.concat(hook.beforeHandle || [])
+				;(hook['~deriveEntries'] ??= []).push(...extras)
 			}
-
-			hook = promoted
 		}
 
 		if (hook.trace) this['~hasTrace'] = true
@@ -7743,10 +7720,7 @@ export class Elysia<
 
 		this.#assertMutable('cleanup')
 		const arr = (this.ext.cleanup ??= [])
-
-		if (Array.isArray(handler))
-			arr.push(...(handler as GracefulHandler<any>[]))
-		else arr.push(handler as GracefulHandler<any>)
+		arr.push(...([] as GracefulHandler<any>[]).concat(handler))
 
 		return this
 	}

@@ -75,9 +75,7 @@ export function createSharedReference<
 	}
 }
 
-export const hasMeta = (
-	property: Partial<BaseSchema> & Record<keyof any, unknown>
-) =>
+const hasMeta = (property: Partial<BaseSchema> & Record<keyof any, unknown>) =>
 	'title' in property ||
 	'description' in property ||
 	'tags' in property ||

@@ -1,5 +1,6 @@
 import { Decode, Refine } from '../typebox-type'
 import { Check, Compile, Decode as decodeValue } from '../bridge'
+import { dropCompiledSource } from '../shared'
 import type { TSchema } from 'typebox'
 
 import { StringType } from './string'
@@ -35,13 +36,7 @@ export function jsonString<T extends TSchema>(
 					if (!check)
 						try {
 							const compiled = Compile(inner) as any
-
-							// since it's private, we can drop unused field to reduce memory usage
-							if (compiled.evaluateResult)
-								compiled.evaluateResult.code = undefined
-
-							if (compiled.buildResult)
-								compiled.buildResult.functions = undefined
+							dropCompiledSource(compiled)
 
 							check = (v) => compiled.Check(v)
 						} catch {

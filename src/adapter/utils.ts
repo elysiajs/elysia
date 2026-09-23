@@ -2,7 +2,7 @@ import { isByteStream, isNotEmpty, nullObject, sseData } from '../utils'
 import { StatusMap } from '../constants'
 
 import { serializeCookie } from '../cookie/serialize'
-import { isBun, hasHeaderShorthand } from '../universal/constants'
+import { hasHeaderShorthand } from '../universal/constants'
 import type { ElysiaFile } from '../universal/file'
 import type { Context } from '../context'
 
@@ -39,11 +39,6 @@ export function handleFile(
 	request?: Request,
 	size = (response as File | Blob).size
 ): Response {
-	if (!isBun && response instanceof Promise)
-		return response.then((res) =>
-			handleFile(res, set, request, size)
-		) as any
-
 	const rangeHeader = request?.headers.get('range')
 	if (rangeHeader) {
 		const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader)

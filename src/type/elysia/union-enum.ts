@@ -5,10 +5,7 @@ import { ELYSIA_TYPES } from '../constants'
 import type { NonEmptyArray, TEnumValue, TUnionEnum } from '../types'
 import { elyType } from './utils'
 
-let unionEnumNoEnumerable: {
-	value: 'UnionEnum'
-	enumerable: false
-}
+const unionEnumKind = { value: 'UnionEnum', enumerable: false } as const
 export function UnionEnum<
 	const T extends
 		| NonEmptyArray<TEnumValue>
@@ -31,10 +28,7 @@ export function UnionEnum<
 	const schema = Object.defineProperty(
 		{ default: values[0], ...options, enum: values },
 		'~kind',
-		(unionEnumNoEnumerable ??= {
-			value: 'UnionEnum',
-			enumerable: false
-		})
+		unionEnumKind
 	) as any as TUnionEnum<T>
 
 	if (!mixed) schema.type = kind

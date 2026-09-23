@@ -32,7 +32,7 @@ describe('body parsing without full header access', () => {
 		expect(source).toContain(
 			"let cj=(ce.charCodeAt(12)===106&&ce==='application/json')||ce.endsWith('+json')"
 		)
-		expect(source).toContain('c.body=cj?await pj(c):await pd(c,ce,true)')
+		expect(source).toContain('c.body=cj?await pj(c):await pd(c,ce)')
 		expect(source).not.toContain('c.contentType=ct')
 		expect(source).not.toContain('c.headers=')
 		expect(source).not.toContain('.toJSON()')
@@ -64,7 +64,7 @@ describe('body parsing without full header access', () => {
 		expect(source).toContain(
 			"let cj=(ce.charCodeAt(12)===106&&ce==='application/json')||ce.endsWith('+json')"
 		)
-		expect(source).toContain('c.body=cj?await pj(c):await pd(c,ce,true)')
+		expect(source).toContain('c.body=cj?await pj(c):await pd(c,ce)')
 		expect(source).not.toContain('c.contentType=ct')
 		expect(source).not.toContain('c.headers=')
 

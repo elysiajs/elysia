@@ -105,19 +105,11 @@ export function coerce(
 				if (result !== null) {
 					if ('~optional' in node) {
 						if (Object.isFrozen(result))
-							result = Object.defineProperty(
-								Object.create(result),
-								'~optional',
-								{
-									value: node['~optional'],
-									enumerable: false
-								}
-							)
-						else
-							Object.defineProperty(result, '~optional', {
-								value: node['~optional'],
-								enumerable: false
-							})
+							result = Object.create(result)
+						Object.defineProperty(result, '~optional', {
+							value: node['~optional'],
+							enumerable: false
+						})
 					}
 
 					memo.set(node, result! as BaseSchema)

@@ -1,6 +1,5 @@
 import { mapCompactResponse, mapResponse } from './handler'
 import { formDataToObject } from './utils'
-import { normalizeContentType } from '../utils'
 
 import { createAdapter } from '..'
 import { parseQuery } from '../../parse-query'
@@ -19,11 +18,7 @@ export const WebStandardAdapter = createAdapter({
 		json: (context) => context.request.json(),
 		text: (context) => context.request.text(),
 		urlencoded: (context) => context.request.text().then(parseQuery),
-		default(context, contentType, normalized) {
-			const ct = normalized
-				? contentType
-				: normalizeContentType(contentType)
-
+		default(context, ct) {
 			switch (ct.charCodeAt(12)) {
 				case 106:
 					if (ct === 'application/json') return context.request.json()

@@ -2,7 +2,7 @@ import type { TObjectOptions, TSchemaOptions } from 'typebox'
 import type { TLocalizedValidationError } from 'typebox/error'
 
 import type { ELYSIA_TYPES } from './constants'
-import type { CookieOptions } from '../cookie'
+import type { CookieOptions } from '../cookie/types'
 
 type MaybeArray<T> = T | T[]
 

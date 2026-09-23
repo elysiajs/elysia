@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { serializeCookie } from '../../../src/cookie'
+import { serializeCookie } from '../../../src/cookie/serialize'
 
 describe('Web Standard - Cookie to Header', () => {
 	it('return undefined on empty object', () => {

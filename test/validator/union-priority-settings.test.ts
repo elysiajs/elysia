@@ -38,7 +38,8 @@ const schema =
  * the deferred `typebox-type` leaf — but the ops that READ it live in the
  * separately deferred `typebox-value` leaf, and an app whose schemas are
  * built from Elysia-owned builders reaches the value ops without ever touching
- * the type leaf. Without the cross-leaf `ensureTypeSettings()` the default
+ * the type leaf. Without the value leaf materializing the type leaf
+ * (`loadTypeNamespace()` in typebox-value's load/injectTypebox) the default
  * would silently never be applied for exactly that (modal) shape of app.
  */
 describe('unionPrioritySort default across the two TypeBox leaves', () => {
