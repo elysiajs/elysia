@@ -22,8 +22,7 @@ import {
 	TypeBoxValidator,
 	TypeBoxValidatorCache,
 	Intersect,
-	HasCodec,
-	Default
+	HasCodec
 } from '../type/bridge'
 import { assignOwn } from '../utils'
 import { isAsyncFunction } from '../compile/utils'
@@ -120,18 +119,12 @@ export abstract class Validator {
 		if (
 			schema != null &&
 			typeof (schema as any).Check === 'function' &&
-			'buildResult' in schema
-		) {
-			const message =
+			'buildResult' in schema &&
+			!('~standard' in schema)
+		)
+			throw new Error(
 				'[Elysia] Compiled schema detected. Please pass t.Schema instead.'
-
-			if (Capture.isCapturing())
-				throw new Error(
-					`${message} build plugin cannot serialize a pre-compiled schema.`
-				)
-
-			console.warn(message)
-		}
+			)
 
 		let isIntersectable = false
 
@@ -374,7 +367,6 @@ export class MultiValidator extends Validator {
 	#schemas: (CompiledTypeBoxValidator | StandardSchemaV1Like)[]
 	#codecs: boolean[]
 	#hasDefaults: boolean[]
-	#tbSchemas: (TSchema | null)[]
 	#asyncMembers: (TypeBoxValidator | null)[]
 
 	constructor(
@@ -392,7 +384,6 @@ export class MultiValidator extends Validator {
 
 		const codecs: boolean[] = []
 		const hasDefaults: boolean[] = []
-		const tbSchemas: (TSchema | null)[] = []
 		const asyncMembers: (TypeBoxValidator | null)[] = []
 
 		const shouldClose = options?.normalize === false
@@ -408,7 +399,6 @@ export class MultiValidator extends Validator {
 
 			codecs.push(HasCodec(coercedSchema))
 			hasDefaults.push(hd)
-			tbSchemas.push(hd ? coercedSchema : null)
 
 			const isAsync =
 				(compiled as any).buildResult?.external?.variables?.some(
@@ -455,7 +445,6 @@ export class MultiValidator extends Validator {
 				if (isAsyncStandardSchema(schema)) this.isAsync = true
 				codecs.push(false)
 				hasDefaults.push(false)
-				tbSchemas.push(null)
 				asyncMembers.push(null)
 			}
 		}
@@ -474,7 +463,6 @@ export class MultiValidator extends Validator {
 		)[]
 		this.#codecs = codecs
 		this.#hasDefaults = hasDefaults
-		this.#tbSchemas = tbSchemas
 		this.#asyncMembers = asyncMembers
 	}
 
@@ -637,10 +625,7 @@ export class MultiValidator extends Validator {
 			const compiled = validator as CompiledTypeBoxValidator
 			let v = this.#cloneForMember(value)
 
-			if (this.#hasDefaults[i])
-				v = (compiled as any).Default
-					? (compiled as any).Default(v)
-					: Default(this.#tbSchemas[i]!, v)
+			if (this.#hasDefaults[i]) v = compiled.Default(v)
 
 			let memberValue: unknown
 			if (this.#codecs[i])

@@ -18,7 +18,6 @@ const PROBE_PATH = '/__p5-probe'
 /** Register a claimable manifest carrying a probe entry on an unused path. */
 const registerProbeManifest = () => {
 	Compiled.register({
-		bf: 1,
 		fingerprint: createAotFingerprint(),
 		handlers: {
 			GET: { [PROBE_PATH]: { a: [], f: () => () => new Response() } }
@@ -28,7 +27,6 @@ const registerProbeManifest = () => {
 
 const registerDuplicateManifest = (path: string) => {
 	Compiled.register({
-		bf: 1,
 		fingerprint: createAotFingerprint(),
 		handlers: {
 			GET: {
@@ -458,7 +456,6 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 			false,
 			undefined,
 			undefined,
-			undefined,
 			table
 		)(new TableContext(new Request('http://localhost/table')))
 		await expect(tableResponse.text()).resolves.toBe('table')
@@ -622,11 +619,12 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 			expect(programAlive(app)).toBe(true)
 
 			// force a sealed-generation rebuild (mirror generation.test.ts):
-			// registerRoute disarms, ~newGeneration re-claims + re-arms
+			// registerRoute disarms, the re-seal re-claims + re-arms
 			;(app as any)['~generation'] = undefined
 			registerProbeManifest()
 			app.get('/c', () => 'c')
-			app['~newGeneration']()
+			void app.fetch
+			expect(app['~generation']).toBeDefined()
 
 			expect(programAlive(app)).toBe(true)
 

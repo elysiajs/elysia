@@ -215,8 +215,6 @@ export interface StubPlan {
 	 * path (`jit`) this flag is still `true`, so the stub replaces the real
 	 * trace module with the non-throwing `unionTracePhases(){return new Set()}`
 	 * fallback (+ throwing `createTracer`, unreachable with zero hooks).
-	 * Measured saving for that shape: ~18KB severing trace also tree-shakes
-	 * sucrose's `separateFunction`, which trace is the sole importer of. A
 	 * traceless app that never imports the capability (Fixture B) has no
 	 * trace module in the graph, so the stub is a no-op there.
 	 */
@@ -227,7 +225,7 @@ export interface StubPlan {
 	 * stubbed. Sucrose never runs in a precompiled app, so its caches are always
 	 * empty and the flush is a no-op. Dropping the import lets the Sucrose
 	 * analyzer tree-shake. `flushMemory`'s other clears are preserved, and the
-	 * public `elysia/sucrose` module is left untouched
+	 * `sucrose` module itself is not stubbed
 	 */
 	sucrose: boolean
 
@@ -255,16 +253,6 @@ export interface StubPlan {
 	 * Every mode except sealed, there the unresolvable `require` is what lets TypeBox collapse
 	 */
 	typeboxValue: boolean
-
-	/**
-	 * Re-route `type/typebox-type` -> its `-live` mirror
-	 * Every mode, sealed included (unlike `typeboxValue`), sealed still executes
-	 * user `t.*()` at route definition and `typebox/type` is already in the bundle
-	 * via the virtual `elysia/type` module
-	 *
-	 * skipping the rewrite collapses nothing and only buys a startup crash on loader-less runtimes
-	 */
-	typeboxType: boolean
 
 	/**
 	 * Re-route `type/validator/exact-mirror` -> its statically-imported `-live`
@@ -320,7 +308,6 @@ export const NO_STUB: StubPlan = {
 	compat: false,
 	bridge: false,
 	typeboxValue: false,
-	typeboxType: false,
 	exactMirror: false,
 	adapter: false,
 	isProduction: false
@@ -397,7 +384,6 @@ export function planFromReport(
 			compat: mode !== 'off',
 			bridge: mode === 'wired',
 			typeboxValue: mode !== 'sealed',
-			typeboxType: true,
 			exactMirror: exactMirror && mode !== 'sealed',
 			adapter: adapterStub,
 			isProduction: productionStub
@@ -427,6 +413,11 @@ export const ADAPTER_BUN_FILTER =
 
 export const IS_PRODUCTION_FILTER =
 	/[\\/]elysia[\\/](dist|src)[\\/]universal[\\/]is-production\.(m?js|ts)$/
+
+// Always re-routed to the `-live` mirror, sealed included (unlike `typeboxValue`): sealed
+// still runs user `t.*()`, so skipping it only buys a startup crash on loader-less runtimes
+export const TYPEBOX_TYPE_FILTER =
+	/[\\/]elysia[\\/](dist|src)[\\/]type[\\/]typebox-type\.(m?js|ts)$/
 
 export const ELYSIA_MODULE_FILTER =
 	/[\\/]elysia[\\/](dist|src)[\\/].+\.(m?js|ts)x?$/
@@ -467,7 +458,7 @@ export const rewriteIsProductionCalls = (code: string) =>
 
 export const bunAdapterStubSource =
 	`const e=(t)=>{throw new Error(\`[elysia-aot] Bun adapter was stripped for target 'web-standard' .listen() is unavailable; use the exported fetch handler or rebuild with a different target.\`)}\n` +
-	`export const BunAdapter={name:'bun',runtime:'bun',isWebStandard:true,parse:{},response:{},listen:e}\n` +
+	`export const BunAdapter={parse:{},response:{},listen:e}\n` +
 	`export function collectStaticRoutes(){}\n`
 
 export const STUB_SOURCES: Record<
@@ -496,23 +487,13 @@ export const STUB_SOURCES: Record<
 			// it pulls in `sucrose`. Stub it alongside the JIT compiler so the sucrose
 			// analyzer stays tree-shakeable in strip mode
 			//
-			// The always-on exports `isEmptyPipelineHook` (native-static promotion)
-			// and `routeDescriptors` are sucrose-free and re-implemented here so the
-			// non-JIT path keeps working.
+			// The always-on export `routeDescriptors` is sucrose-free and
+			// re-implemented here so the non-JIT path keeps working.
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]handler[\\/]descriptor\.(m?js|ts)$/,
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] handler compiler JIT was stripped (strip mode) but a route needed runtime compilation. Rebuild with strip:false.")}\n` +
 				`export function describeRoute(){return e()}\n` +
-				`export const routeDescriptors=new WeakMap()\n` +
-				`export function isEmptyPipelineHook(hook){\n` +
-				`	if(!hook)return true\n` +
-				`	for(const key in hook){\n` +
-				`		if(key==='detail'||key==='tags'||key==='error')continue\n` +
-				`		const value=hook[key]\n` +
-				`		if(value!==undefined&&value!==false&&(!Array.isArray(value)||value.length))return false\n` +
-				`	}\n` +
-				`	return true\n` +
-				`}\n`
+				`export const routeDescriptors=new WeakMap()\n`
 		}
 	],
 	ws: [
@@ -548,12 +529,7 @@ export const STUB_SOURCES: Record<
 				`export function parseCookieRawLazy(){return e()}\n` +
 				`export function parseCookieRawDeferred(){return e()}\n` +
 				`export function buildCookieJar(){return e()}\n` +
-				`export function signCookieValues(){return e()}\n` +
-				`export function signCookie(){return e()}\n` +
-				`export function signCookieSubtle(){return e()}\n` +
-				`export function signCookieSync(){return e()}\n` +
-				`export function unsignCookie(){return e()}\n` +
-				`export function unsignCookieSync(){return e()}\n`
+				`export function signCookieValues(){return e()}\n`
 		},
 		{
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]config\.(m?js|ts)$/,
@@ -582,16 +558,6 @@ export const STUB_SOURCES: Record<
 				`	clearContextCache()\n` +
 				`	Validator.clear()\n` +
 				`}\n`
-		},
-		{
-			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]analysis-cache\.(m?js|ts)$/,
-			source:
-				`import { clearHandlerAnalysisCaches } from './handler/index'\n` +
-				`import { clearFlattenChainMemo } from '../utils'\n` +
-				`export function clearAuthoringAnalysisCaches(root) {\n` +
-				`	clearHandlerAnalysisCaches(root)\n` +
-				`	clearFlattenChainMemo(root)\n` +
-				`}\n`
 		}
 	],
 	compat: [
@@ -610,12 +576,6 @@ export const STUB_SOURCES: Record<
 		{
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]type[\\/]typebox-value\.(m?js|ts)$/,
 			source: `export * from './typebox-value-live'\n`
-		}
-	],
-	typeboxType: [
-		{
-			filter: /[\\/]elysia[\\/](dist|src)[\\/]type[\\/]typebox-type\.(m?js|ts)$/,
-			source: `export * from './typebox-type-live'\n`
 		}
 	],
 	exactMirror: [
@@ -944,7 +904,6 @@ export async function generateCompiledArtifacts(
 		assertNoMount(typedApp, entry)
 
 		const sourceOptions = {
-			register: true,
 			moduleCondition,
 			registerFrom: options?.registerFrom,
 			reconstructFrom: options?.reconstructFrom,
@@ -972,7 +931,6 @@ export async function generateCompiledArtifacts(
 					// TypeBox stays fully wired here, so keep the ops statically
 					// importable for the bundler
 					typeboxValue: true,
-					typeboxType: true,
 					exactMirror,
 					adapter: adapterStub,
 					isProduction: productionStub
@@ -1024,30 +982,19 @@ export async function generateCompiledArtifacts(
 			}
 
 			const [, , , instance, hook, appHook, inheritedChain, macroScope] =
-				route as [
-					unknown,
-					unknown,
-					unknown,
-					unknown,
-					unknown,
-					unknown,
-					unknown,
-					unknown
-				]
+				route
 			const hooks = composeRouteHook(
-				instance as any,
-				hook as any,
-				appHook as any,
-				inheritedChain as any,
-				typedApp as any,
-				macroScope as any
+				instance,
+				hook,
+				appHook,
+				inheritedChain,
+				typedApp,
+				macroScope
 			) as Record<string, unknown> | undefined
 
 			if (
-				(route as { [0]?: unknown })[0] === 'WS' &&
-				((hook as { cookie?: unknown } | undefined)?.cookie !==
-					undefined ||
-					hooks?.cookie !== undefined)
+				method === 'WS' &&
+				(hook?.cookie !== undefined || hooks?.cookie !== undefined)
 			)
 				wsCookie = true
 

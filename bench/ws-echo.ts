@@ -10,13 +10,13 @@
 // method-shorthand handler style used below (matching the plan's own
 // example and the idiomatic style used throughout this repo's WS tests):
 //
-//   1. The pre-existing `handlerMayTouchBody` heuristic (route.ts, out of
-//      scope for this plan) has a bug: for named functions / object-method
-//      shorthand (`{ message(ws, msg) {...} }`), the check
-//      `source.slice(0, paramsEnd).indexOf('(', 1) !== -1` always refinds
-//      the handler's own opening paren, so `messageHandlerTouchesBody` is
-//      forced `true` unconditionally — the reuse path never engages for
-//      this handler style at all.
+//   1. The skip was gated on a `handlerMayTouchBody` source heuristic
+//      (route.ts) that has since been removed; `ws.body` is now assigned on
+//      every frame. At the time it misfired for named functions /
+//      object-method shorthand (`{ message(ws, msg) {...} }`): the check
+//      `source.slice(0, paramsEnd).indexOf('(', 1) !== -1` always refound
+//      the handler's own opening paren, forcing the flag `true`, so the
+//      reuse path never engaged for this handler style at all.
 //   2. Even when forced onto the reuse path directly (bare arrow-function
 //      handler, where the heuristic happens to evaluate correctly), the
 //      measured improvement was ~0.8%, not the >=5% hypothesized — socket
@@ -48,8 +48,9 @@ const MESSAGE = 'x'.repeat(16)
 async function runOnce(): Promise<number> {
 	const app = new Elysia()
 		.ws('/echo', {
-			// Must never reference `body` — keeps this on the no-touch
-			// sync-dispatch lane under test.
+			// No transform / beforeHandle / afterHandle / afterResponse /
+			// mapResponse hooks, so this stays on the sync-dispatch lane
+			// under test.
 			message(ws, msg) {
 				ws.send(msg)
 			}

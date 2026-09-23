@@ -317,6 +317,40 @@ describe('structured +json content types', () => {
 })
 
 describe('mixed-case multipart body handling', () => {
+	// media type and parameter names are case-insensitive (RFC 9110 §8.3.1),
+	// the adapter hands the raw header to the runtime's formData() as-is
+	for (const contentType of [
+		'Multipart/Form-Data; boundary=X',
+		'MULTIPART/FORM-DATA; boundary=X',
+		'multipart/form-data; Boundary=X',
+		'Multipart/Form-Data; Boundary="X"'
+	])
+		it(`parses text and file fields for ${contentType}`, async () => {
+			const app = new Elysia().post('/', async ({ body }) => {
+				const { name, file } = body as { name: string; file: File }
+
+				return { name, file: file.name, content: await file.text() }
+			})
+
+			const res = await app.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					headers: { 'content-type': contentType },
+					body:
+						'--X\r\nContent-Disposition: form-data; name="name"\r\n\r\nelysia\r\n' +
+						'--X\r\nContent-Disposition: form-data; name="file"; filename="a.txt"\r\n' +
+						'Content-Type: text/plain\r\n\r\nhello\r\n--X--\r\n'
+				})
+			)
+
+			expect(res.status).toBe(200)
+			await expect(res.json()).resolves.toEqual({
+				name: 'elysia',
+				file: 'a.txt',
+				content: 'hello'
+			})
+		})
+
 	it('consumes the original request body without retaining a tee', async () => {
 		let originalBodyStillReadable: boolean | undefined
 

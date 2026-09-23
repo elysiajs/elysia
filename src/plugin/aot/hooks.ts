@@ -12,6 +12,7 @@ import {
 	ADAPTER_CONSTANTS_FILTER,
 	ADAPTER_BUN_FILTER,
 	IS_PRODUCTION_FILTER,
+	TYPEBOX_TYPE_FILTER,
 	ELYSIA_MODULE_FILTER,
 	NO_STUB,
 	adapterConstantsSource,
@@ -33,10 +34,7 @@ export interface AotPluginHooks {
 	buildEnd(): void
 	resolveId(id: string): string | undefined
 	load(id: string): string | undefined
-	transform(
-		code: string,
-		id: string
-	): string | undefined | Promise<string | undefined>
+	transform(code: string, id: string): string | undefined
 	isTransformCandidate(id: string): boolean
 }
 
@@ -107,7 +105,7 @@ export const createAotPluginHooks = (
 			if (id === VIRTUAL) return source
 			if (id === VIRTUAL_TYPE) return virtualType
 		},
-		async transform(code, id) {
+		transform(code, id) {
 			const cleanId = id.split('?', 1)[0]
 
 			// Stub when every route is compiled
@@ -127,6 +125,12 @@ export const createAotPluginHooks = (
 					if (filter.test(cleanId))
 						return alignStubExtensions(stubSource, cleanId)
 			}
+
+			if (TYPEBOX_TYPE_FILTER.test(cleanId))
+				return alignStubExtensions(
+					`export * from './typebox-type-live'\n`,
+					cleanId
+				)
 
 			if (
 				stub.adapter !== false &&
@@ -173,25 +177,13 @@ export const createAotPluginHooks = (
 		isTransformCandidate(id) {
 			const cleanId = id.split('?', 1)[0]
 
-			if (isEntry(cleanId)) return true
-			if (
+			// every stub/adapter/is-production filter is a subset of ELYSIA_MODULE_FILTER
+			return (
+				isEntry(cleanId) ||
 				ELYSIA_MODULE_FILTER.test(cleanId) ||
-				ADAPTER_CONSTANTS_FILTER.test(cleanId) ||
-				ADAPTER_BUN_FILTER.test(cleanId) ||
-				IS_PRODUCTION_FILTER.test(cleanId)
+				(SOURCE_REGEX.test(cleanId) &&
+					!cleanId.includes('node_modules'))
 			)
-				return true
-
-			for (const key of Object.keys(
-				STUB_SOURCES
-			) as (keyof typeof STUB_SOURCES)[])
-				for (const { filter } of STUB_SOURCES[key])
-					if (filter.test(cleanId)) return true
-
-			if (SOURCE_REGEX.test(cleanId) && !cleanId.includes('node_modules'))
-				return true
-
-			return false
 		}
 	}
 }
@@ -208,22 +200,13 @@ const resolveLoader = (path: string) => {
 				: 'ts'
 }
 
-export interface AotOnLoadAdapterOptions {
-	/** Read a file's UTF-8 text (abstracted so Bun and esbuild can supply their own reader). */
-	readText: (path: string) => Promise<string>
-
-	/**
-	 * resolveDir for the manifest/virtual-type module loads.
-	 * esbuild needs `dirname(entryPath)` so relative imports in the manifest
-	 * resolve correctly; Bun does not use it (pass undefined for Bun).
-	 */
-	resolveDir?: string
-}
-
 export async function setupAotOnLoad(
 	build: any,
 	hooks: AotPluginHooks,
-	{ readText, resolveDir }: AotOnLoadAdapterOptions
+	// per-adapter reader: `Bun.file().text()` strips a UTF-8 BOM, `readFile` keeps it
+	readText: (path: string) => Promise<string>,
+	// esbuild needs `dirname(entryPath)` so relative imports in the manifest resolve
+	resolveDir?: string
 ) {
 	await hooks.buildStart()
 
@@ -260,7 +243,7 @@ export async function setupAotOnLoad(
 		if (!hooks.isTransformCandidate(args.path)) return undefined
 
 		const original = await readText(args.path)
-		const contents = await hooks.transform(original, args.path)
+		const contents = hooks.transform(original, args.path)
 		if (contents === undefined) return undefined
 
 		return { contents, loader: resolveLoader(args.path) }

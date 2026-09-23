@@ -68,10 +68,10 @@ export const file = (path: string) => new ElysiaFile(path)
 let createReadStream: typeof CreateReadStream
 let stat: typeof Stat
 
-function warnMissing(name?: string) {
+function warnMissing() {
 	console.warn(
 		new Error(
-			`[Elysia] \`file\` require \`fs${name ? '.' + name : ''}\` ${name?.includes('.') ? 'module ' : ''}which is not available in this environment`
+			'[Elysia] `file` require `fs` which is not available in this environment'
 		)
 	)
 }

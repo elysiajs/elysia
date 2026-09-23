@@ -743,10 +743,10 @@ describe('AOT Vite hook contract', () => {
 			vt.split('\n').filter((l) => l.startsWith('export')).length
 		).toBe(29)
 
-		await expect(plugin.transform('x', COMPAT)).resolves.toBe(
+		expect(plugin.transform('x', COMPAT)).toBe(
 			'export function setupTypebox(){}\n'
 		)
-		await expect(plugin.transform('x', BRIDGE)).resolves.toBeUndefined()
+		expect(plugin.transform('x', BRIDGE)).toBeUndefined()
 	})
 
 	it('wired builds serve virtual types and reroute the bridge', async () => {
@@ -758,10 +758,10 @@ describe('AOT Vite hook contract', () => {
 
 		expect(plugin.resolveId('elysia/type')).toBe('\0elysia/type')
 
-		await expect(plugin.transform('x', COMPAT)).resolves.toBe(
+		expect(plugin.transform('x', COMPAT)).toBe(
 			'export function setupTypebox(){}\n'
 		)
-		await expect(plugin.transform('x', BRIDGE)).resolves.toBe(
+		expect(plugin.transform('x', BRIDGE)).toBe(
 			"export * from './bridge-live'\n"
 		)
 	})

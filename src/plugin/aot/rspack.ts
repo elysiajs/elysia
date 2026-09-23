@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { dirname, join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { createAotPluginHooks } from './hooks'
@@ -39,14 +39,13 @@ let tokenCounter = 0
 // Rolldown rewrites `import.meta.url` to `pathToFileURL(__filename).href` in the
 // CJS build, so this resolves the sibling `rspack-loader` file in both the
 // `.mjs` and `.js` outputs (and the `.ts` source under the bun test runtime).
-function loaderPath() {
-	const moduleUrl = import.meta.url
-
-	return resolve(
-		dirname(fileURLToPath(moduleUrl)),
-		'rspack-loader' + siblingModuleExt(moduleUrl)
+const loaderPath = () =>
+	fileURLToPath(
+		new URL(
+			'./rspack-loader' + siblingModuleExt(import.meta.url),
+			import.meta.url
+		)
 	)
-}
 
 /**
  * Elysia AOT build plugin
@@ -87,8 +86,7 @@ export const aot = (
 
 		// Loader: shared transform for every candidate id (entry + elysia-owned).
 		;(compiler.options.module.rules as RspackModuleRule[]).push({
-			test: (id: string) =>
-				hooks.isTransformCandidate(id.split('?', 1)[0]),
+			test: hooks.isTransformCandidate,
 			enforce: 'pre',
 			use: [{ loader: loaderPath(), options: { token } }]
 		})

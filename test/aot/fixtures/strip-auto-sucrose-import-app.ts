@@ -1,7 +1,11 @@
 import { Elysia } from '../../../src'
-import { bracketPairRange } from '../../../src/sucrose'
+import { sucrose } from '../../../src/sucrose'
 
-// User imports of sucrose remain live when route compilation no longer needs it.
-export const app = new Elysia().get('/range', () =>
-	bracketPairRange('{value}').join(',')
-)
+// `elysia/sucrose` is no longer a public subpath, but src/ws/route.ts still
+// calls sucrose at runtime, so the JIT strip may only drop memory's
+// cache-flush edge and must leave the sucrose module itself live.
+export const app = new Elysia().get('/infer', () => {
+	const inference = sucrose(({ query }: any) => query, undefined)
+
+	return `${inference.query},${inference.body}`
+})

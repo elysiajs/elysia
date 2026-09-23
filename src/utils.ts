@@ -186,33 +186,24 @@ export function compactBeforeHandlePrefix(start: ChainNode | undefined) {
 
 	while (node) {
 		const cached = compactBeforeHandleMemos.get(node)
-		if (cached !== undefined) {
-			if (cached === false) {
-				for (let i = 0; i < pending.length; i++)
-					compactBeforeHandleMemos.set(pending[i]!.node, false)
-				return
-			}
+		if (cached) {
 			prefix = cached
 			break
 		}
 
-		if ('combine' in node) {
-			compactBeforeHandleMemos.set(node, false)
-			for (let i = 0; i < pending.length; i++)
-				compactBeforeHandleMemos.set(pending[i]!.node, false)
-			return
+		if (cached === undefined && !('combine' in node)) {
+			const values = compactBeforeHandleValues(node.added)
+			if (values !== false) {
+				pending.push({ node, values })
+				node = node.parent
+				continue
+			}
 		}
 
-		const values = compactBeforeHandleValues(node.added)
-		if (values === false) {
-			compactBeforeHandleMemos.set(node, false)
-			for (let i = 0; i < pending.length; i++)
-				compactBeforeHandleMemos.set(pending[i]!.node, false)
-			return
-		}
-
-		pending.push({ node, values })
-		node = node.parent
+		compactBeforeHandleMemos.set(node, false)
+		for (let i = 0; i < pending.length; i++)
+			compactBeforeHandleMemos.set(pending[i]!.node, false)
+		return
 	}
 
 	for (let i = pending.length - 1; i >= 0; i--) {
@@ -616,7 +607,12 @@ let _constantTimeEqual: ((a: string, b: string) => boolean) | undefined
 const _resolveConstantTimeEqual = (): ((a: string, b: string) => boolean) => {
 	let native: ((a: Uint8Array, b: Uint8Array) => boolean) | undefined
 
-	try {
+	// Bun's global `crypto.timingSafeEqual` is the same native function as
+	// `node:crypto`'s (BoringSSL `CRYPTO_memcmp`), without loading the module
+	if (isBun && typeof (crypto as any)?.timingSafeEqual === 'function')
+		native = (a: Uint8Array, b: Uint8Array) =>
+			(crypto as any).timingSafeEqual(a, b)
+	else try {
 		const _crypto = (globalThis.process as any)?.getBuiltinModule?.(
 			'node:crypto'
 		)
@@ -779,14 +775,28 @@ function dedupedMergeArray<
 	return (reverse ? bArr.concat(filtered) : filtered.concat(bArr)) as any
 }
 
-export const schemaProperties = new Set([
+const hookSchemaKeys = [
 	'body',
 	'headers',
 	'params',
 	'query',
 	'cookie',
 	'response'
-])
+] as const
+
+export const schemaProperties = new Set<string>(hookSchemaKeys)
+
+const hookEventKeys = [
+	'parse',
+	'transform',
+	'derive',
+	'beforeHandle',
+	'afterHandle',
+	'mapResponse',
+	'afterResponse',
+	'error',
+	'trace'
+] as const
 
 export const eventProperties = new Set([
 	'start',
@@ -807,39 +817,26 @@ export function hookToGuard(
 		schema?: GuardSchemaType
 	}
 ): Partial<AppHook & Macro> {
+	if (a.schema !== 'merge') {
+		// Anything else would silently apply the default override channel: a
+		// 1.x `schema: 'standalone'` guard stops validating the routes under it
+		if (a.schema !== undefined && a.schema !== 'override')
+			throw new Error(
+				`[Elysia] Invalid guard schema ${JSON.stringify(a.schema)}, expected 'merge' or 'override' (1.x 'standalone' is 'merge')`
+			)
+
+		return a
+	}
+
 	if (a.body || a.headers || a.params || a.query || a.cookie || a.response) {
 		a.schemas ??= []
 		const schema = Object.create(null)
 
-		if (a.body) {
-			schema.body = a.body
-			a.body = undefined
-		}
-
-		if (a.headers) {
-			schema.headers = a.headers
-			a.headers = undefined
-		}
-
-		if (a.params) {
-			schema.params = a.params
-			a.params = undefined
-		}
-
-		if (a.query) {
-			schema.query = a.query
-			a.query = undefined
-		}
-
-		if (a.cookie) {
-			schema.cookie = a.cookie
-			a.cookie = undefined
-		}
-
-		if (a.response) {
-			schema.response = a.response
-			a.response = undefined
-		}
+		for (const key of hookSchemaKeys)
+			if (a[key]) {
+				schema[key] = a[key]
+				a[key] = undefined
+			}
 
 		a.schemas.push(schema)
 	}
@@ -887,38 +884,14 @@ export function mergeHook(
 
 	const merge = (dedup ? dedupedMergeArray : mergeArray) as typeof mergeArray
 
-	if (!a.body && b.body) a.body = b.body
-	if (!a.headers && b.headers) a.headers = b.headers
-	if (!a.params && b.params) a.params = b.params
-	if (!a.query && b.query) a.query = b.query
-	if (!a.cookie && b.cookie) a.cookie = b.cookie
-	if (!a.response && b.response) a.response = b.response
-	else if (a.response && b.response)
-		a.response = mergeResponse(b.response, a.response) as any
+	for (const key of hookSchemaKeys)
+		if (!a[key] && b[key]) a[key] = b[key] as any
+		else if (key === 'response' && a.response && b.response)
+			a.response = mergeResponse(b.response, a.response) as any
 
-	if (a.parse || b.parse) a.parse = merge(a.parse, b.parse, reverse)
-
-	if (a.transform || b.transform)
-		a.transform = merge(a.transform, b.transform, reverse)
-
-	// @ts-expect-error
-	if (a.derive || b.derive) a.derive = merge(a.derive, b.derive, reverse)
-
-	if (a.beforeHandle || b.beforeHandle)
-		a.beforeHandle = merge(a.beforeHandle, b.beforeHandle, reverse)
-
-	if (a.afterHandle || b.afterHandle)
-		a.afterHandle = merge(a.afterHandle, b.afterHandle, reverse)
-
-	if (a.mapResponse || b.mapResponse)
-		a.mapResponse = merge(a.mapResponse, b.mapResponse, reverse)
-
-	if (a.afterResponse || b.afterResponse)
-		a.afterResponse = merge(a.afterResponse, b.afterResponse, reverse)
-
-	if (a.error || b.error) a.error = merge(a.error, b.error, reverse)
-
-	if (a.trace || b.trace) a.trace = merge(a.trace, b.trace, reverse)
+	for (const key of hookEventKeys)
+		if ((a as any)[key] || (b as any)[key])
+			(a as any)[key] = merge((a as any)[key], (b as any)[key], reverse)
 
 	if (a.schemas || b.schemas)
 		a.schemas = mergeArray(a.schemas, b.schemas, reverse) as any
@@ -1144,18 +1117,9 @@ export function pushField<K extends keyof any>(
 	} else target[key] = defaultArray ? [item] : item
 }
 
-let fallbackRequestIdCounter = 0
-export const fallbackRequestId = () =>
-	Date.now().toString(36) + '-' + (++fallbackRequestIdCounter).toString(36)
-
 export const requestId = isBun
 	? Bun.randomUUIDv7
-	: typeof crypto !== 'undefined'
-		? // @ts-ignore
-			(crypto.randomUUIDv7?.bind(crypto) ??
-			crypto.randomUUID?.bind(crypto) ??
-			fallbackRequestId)
-		: fallbackRequestId
+	: crypto.randomUUID.bind(crypto)
 
 /**
  * Offset of the first byte after `://`, so the authority is never scanned as
@@ -1176,7 +1140,7 @@ export function replaceUrlPath(url: string, path: string) {
 	return `${url.slice(0, i)}${path.charCodeAt(0) === 47 ? '' : '/'}${path}${qs === -1 ? '' : url.slice(qs)}`
 }
 
-function isPlainObject(v: unknown): v is Record<string, unknown> {
+export function isPlainObject(v: unknown): v is Record<string, unknown> {
 	if (!v || typeof v !== 'object' || Array.isArray(v)) return false
 
 	const proto = Object.getPrototypeOf(v)

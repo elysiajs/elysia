@@ -230,6 +230,7 @@ function maybeCapture(args: {
 		normalize,
 		buildResult
 	} = args
+	const loc = { method: aot.method, path: aot.path, slot }
 
 	if (
 		hasCodec &&
@@ -244,10 +245,7 @@ function maybeCapture(args: {
 			externalsShape(buildCoercedFromPlan(originalSchema, plan)) ===
 				externalsShape(schema)
 		)
-			Capture.set(
-				{ method: aot.method, path: aot.path, slot },
-				{ coercePlan: plan }
-			)
+			Capture.set(loc, { coercePlan: plan })
 	}
 
 	const defaultFastPathCapture: Partial<CapturedValidator> = {
@@ -279,41 +277,27 @@ function maybeCapture(args: {
 		}
 	}
 
-	Capture.set(
-		{ method: aot.method, path: aot.path, slot },
-		defaultFastPathCapture
-	)
+	Capture.set(loc, defaultFastPathCapture)
 
 	const customErrors = captureCustomErrors(schema)
-	if (customErrors)
-		Capture.set(
-			{ method: aot.method, path: aot.path, slot },
-			{ customErrors }
-		)
+	if (customErrors) Capture.set(loc, { customErrors })
 
 	const innerCodecs = captureStringCodecEntries(
 		schema as TSchema,
 		args.sanitize as any
 	)
-	if (innerCodecs)
-		Capture.set(
-			{ method: aot.method, path: aot.path, slot },
-			{ innerCodecs }
-		)
+	if (innerCodecs) Capture.set(loc, { innerCodecs })
 
 	const cf = buildFrozenCheck(buildResult, schema)
 	if (!cf) return
 
-	Capture.set(
-		{ method: aot.method, path: aot.path, slot },
-		{
-			...cf,
-			async: buildResult.external.variables.some(isAsyncPredicate),
-			hasDefault,
-			hasCodec,
-			hasRef
-		}
-	)
+	Capture.set(loc, {
+		...cf,
+		async: buildResult.external.variables.some(isAsyncPredicate),
+		hasDefault,
+		hasCodec,
+		hasRef
+	})
 }
 
 function captureMirror(
@@ -335,30 +319,23 @@ function captureMirror(
 		if (typeof emitted?.source === 'string') {
 			const ext = emitted.externals
 
+			const loc = { method: aot.method, path: aot.path, slot }
+
 			if (!ext)
-				Capture.set(
-					{ method: aot.method, path: aot.path, slot },
-					{
-						mirror: {
-							source: emitted.source,
-							hasExternals: false
-						}
-					}
-				)
+				Capture.set(loc, {
+					mirror: { source: emitted.source, hasExternals: false }
+				})
 			else if (ext.unions && !ext.hof) {
 				const u = captureMirrorUnions(schema, ext.unions)
 
 				if (u)
-					Capture.set(
-						{ method: aot.method, path: aot.path, slot },
-						{
-							mirror: {
-								source: emitted.source,
-								hasExternals: true,
-								u
-							}
+					Capture.set(loc, {
+						mirror: {
+							source: emitted.source,
+							hasExternals: true,
+							u
 						}
-					)
+					})
 			}
 		}
 	} catch {}
@@ -461,11 +438,8 @@ function captureBridgeFree(
 	slot: ValidatorSlot,
 	rawSchema: unknown
 ) {
-	const captured = Capture.get({
-		method: aot.method,
-		path: aot.path,
-		slot
-	})
+	const loc = { method: aot.method, path: aot.path, slot }
+	const captured = Capture.get(loc)
 
 	if (captured) {
 		const coerced =
@@ -475,10 +449,7 @@ function captureBridgeFree(
 
 		const bridgeFree = isCapturedBridgeFree(captured, rawSchema, coerced)
 
-		Capture.set(
-			{ method: aot.method, path: aot.path, slot },
-			{ bridgeFree }
-		)
+		Capture.set(loc, { bridgeFree })
 
 		if (bridgeFree && !isCompactWalkable(coerced))
 			warnCompactErrorLoss(aot, slot)

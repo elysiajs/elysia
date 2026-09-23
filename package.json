@@ -43,11 +43,6 @@
 			"import": "./dist/adapter/web-standard/index.mjs",
 			"require": "./dist/adapter/web-standard/index.js"
 		},
-		"./adapter/web-standard/handler": {
-			"types": "./dist/adapter/web-standard/handler.d.ts",
-			"import": "./dist/adapter/web-standard/handler.mjs",
-			"require": "./dist/adapter/web-standard/handler.js"
-		},
 		"./adapter/response-ownership": {
 			"types": "./dist/adapter/response-ownership.d.ts",
 			"import": "./dist/adapter/response-ownership.mjs",
@@ -83,11 +78,6 @@
 			"import": "./dist/context.mjs",
 			"require": "./dist/context.js"
 		},
-		"./cookies": {
-			"types": "./dist/cookie/index.d.ts",
-			"import": "./dist/cookie/index.mjs",
-			"require": "./dist/cookie/index.js"
-		},
 		"./error": {
 			"types": "./dist/error.d.ts",
 			"import": "./dist/error.mjs",
@@ -97,11 +87,6 @@
 			"types": "./dist/memory.d.ts",
 			"import": "./dist/memory.mjs",
 			"require": "./dist/memory.js"
-		},
-		"./parse-query": {
-			"types": "./dist/parse-query.d.ts",
-			"import": "./dist/parse-query.mjs",
-			"require": "./dist/parse-query.js"
 		},
 		"./plugin/aot/bun": {
 			"types": "./dist/plugin/aot/bun.d.ts",
@@ -133,11 +118,6 @@
 			"import": "./dist/plugin/auto-head.mjs",
 			"require": "./dist/plugin/auto-head.js"
 		},
-		"./sucrose": {
-			"types": "./dist/sucrose.d.ts",
-			"import": "./dist/sucrose.mjs",
-			"require": "./dist/sucrose.js"
-		},
 		"./trace": {
 			"types": "./dist/plugin/trace.d.ts",
 			"import": "./dist/plugin/trace.mjs",
@@ -147,16 +127,6 @@
 			"types": "./dist/type/exports.d.ts",
 			"import": "./dist/type/exports.mjs",
 			"require": "./dist/type/exports.js"
-		},
-		"./type-system": {
-			"types": "./dist/type/index.d.ts",
-			"import": "./dist/type/index.mjs",
-			"require": "./dist/type/index.js"
-		},
-		"./type-system/utils": {
-			"types": "./dist/type/utils.d.ts",
-			"import": "./dist/type/utils.mjs",
-			"require": "./dist/type/utils.js"
 		},
 		"./type-system/types": {
 			"types": "./dist/type/types.d.ts",
@@ -172,16 +142,6 @@
 			"types": "./dist/universal/index.d.ts",
 			"import": "./dist/universal/index.mjs",
 			"require": "./dist/universal/index.js"
-		},
-		"./universal/server": {
-			"types": "./dist/universal/server.d.ts",
-			"import": "./dist/universal/server.mjs",
-			"require": "./dist/universal/server.js"
-		},
-		"./universal/env": {
-			"types": "./dist/universal/env.d.ts",
-			"import": "./dist/universal/env.mjs",
-			"require": "./dist/universal/env.js"
 		},
 		"./universal/file": {
 			"types": "./dist/universal/file.d.ts",

@@ -23,7 +23,6 @@ const sseFormat = (data: string) => sseData(data) + '\n'
 const identityFormat = (data: string) => data
 
 const textEncoder = new TextEncoder()
-const encodeChunk = (s: string): Uint8Array => textEncoder.encode(s)
 
 export function normalizeContentType(contentType: string) {
 	if (contentType === 'application/json') return contentType
@@ -49,15 +48,6 @@ export function handleFile(
 	if (rangeHeader) {
 		const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader)
 		if (match) {
-			if (!match[1] && !match[2])
-				return new Response(null, {
-					status: 416,
-					headers: mergeHeaders(
-						new Headers({ 'content-range': `bytes */${size}` }),
-						set?.headers ?? nullObject()
-					)
-				})
-
 			let start: number
 			let end: number
 
@@ -72,7 +62,7 @@ export function handleFile(
 					: size - 1
 			}
 
-			if (start >= size || start > end) {
+			if ((!match[1] && !match[2]) || start >= size || start > end)
 				return new Response(null, {
 					status: 416,
 					headers: mergeHeaders(
@@ -80,7 +70,6 @@ export function handleFile(
 						set?.headers ?? nullObject()
 					)
 				})
-			}
 
 			const contentLength = end - start + 1
 			const rangeHeaders = new Headers({
@@ -90,15 +79,7 @@ export function handleFile(
 			})
 
 			return new Response(
-				(
-					response as unknown as {
-						slice(
-							start: number,
-							end: number,
-							contentType?: string
-						): unknown
-					}
-				).slice(start, end + 1, response.type) as any,
+				(response as any).slice(start, end + 1, response.type),
 				{
 					status: 206,
 					headers: mergeHeaders(
@@ -148,15 +129,9 @@ export function handleFile(
 		return new Response(body as Blob, set as any)
 	}
 
-	if (isNotEmpty(set.headers))
-		return new Response(body as Blob, {
-			status: set.status as number,
-			headers: Object.assign(defaultHeader, set.headers)
-		})
-
 	return new Response(body as Blob, {
 		status: set.status as number,
-		headers: defaultHeader
+		headers: Object.assign(defaultHeader, set.headers)
 	})
 }
 
@@ -445,7 +420,7 @@ export function createStreamHandler({
 			// @ts-ignore
 			if (value.toSSE) {
 				// @ts-ignore
-				controller.enqueue(encodeChunk(value.toSSE()))
+				controller.enqueue(textEncoder.encode(value.toSSE()))
 				return
 			}
 
@@ -476,16 +451,16 @@ export function createStreamHandler({
 			if (typeof value === 'object')
 				try {
 					controller.enqueue(
-						encodeChunk(format(JSON.stringify(value)))
+						textEncoder.encode(format(JSON.stringify(value)))
 					)
 				} catch {
 					controller.enqueue(
-						encodeChunk(format((value as object).toString()))
+						textEncoder.encode(format((value as object).toString()))
 					)
 				}
 			else
 				controller.enqueue(
-					encodeChunk(format((value as any).toString()))
+					textEncoder.encode(format((value as any).toString()))
 				)
 		}
 
@@ -748,8 +723,10 @@ export function createResponseHandler(handler: CreateHandlerParameter) {
 				'Cannot reuse a consumed Response across requests'
 			)
 
+		let status: Context['set']['status']
+
 		if (set) {
-			const status = mergeStatus(response.status, set.status)
+			status = mergeStatus(response.status, set.status)
 			const statusUnchanged =
 				status === undefined || status === response.status
 
@@ -785,7 +762,7 @@ export function createResponseHandler(handler: CreateHandlerParameter) {
 			set
 				? {
 						headers: mergeHeaders(response.headers, set.headers),
-						status: mergeStatus(response.status, set.status) as any,
+						status: status as any,
 						statusText: response.statusText
 					}
 				: {

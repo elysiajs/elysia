@@ -1,17 +1,10 @@
+import { syncRequire } from '../sync-require'
+
 export type CreateMirror = (schema: any, options?: any) => any
 
 let exactMirror: CreateMirror | undefined
 try {
-	const meta = import.meta as ImportMeta & {
-		require?: (specifier: string) => any
-	}
-	const require =
-		meta.require ??
-		(globalThis as any).process
-			?.getBuiltinModule?.('module')
-			?.createRequire(import.meta.url)
-
-	const module = require?.('exact-mirror')
+	const module = syncRequire(import.meta, import.meta.url)?.('exact-mirror')
 	const mirror = module?.default ?? module
 
 	exactMirror = typeof mirror === 'function' ? mirror : undefined

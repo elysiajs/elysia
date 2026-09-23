@@ -186,9 +186,7 @@ export const aotReconstructHandle = {
 		Validator.clear()
 
 		const source = define(new Elysia())
-		const { source: manifestSource } = await captureArtifacts(source, {
-			register: true
-		})
+		const { source: manifestSource } = await captureArtifacts(source)
 
 		installReconstructImpl()
 		evalManifest(manifestSource)

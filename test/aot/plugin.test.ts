@@ -68,7 +68,7 @@ describe('AOT plugin', () => {
 		expect(src).toContain('const validators')
 		expect(src).not.toContain('export const validators')
 		expect(src).toContain('Compiled.register((() => {')
-		expect(src).toContain('return { bf: 1, fingerprint')
+		expect(src).toContain('return { fingerprint')
 		// Simple schemas require no TypeBox runtime imports.
 		expect(src).not.toContain('typebox/')
 		expect(src).not.toContain('(CheckContext')
@@ -89,7 +89,6 @@ describe('AOT plugin', () => {
 				({ query }) => String(query.n)
 			),
 			{
-				register: true,
 				moduleCondition: 'cjs',
 				registerFrom: 'custom-register',
 				reconstructFrom: 'custom-reconstruct'
@@ -111,7 +110,7 @@ describe('AOT plugin', () => {
 	it('emits typebox imports only for the symbols a check references', async () => {
 		const { Elysia, t } = await import('../../src')
 		const { compileToSource } = await import('../../src/plugin/aot/source')
-		const manifest = (app: any) => compileToSource(app, { register: true })
+		const manifest = (app: any) => compileToSource(app)
 
 		const bare = await manifest(
 			new Elysia().get('/', () => 'hi').post('/echo', (c: any) => c.body)
@@ -140,7 +139,6 @@ describe('AOT plugin', () => {
 		expect(format).not.toContain('from "typebox/system"')
 
 		const cjsFormat = await compileToSource(formatApp(), {
-			register: true,
 			moduleCondition: 'cjs'
 		})
 		expect(cjsFormat).toContain('const { Compiled } = require("elysia")')
@@ -179,21 +177,11 @@ describe('AOT plugin', () => {
 
 		try {
 			delete process.env.ELYSIA_AOT_BUILD
-			await compileToSource(
-				new Elysia().get('/x', () => 'x'),
-				{
-					register: false
-				}
-			)
+			await compileToSource(new Elysia().get('/x', () => 'x'))
 			expect(process.env.ELYSIA_AOT_BUILD).toBeUndefined()
 
 			process.env.ELYSIA_AOT_BUILD = 'keep'
-			await compileToSource(
-				new Elysia().get('/y', () => 'y'),
-				{
-					register: false
-				}
-			)
+			await compileToSource(new Elysia().get('/y', () => 'y'))
 			expect(process.env.ELYSIA_AOT_BUILD).toBe('keep')
 		} finally {
 			if (previous === undefined) delete process.env.ELYSIA_AOT_BUILD
@@ -248,7 +236,7 @@ describe('AOT plugin', () => {
 		const out = await result.outputs[0]!.text()
 		// the frozen manifest was inlined and self-registers (zero user wiring)
 		expect(out).toContain('.register((() => {')
-		expect(out).toMatch(/return \{ bf: 1, fingerprint,[^}]*\bvalidators\b[^}]*\bhandlers\b/)
+		expect(out).toMatch(/return \{ fingerprint,[^}]*\bvalidators\b[^}]*\bhandlers\b/)
 		expect(out).toContain('"/body"')
 		// A real validator factory (including a merged check/clean factory), not a stub.
 		expect(out).toContain('(External')
@@ -273,7 +261,7 @@ describe('AOT plugin', () => {
 		// frozen manifest inlined + self-registers (validators AND handlers)
 		// (esbuild auto-annotates the scoping IIFE with /* @__PURE__ */)
 		expect(out).toMatch(/\.register\((?:\/\* @__PURE__ \*\/ )?\(\(\) => \{/)
-		expect(out).toMatch(/return \{ bf: 1, fingerprint,[^}]*\bvalidators\b[^}]*\bhandlers\b/)
+		expect(out).toMatch(/return \{ fingerprint,[^}]*\bvalidators\b[^}]*\bhandlers\b/)
 		expect(out).toContain('"/body"')
 		// A real validator factory (including a merged check/clean factory), not a stub.
 		expect(out).toContain('(External')
@@ -312,9 +300,9 @@ describe('AOT plugin', () => {
 		)
 		expect(injected).toBe("import 'elysia/compiled'\nexport const app = 1")
 		// any other module is untouched
-		await expect(
+		expect(
 			plugin.transform('x', '/some/other/file.ts')
-		).resolves.toBeUndefined()
+		).toBeUndefined()
 	})
 
 	it('builds with forced lazy loading and serves a request', async () => {

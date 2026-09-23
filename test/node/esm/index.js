@@ -115,6 +115,60 @@ if (!disposed.includes('decorator'))
 
 console.log('✅ ESM Node.js disposes derive and decorate values')
 
+// named model resolution must not depend on Bun-only built-ins
+const modelApp = new Elysia()
+	.model({ user: t.Object({ name: t.String() }) })
+	.post('/', { body: 'user' }, ({ body }) => body.name)
+const postUser = (body) =>
+	modelApp.handle(
+		new Request('http://localhost', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(body)
+		})
+	)
+
+const validModel = await postUser({ name: 'Elysia' })
+const validModelBody = await validModel.text()
+if (validModel.status !== 200 || validModelBody !== 'Elysia')
+	throw new Error(
+		`❌ ESM Node.js named model returned ${validModel.status}: ${validModelBody}`
+	)
+
+const invalidModel = await postUser({ name: 1 })
+if (invalidModel.status !== 422)
+	throw new Error(
+		`❌ ESM Node.js named model accepted invalid body: ${invalidModel.status}`
+	)
+
+console.log('✅ ESM Node.js resolves named model references')
+
+// mixed-case multipart content-type is handed to the runtime's formData() as-is
+const multipartApp = new Elysia().post('/', async ({ body }) => ({
+	name: body.name,
+	file: await body.file.text()
+}))
+const multipart = await multipartApp.handle(
+	new Request('http://localhost', {
+		method: 'POST',
+		headers: { 'content-type': 'Multipart/Form-Data; Boundary=X' },
+		body:
+			'--X\r\nContent-Disposition: form-data; name="name"\r\n\r\nelysia\r\n' +
+			'--X\r\nContent-Disposition: form-data; name="file"; filename="a.txt"\r\n' +
+			'Content-Type: text/plain\r\n\r\nhello\r\n--X--\r\n'
+	})
+)
+const multipartBody = await multipart.text()
+if (
+	multipart.status !== 200 ||
+	multipartBody !== JSON.stringify({ name: 'elysia', file: 'hello' })
+)
+	throw new Error(
+		`❌ ESM Node.js mixed-case multipart returned ${multipart.status}: ${multipartBody}`
+	)
+
+console.log('✅ ESM Node.js parses mixed-case multipart')
+
 const filePath = fileURLToPath(
 	new URL('../../../package.json', import.meta.url)
 )

@@ -24,36 +24,19 @@ export function unregisterAotHooks(token: string) {
 interface AotLoaderContext {
 	resourcePath: string
 	getOptions(): { token?: string } | undefined
-	async(): (
-		err: Error | null | undefined,
-		content?: string,
-		sourceMap?: unknown
-	) => void
 }
 
 /**
  * webpack/rspack-style JS loader. Delegates to `hooks.transform`, which returns
  * `undefined` for any module it doesn't rewrite so the loader passes the source through unchanged.
  * `enforce: 'pre'` runs this before the swc/babel loaders, mirroring unplugin's `enforce: 'pre'`.
- *
- * Uses `this.async()` because `hooks.transform` can be async (isolated
- * regeneration in watch flows).
  */
 export default function elysiaAotLoader(
 	this: AotLoaderContext,
 	source: string
 ) {
-	const callback = this.async()
 	const token = this.getOptions()?.token
 	const hooks = token ? registry.get(token) : undefined
 
-	if (!hooks) {
-		callback(null, source)
-		return
-	}
-
-	Promise.resolve(hooks.transform(source, this.resourcePath)).then(
-		(out) => callback(null, out === undefined ? source : out),
-		(error) => callback(error as Error)
-	)
+	return hooks?.transform(source, this.resourcePath) ?? source
 }

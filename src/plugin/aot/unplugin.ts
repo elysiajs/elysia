@@ -17,19 +17,11 @@ export interface ElysiaAotUnpluginFactoryResult {
 	resolveId?: (id: string) => string | undefined
 	load?: (id: string) => string | undefined
 	transformInclude?: (id: string) => boolean
-	transform?: (
-		code: string,
-		id: string
-	) => string | undefined | Promise<string | undefined>
-	/** Vite-specific override (`apply: 'build'` keeps dev on runtime JIT). */
+	transform?: (code: string, id: string) => string | undefined
 	vite?: { apply?: 'build' | 'serve' }
-	/** rspack compiler hook: forces the manifest module side-effectful. */
 	rspack?: (compiler: unknown) => void
-	/** webpack compiler hook: forces the manifest module side-effectful. */
 	webpack?: (compiler: unknown) => void
 }
-
-const cleanIdOf = (id: string): string => id.split('?', 1)[0]
 
 const VIRTUAL_MANIFEST_RESOURCE = /%00elysia%2Fcompiled/
 
@@ -74,19 +66,11 @@ export const aotFactory = (
 		enforce: 'pre',
 		buildStart: hooks.buildStart,
 		buildEnd: hooks.buildEnd,
-		resolveId(id) {
-			return hooks.resolveId(id) ?? undefined
-		},
-		load(id) {
-			return hooks.load(id) ?? undefined
-		},
+		resolveId: hooks.resolveId,
+		load: hooks.load,
 		// required so webpack/rspack don't pipe every module through the loader.
-		transformInclude(id) {
-			return hooks.isTransformCandidate(cleanIdOf(id))
-		},
-		transform(code, id) {
-			return hooks.transform(code, id)
-		},
+		transformInclude: hooks.isTransformCandidate,
+		transform: hooks.transform,
 		// Framework-specific override: preserve the native Vite plugin's
 		// `apply: 'build'` (Vite dev keeps the runtime JIT path).
 		vite: {

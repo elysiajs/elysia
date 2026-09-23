@@ -220,7 +220,7 @@ class OtherError extends Error {
 {
 	const app = new Elysia()
 		.error(({ error }) => {
-			expectTypeOf(error).toEqualTypeOf<Error>()
+			expectTypeOf(error).toEqualTypeOf<unknown>()
 		})
 		.get('/', () => 'hi' as const)
 

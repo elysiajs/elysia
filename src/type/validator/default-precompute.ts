@@ -3,6 +3,7 @@ import type { TSchema } from 'typebox/type'
 
 import { nullObject } from '../../utils'
 import { dangerousKeys } from '../../constants'
+import { schemaSome } from './clean-safe'
 import { isProduction } from '../../universal/is-production'
 
 type DefaultCloner = () => unknown
@@ -142,65 +143,40 @@ export function applyPrecomputed(
 	return out
 }
 
-const subtreeHasDefault = (n: any) =>
-	!!n &&
-	typeof n === 'object' &&
-	('default' in n || childSchemaSome(n, subtreeHasDefault))
+// `conditional`: a default/ref under if/then/else must still decline precompute
+const subtreeHasDefault = (node: any) =>
+	schemaSome(node, (n) => 'default' in n, undefined, undefined, true)
 
-function childSchemaSome(n: any, f: (x: any) => boolean): boolean {
-	if (!n || typeof n !== 'object') return false
-
-	if (n.properties)
-		for (const k in n.properties) if (f(n.properties[k])) return true
-
-	const items = n.items
-	if (Array.isArray(items)) {
-		for (const it of items) if (f(it)) return true
-	} else if (items && f(items)) return true
-
-	for (const key of ['anyOf', 'allOf', 'oneOf'] as const) {
-		const arr = n[key]
-		if (Array.isArray(arr)) for (const s of arr) if (f(s)) return true
-	}
-
-	if (typeof n.additionalProperties === 'object' && f(n.additionalProperties))
-		return true
-
-	if (n.patternProperties)
-		for (const k in n.patternProperties)
-			if (f(n.patternProperties[k])) return true
-
-	for (const key of ['not', 'if', 'then', 'else'] as const)
-		if (n[key] && f(n[key])) return true
-
-	return false
-}
-
-const hasDefaultBelow = (node: any) => childSchemaSome(node, subtreeHasDefault)
-
-function hasUnemittableDefaultValue(node: any): boolean {
-	if (!node || typeof node !== 'object') return false
-
-	if ('default' in node && !isEmittable(node.default, new Set(), true))
-		return true
-
-	return childSchemaSome(node, hasUnemittableDefaultValue)
-}
-
-function containsRefLike(node: any, seen = new WeakSet()): boolean {
-	if (!node || typeof node !== 'object' || seen.has(node)) return false
-	seen.add(node)
-
-	if (
-		node.$ref !== undefined ||
-		node['~kind'] === 'Ref' ||
-		node['~kind'] === 'This' ||
-		node['~kind'] === 'Cyclic'
+const hasDefaultBelow = (node: any) =>
+	schemaSome(
+		node,
+		(n) => n !== node && 'default' in n,
+		undefined,
+		undefined,
+		true
 	)
-		return true
 
-	return childSchemaSome(node, (child) => containsRefLike(child, seen))
-}
+const hasUnemittableDefaultValue = (node: any) =>
+	schemaSome(
+		node,
+		(n) => 'default' in n && !isEmittable(n.default, new Set(), true),
+		undefined,
+		undefined,
+		true
+	)
+
+const containsRefLike = (node: any) =>
+	schemaSome(
+		node,
+		(n) =>
+			n.$ref !== undefined ||
+			n['~kind'] === 'Ref' ||
+			n['~kind'] === 'This' ||
+			n['~kind'] === 'Cyclic',
+		undefined,
+		undefined,
+		true
+	)
 
 function structuralPreallocatable(schema: any, depth = 0) {
 	if (!schema || typeof schema !== 'object') return true
@@ -220,22 +196,17 @@ function structuralPreallocatable(schema: any, depth = 0) {
 	) {
 		const ownKey =
 			'default' in schema ? canonical(schema.default) : undefined
-		let bad = false
 
-		const visit = (n: any) => {
-			if (!n || typeof n !== 'object') return false
-			if (
+		return !schemaSome(
+			schema,
+			(n) =>
+				n !== schema &&
 				'default' in n &&
-				(ownKey === undefined || canonical(n.default) !== ownKey)
-			)
-				return (bad = true)
-
-			return childSchemaSome(n, visit)
-		}
-
-		childSchemaSome(schema, visit)
-
-		return !bad
+				(ownKey === undefined || canonical(n.default) !== ownKey),
+			undefined,
+			undefined,
+			true
+		)
 	}
 
 	if (depth > 0 && schema.default === undefined && hasDefaultBelow(schema))

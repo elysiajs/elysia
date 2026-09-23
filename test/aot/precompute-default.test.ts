@@ -8,7 +8,12 @@ import {
 	endValidatorCapture
 } from '../../src/compile/aot-capture'
 import { compileToSource } from '../../src/plugin/aot/source'
-import { claimManifest, materialise, registerManifest } from './_manifest'
+import {
+	claimManifest,
+	evalRegistration,
+	materialise,
+	registerManifest
+} from './_manifest'
 
 /** Frozen defaults must match live validation without runtime TypeBox setup. */
 
@@ -468,25 +473,16 @@ describe('AOT default preallocation', () => {
 				)
 				.then((r) => r.text())
 
-		const evalValidators = (src: string): any =>
-			new Function(
-				src
-					.replace('export const validators', 'const validators')
-					.replace('export const handlers', 'const handlers')
-					.replace('export default validators', 'return validators')
-					.replace(/^import .*$/gm, '')
-			)()
-
 		process.env.ELYSIA_AOT_BUILD = '1'
 		let src: string
 		try {
-			src = await compileToSource(build(), { register: false })
+			src = await compileToSource(build())
 		} finally {
 			delete process.env.ELYSIA_AOT_BUILD
 		}
 
 		Validator.clear()
-		registerManifest({ validators: evalValidators(src) })
+		registerManifest({ validators: evalRegistration(src).validators })
 		const frozen = build()
 		frozen.compile()
 
@@ -509,14 +505,7 @@ describe('AOT default preallocation', () => {
 
 /** Frozen and live compilation agree on nested and array element defaults. */
 describe('AOT default preallocation — live and frozen parity', () => {
-	const evalManifest = (src: string): any =>
-		new Function(
-			src
-				.replace('export const validators', 'const validators')
-				.replace('export const handlers', 'const handlers')
-				.replace('export default validators', 'return validators')
-				.replace(/^import .*$/gm, '')
-		)()
+	const evalManifest = (src: string): any => evalRegistration(src).validators
 
 	const CASES: Array<{
 		name: string
@@ -655,7 +644,7 @@ describe('AOT default preallocation — live and frozen parity', () => {
 		process.env.ELYSIA_AOT_BUILD = '1'
 		let src: string
 		try {
-			src = await compileToSource(build(), { register: false })
+			src = await compileToSource(build())
 		} finally {
 			delete process.env.ELYSIA_AOT_BUILD
 		}
@@ -719,19 +708,12 @@ describe('AOT default preallocation — source emit', () => {
 			({ body }) => body
 		)
 
-	const evalManifest = (src: string): any =>
-		new Function(
-			src
-				.replace('export const validators', 'const validators')
-				.replace('export const handlers', 'const handlers')
-				.replace('export default validators', 'return validators')
-				.replace(/^import .*$/gm, '')
-		)()
+	const evalManifest = (src: string): any => evalRegistration(src).validators
 
 	it('emits valid ps/pd/pod into the manifest', async () => {
 		process.env.ELYSIA_AOT_BUILD = '1'
 		try {
-			const src = await compileToSource(build(), { register: false })
+			const src = await compileToSource(build())
 			expect(src).toContain('ps: 1')
 			expect(src).toContain('pm: ')
 			const v = evalManifest(src)
@@ -746,9 +728,7 @@ describe('AOT default preallocation — source emit', () => {
 	it('emits a generated cloner for root object defaults', async () => {
 		process.env.ELYSIA_AOT_BUILD = '1'
 		try {
-			const src = await compileToSource(buildRootDefault(), {
-				register: false
-			})
+			const src = await compileToSource(buildRootDefault())
 			expect(src).toContain('dc: function(){')
 			const v = evalManifest(src)
 			const cloner = v.POST['/cfg'].body.dc
@@ -766,7 +746,7 @@ describe('AOT default preallocation — source emit', () => {
 		process.env.ELYSIA_AOT_BUILD = '1'
 		let src: string
 		try {
-			src = await compileToSource(build(), { register: false })
+			src = await compileToSource(build())
 		} finally {
 			delete process.env.ELYSIA_AOT_BUILD
 		}

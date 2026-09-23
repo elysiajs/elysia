@@ -113,6 +113,17 @@ describe('validation detail', () => {
 			).toBeUndefined()
 		})
 
+		it('never enumerates or slices TypeBox errors on the findCustomError lane', async () => {
+			const r = await run('production')
+
+			// production answers from findCustomError alone: enumerating
+			// errors is the unbounded cost MAX_ERRORS only caps afterwards
+			const lane = r.customErrorLaneSkipsEnumeration.body
+			expect(lane.calls).toBe(0)
+			expect(lane.errors).toEqual([{ instancePath: '/x' }])
+			expect(lane.message).toBe('Validation error on body')
+		})
+
 		it('returns a generic 500 without echoing an invalid server response', async () => {
 			const r = await run('production')
 

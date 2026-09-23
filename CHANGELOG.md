@@ -20,6 +20,8 @@ Feature:
 - use RFC 9457 by default with `problem` function
 - `t.Cookie(schema, opts)` field-form, wrap individual properties of `t.Object` for per-field cookie attributes/secrets, replacing the need for top-level `sign: ['name']` arrays
 - programmatic `defer` API
+- export `isPlainObject` from `elysia/utils`
+- on Bun, signed-cookie verification uses the native constant-time `crypto.timingSafeEqual` instead of loading `node:crypto`
 
 Breaking Change:
 - see for migration guide https://github.com/elysiajs/elysia/pull/1873#issuecomment-4734573873
@@ -55,6 +57,20 @@ Breaking Change:
 - recommended minimum TypeScript version is 5.7
 - `ElysiaError.problemType` / `problemTitle` removed in favour of `code` plus a `type` accessor
 - `ElysiaStatus.code` renamed to `.status`
+- remove package subpaths `elysia/type-system` (import from `elysia`), `elysia/type-system/utils`, `elysia/universal/env` (`env` is in `elysia` and `elysia/universal`), `elysia/universal/server` (types are in `elysia/universal`), `elysia/adapter/web-standard/handler`, `elysia/cookies`, `elysia/parse-query` and `elysia/sucrose`; importing them throws `ERR_PACKAGE_PATH_NOT_EXPORTED`
+- no longer importable: `hasTypes`, `hasProperty`, `hasReadableEnv`, `ServerOptions`, `mapResponse`, `mapCompactResponse`, `errorToResponse`, `serializeCookie`, `signCookie`, `unsignCookie`, the `Cookie` class value (`elysia` exports it as a type), `parseQuery`, `parseQueryFromURL`, `sucrose` and its helpers (`separateFunction`, `bracketPairRange`, `findAlias`, … were removed outright; trace-phase inference now uses the token-based inference)
+- remove `name`, `runtime`, `isWebStandard` and `websocket` from `ElysiaAdapterOptions` (never read); a custom adapter passing them as an object literal must drop them
+- remove the literal-scope overloads of `.parse()`, `.transform()`, `.mapResponse()`, `.afterResponse()` and `.trace()`; the generic scope overload covers them with the same inferred types
+- AOT plugin `transform` hook and the rspack loader are now synchronous
+- AOT: `compileToSource` / `captureArtifacts` drop the `register` option and always emit the self-registering manifest (the `export const validators` / `handlers` / `groups` / `groupOf` / default-export form is gone)
+- AOT: remove `CompiledProgramRegistration.bf` and the `Compiled.reconstruct` getter (the setter stays)
+- AOT manifest format is now 5: an artifact built before this change is rejected at startup with `[elysia-aot] Registered manifest fingerprint mismatch: abi (…)`; rebuild it
+- remove `ElysiaConfig.handler` (`handler.standardHostname` was ignored; the path is taken from the request URL)
+- `.mount()` no longer takes a `{ detail }` argument; a mounted route is always `detail: { hide: true }`
+- remove the `NonResolvableMacroKey` type
+- remove `fallbackRequestId` from `elysia/utils`; `requestId` is `Bun.randomUUIDv7` on Bun and `crypto.randomUUID` elsewhere
+- `WSCapability.accumulateOptions(target, routeOptions)` drops its unused `path` parameter
+- `app.handler()` drops its unused 4th `precomputedStatic` parameter: `handler(index, immediate?, route?, aliases?, table?)`
 
 Behavior Change:
 
@@ -78,6 +94,17 @@ Behavior Change:
 - Signed-cookie verification now defaults to `verify: 'lazy'`
 - Values returned early from `request()` hooks now pass through `mapResponse` before they are sent.
 - [Type] instance-level `.parse()` and `.transform()` no longer inherit ANY guard input schema — its context is typed as raw, pre-validation values (path params from the instance prefix are kept)
+- `ws.body` is always set on the message lane; it was skipped when a heuristic guessed the handler never read it, which missed indirect reads
+- a compiled TypeBox validator passed as a schema now throws a descriptive error at registration instead of a warning followed by the generic unsupported-schema error
+- `t.ArrayBuffer` / `t.Uint8Array` report a wrong-type value once instead of twice in the validation `errors`
+- derive keyed merge requires the object literal to be the whole returned expression; `({ a: 1 }).a` no longer merges `a: undefined`
+- trace-phase inference: a trace handler with no (or a defaulted) parameter subscribes to every phase; an unparenthesised `p =>` handler gets a precise phase set
+- remove the Bun mixed-case `multipart/form-data` content-type workaround; Bun 1.4+ and Node parse it natively
+- on an app with no `request` or `trace` hook, a throw while building the default 404 (e.g. an invalid `.headers()` value) or from a throwing `request.method` / `request.headers` getter now becomes a handled `500` (or reaches the `error` hook) instead of rejecting `handle()` / throwing from `fetch`
+- a non-native thenable returned by a WebSocket upgrade handler is now awaited, and its rejection goes to the `error` hook
+- `file()` with a path that has no extension (e.g. `file('js')`) no longer gets a `content-type`
+- a `file()` / `Blob` response now throws, like every other response path, when `set.headers` holds an enumerable Symbol key
+- off Bun, importing Elysia now requires a global `crypto.randomUUID` (no timestamp-id fallback)
 - `afterHandle` will skip the rest when short-circuit
 - `Error.summary` now use default TypeBox message instead
 - `Error.summary` now support for Standard Schema

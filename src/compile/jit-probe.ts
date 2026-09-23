@@ -31,14 +31,8 @@ export abstract class JITProbe {
 		armed = false
 
 		const fired = [...reasons]
-		const unused = fired.length === 0
-		const result: JITProbeResult = {
-			jit: unused,
-			reasons: fired
-		}
-
 		reasons.clear()
 
-		return result
+		return { jit: fired.length === 0, reasons: fired }
 	}
 }

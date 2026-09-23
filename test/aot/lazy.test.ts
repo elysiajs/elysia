@@ -3,20 +3,17 @@ import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
 import { compileToSource, autoGroupSize } from '../../src/plugin/aot/source'
-import { claimManifest, registerManifest } from './_manifest'
+import { claimManifest, evalRegistration, registerManifest } from './_manifest'
 import { post, json } from '../utils'
 
 /** Lazy manifests build each validator group only when one of its routes is used. */
 
-// Evaluate a side-effect-free manifest without materializing its groups.
-const evalLazy = (src: string): any =>
-	new Function(
-		src
-			.replace('export const groups', 'const groups')
-			.replace('export const groupOf', 'const groupOf')
-			.replace('export const handlers', 'const handlers') +
-			'\nreturn { groups, groupOf, handlers }'
-	)()
+// Evaluate a manifest without registering it or materializing its groups.
+const evalLazy = (src: string) => {
+	const { lazyGroups, lazyGroupOf, handlers } = evalRegistration(src)
+
+	return { groups: lazyGroups!, groupOf: lazyGroupOf!, handlers }
+}
 
 const build = () =>
 	new Elysia()
@@ -43,22 +40,22 @@ afterEach(() => {
 
 describe('lazy AOT validators', () => {
 	it('emits route groups without an eager validator tree', async () => {
-		const src = await compileToSource(build(), { register: false, lazy: 1 })
+		const src = await compileToSource(build(), { lazy: 1 })
 		delete process.env.ELYSIA_AOT_BUILD
 
-		expect((src.match(/\(\) => \{/g) ?? []).length).toBe(2)
-		expect(src).toContain('export const groups')
+		expect(evalLazy(src).groups).toHaveLength(2)
+		expect(src).toContain('lazyGroups: _groups')
 		expect(src).toContain('"/body":0')
-		expect(src).not.toContain('export const validators')
+		expect(src).not.toContain('const validators')
 	})
 
 	it('materializes each group once on first access', async () => {
-		const src = await compileToSource(build(), { register: false, lazy: 1 })
+		const src = await compileToSource(build(), { lazy: 1 })
 		delete process.env.ELYSIA_AOT_BUILD
 		const { groups, groupOf, handlers } = evalLazy(src)
 
 		const calls = [0, 0]
-		const spied = groups.map((g: () => unknown, i: number) => () => {
+		const spied = groups.map((g, i) => () => {
 			calls[i]++
 			return g()
 		})
@@ -83,12 +80,12 @@ describe('lazy AOT validators', () => {
 	})
 
 	it('reports registered validators without materializing their group', async () => {
-		const src = await compileToSource(build(), { register: false, lazy: 1 })
+		const src = await compileToSource(build(), { lazy: 1 })
 		delete process.env.ELYSIA_AOT_BUILD
 		const { groups, groupOf, handlers } = evalLazy(src)
 
 		const calls = [0, 0]
-		const spied = groups.map((g: () => unknown, i: number) => () => {
+		const spied = groups.map((g, i) => () => {
 			calls[i]++
 			return g()
 		})
@@ -112,14 +109,11 @@ describe('lazy AOT validators', () => {
 				.post('/b', { body }, ({ body }: any) => body)
 				.post('/c', { body }, ({ body }: any) => body)
 
-		const src = await compileToSource(make() as any, {
-			register: false,
-			lazy: 1
-		})
+		const src = await compileToSource(make() as any, { lazy: 1 })
 		delete process.env.ELYSIA_AOT_BUILD
 
 		expect((src.match(/const _c\d+ =/g) ?? []).length).toBe(1)
-		expect((src.match(/\(\) => \{/g) ?? []).length).toBe(3)
+		expect(evalLazy(src).groups).toHaveLength(3)
 		expect(src.indexOf('const _c0')).toBeLessThan(src.indexOf('_groups'))
 
 		const { groups, groupOf, handlers } = evalLazy(src)
@@ -152,10 +146,7 @@ describe('lazy AOT validators', () => {
 				({ body }: any) => body
 			)
 
-		const src = await compileToSource(app as any, {
-			register: false,
-			lazy: 1
-		})
+		const src = await compileToSource(app as any, { lazy: 1 })
 		delete process.env.ELYSIA_AOT_BUILD
 
 		const firstThunk = src.indexOf('_groups')
@@ -173,24 +164,18 @@ describe('lazy AOT validators', () => {
 			},
 			({ body }: any) => body
 		)
-		const src = await compileToSource(app as any, {
-			register: true,
-			lazy: true
-		})
+		const src = await compileToSource(app as any, { lazy: true })
 		delete process.env.ELYSIA_AOT_BUILD
 
 		expect(src).not.toMatch(/\bnew Function\b/)
 		expect(src).not.toMatch(/\beval\s*\(/)
 		expect(src).not.toMatch(/\bimport\s*\(/)
 		expect(src).toContain('Compiled.register((() => {')
-		expect(src).toContain('return { bf: 1, fingerprint')
+		expect(src).toContain('return { fingerprint')
 	})
 
 	it('preserves request validation and coercion', async () => {
-		const src = await compileToSource(build(), {
-			register: false,
-			lazy: 64
-		})
+		const src = await compileToSource(build(), { lazy: 64 })
 		delete process.env.ELYSIA_AOT_BUILD
 		const { groups, groupOf, handlers } = evalLazy(src)
 
@@ -241,23 +226,17 @@ describe('lazy AOT group sizing', () => {
 			return app
 		}
 
-		const auto = await compileToSource(make(100) as any, {
-			register: false,
-			lazy: true
-		})
+		const auto = await compileToSource(make(100) as any, { lazy: true })
 		delete process.env.ELYSIA_AOT_BUILD
-		expect((auto.match(/\(\) => \{/g) ?? []).length).toBe(
+		expect(evalLazy(auto).groups).toHaveLength(
 			Math.ceil(100 / autoGroupSize(100))
 		)
 
 		const fixedSize = await compileToSource(make(100) as any, {
-			register: false,
 			lazy: 25
 		})
 		delete process.env.ELYSIA_AOT_BUILD
-		expect((fixedSize.match(/\(\) => \{/g) ?? []).length).toBe(
-			Math.ceil(100 / 25)
-		)
+		expect(evalLazy(fixedSize).groups).toHaveLength(Math.ceil(100 / 25))
 	})
 })
 
@@ -285,10 +264,7 @@ describe('lazy AOT cross-group slot hoist', () => {
 			return app
 		}
 
-		const src = await compileToSource(make() as any, {
-			register: false,
-			lazy: 5
-		})
+		const src = await compileToSource(make() as any, { lazy: 5 })
 		delete process.env.ELYSIA_AOT_BUILD
 
 		const firstThunk = src.indexOf('_groups')
@@ -337,10 +313,7 @@ describe('lazy AOT cross-group slot hoist', () => {
 			return app
 		}
 
-		const src = await compileToSource(make() as any, {
-			register: false,
-			lazy: 3
-		})
+		const src = await compileToSource(make() as any, { lazy: 3 })
 		delete process.env.ELYSIA_AOT_BUILD
 
 		const firstThunk = src.indexOf('_groups')

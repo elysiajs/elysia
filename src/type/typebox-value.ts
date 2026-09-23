@@ -17,11 +17,12 @@ import type {
 	HasCodec as HasCodecType
 } from 'typebox/value'
 
+import { syncRequire } from './sync-require'
 import {
-	ensureTypeSettings,
 	injectTypeboxType,
 	isTypeNamespaceLoaded,
-	isTypeUsed
+	isTypeUsed,
+	loadTypeNamespace
 } from './typebox-type'
 
 export interface TypeboxNamespaces {
@@ -38,7 +39,7 @@ let loaded = false
 function load() {
 	if (loaded) return
 
-	ensureTypeSettings()
+	loadTypeNamespace()
 	injectTypebox(resolveNamespaces())
 }
 
@@ -62,7 +63,6 @@ export function preloadTypebox(): Promise<void> | undefined {
 			if (loaded) return
 
 			if (!isTypeNamespaceLoaded()) injectTypeboxType({ type, system })
-			ensureTypeSettings()
 			injectTypebox({ value, schema, compile })
 		},
 		// the synchronous loader still runs at build and reports the failure
@@ -71,15 +71,7 @@ export function preloadTypebox(): Promise<void> | undefined {
 }
 
 function resolveNamespaces(): TypeboxNamespaces {
-	const meta = import.meta as ImportMeta & {
-		require?: (specifier: string) => any
-	}
-
-	const req =
-		meta.require ??
-		(globalThis as any).process
-			?.getBuiltinModule?.('module')
-			?.createRequire(import.meta.url)
+	const req = syncRequire(import.meta, import.meta.url)
 
 	if (!req)
 		throw new Error(
@@ -121,7 +113,7 @@ export let Compile: typeof CompileType = stub(() => Compile)
 export function injectTypebox(typebox: TypeboxNamespaces) {
 	loaded = true
 
-	ensureTypeSettings()
+	loadTypeNamespace()
 
 	Check = typebox.value.Check
 	Clean = typebox.value.Clean

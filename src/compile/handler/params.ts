@@ -17,6 +17,7 @@ import { requestId } from '../../utils'
 import { adoptErrorType, fallbackResponse } from '../../handler/error'
 import {
 	drainDisposables,
+	emptyResponse,
 	finalizeRouteError,
 	forwardError,
 	registerDeriveDisposable
@@ -30,7 +31,6 @@ import {
 } from '../../adapter/utils'
 import {
 	cloneResponse,
-	emptyResponse,
 	getQueryParseChannels,
 	hasRequestBody,
 	replaceDeriveContext,

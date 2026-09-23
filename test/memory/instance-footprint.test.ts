@@ -14,8 +14,6 @@ describe('Elysia instance footprint', () => {
 		expect(Object.hasOwn(app, '~programId')).toBe(false)
 		expect(Object.getOwnPropertyNames(app)).toEqual([
 			'~Prefix',
-			'hasPlugin',
-			'hasGlobal',
 			'ready',
 			'_pending',
 			'_error',
@@ -31,7 +29,6 @@ describe('Elysia instance footprint', () => {
 			'jitColdRemaining',
 			'jitTable',
 			'jitRoute',
-			'jitStatic',
 			'jitAliases',
 			'routerBuilt',
 			'fetchFn',

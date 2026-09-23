@@ -116,6 +116,34 @@ const main = async () => {
 
 	console.log('✅ CommonJS Node.js disposes derive and decorate values')
 
+	// named model resolution must not depend on Bun-only built-ins
+	const modelApp = new Elysia()
+		.model({ user: t.Object({ name: t.String() }) })
+		.post('/', { body: 'user' }, ({ body }) => body.name)
+	const postUser = (body) =>
+		modelApp.handle(
+			new Request('http://localhost', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(body)
+			})
+		)
+
+	const validModel = await postUser({ name: 'Elysia' })
+	const validModelBody = await validModel.text()
+	if (validModel.status !== 200 || validModelBody !== 'Elysia')
+		throw new Error(
+			`❌ CommonJS Node.js named model returned ${validModel.status}: ${validModelBody}`
+		)
+
+	const invalidModel = await postUser({ name: 1 })
+	if (invalidModel.status !== 422)
+		throw new Error(
+			`❌ CommonJS Node.js named model accepted invalid body: ${invalidModel.status}`
+		)
+
+	console.log('✅ CommonJS Node.js resolves named model references')
+
 	const filePath = resolve(__dirname, '../../../package.json')
 	const expectedFile = await readFile(filePath)
 	const fileApp = new Elysia().get('/file', file(filePath))

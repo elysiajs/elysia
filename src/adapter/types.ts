@@ -10,40 +10,6 @@ import type { MaybePromise } from '../types'
  * @since 2.0.0
  */
 export interface ElysiaAdapterOptions<App extends AnyElysia | void = void> {
-	/**
-	 * Name of the adapter, preferably runtime
-	 */
-	name: string
-	/**
-	 *
-	 * @param app
-	 */
-	runtime:
-		| 'node'
-		| 'deno'
-		| 'bun'
-		| 'cloudflare-worker'
-		| 'browser'
-		| 'vercel'
-		| 'netlify'
-		| 'lambda'
-		| 'fastly'
-		| 'edge'
-		| 'unknown'
-		| (string & {})
-
-	/**
-	 * Whether this adapter is web standard
-	 */
-	isWebStandard: boolean
-
-	/**
-	 * Whether this adapter supports WebSocket.
-	 *
-	 * `.ws()` throws on non-Bun runtimes unless this is set.
-	 */
-	websocket?: boolean
-
 	listen?(
 		app: AnyElysia,
 		options: string | number | Partial<Serve>,

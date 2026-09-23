@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../src'
 
-import { separateFunction, sucrose, clearSucroseCache } from '../../src/sucrose'
+import { sucrose, clearSucroseCache } from '../../src/sucrose'
 import { post, json } from '../utils'
 
 describe('sucrose', () => {
@@ -403,7 +403,7 @@ describe('sucrose', () => {
 
 			// clearing the sucrose cache must also drop the identity memo so
 			// gcTime actually releases the retained inference objects
-			clearSucroseCache(0)
+			clearSucroseCache()
 
 			const third = sucrose(fn, undefined)
 			expect(third).toEqual(first)
@@ -411,5 +411,19 @@ describe('sucrose', () => {
 		} finally {
 			Function.prototype.toString = original
 		}
+	})
+
+	// `in` after `.` is a property, so `/` divides: read as a regex it would
+	// swallow `c.body` up to the next `/` and the body would never be parsed
+	it('infers body read between divisions after a keyword-named member', () => {
+		const inference = sucrose(
+			new Function(
+				'return (c) => { const r = c.query.in / 2; return c.body.x / 3 }'
+			)(),
+			undefined
+		)
+
+		expect(inference.query).toBe(true)
+		expect(inference.body).toBe(true)
 	})
 })

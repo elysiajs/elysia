@@ -1,7 +1,5 @@
 import { skipString } from '../../compile/lexer'
 
-const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-
 function nonCodeSpans(code: string): [start: number, end: number][] {
 	const spans: [number, number][] = []
 	const length = code.length
@@ -64,7 +62,7 @@ export function rewriteTypeImport(code: string): string {
 
 	// Only match import clauses that can contain a named `t` binding
 	const importRe = new RegExp(
-		`(^|\\n)([ \\t]*)import\\s+(?!type\\b)((?:[A-Za-z_$][\\w$]*\\s*,\\s*)?\\{[^}]*\\})\\s+from\\s*(['"])${escape(from)}\\4(\\s*(?:with|assert)\\s*\\{[^}]*\\})?`,
+		`(^|\\n)([ \\t]*)import\\s+(?!type\\b)((?:[A-Za-z_$][\\w$]*\\s*,\\s*)?\\{[^}]*\\})\\s+from\\s*(['"])${from}\\4(\\s*(?:with|assert)\\s*\\{[^}]*\\})?`,
 		'g'
 	)
 
@@ -80,10 +78,9 @@ export function rewriteTypeImport(code: string): string {
 		if (spans.some(([start, end]) => keyword >= start && keyword < end))
 			continue
 
+		// the import regex guarantees a `{` whose first following `}` ends the clause
 		const braceStart = clause.indexOf('{')
-		if (braceStart === -1) continue // no named imports → nothing to split
 		const braceEnd = clause.indexOf('}', braceStart)
-		if (braceEnd === -1) continue
 
 		const before = clause.slice(0, braceStart).trim() // default import, e.g. "Default,"
 		const memberSource = clause.slice(braceStart + 1, braceEnd)
@@ -106,14 +103,9 @@ export function rewriteTypeImport(code: string): string {
 		if (!alias) continue // `t` not imported here
 
 		const head = before.replace(/,\s*$/, '').trim() // default specifier (rare for elysia)
-		const keptClause =
-			head && kept.length
-				? `${head}, { ${kept.join(', ')} }`
-				: head
-					? head
-					: kept.length
-						? `{ ${kept.join(', ')} }`
-						: ''
+		const keptClause = [head, kept.length ? `{ ${kept.join(', ')} }` : '']
+			.filter(Boolean)
+			.join(', ')
 
 		const attr = attributes ?? ''
 		const lines: string[] = []

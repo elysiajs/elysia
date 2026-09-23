@@ -5,7 +5,8 @@ import {
 	type ProgramId,
 	type ValidatorManifest,
 	type CapturedHandler,
-	type HandlerManifest
+	type HandlerManifest,
+	type CompiledProgramRegistration
 } from '../../src/compile/aot'
 import { Source, installReconstructImpl } from '../../src/compile/aot-emit'
 
@@ -31,7 +32,6 @@ interface TestManifest {
  */
 export const registerManifest = (manifest: TestManifest) =>
 	Compiled.register({
-		bf: 1,
 		fingerprint: createAotFingerprint(),
 		planRebuilder: buildCoercedFromPlan,
 		...manifest
@@ -58,6 +58,43 @@ const fn = (src: string) =>
 		Format,
 		Hashing
 	)
+
+/**
+ * Evaluate a generated manifest module (`compileToSource` output) in-process
+ * and return the registration it hands to `Compiled.register`, without
+ * registering it, so a test can inspect or spy on it before claiming.
+ * Imports become parameters; the `Compiled` stub also swallows the
+ * `Compiled.reconstruct = Reconstruct` wiring (installed above already).
+ */
+export const evalRegistration = (src: string): CompiledProgramRegistration => {
+	let registration: CompiledProgramRegistration | undefined
+	new Function(
+		'Compiled',
+		'Reconstruct',
+		'buildCoercedFromPlan',
+		'CheckContext',
+		'Guard',
+		'Format',
+		'Hashing',
+		src.replace(/^import .*$/gm, '').replace(/^export const /gm, 'const ')
+	)(
+		{
+			register(m: CompiledProgramRegistration) {
+				registration = m
+			}
+		},
+		undefined,
+		buildCoercedFromPlan,
+		CheckContext,
+		Guard,
+		Format,
+		Hashing
+	)
+	if (!registration)
+		throw new Error('manifest did not call Compiled.register')
+
+	return registration
+}
 
 /** Materialise captured handlers into a frozen `{ a, f }` manifest. */
 export const materialiseHandlers = (

@@ -11,13 +11,14 @@ import type {
 	Unsafe as UnsafeType
 } from 'typebox/type'
 
+import { syncRequire } from './sync-require'
+
 export interface TypeboxTypeNamespaces {
 	type: typeof import('typebox/type')
 	system: typeof import('typebox/system')
 }
 
 let namespaces: TypeboxTypeNamespaces | undefined
-let settingsApplied = false
 
 /**
  * Loads `typebox/type` + `typebox/system` on first use
@@ -34,15 +35,7 @@ function load() {
 }
 
 function resolveNamespaces(): TypeboxTypeNamespaces {
-	const meta = import.meta as ImportMeta & {
-		require?: (specifier: string) => any
-	}
-
-	const req =
-		meta.require ??
-		(globalThis as any).process
-			?.getBuiltinModule?.('module')
-			?.createRequire(import.meta.url)
+	const req = syncRequire(import.meta, import.meta.url)
 
 	if (!req)
 		throw new Error(
@@ -50,14 +43,6 @@ function resolveNamespaces(): TypeboxTypeNamespaces {
 		)
 
 	return { type: req('typebox/type'), system: req('typebox/system') }
-}
-
-function applySettings() {
-	if (settingsApplied || !namespaces) return
-
-	settingsApplied = true
-
-	namespaces.system.Settings.Set({ unionPrioritySort: false })
 }
 
 export const loadTypeNamespace = () => namespaces ?? load()
@@ -72,13 +57,6 @@ export const markTypeUsed = () => {
 export const isTypeUsed = () => typeUsed || namespaces !== undefined
 
 export const isTypeNamespaceLoaded = () => namespaces !== undefined
-
-export function ensureTypeSettings() {
-	if (settingsApplied) return
-
-	loadTypeNamespace()
-	applySettings()
-}
 
 function stub<T>(get: () => T): T {
 	return function (...args: unknown[]) {
@@ -100,6 +78,9 @@ export let Undefined: typeof UndefinedType = stub(() => Undefined)
 export let Unsafe: typeof UnsafeType = stub(() => Unsafe)
 
 export function injectTypeboxType(typebox: TypeboxTypeNamespaces) {
+	// Elysia's default is applied on first materialization only: a
+	// reinjection must never clobber a user's later `Settings.Set`
+	const first = namespaces === undefined
 	namespaces = typebox
 
 	Codec = typebox.type.Codec
@@ -113,5 +94,5 @@ export function injectTypeboxType(typebox: TypeboxTypeNamespaces) {
 	Undefined = typebox.type.Undefined
 	Unsafe = typebox.type.Unsafe
 
-	applySettings()
+	if (first) typebox.system.Settings.Set({ unionPrioritySort: false })
 }

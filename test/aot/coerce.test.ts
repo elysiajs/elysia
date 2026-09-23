@@ -7,13 +7,14 @@ import {
 	beginValidatorCapture,
 	endValidatorCapture
 } from '../../src/compile/aot-capture'
-import { claimManifest, materialise, registerManifest } from './_manifest'
+import {
+	claimManifest,
+	evalRegistration,
+	materialise,
+	registerManifest
+} from './_manifest'
 import { Value } from 'typebox/value'
 import { compileToSource } from '../../src/plugin/aot/source'
-import { CheckContext } from 'typebox/schema'
-import { Guard } from 'typebox/guard'
-import { Format } from 'typebox/format'
-import { Hashing } from 'typebox/system'
 
 /** Frozen request validators preserve codec coercion and cleaning. */
 
@@ -208,22 +209,12 @@ describe('frozen request coercion', () => {
 				},
 				({ query }) => query
 			)
-			src = await compileToSource(app, { register: false })
+			src = await compileToSource(app)
 		} finally {
 			delete process.env.ELYSIA_AOT_BUILD
 		}
 
-		const validators = new Function(
-			'CheckContext',
-			'Guard',
-			'Format',
-			'Hashing',
-			src
-				.replace('export const validators', 'const validators')
-				.replace(/export const handlers[\s\S]*$/, '')
-				.replace('export default validators', '') +
-				'\nreturn validators'
-		)(CheckContext, Guard, Format, Hashing)
+		const { validators } = evalRegistration(src)
 
 		Compiled.clear()
 		Validator.clear()

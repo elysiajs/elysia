@@ -76,8 +76,8 @@ describe('AOT strip disabled', () => {
 		for (const marker of STUB_MARKERS) expect(text).not.toContain(marker)
 
 		// live sucrose code must be retained. `separateFunction` used to be the
-		// marker, but it is imported ONLY by the trace subsystem, which is now
-		// severed into `elysia/trace` — a traceless app no longer bundles it.
+		// marker, but it no longer exists (trace-phase inference now runs on
+		// `inferFunction`, severed into `elysia/trace`).
 		// `sucrose` itself (parameter inference) is still core-live, so it is the
 		// correct strip-disabled sucrose signal.
 		expect(text).toContain('function sucrose')
@@ -145,7 +145,6 @@ describe('automatic AOT stripping', () => {
 			compat: true,
 			bridge: false,
 			typeboxValue: false,
-			typeboxType: true,
 			exactMirror: false,
 			adapter: false,
 			isProduction: true
@@ -279,7 +278,7 @@ describe('automatic AOT stripping', () => {
 		expect(res.headers.getAll('set-cookie')).toEqual(['token=abc'])
 	})
 
-	it('preserves userland sucrose imports when handler JIT is stripped', async () => {
+	it('keeps the sucrose module live for its remaining importers when handler JIT is stripped', async () => {
 		const text = await build(
 			'test/aot/fixtures/strip-auto-sucrose-import-app.ts',
 			'auto'
@@ -287,9 +286,9 @@ describe('automatic AOT stripping', () => {
 		expect(text).toContain('handler compiler JIT was stripped')
 
 		const app = await load(text)
-		const res = await app.handle('/range')
+		const res = await app.handle('/infer')
 		expect(res.status).toBe(200)
-		await expect(res.text()).resolves.toBe('0,7')
+		await expect(res.text()).resolves.toBe('true,false')
 	})
 
 	// A mounted sub-app is a second Elysia with its own router build. The

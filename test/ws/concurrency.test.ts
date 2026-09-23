@@ -108,11 +108,11 @@ describe('WebSocket per-route option conflict', () => {
 		const strictFirst = {} as any
 
 		captureWarn(() => {
-			accumulateWSOptions(looseFirst, loose as any, '/a')
-			accumulateWSOptions(looseFirst, strict as any, '/b')
+			accumulateWSOptions(looseFirst, loose as any)
+			accumulateWSOptions(looseFirst, strict as any)
 
-			accumulateWSOptions(strictFirst, strict as any, '/a')
-			accumulateWSOptions(strictFirst, loose as any, '/b')
+			accumulateWSOptions(strictFirst, strict as any)
+			accumulateWSOptions(strictFirst, loose as any)
 		})
 
 		expect(looseFirst).toEqual(strict)
@@ -123,8 +123,8 @@ describe('WebSocket per-route option conflict', () => {
 		const target = {} as any
 
 		captureWarn(() => {
-			accumulateWSOptions(target, { publishToSelf: false } as any, '/a')
-			accumulateWSOptions(target, { publishToSelf: true } as any, '/b')
+			accumulateWSOptions(target, { publishToSelf: false } as any)
+			accumulateWSOptions(target, { publishToSelf: true } as any)
 		})
 
 		expect(target.publishToSelf).toBe(true)

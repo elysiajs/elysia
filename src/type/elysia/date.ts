@@ -13,6 +13,16 @@ import { cloneSchema, createSharedReference, elyType, getMeta } from './utils'
 const ISO8601 = /T\d\d(?::\d\d){1,2} \d\d:\d\d$/
 const removeTime = / (\d{2}:\d{2})$/
 
+function toDate(value: string | number) {
+	const date = new Date(value)
+
+	return isNaN(date.getTime()) &&
+		typeof value === 'string' &&
+		ISO8601.test(value)
+		? new Date(value.replace(removeTime, '+$1'))
+		: date
+}
+
 let StringifiedDate: Type.TCodec<
 	Type.TUnion<[Type.TUnsafe<Date>, Type.TString, Type.TNumber]>,
 	Date
@@ -42,15 +52,7 @@ export function DateType(
 			),
 			Refine(
 				StringType(),
-				(value) => {
-					if (!isNaN(new Date(value).getTime())) return true
-
-					if (ISO8601.test(value))
-						return !isNaN(
-							new Date(value.replace(removeTime, '+$1')).getTime()
-						)
-					return false
-				},
+				(value) => !isNaN(toDate(value).getTime()),
 				() => 'must be Date'
 			),
 			NumberType()
@@ -58,14 +60,7 @@ export function DateType(
 	)
 		.Decode((value) => {
 			if (value instanceof Date) return value
-			let d = new Date(value as any)
-
-			if (
-				isNaN(d.getTime()) &&
-				typeof value === 'string' &&
-				/T\d{2}:\d{2}(:\d{2})? \d{2}:\d{2}$/.test(value)
-			)
-				d = new Date(value.replace(/ (\d{2}:\d{2})$/, '+$1'))
+			const d = toDate(value)
 
 			if (isNaN(d.getTime()))
 				throw new Error(`Expected Date, got: ${String(value)}`)
@@ -126,19 +121,10 @@ function DateWithProperty(options: DateOptions) {
 		schema = Refine(
 			schema,
 			(value: Date | string | number) => {
-				let t: number
-				if (value instanceof Date) t = value.getTime()
-				else {
-					t = new Date(value).getTime()
-					if (
-						isNaN(t) &&
-						typeof value === 'string' &&
-						/T\d{2}:\d{2}(:\d{2})? \d{2}:\d{2}$/.test(value)
-					)
-						t = new Date(
-							value.replace(/ (\d{2}:\d{2})$/, '+$1')
-						).getTime()
-				}
+				const t =
+					value instanceof Date
+						? value.getTime()
+						: toDate(value).getTime()
 
 				if (minMessage && t < (min as number)) {
 					failed = minMessage

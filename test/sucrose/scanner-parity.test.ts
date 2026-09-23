@@ -242,7 +242,7 @@ const transitiveAliasHandler = (size: number, nonce: number) => {
 
 describe('Sucrose scanner slope', () => {
 	it('stays linear across 4/8/16/31 KiB transitive aliases', () => {
-		clearSucroseCache(0)
+		clearSucroseCache()
 		const sizes = [4, 8, 16, 31].map((size) => size * 1024)
 		const timings: number[] = []
 

@@ -4,7 +4,6 @@ import type {
 	Create as CreateType,
 	Decode as DecodeType,
 	HasCodec as HasCodecType,
-	Default as DefaultType,
 	Clone as CloneType,
 	Check as CheckType
 } from 'typebox/value'
@@ -42,7 +41,6 @@ interface TypeboxModule {
 	mayHaveFileType: typeof mayHaveFileTypeType
 	HasCodec: typeof HasCodecType
 	Intersect: typeof IntersectType
-	Default: typeof DefaultType
 	Ref: typeof RefType
 	Clone: typeof CloneType
 	Check: typeof CheckType
@@ -104,7 +102,6 @@ export let hasTypes: typeof hasTypesType = stub('hasTypes')
 export let mayHaveFileType: typeof mayHaveFileTypeType = stub('mayHaveFileType')
 export let HasCodec: typeof HasCodecType = stub('HasCodec')
 export let Intersect: typeof IntersectType = stub('Intersect')
-export let Default: typeof DefaultType = stub('Default')
 export let Ref: typeof RefType = stub('Ref')
 export let Clone: typeof CloneType = stub('Clone')
 export let Check: typeof CheckType = stub('Check')
@@ -131,7 +128,6 @@ export function useTypebox(mod: TypeboxModule) {
 	mayHaveFileType = mod.mayHaveFileType
 	HasCodec = mod.HasCodec
 	Intersect = mod.Intersect
-	Default = mod.Default
 	Ref = mod.Ref
 	Clone = mod.Clone
 	Check = mod.Check

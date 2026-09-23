@@ -61,12 +61,12 @@ describe('AOT unplugin Vite adapter', () => {
 		).toBe(29)
 		expect(vt).toBe(native.load(native.resolveId('elysia/type')!)!)
 
-		await expect(
+		expect(
 			(plugin.transform as any).call(ctx, 'x', COMPAT)
-		).resolves.toBe('export function setupTypebox(){}\n')
-		await expect(
+		).toBe('export function setupTypebox(){}\n')
+		expect(
 			(plugin.transform as any).call(ctx, 'x', BRIDGE)
-		).resolves.toBeUndefined()
+		).toBeUndefined()
 	})
 
 	it('wired builds reroute the bridge like the native plugin', async () => {
@@ -81,13 +81,13 @@ describe('AOT unplugin Vite adapter', () => {
 		await (plugin.buildStart as any).call(ctx)
 		await native.buildStart()
 
-		await expect(
+		expect(
 			(plugin.transform as any).call(ctx, 'x', COMPAT)
-		).resolves.toBe('export function setupTypebox(){}\n')
-		await expect(
+		).toBe('export function setupTypebox(){}\n')
+		expect(
 			(plugin.transform as any).call(ctx, 'x', BRIDGE)
-		).resolves.toBe("export * from './bridge-live'\n")
-		await expect(native.transform('x', BRIDGE)).resolves.toBe(
+		).toBe("export * from './bridge-live'\n")
+		expect(native.transform('x', BRIDGE)).toBe(
 			"export * from './bridge-live'\n"
 		)
 	})
@@ -114,9 +114,9 @@ describe('AOT unplugin Vite adapter', () => {
 			await native.transform('export const app = 1', SEALED_VITE_APP)
 		)
 
-		await expect(
+		expect(
 			(plugin.transform as any).call(ctx, 'x', '/some/other/file.ts')
-		).resolves.toBeUndefined()
+		).toBeUndefined()
 	})
 
 	it('limits transforms to the entry and Elysia modules', async () => {

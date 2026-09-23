@@ -47,8 +47,7 @@ describe('WebSocket message body', () => {
 	})
 
 	it('sets ws.body for a bound handler whose source cannot be inspected', async () => {
-		// Bound functions expose native-code source, so body-use analysis must
-		// conservatively assume the handler may read ws.body.
+		// Bound functions expose native-code source; ws.body must still be set.
 		function impl(this: unknown, ws: any) {
 			ws.send(`bound-body:${ws.body}`)
 		}
@@ -89,6 +88,32 @@ describe('WebSocket message body', () => {
 		ws.send('forwarded')
 
 		expect((await message).data).toBe('fwd:forwarded')
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('sets ws.body when an arrow handler reads it only through a method on ws', async () => {
+		// Nothing in the handler source names `body` or passes `ws` along, so a
+		// source scan cannot see this read: the sync message lane must always
+		// assign ws.body, the same as the full lane does.
+		const app = new Elysia()
+			.use(websocket())
+			.decorate('readBody', function (this: { body: unknown }) {
+				return this.body
+			})
+			.ws('/ws', {
+				message: (ws) => ws.send(`method:${ws.readBody()}`)
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+		ws.send('indirect')
+
+		expect((await message).data).toBe('method:indirect')
 
 		await wsClosed(ws)
 		app.stop()

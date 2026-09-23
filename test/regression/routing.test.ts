@@ -360,7 +360,7 @@ describe('URL authority is not assumed to be a fixed length', () => {
 			.get('/admin', () => 'privileged')
 
 	// Each label exercises a different fixed offset in the old, broken
-	// `extractPath` (11 for the default config, 7 for
+	// `extractPath` (11 for the default config, 7 for the since-removed
 	// `standardHostname: false`), so the two labels are wrong for different
 	// host shapes and a shared URL list can't discriminate both at once:
 	// - `default` (old offset 11): wrong whenever the real authority ends
@@ -385,8 +385,8 @@ describe('URL authority is not assumed to be a fixed length', () => {
 			'http://a1/public/admin'
 		]],
 		[
-			'standardHostname: false',
-			{ handler: { standardHostname: false } },
+			'https (old standardHostname: false offset)',
+			undefined,
 			[
 				'https://a/public/admin',
 				'https://ab/public/admin',
@@ -435,8 +435,7 @@ describe('URL authority is not assumed to be a fixed length', () => {
 	// prefix survived into the sub-app, or the splice landed mid-path and handed
 	// the sub-app an attacker-chosen extra leading segment.
 	it.each([
-		['default', undefined],
-		['standardHostname: false', { handler: { standardHostname: false } }]
+		['default', undefined]
 	] as const)(
 		'mount rewrites the path against the real authority (%s)',
 		async (_label, config) => {

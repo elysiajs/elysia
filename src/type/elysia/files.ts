@@ -11,8 +11,8 @@ import {
 	cloneSchema,
 	createSharedReference,
 	elyType,
-	getMeta,
 	Refines,
+	withMeta,
 	type Refines as RefinesType
 } from './utils'
 
@@ -100,12 +100,8 @@ function FilesWithProperty(options: FilesOptions) {
 			`Expect less than ${options.maxItems} files`
 		])
 
-	let schema: any = Refines(base, refines as any)
-	const [, meta] = getMeta(options as any)
-	if (meta) {
-		schema = cloneSchema(schema)
-		Object.assign(schema, meta)
-	}
-
-	return elyType(ELYSIA_TYPES.Files, schema)
+	return elyType(
+		ELYSIA_TYPES.Files,
+		withMeta(Refines(base, refines as any), options)
+	)
 }

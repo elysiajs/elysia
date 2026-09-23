@@ -308,23 +308,21 @@ export function collectStaticRoutes(app: AnyElysia) {
 	if (!table || !length) return
 
 	const { method: methods, path: paths, handler: handlers, flags } = table
+	const isStatic = (i: number) =>
+		isNativeStaticMethod(methods[i]) && (flags[i] & RouteFlag.Dynamic) === 0
+	const isPromotable = (h: unknown) =>
+		promoteResponses &&
+		typeof h !== 'function' &&
+		!(h instanceof Error) &&
+		!(h instanceof Promise)
+
 	let hasCandidate = false
 
 	for (let i = 0; i < length; i++) {
-		if (
-			!isNativeStaticMethod(methods[i]) ||
-			(flags[i] & RouteFlag.Dynamic) !== 0
-		)
-			continue
+		if (!isStatic(i)) continue
 
 		const h = handlers[i]
-		if (
-			isHTMLBundle(h) ||
-			(promoteResponses &&
-				typeof h !== 'function' &&
-				!(h instanceof Error) &&
-				!(h instanceof Promise))
-		) {
+		if (isHTMLBundle(h) || isPromotable(h)) {
 			hasCandidate = true
 			break
 		}
@@ -335,13 +333,9 @@ export function collectStaticRoutes(app: AnyElysia) {
 	const routeIndex = new Map<string, Map<string, number>>()
 
 	for (let i = 0; i < length; i++) {
-		const method = methods[i]
-		if (
-			!isNativeStaticMethod(method) ||
-			(flags[i] & RouteFlag.Dynamic) !== 0
-		)
-			continue
+		if (!isStatic(i)) continue
 
+		const method = methods[i]
 		const path = paths[i]
 		let pathsByMethod = routeIndex.get(method)
 
@@ -373,14 +367,9 @@ export function collectStaticRoutes(app: AnyElysia) {
 	}
 
 	for (let i = 0; i < length; i++) {
-		const method = methods[i]
-		const routeFlags = flags[i]
-		if (
-			!isNativeStaticMethod(method) ||
-			(routeFlags & RouteFlag.Dynamic) !== 0
-		)
-			continue
+		if (!isStatic(i)) continue
 
+		const method = methods[i]
 		const pathsByMethod = routeIndex.get(method)!
 		const path = paths[i]
 		if (pathsByMethod.get(path) !== i) continue
@@ -388,18 +377,12 @@ export function collectStaticRoutes(app: AnyElysia) {
 		const h = handlers[i]
 		let value: Response | BunHTMLBundlelike | undefined
 		if (isHTMLBundle(h)) value = h
-		else if (
-			!promoteResponses ||
-			typeof h === 'function' ||
-			h instanceof Error ||
-			h instanceof Promise
-		)
-			continue
+		else if (!isPromotable(h)) continue
 		else value = buildNativeStaticResponse(routeRow(table, i), app)
 
 		if (!value) continue
 
-		const needsEncode = (routeFlags & RouteFlag.Encode) !== 0
+		const needsEncode = (flags[i] & RouteFlag.Encode) !== 0
 		add(method, path, value, needsEncode)
 
 		if (!strictPath) {
@@ -415,9 +398,6 @@ export function collectStaticRoutes(app: AnyElysia) {
 }
 
 export const BunAdapter = createAdapter({
-	name: 'bun',
-	runtime: 'bun',
-	isWebStandard: true,
 	parse: WebStandardAdapter.parse,
 	response: WebStandardAdapter.response,
 	listen(app, options, callback) {
@@ -438,16 +418,14 @@ export const BunAdapter = createAdapter({
 					})
 		}
 
-		const optionsIsObject = typeof options === 'object'
-		const _options = optionsIsObject
-			? { ...(options as object) }
-			: // monomorphic
-				{
-					port: +options,
-					fetch: gatedFetch
-				}
-
-		if (optionsIsObject) _options.fetch = gatedFetch
+		const _options =
+			typeof options === 'object'
+				? { ...(options as object), fetch: gatedFetch }
+				: // monomorphic
+					{
+						port: +options,
+						fetch: gatedFetch
+					}
 
 		const _config = (app['~config'] as any)?.serve
 		const serve = _config ? { ..._config, ..._options } : _options

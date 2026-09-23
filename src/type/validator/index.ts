@@ -43,10 +43,10 @@ import {
 import { hasProperty } from '../utils'
 import {
 	collectFileTypeChecks,
+	isAsyncPredicate,
 	takeFileTypeChecks,
 	type PendingFileTypeCheck
-} from '../elysia/file'
-import { isAsyncPredicate } from '../elysia/file-type'
+} from '../elysia/file-type'
 import { ELYSIA_FORM_PROTOTYPE, nullObject } from '../../utils'
 import { ValidationError } from '../../error'
 import {
@@ -504,42 +504,37 @@ export class TypeBoxValidator<
 
 		let schemaHasRef = false
 		if (name && options?.models) {
-			schema = (
-				moduleCache.getOrInsertComputed(options.models, () => {
-					const module = Module
-					const models = options.models as Record<string, TSchema>
-					const out: Record<string, TSchema> = {}
+			// WeakMap#getOrInsertComputed is Bun-only, Node 24 lacks it
+			let modelModule = moduleCache.get(options.models)
+			if (modelModule === undefined) {
+				const models = options.models as Record<string, TSchema>
+				const out: Record<string, TSchema> = {}
 
-					for (const modelName in models) {
-						const modelSchema = models[modelName]
-						const value: Record<string, unknown> = {}
-						let source = modelSchema
+				for (const modelName in models) {
+					const modelSchema = models[modelName]
+					const value: Record<string, unknown> = {}
+					let source = modelSchema
 
-						while (source && source !== Object.prototype) {
-							for (const key of Object.getOwnPropertyNames(
-								source
-							))
-								if (
-									key !== '$id' &&
-									!Object.hasOwn(value, key)
+					while (source && source !== Object.prototype) {
+						for (const key of Object.getOwnPropertyNames(source))
+							if (key !== '$id' && !Object.hasOwn(value, key))
+								Object.defineProperty(
+									value,
+									key,
+									Object.getOwnPropertyDescriptor(
+										source,
+										key
+									)!
 								)
-									Object.defineProperty(
-										value,
-										key,
-										Object.getOwnPropertyDescriptor(
-											source,
-											key
-										)!
-									)
-							source = Object.getPrototypeOf(source)
-						}
-
-						out[modelName] = value as TSchema
+						source = Object.getPrototypeOf(source)
 					}
 
-					return module(out)
-				}) as any
-			)[name]
+					out[modelName] = value as TSchema
+				}
+
+				moduleCache.set(options.models, (modelModule = Module(out)))
+			}
+			schema = (modelModule as any)[name]
 
 			if (isIntersectable) {
 				const members = [schema, ...options!.schemas!]
@@ -825,31 +820,24 @@ export class TypeBoxValidator<
 			this.hasCodec &&
 			!this.#isForm &&
 			!this.#noValidate &&
-			!options?.slot?.startsWith('r') &&
 			options?.normalize !== false &&
 			options?.normalize !== 'typebox'
-		)
-			this.#decodeMirror = this.#setupCodecMirror(
-				this.schema as TSchema,
-				options,
-				frozen,
-				'decode'
-			)
-
-		if (
-			this.hasCodec &&
-			!this.#isForm &&
-			!this.#noValidate &&
-			options?.slot?.startsWith('r') &&
-			options?.normalize !== false &&
-			options?.normalize !== 'typebox'
-		)
-			this.#encodeMirror = this.#setupCodecMirror(
-				this.schema as TSchema,
-				options,
-				frozen,
-				'encode'
-			)
+		) {
+			if (options?.slot?.startsWith('r'))
+				this.#encodeMirror = this.#setupCodecMirror(
+					this.schema as TSchema,
+					options,
+					frozen,
+					'encode'
+				)
+			else
+				this.#decodeMirror = this.#setupCodecMirror(
+					this.schema as TSchema,
+					options,
+					frozen,
+					'decode'
+				)
+		}
 
 		if (!this.#noValidate)
 			this.#findCustomError = buildFindCustomError(this.schema, frozen)
@@ -1081,7 +1069,7 @@ export class TypeBoxValidator<
 		// second public Check dispatch and tick
 		this.#tick()
 
-		if (this.#isForm) {
+		if (this.#isForm || !this.hasCodec) {
 			const errors = this.#noValidate
 				? undefined
 				: this.#validate(value, false)
@@ -1092,21 +1080,9 @@ export class TypeBoxValidator<
 					errors.length ? errors : undefined
 				)
 
-			return value as any
-		}
-
-		if (!this.hasCodec) {
-			const errors = this.#noValidate
-				? undefined
-				: this.#validate(value, false)
-			if (errors)
-				throw this.#error(
-					value,
-					type,
-					errors.length ? errors : undefined
-				)
-
-			if (this.Clean) value = this.Clean(value) as Static<T>
+			// Form values are returned as-is (never cleaned)
+			if (this.Clean && !this.#isForm)
+				value = this.Clean(value) as Static<T>
 			return value as any
 		}
 
@@ -1134,21 +1110,25 @@ export class TypeBoxValidator<
 				: Encode(this.schema, value)
 
 			return this.Clean ? (this.Clean(out) as any) : out
-		} catch (e: any) {
+		} catch (e) {
 			if (this.#noValidate)
 				return this.Clean ? (this.Clean(value) as any) : (value as any)
 
-			if (e instanceof ValidationError) throw e
-			if (e?.error) throw e.error
-			if (e?.status) throw e
-
-			throw new ValidationError(
-				type,
-				value,
-				() => this.Errors(value),
-				this.schema
-			)
+			this.#rethrow(e, value, type)
 		}
+	}
+
+	#rethrow(e: any, value: unknown, type?: string): never {
+		if (e instanceof ValidationError) throw e
+		if (e?.error) throw e.error
+		if (e?.status) throw e
+
+		throw new ValidationError(
+			type,
+			value,
+			() => this.Errors(value),
+			this.schema
+		)
 	}
 
 	#markForm(value: unknown) {
@@ -1199,6 +1179,27 @@ export class TypeBoxValidator<
 		return applyPrecomputed(defaults.objectTemplate!, value)
 	}
 
+	#applyDefault(value: Static<T>): Static<T> {
+		const defaults = this.#defaultFastPath
+		if (defaults) {
+			if (
+				value === undefined ||
+				(value === null && defaults.appliesToNull)
+			)
+				return this.#cloneSharedDefault() as any
+			if (
+				value !== null &&
+				typeof value === 'object' &&
+				(defaults.merge !== undefined ||
+					defaults.objectTemplate !== undefined)
+			)
+				return this.#applyPrecomputedObjectDefault(value as any) as any
+			return value
+		}
+
+		return Default(this.schema, value) as any
+	}
+
 	private optionalBypass(
 		value: Static<T>
 	): { bypass: true; value: Static<T> } | undefined {
@@ -1223,25 +1224,7 @@ export class TypeBoxValidator<
 	}
 
 	async FromAsync(value: Static<T>, type?: string): Promise<Static<T>> {
-		if (this.hasDefault) {
-			const defaults = this.#defaultFastPath
-			if (defaults) {
-				if (
-					value === undefined ||
-					(value === null && defaults.appliesToNull)
-				)
-					value = this.#cloneSharedDefault() as any
-				else if (
-					value !== null &&
-					typeof value === 'object' &&
-					(defaults.merge !== undefined ||
-						defaults.objectTemplate !== undefined)
-				)
-					value = this.#applyPrecomputedObjectDefault(
-						value as any
-					) as any
-			} else value = Default(this.schema, value) as any
-		}
+		if (this.hasDefault) value = this.#applyDefault(value)
 
 		if (this.#hasOptional) {
 			const bypass = this.optionalBypass(value)
@@ -1251,57 +1234,10 @@ export class TypeBoxValidator<
 		const markedValue = value
 		const marked = this.#isForm ? this.#markForm(value) : undefined
 		try {
-			if (this.hasCodec) {
-				if (!this.#noValidate) {
-					collectFileTypeChecks()
-
-					let errors: TLocalizedValidationError[] | undefined
-					let pendingFile: ReturnType<typeof takeFileTypeChecks>
-					try {
-						errors = this.#validate(value)
-					} finally {
-						pendingFile = takeFileTypeChecks()
-					}
-
-					if (errors)
-						throw this.#error(
-							value,
-							type,
-							errors.length ? errors : undefined
-						)
-					if (pendingFile)
-						await enforceFileTypeChecks(
-							pendingFile,
-							type,
-							value,
-							this.schema
-						)
-				}
-
-				if (this.#decodeMirror)
-					value = this.#decodeMirror(value) as Static<T>
-				else
-					try {
-						value = DecodeUnsafe(
-							nullObject() as {},
-							this.schema,
-							value
-						) as Static<T>
-					} catch (e: any) {
-						if (e instanceof ValidationError) throw e
-						if (e?.error) throw e.error
-						if (e?.status) throw e
-
-						throw new ValidationError(
-							type,
-							value,
-							() => this.Errors(value),
-							this.schema
-						)
-					}
-			} else if (!this.#noValidate) {
-				// take() MUST run even if Check throws (type-elysia-2), see above.
+			if (!this.#noValidate) {
+				// take() MUST run even if Check throws (type-elysia-2)
 				collectFileTypeChecks()
+
 				let errors: TLocalizedValidationError[] | undefined
 				let pendingFile: ReturnType<typeof takeFileTypeChecks>
 				try {
@@ -1325,6 +1261,20 @@ export class TypeBoxValidator<
 					)
 			}
 
+			if (this.hasCodec)
+				if (this.#decodeMirror)
+					value = this.#decodeMirror(value) as Static<T>
+				else
+					try {
+						value = DecodeUnsafe(
+							nullObject() as {},
+							this.schema,
+							value
+						) as Static<T>
+					} catch (e) {
+						this.#rethrow(e, value, type)
+					}
+
 			if (this.Clean && !this.#decodeMirror && !this.#cleanRedundant)
 				value = this.Clean(value) as Static<T>
 
@@ -1335,25 +1285,7 @@ export class TypeBoxValidator<
 	}
 
 	FromSync(value: Static<T>, type?: string): Static<T> {
-		if (this.hasDefault) {
-			const defaults = this.#defaultFastPath
-			if (defaults) {
-				if (
-					value === undefined ||
-					(value === null && defaults.appliesToNull)
-				)
-					value = this.#cloneSharedDefault() as Static<T>
-				else if (
-					value !== null &&
-					typeof value === 'object' &&
-					(defaults.merge !== undefined ||
-						defaults.objectTemplate !== undefined)
-				)
-					value = this.#applyPrecomputedObjectDefault(
-						value as any
-					) as Static<T>
-			} else value = Default(this.schema, value) as Static<T>
-		}
+		if (this.hasDefault) value = this.#applyDefault(value)
 
 		if (this.#hasOptional) {
 			const bypass = this.optionalBypass(value)
@@ -1363,18 +1295,15 @@ export class TypeBoxValidator<
 		const markedValue = value
 		const marked = this.#isForm ? this.#markForm(value) : undefined
 		try {
-			if (this.hasCodec) {
-				// See FromAsync for the rationale on skipping `Convert`
-				const errors = this.#noValidate
-					? undefined
-					: this.#validate(value)
-				if (errors)
-					throw this.#error(
-						value,
-						type,
-						errors.length ? errors : undefined
-					)
+			const errors = this.#noValidate ? undefined : this.#validate(value)
+			if (errors)
+				throw this.#error(
+					value,
+					type,
+					errors.length ? errors : undefined
+				)
 
+			if (this.hasCodec)
 				if (this.#decodeMirror)
 					value = this.#decodeMirror(value) as Static<T>
 				else
@@ -1384,29 +1313,9 @@ export class TypeBoxValidator<
 							this.schema,
 							value
 						) as Static<T>
-					} catch (e: any) {
-						if (e instanceof ValidationError) throw e
-						if (e?.error) throw e.error
-						if (e?.status) throw e
-
-						throw new ValidationError(
-							type,
-							value,
-							() => this.Errors(value),
-							this.schema
-						)
+					} catch (e) {
+						this.#rethrow(e, value, type)
 					}
-			} else {
-				const errors = this.#noValidate
-					? undefined
-					: this.#validate(value)
-				if (errors)
-					throw this.#error(
-						value,
-						type,
-						errors.length ? errors : undefined
-					)
-			}
 
 			if (this.Clean && !this.#decodeMirror && !this.#cleanRedundant)
 				value = this.Clean(value) as Static<T>

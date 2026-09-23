@@ -23,7 +23,6 @@ const register = async () => {
 
 	Compiled.clear()
 	Compiled.register({
-		bf: 1,
 		fingerprint: artifacts.fingerprint,
 		validators,
 		handlers
@@ -141,7 +140,6 @@ describe('AOT manifest ownership and compiler sessions', () => {
 
 		Compiled.clear()
 		Compiled.register({
-			bf: 1,
 			fingerprint: {
 				...artifacts.fingerprint,
 				abi: 'from-the-future:99'
@@ -151,6 +149,29 @@ describe('AOT manifest ownership and compiler sessions', () => {
 		})
 
 		expect(() => void buildA().fetch).toThrow('abi')
+	})
+
+	// Format 5 dropped the manifest `bf` field and changed the emitted trace
+	// child reader (`rp.resolveChild?.shift?.()` -> `rp.shift?.()`); the ABI is
+	// now the only compatibility check: an artifact emitted by the previous
+	// format must be rejected loudly rather than silently bound to the current
+	// runtime.
+	it('rejects a manifest emitted by the previous manifest format', async () => {
+		const { validators, handlers } = await register()
+		const app = createAotFingerprint().abi
+		const stale = app.replace(/:\d+$/, ':4')
+
+		Compiled.clear()
+		Compiled.register({
+			bf: 1,
+			fingerprint: { abi: stale },
+			validators,
+			handlers
+		} as any)
+
+		expect(() => void buildA().fetch).toThrow(
+			`[elysia-aot] Registered manifest fingerprint mismatch: abi (manifest ${stale}, app ${app}).`
+		)
 	})
 
 	it('binds by program ID and ABI without comparing route tables', async () => {
@@ -210,7 +231,6 @@ describe('AOT manifest ownership and compiler sessions', () => {
 
 		// a registration arriving after the claim must never rebind the app
 		Compiled.register({
-			bf: 1,
 			fingerprint: stale.fingerprint,
 			handlers: materialiseHandlers(stale.handlers)
 		})

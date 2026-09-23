@@ -230,6 +230,29 @@ if ((process.env.NODE_ENV ?? process.env.ENV) === 'production')
 	}
 
 if ((process.env.NODE_ENV ?? process.env.ENV) === 'production') {
+	scenarios.customErrorLaneSkipsEnumeration = async () => {
+		let calls = 0
+		const err = new ValidationError(
+			'body',
+			{ x: 'bad' },
+			() => {
+				calls++
+				return Array.from({ length: 100 }, () => ({
+					instancePath: '/y',
+					message: 'enumerated'
+				}))
+			},
+			{ properties: { x: {} } },
+			() => ({ instancePath: '/x', error: undefined })
+		)
+		const message = err.message
+		const errors = err.errors
+		err.detail(message)
+		return new Response(JSON.stringify({ calls, errors, message }), {
+			status: 422
+		})
+	}
+
 	scenarios.freeTextPath = async () => {
 		const err = new ValidationError(
 			'body',

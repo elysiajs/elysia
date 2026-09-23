@@ -1,4 +1,5 @@
 import type { AnyElysia } from '../../base'
+import type { ElysiaAdapter } from '../../adapter'
 
 import { defaultAdapter } from '../../adapter/constants'
 import { mapResponse } from '../../adapter/web-standard/handler'
@@ -10,11 +11,7 @@ import { frozenRootOf } from '../../generation'
 import { resolveHandlerParams } from './params'
 import { compileHandlerJit, createInlineHandler } from './jit'
 export { setCaptureHeaderShorthand } from './jit'
-import {
-	describeRoute,
-	isEmptyPipelineHook,
-	routeDescriptors
-} from './descriptor'
+import { describeRoute, routeDescriptors } from './descriptor'
 import { Reconstrct } from './reconstruct'
 import type { Context } from '../../context'
 import {
@@ -46,28 +43,19 @@ import type {
 
 function applyHook(
 	localHook: Partial<AnyLocalHook> | undefined,
+	// from `flattenChainMemo`: already a clone, safe to mutate
 	appHook: Partial<AnyLocalHook> | undefined,
-	rootHook: Partial<AppHook> | undefined,
-	// `appHook` from `flattenChainMemo` is already a clone, safe to mutate
-	// When no `localHook`, skip the redundant second clone
-	appHookFresh = false
+	rootHook: Partial<AppHook> | undefined
 ): AnyLocalHook | undefined {
 	let hook: any
 
 	if (localHook && appHook)
 		hook = mergeHook(cloneHook(localHook) as any, appHook as any, true)
 	else {
-		const base = localHook ?? appHook
-		const ownsBase = appHookFresh && !localHook && base !== undefined
+		const base = localHook ? cloneHook(localHook as any) : appHook
+		if (!rootHook) return base as any
 
-		if (!rootHook)
-			return ownsBase
-				? (base as any)
-				: base
-					? cloneHook(base as any)
-					: (base as any)
-
-		hook = ownsBase ? base : base ? cloneHook(base as any) : nullObject()
+		hook = base ?? nullObject()
 	}
 
 	if (rootHook) mergeHook(hook, rootHook as any, true, true)
@@ -192,6 +180,38 @@ function memoScope(
 	return perScope
 }
 
+function hasMacroKey(
+	hook: object,
+	scopeMacro: object | undefined,
+	rootMacro: object | undefined
+) {
+	if (scopeMacro || rootMacro)
+		for (const key in hook)
+			if (
+				(scopeMacro && key in scopeMacro) ||
+				(rootMacro && key in rootMacro)
+			)
+				return true
+
+	return false
+}
+
+function applyMacros(
+	hook: any,
+	scope: AnyElysia,
+	frozenRoot: ReturnType<typeof frozenRootOf>,
+	scopeMacro: object | undefined,
+	rootMacro: object | undefined
+) {
+	if (scopeMacro) {
+		frozenRootOf(scope)['~applyMacro'](hook)
+
+		if (rootMacro) for (const k in hook) if (k in scopeMacro) delete hook[k]
+	}
+
+	if (rootMacro) frozenRoot['~applyMacro'](hook)
+}
+
 // Memo of resolved localHooks (route[4])
 const localHookMemos: ResolutionMemo = new WeakMap()
 
@@ -205,34 +225,14 @@ export function resolveLocalHook(
 	const frozenRoot = frozenRootOf(root)
 	const scopeMacro = frozenRootOf(scope)['~ext']?.macro
 	const rootMacro = root === scope ? undefined : frozenRoot['~ext']?.macro
-	if (!scopeMacro && !rootMacro) return hook
-
-	let hasMacroKey = false
-	for (const key in hook)
-		if (
-			(scopeMacro && key in scopeMacro) ||
-			(rootMacro && key in rootMacro)
-		) {
-			hasMacroKey = true
-			break
-		}
-
-	if (!hasMacroKey) return hook
+	if (!hasMacroKey(hook, scopeMacro, rootMacro)) return hook
 
 	const perScope = memoScope(localHookMemos, root, scope)
 
 	let resolved = perScope.get(hook)
 	if (resolved === undefined) {
 		resolved = cloneHook(hook)
-		if (scopeMacro) {
-			frozenRootOf(scope)['~applyMacro'](resolved)
-
-			if (rootMacro)
-				for (const k in resolved)
-					if (k in scopeMacro) delete (resolved as any)[k]
-		}
-
-		if (rootMacro) frozenRoot['~applyMacro'](resolved)
+		applyMacros(resolved, scope, frozenRoot, scopeMacro, rootMacro)
 		perScope.set(hook, resolved)
 	}
 
@@ -284,17 +284,7 @@ function resolveChainNode(
 	const frozenRoot = frozenRootOf(root)
 	const scopeMacro = frozenRootOf(scope)['~ext']?.macro
 	const rootMacro = root === scope ? undefined : frozenRoot['~ext']?.macro
-
-	let needsMacro = false
-	if (scopeMacro || rootMacro)
-		for (const key in added)
-			if (
-				(scopeMacro && key in scopeMacro) ||
-				(rootMacro && key in rootMacro)
-			) {
-				needsMacro = true
-				break
-			}
+	const needsMacro = hasMacroKey(added, scopeMacro, rootMacro)
 
 	if (!needsMacro && (added as { derive?: unknown }).derive === undefined)
 		return added
@@ -304,17 +294,8 @@ function resolveChainNode(
 	let resolved = perScope.get(added)
 	if (resolved === undefined) {
 		resolved = cloneHook(added)
-		if (needsMacro) {
-			if (scopeMacro) {
-				frozenRootOf(scope)['~applyMacro'](resolved)
-
-				if (rootMacro)
-					for (const k in resolved)
-						if (k in scopeMacro) delete (resolved as any)[k]
-			}
-
-			if (rootMacro) frozenRoot['~applyMacro'](resolved)
-		}
+		if (needsMacro)
+			applyMacros(resolved, scope, frozenRoot, scopeMacro, rootMacro)
 
 		promoteDerive(resolved)
 		perScope.set(added, resolved)
@@ -340,16 +321,47 @@ export const localMacroRoot = (
 		? instance
 		: root
 
-function staticPrimitiveType(response: Response, value: unknown) {
+/** Whether a hook can be skipped by a native static response. */
+function isEmptyPipelineHook(hook: AnyLocalHook | undefined) {
+	if (!hook) return true
+
+	for (const key in hook) {
+		if (key === 'detail' || key === 'tags' || key === 'error') continue
+
+		const value = (hook as any)[key]
+		if (
+			value !== undefined &&
+			value !== false &&
+			(!Array.isArray(value) || value.length)
+		)
+			return false
+	}
+
+	return true
+}
+
+function mapStaticValue(
+	response: ElysiaAdapter['response'],
+	map: ElysiaAdapter['response']['map'],
+	set: { headers: Record<string, string> },
+	value: unknown
+) {
+	const mapped =
+		map === mapResponse
+			? mapResponse(value, set, null!)
+			: Reflect.apply(map, response, [value, set])
+
+	if (!(mapped instanceof Response)) return
+
 	if (
 		(typeof value === 'string' ||
 			typeof value === 'number' ||
 			typeof value === 'boolean') &&
-		!response.headers.has('content-type')
+		!mapped.headers.has('content-type')
 	)
-		response.headers.set('content-type', 'text/plain;charset=utf-8')
+		mapped.headers.set('content-type', 'text/plain;charset=utf-8')
 
-	return response
+	return mapped
 }
 
 export function buildNativeStaticResponse(
@@ -382,14 +394,10 @@ export function buildNativeStaticResponse(
 		root
 	)
 
-	const flatAppHook = flattenChainMemo(
-		root,
-		appHook as ChainNode,
-		chainResolver(root)
-	)
+	const resolve = chainResolver(root)
+	const flatAppHook = flattenChainMemo(root, appHook as ChainNode, resolve)
 	let rootHook: Partial<AppHook> | undefined
 	if (instance !== root) {
-		const resolve = chainResolver(root)
 		const locals = flattenChain(
 			frozenRootOf(root)['~hookChain'],
 			isLocalScope,
@@ -404,8 +412,8 @@ export function buildNativeStaticResponse(
 		if (!inherited) rootHook = locals
 		else if (!locals) rootHook = inherited
 		else rootHook = mergeHook(inherited, locals as any)
-	} else rootHook = undefined
-	const hook = applyHook(ownedHook, flatAppHook as any, rootHook, true)
+	}
+	const hook = applyHook(ownedHook, flatAppHook as any, rootHook)
 
 	if (hook && !isEmptyPipelineHook(hook as any)) return
 
@@ -419,13 +427,8 @@ export function buildNativeStaticResponse(
 			? Object.assign(nullObject(), rootHeaders)
 			: nullObject()
 	}
-	// Null marks canonical static preparation without consuming streams.
-	const mapped =
-		map === mapResponse
-			? mapResponse(handler, set, null!)
-			: Reflect.apply(map, response, [handler, set])
 
-	if (mapped instanceof Response) return staticPrimitiveType(mapped, handler)
+	return mapStaticValue(response, map, set, handler)
 }
 
 function toArray(name: string, hook: any) {
@@ -499,7 +502,7 @@ export function composeRouteHook(
 		!compactBeforeHandleConflicts(flatAppHook as any) &&
 		!compactBeforeHandleConflicts(locals as any)
 	) {
-		let hook = applyHook(localHook, flatAppHook as any, undefined, true)
+		let hook = applyHook(localHook, flatAppHook as any, undefined)
 		if (locals)
 			hook = hook ? mergeHook(hook, locals, false, true) : (locals as any)
 
@@ -528,8 +531,7 @@ export function composeRouteHook(
 		flatAppHook as any,
 		inherited
 			? (cloneHook(inherited as any) as Partial<AppHook>)
-			: undefined,
-		true
+			: undefined
 	)
 
 	// Append after-use root hooks last, after the plugin's own hooks.
@@ -559,13 +561,26 @@ export function composeRouteHook(
 	return hook
 }
 
+// frozen handler params that read the composed hook / validator / cookie / trace
+const hookStateAliases = [
+	'ho',
+	'tf',
+	'bf',
+	'af',
+	'mr',
+	'er',
+	'ar',
+	'va',
+	'cc',
+	'tr'
+]
+
 const isBareArrow = /^(?:async\s*)?\(\s*\)\s*=>/
 const isSucroseOpaque = /arguments|eval|\[native code\]/
 
 export function compileHandler(
 	route: InternalRoute,
 	root: AnyElysia,
-	precomputedStatic?: Response,
 	liveOnly: boolean = false
 ): CompiledHandler {
 	let [
@@ -615,31 +630,12 @@ export function compileHandler(
 
 	if (
 		reconstructed &&
-		!precomputedStatic &&
 		typeof handler === 'function' &&
 		!frozenRoot['~ext']?.macro &&
 		!frozenRootOf(localMacroRoot(macroScope ?? instance, root))['~ext']
 			?.macro
 	) {
-		let needsHookState = false
-		const names = reconstructed.a
-		hookState: for (let i = 0; i < names.length; i++)
-			switch (names[i]) {
-				case 'ho':
-				case 'tf':
-				case 'bf':
-				case 'af':
-				case 'mr':
-				case 'er':
-				case 'ar':
-				case 'va':
-				case 'cc':
-				case 'tr':
-					needsHookState = true
-					break hookState
-			}
-
-		if (!needsHookState)
+		if (!reconstructed.a.some((name) => hookStateAliases.includes(name)))
 			return reconstructed.f(
 				handler,
 				...resolveHandlerParams(reconstructed.a, {
@@ -686,16 +682,12 @@ export function compileHandler(
 		handler = () => {
 			throw error
 		}
-	} else if (isHTMLBundle(handler)) {
-		// Only Bun.serve's native router can serve a bundle; mapping it here
-		// would answer `{}` with a 200
-		const error = new Error(
-			`[Elysia] ${method} ${path} is an HTML bundle, only Bun's native router serves it`
-		)
+	} else if (isHTMLBundle(handler))
 		handler = () => {
-			throw error
+			throw new Error(
+				`[Elysia] ${method} ${path} is an HTML bundle, only Bun's native router serves it`
+			)
 		}
-	}
 
 	const declaresResponse =
 		!!hook &&
@@ -705,8 +697,7 @@ export function compileHandler(
 			))
 
 	const isHandleFunction = typeof handler === 'function'
-	if (precomputedStatic) handler = precomputedStatic
-	else if (
+	if (
 		!isHandleFunction &&
 		!(handler instanceof Promise) &&
 		!(!isBun && handler instanceof ElysiaFile) &&
@@ -721,13 +712,8 @@ export function compileHandler(
 		}
 
 		const response = adapter.response
-		const map = response.map
-		const mapped =
-			map === mapResponse
-				? mapResponse(handler, set, null!)
-				: Reflect.apply(map, response, [handler, set])
-		if (mapped instanceof Response)
-			handler = staticPrimitiveType(mapped, handler)
+		const mapped = mapStaticValue(response, response.map, set, handler)
+		if (mapped) handler = mapped
 	}
 
 	const isStaticResponse = !isHandleFunction && handler instanceof Response
@@ -767,10 +753,6 @@ export function compileHandler(
 	if (
 		hook === undefined &&
 		isHandleFunction &&
-		// the replacement at `if (precomputedStatic)` runs *after*
-		// `isHandleFunction` is computed, so the flag alone does not imply the
-		// handler is still callable
-		!precomputedStatic &&
 		!mountMeta &&
 		(method === 'GET' || method === 'HEAD') &&
 		!root['~hasTrace'] &&
@@ -790,13 +772,13 @@ export function compileHandler(
 
 		if (isContextFree) {
 			const compact = adapter.response.compact
-			if (compact) return createInlineHandler(compact as any, handler as any)
+			if (compact)
+				return createInlineHandler(compact as any, handler as any)
 		}
 	}
 
 	const state = describeRoute({
 		method,
-		path,
 		handler,
 		root,
 		adapter,
@@ -821,7 +803,6 @@ export function compileHandler(
 		method,
 		path,
 		handler,
-		instance,
 		root: frozenRoot as AnyElysia,
 		errorRoot: root,
 		hook,

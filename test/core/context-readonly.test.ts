@@ -96,7 +96,8 @@ describe('context.path', () => {
 			expect(warnings).toHaveLength(1)
 			;(app as any)['~generation'] = undefined
 			app.get('/late', () => 'late')
-			app['~newGeneration']()
+			void app.fetch
+			expect(app['~generation']).toBeDefined()
 
 			await expect((await app.handle('/original')).text()).resolves.toBe(
 				'moved'

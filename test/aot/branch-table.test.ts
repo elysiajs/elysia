@@ -3,6 +3,7 @@ import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
 import { compileToSource } from '../../src/plugin/aot/source'
+import { evalRegistration } from './_manifest'
 
 /** Equivalent codec branch checks are emitted once and shared by every entry. */
 
@@ -15,14 +16,8 @@ afterEach(() => {
 	Validator.clear()
 })
 
-// Evaluate a side-effect-free manifest to compare shared runtime objects.
-const evalManifest = (src: string): any =>
-	new Function(
-		src
-			.replace('export const validators', 'const validators')
-			.replace('export const handlers', 'const handlers')
-			.replace('export default validators', 'return validators')
-	)()
+// Evaluate a manifest without registering it to compare shared runtime objects.
+const evalManifest = (src: string): any => evalRegistration(src).validators
 
 describe('shared AOT branch checks', () => {
 	it('reuses one codec branch check across distinct validator entries', async () => {
@@ -42,7 +37,7 @@ describe('shared AOT branch checks', () => {
 				({ query }) => query
 			)
 
-		const src = await compileToSource(app, { register: false })
+		const src = await compileToSource(app)
 
 		expect((src.match(/const _c\d+ =/g) ?? []).length).toBe(2)
 		expect(
@@ -64,7 +59,7 @@ describe('shared AOT branch checks', () => {
 			},
 			({ query }) => query
 		)
-		const src = await compileToSource(app, { register: false })
+		const src = await compileToSource(app)
 
 		const entries = (src.match(/const _c\d+ =/g) ?? []).length
 		const branches = (src.match(/const _b\d+ =/g) ?? []).length
@@ -97,7 +92,7 @@ describe('shared AOT branch checks', () => {
 				},
 				({ query }) => query
 			)
-		const src = await compileToSource(app, { register: false })
+		const src = await compileToSource(app)
 
 		expect((src.match(/const _c\d+ =/g) ?? []).length).toBe(3)
 		expect((src.match(/const _u\d+ =/g) ?? []).length).toBe(1)
@@ -112,7 +107,7 @@ describe('shared AOT branch checks', () => {
 			.get('/b', { query: schema }, ({ query }) => query)
 			.get('/c', { query: schema }, ({ query }) => query)
 
-		const src = await compileToSource(app, { register: false })
+		const src = await compileToSource(app)
 
 		// TypeBox names its compiled check by content hash, and the hash is
 		// not stable across captures of the same logical schema — if it ever
@@ -151,7 +146,7 @@ describe('shared AOT branch checks', () => {
 			)
 		}
 
-		const src = await compileToSource(app, { register: false })
+		const src = await compileToSource(app)
 
 		expect((src.match(/const _c\d+ =/g) ?? []).length).toBe(shapes)
 	})

@@ -1,8 +1,9 @@
 import Memoirist from 'memoirist'
 
-import { applyHoc, createFetchHandler } from './handler'
+import { applyHoc, createFetchHandler } from './handler/fetch'
 import {
 	chainResolver,
+	clearHandlerAnalysisCaches,
 	compileHandler,
 	composeRouteHook,
 	localMacroRoot,
@@ -18,7 +19,6 @@ import {
 	type CompilerSession,
 	type ProgramId
 } from './compile/aot'
-import { clearAuthoringAnalysisCaches } from './compile/analysis-cache'
 import { isProduction } from './universal/is-production'
 import type {
 	WSLocalHook,
@@ -44,6 +44,7 @@ import { BunAdapter } from './adapter/bun'
 import {
 	clonePlainDeep,
 	clonePlainDecorators,
+	clearFlattenChainMemo,
 	coalesceSchemas,
 	createErrorEventHandler,
 	disposeDecorators,
@@ -57,6 +58,7 @@ import {
 	isEmpty,
 	isHTMLBundle,
 	isNotEmpty,
+	isPlainObject,
 	isRecordNumber,
 	joinPath,
 	macroOrigin,
@@ -132,7 +134,6 @@ import type {
 	DefaultEphemeral,
 	DefaultSingleton,
 	DefaultMetadata,
-	DocumentDecoration,
 	Handler,
 	HistoryEntry,
 	MacroToProperty,
@@ -167,21 +168,15 @@ export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 const useNodesBuffer: ChainNode[] = []
 const emptyHistory = Object.freeze([]) as readonly HistoryEntry[]
 
-/**
- * Bumped by `#assertMutable`, which every mutating API funnels through, so it
- * counts mutations across ALL instances. Sealing only freezes the app itself:
- * a merged plugin stays mutable, and `composeRouteHook` reads its `error`
- * chain live, so composed hooks can change without the owning app changing.
- * The `routes`/`history` memos key on this
- */
 let mutationEpoch = 0
 const extCallbackIndexes = new WeakMap<
 	unknown[],
 	{ indexedLength: number; seen: Set<unknown> }
 >()
 
-// ponytail: authoring is append-only; invalidate the index if a mutation API is added.
-const mergeExtCallbacks = <T>(target: T[], incoming: T[]) => {
+const mergeExtCallbacks = <T>(target: T[] | undefined, incoming: T[]) => {
+	if (!target) return incoming.slice()
+
 	let index = extCallbackIndexes.get(target)
 
 	if (!index) {
@@ -202,6 +197,8 @@ const mergeExtCallbacks = <T>(target: T[], incoming: T[]) => {
 	}
 
 	index.indexedLength = target.length
+
+	return target
 }
 
 const recordDisposable = (
@@ -238,17 +235,27 @@ const markStoredSingletons = (table: object | undefined, source: object) => {
 const canRegisterLoose = (path: string, isDynamic: boolean) =>
 	!isDynamic && (path.length === 0 || path.charCodeAt(path.length - 1) === 47)
 
+const isSingleSchema = (value: object) =>
+	'~kind' in value || '~elyAcl' in value || '~standard' in value
+
 const isSchemaValue = (value: unknown) => {
 	if (value == null || typeof value === 'string') return true
 	// A Standard Schema can also be a function.
 	if (typeof value !== 'object' && typeof value !== 'function') return false
 
 	return (
-		'~kind' in value ||
-		'~standard' in value ||
-		'~elyAcl' in value ||
+		isSingleSchema(value) ||
 		typeof (value as { Check?: unknown }).Check === 'function'
 	)
+}
+
+const toModel = (key: string, value: AnySchema) => {
+	if ('~standard' in value) return value
+
+	value = snapshotSchema(value)
+	;(value as any).$id ??= key
+
+	return value
 }
 
 // Runtime hook keys plus legacy Swagger metadata.
@@ -279,18 +286,7 @@ const hasHookKeys = (value: object) => {
 	return false
 }
 
-const isPlainObject = (value: unknown): value is Record<string, unknown> => {
-	if (!value || typeof value !== 'object' || Array.isArray(value))
-		return false
-
-	const proto = Object.getPrototypeOf(value)
-
-	return proto === Object.prototype || proto === null
-}
-
-// Reject invalid schemas during registration. Responses may be keyed by status;
-// "default" remains valid for model-reference checks.
-const assertSchemaShape = (hook: Record<string, unknown>, where: string) => {
+function assertSchemaShape(hook: Record<string, unknown>, where: string) {
 	for (const key in hook) {
 		if (!schemaProperties.has(key)) continue
 
@@ -325,12 +321,12 @@ const assertSchemaShape = (hook: Record<string, unknown>, where: string) => {
  * `canRegisterLoose` because its lookup retries the trailing slash, while WS
  * has no such retry and must own both directions outright
  */
-const expandPaths = (
+function expandPaths(
 	path: string,
 	needsEncode: boolean,
 	registerLoose: boolean,
 	explicit: { has(path: string): boolean } | undefined
-) => {
+) {
 	// Bun always percent-encodes the request target, so a path that
 	// needs encoding is only ever reachable by its encoded twin
 	const variants = [path]
@@ -377,9 +373,6 @@ export class Elysia<
 	declare '~Volatile': Volatile
 	declare '~Routes': Routes
 
-	private hasPlugin?: true
-	private hasGlobal?: true
-
 	private ready?: Promise<void>
 	private _pending = 0
 	private _error?: { error: unknown }
@@ -399,7 +392,6 @@ export class Elysia<
 		headers?: Record<string, string>
 		macro?: Macro
 		models?: Record<keyof any, AnySchema>
-		error?: Map<AnyErrorConstructor, string>
 		parser?: Record<string, BodyHandler<any, any>>
 		hoc?: WrapFn<any>[]
 		setup?: GracefulHandler<any>[]
@@ -528,7 +520,6 @@ export class Elysia<
 	private jitColdRemaining?: number
 	private jitTable?: RouteTable
 	private jitRoute?: (InternalRoute | undefined)[]
-	private jitStatic?: (Response | undefined)[]
 	private jitAliases?: (StaticMapAliases | undefined)[]
 
 	declare '~router'?: Memoirist<CompiledHandler>
@@ -848,44 +839,47 @@ export class Elysia<
 		nameOrDecorators?: unknown,
 		value?: unknown
 	): AnyElysia {
-		switch (arguments.length) {
-			case 1:
-				return this.#decorate('append', '', typeOrNameOrDecorators)
-
-			case 2:
-				if (
-					typeOrNameOrDecorators === 'append' ||
-					typeOrNameOrDecorators === 'override'
-				)
-					return this.#decorate(
-						typeOrNameOrDecorators,
-						'',
-						nameOrDecorators
-					)
-
-				return this.#decorate(
-					'append',
-					typeOrNameOrDecorators as string,
-					nameOrDecorators
-				)
-
-			case 3:
-				return this.#decorate(
-					typeOrNameOrDecorators as ContextAppendType,
-					nameOrDecorators as string,
-					value
-				)
-		}
-
-		return this
+		return this.#setField(
+			'decorator',
+			arguments.length,
+			typeOrNameOrDecorators,
+			nameOrDecorators,
+			value
+		)
 	}
 
 	#setField(
 		field: 'decorator' | 'store',
-		as: ContextAppendType,
-		name: string,
+		length: number,
+		typeOrName: unknown,
+		nameOrValue: unknown,
 		value: unknown
 	): this {
+		let as: ContextAppendType = 'append'
+		let name = ''
+
+		switch (length) {
+			case 1:
+				value = typeOrName
+				break
+
+			case 2:
+				if (typeOrName === 'append' || typeOrName === 'override')
+					as = typeOrName
+				else name = typeOrName as string
+
+				value = nameOrValue
+				break
+
+			case 3:
+				as = typeOrName as ContextAppendType
+				name = nameOrValue as string
+				break
+
+			default:
+				return this
+		}
+
 		this.#assertMutable(field === 'store' ? 'state' : 'decorate')
 		const ext = this.ext
 		const fresh = !ext[field]
@@ -904,9 +898,7 @@ export class Elysia<
 					// so a cross-kind `override` would silently no-op. When the
 					// kinds are incompatible, replace instead of merge.
 					if (
-						!fresh &&
-						name in target &&
-						!!existing &&
+						existing &&
 						typeof existing === 'object' &&
 						!Array.isArray(existing) &&
 						!Array.isArray(value)
@@ -975,10 +967,6 @@ export class Elysia<
 
 				return this
 		}
-	}
-
-	#decorate(as: ContextAppendType, name: string, value: unknown): this {
-		return this.#setField('decorator', as, name, value)
 	}
 
 	/**
@@ -1130,44 +1118,19 @@ export class Elysia<
 		nameOrStore?: unknown,
 		value?: unknown
 	): AnyElysia {
-		switch (arguments.length) {
-			case 1:
-				return this.#state('append', '', typeOrNameOrStore)
-
-			case 2:
-				if (
-					typeOrNameOrStore === 'append' ||
-					typeOrNameOrStore === 'override'
-				)
-					return this.#state(typeOrNameOrStore, '', nameOrStore)
-
-				return this.#state(
-					'append',
-					typeOrNameOrStore as string,
-					nameOrStore
-				)
-
-			case 3:
-				return this.#state(
-					typeOrNameOrStore as ContextAppendType,
-					nameOrStore as string,
-					value
-				)
-		}
-
-		return this
-	}
-
-	#state(as: ContextAppendType, name: string, value: unknown): this {
-		return this.#setField('store', as, name, value)
+		return this.#setField(
+			'store',
+			arguments.length,
+			typeOrNameOrStore,
+			nameOrStore,
+			value
+		)
 	}
 
 	headers(headers: Record<string, string>) {
 		this.#assertMutable('headers')
 		const ext = this.ext
-
-		if (ext.headers) Object.assign(ext!.headers, headers)
-		else ext.headers = Object.assign(nullObject(), headers)
+		ext.headers = Object.assign(ext.headers ?? nullObject(), headers)
 
 		return this
 	}
@@ -1186,32 +1149,35 @@ export class Elysia<
 
 		if (type === 'trace') this['~hasTrace'] = true
 
-		const parent = this['~hookChain']
-
-		this['~hookChain'] = {
-			added,
-			parent,
-			refs:
-				(parent !== undefined && parent.refs) ||
-				Elysia.#hookHasString(added as Record<string, unknown>),
-			scope,
-			owner: this
-		}
-
-		if (scope === 'plugin') this.hasPlugin = true
-		else if (scope === 'global') this.hasGlobal = true
-
-		if (this.hash !== undefined) {
-			const tag = (f: unknown) => {
-				if (typeof f === 'function' && !fnOrigin.has(f as any))
-					fnOrigin.set(f as any, this.hash!)
-			}
-
-			if (Array.isArray(fn)) for (const f of fn) tag(f)
-			else tag(fn)
-		}
+		this.#link(added, scope, this)
+		this.#tagOrigin(fn)
 
 		return this
+	}
+
+	#link(
+		added: Partial<AppHook>,
+		scope: EventScope | undefined,
+		owner: object,
+		mayRef = true,
+		propagated?: true
+	) {
+		const parent = this['~hookChain']
+		const refs =
+			(parent !== undefined && parent.refs) ||
+			(mayRef && Elysia.#hookHasString(added as Record<string, unknown>))
+
+		this['~hookChain'] = propagated
+			? { added, parent, refs, scope, propagated, owner }
+			: { added, parent, refs, scope, owner }
+	}
+
+	#tagOrigin(value: unknown) {
+		if (this.hash === undefined) return
+
+		for (const fn of Array.isArray(value) ? value : [value])
+			if (typeof fn === 'function' && !fnOrigin.has(fn))
+				fnOrigin.set(fn, this.hash)
 	}
 
 	#onBranch(
@@ -1238,37 +1204,6 @@ export class Elysia<
 		>
 	): this
 	parse(name: string): this
-	parse(
-		scope: 'local',
-		fn: MaybeArray<
-			BodyHandler<
-				MergeSchema<{}, {}, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>
-			>
-		>
-	): this
-	parse(
-		scope: 'plugin',
-		fn: MaybeArray<
-			BodyHandler<
-				MergeSchema<{}, {}, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'plugin'
-			>
-		>
-	): this
-	parse(
-		scope: 'global',
-		fn: MaybeArray<
-			BodyHandler<
-				MergeSchema<{}, {}, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'global'
-			>
-		>
-	): this
 	parse<const HookScope extends EventScope>(
 		scope: HookScope,
 		fn: MaybeArray<
@@ -1365,37 +1300,6 @@ export class Elysia<
 			TransformHandler<
 				MergeSchema<{}, {}, BasePath>,
 				HookContextSingleton<Singleton, Ephemeral, Volatile>
-			>
-		>
-	): this
-	transform(
-		scope: 'local',
-		fn: MaybeArray<
-			TransformHandler<
-				MergeSchema<{}, {}, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>
-			>
-		>
-	): this
-	transform(
-		scope: 'plugin',
-		fn: MaybeArray<
-			TransformHandler<
-				MergeSchema<{}, {}, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'plugin'
-			>
-		>
-	): this
-	transform(
-		scope: 'global',
-		fn: MaybeArray<
-			TransformHandler<
-				MergeSchema<{}, {}, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'global'
 			>
 		>
 	): this
@@ -1674,22 +1578,25 @@ export class Elysia<
 	>
 
 	derive(scopeOrFn: EventScope | Function, fn?: Function): any {
-		const result = this.#onBranch(
-			'beforeHandle',
-			scopeOrFn as any,
-			fn as any
-		)
+		return this.#derive(scopeOrFn, fn)
+	}
 
-		const node = this['~hookChain'] as { added?: any } | undefined
-		if (node?.added) {
-			const d = fn ?? scopeOrFn
-			const entries = (node.added['~deriveEntries'] ??= [])
+	#derive(
+		scopeOrFn: EventScope | Function,
+		fn: Function | undefined,
+		map?: (fn: Function) => unknown
+	): this {
+		this.#onBranch('beforeHandle', scopeOrFn as any, fn as any)
 
-			if (Array.isArray(d)) for (const f of d) entries.push(f)
-			else entries.push(d)
-		}
+		const d = fn ?? scopeOrFn
+		const entries = ((this['~hookChain'] as { added: any }).added[
+			'~deriveEntries'
+		] ??= [])
 
-		return result
+		if (Array.isArray(d)) for (const f of d) entries.push(map ? map(f) : f)
+		else entries.push(map ? map(d as Function) : d)
+
+		return this
 	}
 
 	mapDerive<
@@ -1863,23 +1770,7 @@ export class Elysia<
 	>
 
 	mapDerive(scopeOrFn: EventScope | Function, fn?: Function): any {
-		const result = this.#onBranch(
-			'beforeHandle',
-			scopeOrFn as any,
-			fn as any
-		)
-
-		const node = this['~hookChain'] as { added?: any } | undefined
-		if (node?.added) {
-			const d = fn ?? scopeOrFn
-			const entries = (node.added['~deriveEntries'] ??= [])
-
-			if (Array.isArray(d))
-				for (const f of d) entries.push(mapDeriveEntry(f))
-			else entries.push(mapDeriveEntry(d as Function))
-		}
-
-		return result
+		return this.#derive(scopeOrFn, fn, mapDeriveEntry)
 	}
 
 	afterHandle<
@@ -2011,37 +1902,6 @@ export class Elysia<
 			>
 		>
 	): this
-	mapResponse(
-		scope: 'local',
-		fn: MaybeArray<
-			MapResponse<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>
-			>
-		>
-	): this
-	mapResponse(
-		scope: 'plugin',
-		fn: MaybeArray<
-			MapResponse<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'plugin'
-			>
-		>
-	): this
-	mapResponse(
-		scope: 'global',
-		fn: MaybeArray<
-			MapResponse<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>,
-				undefined,
-				'global'
-			>
-		>
-	): this
 	mapResponse<const HookScope extends EventScope>(
 		scope: HookScope,
 		fn: MaybeArray<
@@ -2061,31 +1921,6 @@ export class Elysia<
 		fn: AfterResponseHandler<
 			HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
 			HookContextSingleton<Singleton, Ephemeral, Volatile>
-		>
-	): this
-	afterResponse(
-		scope: 'local',
-		fn: AfterResponseHandler<
-			HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-			HookContextSingleton<Singleton, Ephemeral, Volatile>
-		>
-	): this
-	afterResponse(
-		scope: 'plugin',
-		fn: AfterResponseHandler<
-			HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-			HookContextSingleton<Singleton, Ephemeral, Volatile>,
-			undefined,
-			'plugin'
-		>
-	): this
-	afterResponse(
-		scope: 'global',
-		fn: AfterResponseHandler<
-			HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-			HookContextSingleton<Singleton, Ephemeral, Volatile>,
-			undefined,
-			'global'
 		>
 	): this
 	afterResponse<const HookScope extends EventScope>(
@@ -2513,18 +2348,11 @@ export class Elysia<
 		this.#assertMutable('error')
 		switch (arguments.length) {
 			case 1:
-				if (scopeOrFnOrError && typeof scopeOrFnOrError === 'object') {
-					for (const [code, ErrorClass] of Object.entries(
-						scopeOrFnOrError
-					))
-						if (typeof ErrorClass === 'function')
-							(this.ext.error ??= new Map()).set(
-								ErrorClass as unknown as AnyErrorConstructor,
-								code
-							)
-
+				// 1.x `.error({ CODE: Class })` code dictionary: 2.0 dispatches
+				// by class, so there is nothing to register. Also swallows the
+				// typed `.error([fn])` array form (pre-existing, unresolved)
+				if (scopeOrFnOrError && typeof scopeOrFnOrError === 'object')
 					return this
-				}
 
 				return this.#onBranch(
 					'error',
@@ -2536,28 +2364,10 @@ export class Elysia<
 					typeof scopeOrFnOrError === 'function' &&
 					((scopeOrFnOrError as unknown) === Error ||
 						scopeOrFnOrError.prototype instanceof Error)
-				) {
-					const run = (
-						typeof fnOrError === 'function'
-							? fnOrError
-							: () => fnOrError
-					) as EventFn<'error'>
-
-					;(this.ext.error ??= new Map()).set(
-						scopeOrFnOrError as unknown as AnyErrorConstructor,
-						(scopeOrFnOrError as { name: string }).name
-					)
-
+				)
 					// scopeOrFnOrError: Error
 					// fnOrError: EventFn<'error'>
-					return this.#onBranch(
-						'error',
-						createErrorEventHandler(
-							run,
-							scopeOrFnOrError as unknown as Error
-						)
-					)
-				}
+					return this.#errorClass(scopeOrFnOrError, fnOrError)
 
 				return this.#onBranch(
 					'error',
@@ -2565,31 +2375,30 @@ export class Elysia<
 					fnOrError as EventFn<'error'>
 				)
 
-			case 3: {
-				const run = (typeof fn === 'function'
-					? fn
-					: () => fn) as unknown as EventFn<'error'>
-
-				;(this.ext.error ??= new Map()).set(
-					fnOrError as unknown as AnyErrorConstructor,
-					(fnOrError as { name: string }).name
+			case 3:
+				return this.#errorClass(
+					fnOrError,
+					fn,
+					scopeOrFnOrError as EventScope
 				)
-
-				return this.#onBranch(
-					'error',
-					scopeOrFnOrError as EventScope,
-					createErrorEventHandler(run, fnOrError as unknown as Error)
-				)
-			}
 		}
 
 		return this
 	}
 
+	#errorClass(ErrorClass: unknown, fn: unknown, scope?: EventScope): this {
+		const run = (
+			typeof fn === 'function' ? fn : () => fn
+		) as EventFn<'error'>
+
+		return this.#on(
+			'error',
+			createErrorEventHandler(run, ErrorClass as Error) as any,
+			scope
+		)
+	}
+
 	trace(fn: TraceHandler<any, any>): this
-	trace(scope: 'local', fn: TraceHandler<any, any>): this
-	trace(scope: 'plugin', fn: TraceHandler<any, any>): this
-	trace(scope: 'global', fn: TraceHandler<any, any>): this
 	trace<const HookScope extends EventScope>(
 		scope: HookScope,
 		fn: TraceHandler<any, any>
@@ -2678,19 +2487,6 @@ export class Elysia<
 			if (node.scope !== 'global') {
 				node.scope = scope
 				node.propagated = false
-
-				for (const key in node.added) {
-					if (!eventProperties.has(key)) continue
-
-					const v = (node.added as any)[key]
-					const fns = Array.isArray(v) ? v : [v]
-
-					for (const fn of fns) {
-						if (typeof fn !== 'function') continue
-						if (scope === 'plugin') this.hasPlugin = true
-						else this.hasGlobal = true
-					}
-				}
 			}
 
 			node = node.parent
@@ -3629,28 +3425,10 @@ export class Elysia<
 		hook = snapshotHookSchemas(hook)
 		hookToGuard(hook as any)
 
-		const trackFn = (fn: unknown) => {
-			if (typeof fn !== 'function') return
+		for (const key in hook)
+			if (eventProperties.has(key)) this.#tagOrigin((hook as any)[key])
 
-			if (this.hash !== undefined && !fnOrigin.has(fn as any))
-				fnOrigin.set(fn as any, this.hash)
-		}
-
-		for (const key in hook) {
-			if (!eventProperties.has(key)) continue
-
-			const raw = (hook as any)[key]
-			if (raw === null) continue
-
-			if (Array.isArray(raw)) for (const fn of raw) trackFn(fn)
-			else trackFn(raw)
-		}
-
-		if (hook.derive) {
-			if (Array.isArray(hook.derive))
-				for (const fn of hook.derive) trackFn(fn)
-			else trackFn(hook.derive)
-		}
+		this.#tagOrigin(hook.derive)
 
 		this.#pushHook(hook as Partial<AppHook>, scope)
 
@@ -4029,10 +3807,8 @@ export class Elysia<
 
 			const extras: Function[] = []
 
-			if (hook.derive) {
-				if (Array.isArray(hook.derive)) extras.push(...hook.derive)
-				else extras.push(hook.derive)
-			}
+			if (Array.isArray(hook.derive)) extras.push(...hook.derive)
+			else extras.push(hook.derive)
 
 			if (extras.length) {
 				const existing = promoted.beforeHandle
@@ -4052,17 +3828,7 @@ export class Elysia<
 
 		if (hook.trace) this['~hasTrace'] = true
 
-		const parent = this['~hookChain']
-
-		this['~hookChain'] = {
-			added: hook,
-			parent,
-			refs:
-				(parent !== undefined && parent.refs) ||
-				Elysia.#hookHasString(hook as Record<string, unknown>),
-			scope,
-			owner: this
-		}
+		this.#link(hook, scope, this)
 
 		return this
 	}
@@ -4203,11 +3969,7 @@ export class Elysia<
 				const seedSource = hook.seed ?? value
 				const seedType = typeof seedSource
 				let seedKey: string
-				if (
-					seedSource === null ||
-					seedSource === undefined ||
-					seedType !== 'object'
-				)
+				if (seedSource === null || seedType !== 'object')
 					seedKey = key + '\0' + seedType + '\0' + String(seedSource)
 				else
 					try {
@@ -4319,21 +4081,10 @@ export class Elysia<
 					insertions.set(k, at + added.length)
 				} else if (k in input) {
 					if (Array.isArray(input[k])) {
-						if (Array.isArray(v)) {
-							for (const item of v)
-								if (!input[k].some((e: any) => e === item))
-									input[k].unshift(item)
-						} else if (!input[k].some((item: any) => item === v))
-							input[k].unshift(v)
+						for (const item of Array.isArray(v) ? v : [v])
+							if (!input[k].includes(item)) input[k].unshift(item)
 					} else if (input[k] !== v) input[k] = [v, input[k]]
-				} else
-					input[k] = eventProperties.has(k)
-						? Array.isArray(v)
-							? v.slice()
-							: [v]
-						: Array.isArray(v)
-							? v.slice()
-							: v
+				} else input[k] = Array.isArray(v) ? v.slice() : v
 
 				delete input[key]
 			}
@@ -4743,8 +4494,7 @@ export class Elysia<
 
 		if (app['~ext']) this.#absorbExt(app)
 
-		if (app.hasPlugin || app.hasGlobal || hookChain)
-			this.#propagateHooks(app, hookChain, addedByThisCall)
+		if (hookChain) this.#propagateHooks(app, hookChain, addedByThisCall)
 	}
 
 	#absorbChildrenHash(
@@ -4824,7 +4574,6 @@ export class Elysia<
 			models,
 			parser,
 			macro,
-			error,
 			hoc,
 			setup,
 			cleanup,
@@ -4858,20 +4607,12 @@ export class Elysia<
 			markStoredSingletons(ext.store, store)
 		}
 
-		if (headers) {
-			if (ext.headers) Object.assign(ext.headers, headers)
-			else ext.headers = Object.assign(nullObject(), headers)
-		}
-
-		if (models) {
-			if (ext.models) Object.assign(ext.models, models)
-			else ext.models = Object.assign(nullObject(), models)
-		}
-
-		if (parser) {
-			if (ext.parser) Object.assign(ext.parser, parser)
-			else ext.parser = Object.assign(nullObject(), parser)
-		}
+		if (headers)
+			ext.headers = Object.assign(ext.headers ?? nullObject(), headers)
+		if (models)
+			ext.models = Object.assign(ext.models ?? nullObject(), models)
+		if (parser)
+			ext.parser = Object.assign(ext.parser ?? nullObject(), parser)
 
 		if (macro) {
 			if (app['~scopeChild']) {
@@ -4904,94 +4645,47 @@ export class Elysia<
 			}
 		}
 
-		if (error) {
-			if (ext.error)
-				for (const [code, handler] of error)
-					ext.error.set(code, handler)
-			else ext.error = new Map(error)
-		}
-
-		if (hoc) {
-			if (ext.hoc) mergeExtCallbacks(ext.hoc, hoc)
-			else ext.hoc = hoc.slice()
-		}
-
-		if (setup) {
-			if (ext.setup) mergeExtCallbacks(ext.setup, setup)
-			else ext.setup = setup.slice()
-		}
-
-		if (cleanup) {
-			if (ext.cleanup) mergeExtCallbacks(ext.cleanup, cleanup)
-			else ext.cleanup = cleanup.slice()
-		}
-
-		if (disposable) {
-			if (ext.disposable) mergeExtCallbacks(ext.disposable, disposable)
-			else ext.disposable = disposable.slice()
-		}
+		if (hoc) ext.hoc = mergeExtCallbacks(ext.hoc, hoc)
+		if (setup) ext.setup = mergeExtCallbacks(ext.setup, setup)
+		if (cleanup) ext.cleanup = mergeExtCallbacks(ext.cleanup, cleanup)
+		if (disposable)
+			ext.disposable = mergeExtCallbacks(ext.disposable, disposable)
 
 		if (capability) {
 			const target = (ext.capability ??= nullObject())
 
-			if (capability.trace) {
-				const incoming = capability.trace.provider
-
-				if (!target.trace) target.trace = { provider: incoming }
-				// ? Doesn't really need
-				// else if (target.trace.provider !== incoming)
-				// 	console.warn(
-				// 		`[Elysia] Duplicate trace capability providers detected:\n  ${target.trace.provider.id}\n  ${incoming.id}\nUsing the first; ensure a single copy of 'elysia/trace' is installed.`
-				// 	)
-			}
+			if (capability.trace)
+				target.trace ??= { provider: capability.trace.provider }
 
 			if (capability.ws) {
-				const incoming = capability.ws.provider
-				const existing = target.ws
 				const incomingOptions = capability.ws.options
+				const existing = (target.ws ??= {
+					provider: capability.ws.provider,
+					options: undefined
+				})
 
-				if (!existing)
-					target.ws = {
-						provider: incoming,
-						options: incomingOptions?.length
-							? incomingOptions.map((entry) => ({
-									depth: entry.depth + 1,
-									value: entry.value,
-									origin: entry.origin
-								}))
-							: undefined
+				if (incomingOptions?.length) {
+					const base: WSOptionsEntry[] = existing.options ?? []
+					const seen = new Set(
+						base.map((e: WSOptionsEntry) => e.origin)
+					)
+					let next: WSOptionsEntry[] | undefined
+
+					for (const entry of incomingOptions) {
+						if (seen.has(entry.origin)) continue
+						seen.add(entry.origin)
+						;(next ??= base.slice()).push({
+							depth: entry.depth + 1,
+							value: entry.value,
+							origin: entry.origin
+						})
 					}
-				else {
-					// ? Doesn't really need
-					// if (existing.provider !== incoming)
-					// 	// Dual-package (see trace above): nearest root wins.
-					// 	console.warn(
-					// 		`[Elysia] Duplicate WebSocket capability providers detected:\n  ${existing.provider.id}\n  ${incoming.id}\nUsing the first; ensure a single copy of 'elysia/websocket' is installed.`
-					// 	)
 
-					if (incomingOptions?.length) {
-						const base: WSOptionsEntry[] = existing.options ?? []
-						const seen = new Set(
-							base.map((e: WSOptionsEntry) => e.origin)
-						)
-						let next: WSOptionsEntry[] | undefined
-
-						for (const entry of incomingOptions) {
-							if (seen.has(entry.origin)) continue
-							seen.add(entry.origin)
-							;(next ??= base.slice()).push({
-								depth: entry.depth + 1,
-								value: entry.value,
-								origin: entry.origin
-							})
+					if (next)
+						target.ws = {
+							provider: existing.provider,
+							options: next
 						}
-
-						if (next)
-							target.ws = {
-								provider: existing.provider,
-								options: next
-							}
-					}
 				}
 			}
 		}
@@ -5011,8 +4705,6 @@ export class Elysia<
 
 		let pluginMayRef = false
 		let globalMayRef = false
-
-		if (app.hasGlobal) this.hasGlobal = true
 
 		const nodes = useNodesBuffer
 		nodes.length = 0
@@ -5058,10 +4750,8 @@ export class Elysia<
 					if (isGlobal) globalMayRef = true
 					else pluginMayRef = true
 
-					for (const s of schemas) {
-						;((target as any).schemas ??= []).push(s)
-						if (isGlobal) this.hasGlobal = true
-					}
+					for (const s of schemas)
+						((target as any).schemas ??= []).push(s)
 
 					continue
 				}
@@ -5095,7 +4785,6 @@ export class Elysia<
 							: (pluginEvents ??= nullObject())
 
 						pushField(target, key, fn)
-						if (isGlobal) this.hasGlobal = true
 					}
 
 					continue
@@ -5128,41 +4817,11 @@ export class Elysia<
 
 		nodes.length = 0
 
-		if (globalEvents) {
-			const parent = this['~hookChain']
+		if (globalEvents)
+			this.#link(globalEvents, 'global', app, globalMayRef, true)
 
-			this['~hookChain'] = {
-				added: globalEvents,
-				parent,
-				refs:
-					(parent !== undefined && parent.refs) ||
-					(globalMayRef &&
-						Elysia.#hookHasString(
-							globalEvents as Record<string, unknown>
-						)),
-				scope: 'global',
-				propagated: true,
-				owner: app
-			}
-		}
-
-		if (pluginEvents) {
-			const parent = this['~hookChain']
-
-			this['~hookChain'] = {
-				added: pluginEvents,
-				parent,
-				refs:
-					(parent !== undefined && parent.refs) ||
-					(pluginMayRef &&
-						Elysia.#hookHasString(
-							pluginEvents as Record<string, unknown>
-						)),
-				scope: 'plugin',
-				propagated: true,
-				owner: app
-			}
-		}
+		if (pluginEvents)
+			this.#link(pluginEvents, 'plugin', app, pluginMayRef, true)
 	}
 
 	#emitChildRoutes(
@@ -5170,9 +4829,7 @@ export class Elysia<
 		preChain: ChainNode | undefined,
 		name: string | undefined
 	) {
-		const declared = app.declaredRoutes
-		if (!declared?.length) return
-
+		const declared = app.declaredRoutes!
 		const limit = declared.length
 
 		let lastChildChain: ChainNode | undefined
@@ -5412,16 +5069,7 @@ export class Elysia<
 					: [method, path, handler, this]) as unknown as InternalRoute
 		)
 
-		if (this.routerBuilt || this.compiled !== undefined) {
-			this.compiled = undefined
-			this.jitColdRemaining = undefined
-			this.jitTable = undefined
-			this.jitRoute = undefined
-			this.jitStatic = undefined
-			this.jitAliases = undefined
-			this.fetchFn = undefined
-			this.routerBuilt = false
-		}
+		if (this.routerBuilt || this.compiled !== undefined) this.#invalidate()
 
 		return this
 	}
@@ -5478,16 +5126,17 @@ export class Elysia<
 
 		if (source) (this.routeSources ??= [])[sequence] = source
 
-		if (this.routerBuilt || this.compiled !== undefined) {
-			this.compiled = undefined
-			this.jitColdRemaining = undefined
-			this.jitTable = undefined
-			this.jitRoute = undefined
-			this.jitStatic = undefined
-			this.jitAliases = undefined
-			this.fetchFn = undefined
-			this.routerBuilt = false
-		}
+		if (this.routerBuilt || this.compiled !== undefined) this.#invalidate()
+	}
+
+	#invalidate() {
+		this.compiled = undefined
+		this.jitColdRemaining = undefined
+		this.jitTable = undefined
+		this.jitRoute = undefined
+		this.jitAliases = undefined
+		this.fetchFn = undefined
+		this.routerBuilt = false
 	}
 
 	model<const Name extends string, const Model extends AnySchema>(
@@ -5568,39 +5217,17 @@ export class Elysia<
 
 		switch (typeof name) {
 			case 'object':
-				const entries = Object.entries(name)
-				if (entries.length) {
-					for (let [key, value] of entries) {
-						if (key in models) continue
-
-						if ('~standard' in value) models[key] = value
-						else {
-							value = snapshotSchema(value)
-
-							// @ts-expect-error
-							value.$id ??= key
-							models[key] = value
-						}
-					}
-				}
+				for (const [key, value] of Object.entries(name))
+					if (!(key in models)) models[key] = toModel(key, value)
 
 				return this
 
 			case 'function': {
-				const remapped = name(models ?? nullObject()) as Record<
-					string,
-					AnySchema
-				>
+				const remapped = name(models) as Record<string, AnySchema>
 				const next = nullObject() as Record<string, AnySchema>
-				for (const key in remapped) {
-					let value = remapped[key]
-					if ('~standard' in (value as any)) next[key] = value
-					else {
-						value = snapshotSchema(value)
-						;(value as any).$id ??= key
-						next[key] = value
-					}
-				}
+				for (const key in remapped)
+					next[key] = toModel(key, remapped[key])
+
 				this.ext.models = next
 
 				return this
@@ -7140,28 +6767,19 @@ export class Elysia<
 		return this
 	}
 
-	mount(
-		handle: (request: Request) => MaybePromise<Response>,
-		detail?: { detail?: DocumentDecoration }
-	): this
+	mount(handle: (request: Request) => MaybePromise<Response>): this
 	mount(
 		path: string,
-		handle: (request: Request) => MaybePromise<Response>,
-		detail?: { detail?: DocumentDecoration }
+		handle: (request: Request) => MaybePromise<Response>
 	): this
 
 	mount(
 		path: string | ((request: Request) => MaybePromise<Response>),
-		handleOrConfig?:
-			| ((request: Request) => MaybePromise<Response>)
-			| { detail?: DocumentDecoration },
-		config?: { detail?: DocumentDecoration }
+		handler?: (request: Request) => MaybePromise<Response>
 	) {
 		const options = {
-			...config,
 			parse: 'none',
 			detail: {
-				...config?.detail,
 				hide: true
 			}
 		}
@@ -7170,8 +6788,8 @@ export class Elysia<
 			const run =
 				typeof path === 'function'
 					? path
-					: typeof handleOrConfig === 'function'
-						? handleOrConfig
+					: typeof handler === 'function'
+						? handler
 						: null
 
 			if (!run) throw new Error('Invalid handler')
@@ -7182,7 +6800,7 @@ export class Elysia<
 		}
 
 		const handle =
-			typeof handleOrConfig === 'function' ? handleOrConfig : null
+			typeof handler === 'function' ? handler : null
 
 		if (!handle) throw new Error('Invalid handler')
 
@@ -7234,15 +6852,7 @@ export class Elysia<
 	compile() {
 		this['~config'] ??= nullObject()
 		this['~config']!.precompile = true
-		this.routerBuilt = false
-
-		this.compiled = undefined
-		this.jitColdRemaining = undefined
-		this.jitTable = undefined
-		this.jitRoute = undefined
-		this.jitStatic = undefined
-		this.jitAliases = undefined
-		this.fetchFn = undefined
+		this.#invalidate()
 
 		void this.fetch
 
@@ -7253,7 +6863,6 @@ export class Elysia<
 		index: number,
 		immediate?: boolean,
 		route?: InternalRoute,
-		precomputedStatic?: Response,
 		aliases?: StaticMapAliases,
 		table?: RouteTable
 	): CompiledHandler {
@@ -7279,7 +6888,6 @@ export class Elysia<
 				handler = compileHandler(
 					row,
 					this,
-					precomputedStatic,
 					exactDuplicate && Compiled.hasProgram(this['~programId'])
 				)
 			} catch (error) {
@@ -7300,8 +6908,6 @@ export class Elysia<
 
 		if (indexedTable !== undefined) this.jitTable = indexedTable
 		if (jitRoute !== undefined) (this.jitRoute ??= [])[index] = jitRoute
-		if (precomputedStatic !== undefined)
-			(this.jitStatic ??= [])[index] = precomputedStatic
 		if (aliases !== undefined) (this.jitAliases ??= [])[index] = aliases
 
 		return (context) => this.#jitDispatch(index, context)
@@ -7345,7 +6951,6 @@ export class Elysia<
 		Compiled.release(this['~programId'])
 		this.jitColdRemaining = undefined
 		this.jitRoute = undefined
-		this.jitStatic = undefined
 		this.jitAliases = undefined
 		this.jitTable = undefined
 	}
@@ -7387,7 +6992,6 @@ export class Elysia<
 			handler = compileHandler(
 				materialized,
 				this,
-				this.jitStatic?.[index],
 				exactDuplicate && Compiled.hasProgram(this['~programId'])
 			)
 		} catch (error) {
@@ -7422,7 +7026,6 @@ export class Elysia<
 
 		if (!releasedNow) {
 			if (this.jitRoute) this.jitRoute[index] = undefined
-			if (this.jitStatic) this.jitStatic[index] = undefined
 			if (this.jitAliases) this.jitAliases[index] = undefined
 		}
 
@@ -7455,11 +7058,7 @@ export class Elysia<
 
 		if (response && typeof response === 'object') {
 			const record = response as Record<string, unknown>
-			if (
-				!('~kind' in record) &&
-				!('~elyAcl' in record) &&
-				!('~standard' in record)
-			)
+			if (!isSingleSchema(record))
 				for (const status in record)
 					if (typeof record[status] === 'string') return true
 		}
@@ -7590,12 +7189,7 @@ export class Elysia<
 						)
 				} else if (key === 'response' && v && typeof v === 'object') {
 					const record = v as Record<string, unknown>
-					if (
-						'~kind' in record ||
-						'~elyAcl' in record ||
-						'~standard' in record
-					)
-						continue
+					if (isSingleSchema(record)) continue
 
 					for (const status in record) {
 						const r = record[status]
@@ -7644,7 +7238,6 @@ export class Elysia<
 		const previousCompiled = this.compiled
 		const previousJitTable = this.jitTable
 		const previousJitRoute = this.jitRoute
-		const previousJitStatic = this.jitStatic
 		const previousJitAliases = this.jitAliases
 		const previousHasDynamicWS = this['~hasDynamicWS']
 
@@ -7656,7 +7249,6 @@ export class Elysia<
 		this.jitColdRemaining = undefined
 		this.jitTable = undefined
 		this.jitRoute = undefined
-		this.jitStatic = undefined
 		this.jitAliases = undefined
 		this['~hasDynamicWS'] = undefined
 		this['~generation'] = undefined
@@ -7688,7 +7280,6 @@ export class Elysia<
 			this.jitColdRemaining = undefined
 			this.jitTable = previousJitTable
 			this.jitRoute = previousJitRoute
-			this.jitStatic = previousJitStatic
 			this.jitAliases = previousJitAliases
 			this['~hasDynamicWS'] = previousHasDynamicWS
 			this['~generation'] = previousGeneration
@@ -7745,7 +7336,8 @@ export class Elysia<
 				else this.jitColdRemaining = cold
 			}
 
-			clearAuthoringAnalysisCaches(this)
+			clearHandlerAnalysisCaches(this)
+			clearFlattenChainMemo(this)
 
 			if (!this['~ext']?.macro && !this['~scopeChildren'])
 				this.declaredRoutes = undefined
@@ -7755,15 +7347,6 @@ export class Elysia<
 		if (ext?.hoc) extCallbackIndexes.delete(ext.hoc)
 		if (ext?.setup) extCallbackIndexes.delete(ext.setup)
 		if (ext?.cleanup) extCallbackIndexes.delete(ext.cleanup)
-	}
-
-	['~newGeneration']() {
-		this.fetchFn = undefined
-		this.routerBuilt = false
-		this['~generation'] = undefined
-		this.#buildRouter(true)
-
-		return this
 	}
 
 	#buildRouterUnsafe() {
@@ -7807,33 +7390,19 @@ export class Elysia<
 							this as unknown as AnyElysia
 						)) as unknown as { '~ext'?: { macro?: unknown } }
 
-				let hasModelRef: boolean
-				if (localRoot['~ext']?.macro) hasModelRef = true
-				// route[4]: localHook (per-route)
-				else if (
+				if (
+					localRoot['~ext']?.macro ||
+					// route[4]: localHook (per-route)
 					Elysia.#hookHasString(
-						table.localHook[i] as Record<string, unknown> | undefined
-					)
-				)
-					hasModelRef = true
-				else {
+						table.localHook[i] as Record<string, unknown>
+					) ||
 					// Chain sources: route[5] (appHook), route[6] (inheritedChain).
 					// `~hookChain` is the caller's hoisted third source. Every node
 					// carries the answer for its whole ancestry (`refs`, computed at
 					// creation), so no walk is needed here.
-					const appHook = table.appHook[i] as ChainNode | undefined
-					if (appHook !== undefined && appHook.refs) hasModelRef = true
-					else {
-						const inheritedChain = table.inheritedChain[i] as
-							| ChainNode
-							| undefined
-
-						hasModelRef =
-							inheritedChain !== undefined && inheritedChain.refs
-					}
-				}
-
-				if (hasModelRef)
+					(table.appHook[i] as ChainNode | undefined)?.refs ||
+					(table.inheritedChain[i] as ChainNode | undefined)?.refs
+				)
 					this.#assertRouteModelRefs(routeRow(table, i), method[i])
 			}
 
@@ -7970,7 +7539,6 @@ export class Elysia<
 
 					this['~hasDynamicWS'] = true
 				} else {
-					this.#initMap()
 					const wsMap = (this['~map']!['WS'] ??= nullObject() as any)
 					const wsPaths = expandPaths(
 						routePath,
@@ -7987,8 +7555,7 @@ export class Elysia<
 					wsConfig ??= nullObject() as WSOptions
 					wsCap!.provider.accumulateOptions(
 						wsConfig,
-						options as WSOptions,
-						routePath
+						options as WSOptions
 					)
 				}
 
@@ -8006,7 +7573,6 @@ export class Elysia<
 				const handler = this.handler(
 					i,
 					precompile,
-					undefined,
 					undefined,
 					undefined,
 					table
@@ -8040,7 +7606,6 @@ export class Elysia<
 					precompile,
 					undefined,
 					undefined,
-					undefined,
 					table
 				)
 
@@ -8052,7 +7617,6 @@ export class Elysia<
 				const handler = this.handler(
 					i,
 					precompile,
-					undefined,
 					undefined,
 					{
 						method: routeMethod,

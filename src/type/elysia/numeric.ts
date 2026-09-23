@@ -1,6 +1,6 @@
 import { Decode, Refine } from '../typebox-type'
 import type { Type } from 'typebox'
-import type { TNumberOptions } from 'typebox'
+import type { TNumberOptions, TSchema } from 'typebox'
 
 import { isEmpty } from '../../utils'
 import { ELYSIA_TYPES } from '../constants'
@@ -56,68 +56,77 @@ function isDecimalString(value: string) {
 	return digits < 309 || Number.isFinite(+value)
 }
 
-let StringifiedNumber: Type.TCodec<Type.TRefine<Type.TString>, number>
+function inRange(n: number, c: TNumberOptions) {
+	if (typeof c.minimum === 'number' && n < c.minimum) return false
+	if (typeof c.maximum === 'number' && n > c.maximum) return false
+	if (typeof c.exclusiveMinimum === 'number' && n <= c.exclusiveMinimum)
+		return false
+	if (typeof c.exclusiveMaximum === 'number' && n >= c.exclusiveMaximum)
+		return false
+	if (typeof c.multipleOf === 'number' && n % c.multipleOf !== 0)
+		return false
+
+	return true
+}
+
+// `base` or a numeric string matching `grammar`, decoded to a number
+export function numericString(
+	tag: ELYSIA_TYPES[keyof ELYSIA_TYPES],
+	message: string,
+	grammar: (value: string) => boolean,
+	base: (constraints: TNumberOptions) => TSchema,
+	emptyBase: () => TSchema
+) {
+	let empty: TSchema | undefined
+
+	return (property?: TNumberOptions) => {
+		if (!property || isEmpty(property))
+			return (empty ??= Object.freeze(
+				elyType(
+					tag,
+					Union([
+						emptyBase(),
+						pureRefine(
+							Decode(
+								Refine(StringType(), grammar, () => message),
+								(value) => +value
+							)
+						)
+					])
+				)
+			))
+
+		const [constraints, meta] = getMeta(property)
+		const c = constraints as TNumberOptions
+		const number = base(constraints)
+		const stringified = Decode(
+			Refine(
+				StringType(),
+				(value) => grammar(value) && inRange(+value, c),
+				() => message
+			),
+			(value) => +value
+		)
+
+		// pure: reads only `c`, which is never mutated after `getMeta`
+		pureRefine(stringified)
+
+		return elyType(tag, Union([number, stringified] as any, meta))
+	}
+}
+
 type NumericSchema = Type.TUnion<
 	[Type.TNumber, Type.TCodec<Type.TRefine<Type.TString>, number>]
 >
-let emptyNumeric: Readonly<NumericSchema>
 
-export function Numeric(property?: TNumberOptions) {
-	StringifiedNumber ??= pureRefine(
-		Decode(
-			Refine(StringType(), isDecimalString, () => 'must be number'),
-			(value) => +value
-		)
-	)
+const numeric = /* @__PURE__ */ numericString(
+	ELYSIA_TYPES.Numeric,
+	'must be number',
+	isDecimalString,
+	NumberType,
+	NumberType
+)
 
-	if (!property || isEmpty(property))
-		return (emptyNumeric ??= Object.freeze(
-			elyType(
-				ELYSIA_TYPES.Numeric,
-				Union([NumberType(), StringifiedNumber])
-			) as NumericSchema
-		))
-
-	const [constraints, meta] = getMeta(property)
-	const number = NumberType(constraints)
-	const stringified = Decode(
-		Refine(
-			StringType(),
-			(value) => {
-				if (!isDecimalString(value)) return false
-
-				const n = +value
-				const c = constraints as any
-
-				if (typeof c.minimum === 'number' && n < c.minimum) return false
-				if (typeof c.maximum === 'number' && n > c.maximum) return false
-
-				if (
-					typeof c.exclusiveMinimum === 'number' &&
-					n <= c.exclusiveMinimum
-				)
-					return false
-
-				if (
-					typeof c.exclusiveMaximum === 'number' &&
-					n >= c.exclusiveMaximum
-				)
-					return false
-
-				if (typeof c.multipleOf === 'number' && n % c.multipleOf !== 0)
-					return false
-
-				return true
-			},
-			() => 'must be number'
-		),
-		(value) => +value
-	)
-
-	pureRefine(stringified)
-
-	return elyType(
-		ELYSIA_TYPES.Numeric,
-		Union([number, stringified] as any, meta) as NumericSchema
-	)
+export function Numeric(property?: TNumberOptions): Readonly<NumericSchema> {
+	return numeric(property) as NumericSchema
 }

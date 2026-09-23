@@ -4,7 +4,7 @@ import { defaultAdapter } from '../adapter/constants'
 
 import type { AnyElysia } from '../base'
 import {
-	getAsyncIndexes,
+	hasAsync,
 	emptyResponse,
 	getNotFoundBody,
 	getNotFound,
@@ -157,8 +157,9 @@ function findRoute(
 	hasDynamicWS?: boolean
 ) {
 	const path = context.path
+	const method = request.method
 
-	if (hasWS && request.method === 'GET') {
+	if (hasWS && method === 'GET') {
 		const handler = map['WS']?.[path]
 		const found =
 			handler === undefined && hasDynamicWS
@@ -168,30 +169,29 @@ function findRoute(
 		if (handler !== undefined || found) {
 			const upgrade = request.headers.get('upgrade')
 			if (upgrade && upgrade.toLowerCase() === 'websocket') {
-				if (handler) {
-					const r = handler(context)
-					return r instanceof Promise
-						? (r.catch(
-								catchError(context, handleError, afterResponse)
-							) as any)
-						: r
-				}
+				if (handler)
+					return dispatchResult(
+						handler(context),
+						context,
+						handleError,
+						afterResponse
+					)
 
 				context.params =
 					path.indexOf('%') === -1
 						? found!.params
 						: decodeParams(found!.params)
-				const r = found!.store(context)
-				return r instanceof Promise
-					? (r.catch(
-							catchError(context, handleError, afterResponse)
-						) as any)
-					: r
+
+				return dispatchResult(
+					found!.store(context),
+					context,
+					handleError,
+					afterResponse
+				)
 			}
 		}
 	}
 
-	const method = request.method
 	const methodMap = map[method]
 	let handler: CompiledHandler | undefined = methodMap?.[path]
 
@@ -255,8 +255,6 @@ export function createFetchHandler(
 	const hasDynamicWS = hasWS && !!app['~hasDynamicWS']
 	const strictPath = !!app['~config']?.strictPath
 
-	// `handler.standardHostname` is accepted but ignored: `extractPath`
-	// derives the authority end from the scheme, correct for any hostname
 	const hook = flattenChain(app['~hookChain'])
 	const hasError = !!hook?.error
 
@@ -461,8 +459,10 @@ export function createFetchHandler(
 		})
 	}
 
-	app['~finalizeError'] = (context, error) =>
+	const fail = (context: Context, error: Error) =>
 		finalizeError(context, handleError, afterResponse, error)
+
+	app['~finalizeError'] = fail
 
 	if (traceRequestPhase) {
 		const onRequests = hook?.request ?? []
@@ -506,9 +506,7 @@ export function createFetchHandler(
 				const endReports = new Array(traceLength)
 				for (let i = 0; i < onRequests.length; i++) {
 					for (let j = 0; j < traceLength; j++)
-						endReports[j] = requestReports[
-							j
-						].resolveChild?.shift?.()?.({
+						endReports[j] = requestReports[j].shift?.()?.({
 							id: context.rid,
 							event: 'request',
 							name: (onRequests[i] as any).name || 'anonymous',
@@ -569,21 +567,15 @@ export function createFetchHandler(
 				for (let i = 0; i < traceLength; i++)
 					trace[i].r(requestReports[i], error as Error)
 
-				return finalizeError(
-					context,
-					handleError,
-					afterResponse,
-					error as Error
-				)
+				return fail(context, error as Error)
 			}
 		}
 	}
 
 	if (hook?.request) {
 		const onRequests = hook.request
-		const asyncIndexes = getAsyncIndexes(onRequests)
 
-		if (asyncIndexes)
+		if (hasAsync(onRequests))
 			return async (
 				request: Request,
 				server?: unknown
@@ -638,12 +630,7 @@ export function createFetchHandler(
 						hasDynamicWS
 					)
 				} catch (error) {
-					return finalizeError(
-						context,
-						handleError,
-						afterResponse,
-						error as Error
-					)
+					return fail(context, error as Error)
 				}
 			}
 
@@ -702,12 +689,7 @@ export function createFetchHandler(
 					hasDynamicWS
 				)
 			} catch (error) {
-				return finalizeError(
-					context,
-					handleError,
-					afterResponse,
-					error as Error
-				)
+				return fail(context, error as Error)
 			}
 		}
 	}
@@ -715,129 +697,26 @@ export function createFetchHandler(
 	return (request: Request, server?: unknown): MaybePromise<Response> => {
 		const context = new Context(request)
 
-		const path = extractPath(request.url, context)
+		extractPath(request.url, context)
 		// @ts-expect-error
 		context.server = server ?? null
 
-		const method = request.method
-
-		if (hasWS && method === 'GET') {
-			const handler = map['WS']?.[path]
-			const found =
-				handler === undefined && hasDynamicWS
-					? router?.find('WS', path)
-					: undefined
-
-			if (handler !== undefined || found) {
-				const upgrade = request.headers.get('upgrade')
-				if (upgrade && upgrade.toLowerCase() === 'websocket')
-					try {
-						if (handler) {
-							const r = handler(context)
-							return r instanceof Promise
-								? (r.catch(
-										catchError(
-											context,
-											handleError,
-											afterResponse
-										)
-									) as any)
-								: (r as any)
-						}
-
-						context.params =
-							path.indexOf('%') === -1
-								? found!.params
-								: decodeParams(found!.params)
-						const r = found!.store(context)
-						return r instanceof Promise
-							? (r.catch(
-									catchError(
-										context,
-										handleError,
-										afterResponse
-									)
-								) as any)
-							: (r as any)
-					} catch (error) {
-						return finalizeError(
-							context,
-							handleError,
-							afterResponse,
-							error as Error
-						)
-					}
-			}
-		}
-
 		try {
-			const methodMap = map[method]
-
-			let handler: CompiledHandler | undefined = methodMap?.[path]
-			if (handler)
-				return dispatchResult(
-					handler(context),
-					context,
-					handleError,
-					afterResponse
-				)
-
-			if (
-				!strictPath &&
-				path.length > 1 &&
-				path.charCodeAt(path.length - 1) === 47
-			) {
-				const loose = path.slice(0, -1)
-				handler = methodMap?.[loose]
-				if (!handler) {
-					const anyMap = map['*']
-					handler = anyMap?.[path] ?? anyMap?.[loose]
-				}
-			} else handler = map['*']?.[path]
-
-			if (handler)
-				return dispatchResult(
-					handler(context),
-					context,
-					handleError,
-					afterResponse
-				)
-
-			const result = router?.find(method, path) ?? router?.find('*', path)
-
-			if (result) {
-				context.params =
-					path.indexOf('%') === -1
-						? result.params
-						: decodeParams(result.params)
-
-				return dispatchResult(
-					result.store(context),
-					context,
-					handleError,
-					afterResponse
-				)
-			}
+			return findRoute(
+				context,
+				request,
+				map,
+				router,
+				hasError,
+				handleError,
+				afterResponse,
+				strictPath,
+				hasWS,
+				hasDynamicWS
+			)
 		} catch (error) {
-			return finalizeError(
-				context,
-				handleError,
-				afterResponse,
-				error as Error
-			)
+			return fail(context, error as Error)
 		}
-
-		if (hasError)
-			return finalizeError(
-				context,
-				handleError,
-				afterResponse,
-				notFoundBody as unknown as Error
-			)
-
-		// eslint-disable-next-line sonarjs/no-use-of-empty-return-value
-		afterResponse?.(context, 404)
-		return notFound(context)
 	}
 }
 

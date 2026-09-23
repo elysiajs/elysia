@@ -26,9 +26,9 @@ export function NumericEnum<T extends AssertNumericEnum<T>>(
 	property?: TSchemaOptions
 ) {
 	const allowed = new Set(
-		Object.values(item as Record<string, string | number>)
-			.filter((v) => typeof v === 'number')
-			.map((v) => v as number)
+		Object.values(item as Record<string, string | number>).filter(
+			(v) => typeof v === 'number'
+		)
 	)
 
 	const decoder = Decode(

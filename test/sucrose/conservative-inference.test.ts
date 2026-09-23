@@ -87,6 +87,27 @@ describe('context access that cannot be statically identified', () => {
 		)
 	})
 
+	// Node keeps a pasted NBSP in the source (Bun reprints it): read as an
+	// identifier character, `\u00a0context` is not the parameter
+	it('keeps query available after a non-breaking space', async () => {
+		const handler = new Function(
+			'return (context) =>\u00a0context\u00a0.query.name'
+		)()
+
+		await expect(responseText(handler, 'nbsp')).resolves.toBe('nbsp')
+	})
+
+	// Node keeps `.5` as written (Bun reprints `0.5`): read as a `.`, it made
+	// `return` a property name, so the regex after it divided and the last
+	// `/` opened a regex that swallowed `context.query`
+	it('keeps query available after a line ending in `.5`', async () => {
+		const handler = new Function(
+			'return (context) => {\n const half = .5\n return /a*/.test("") ? context.query.name.length / 2 : 0\n}'
+		)()
+
+		await expect(responseText(handler, 'dot5')).resolves.toBe('2')
+	})
+
 	it('marks every context property as accessed', () => {
 		expect(
 			sucrose(function (context: any) {

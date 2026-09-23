@@ -60,7 +60,7 @@ const lifeCycle = () => ({
 	stop()
 }
 
-clearSucroseCache(0)
+clearSucroseCache()
 
 // ── 2. Content-cache HIT ────────────────────────────────────────────────────
 // Same fresh-function-objects-per-iteration shape, but inside a compiler
@@ -86,7 +86,7 @@ clearSucroseCache(0)
 	endCompilerSession(app, session)
 }
 
-clearSucroseCache(0)
+clearSucroseCache()
 
 // ── 3. Identity-memo HIT ────────────────────────────────────────────────────
 // The same function objects reused every iteration → the WeakMap short-
@@ -104,7 +104,7 @@ clearSucroseCache(0)
 	stop()
 }
 
-clearSucroseCache(0)
+clearSucroseCache()
 
 // ── 4. Unique sources ───────────────────────────────────────────────────────
 // Every handler has distinct source text, so nothing can hit: the full

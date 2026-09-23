@@ -35,7 +35,6 @@ afterEach(() => {
 describe('AOT target-specific header extraction', () => {
 	it("emits Object.fromEntries for target: 'workerd' even when built on Bun", async () => {
 		const src = await compileToSource(build() as any, {
-			register: false,
 			target: 'workerd'
 		})
 
@@ -45,7 +44,6 @@ describe('AOT target-specific header extraction', () => {
 
 	it("emits Object.fromEntries for target: 'node'", async () => {
 		const src = await compileToSource(build() as any, {
-			register: false,
 			target: 'node'
 		})
 
@@ -55,7 +53,6 @@ describe('AOT target-specific header extraction', () => {
 
 	it("emits Headers.toJSON for target: 'bun'", async () => {
 		const src = await compileToSource(build() as any, {
-			register: false,
 			target: 'bun'
 		})
 

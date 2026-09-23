@@ -67,7 +67,36 @@ describe('derive key codegen', () => {
 			['a', 'b'],
 			'punctuation in string value'
 		],
-		[(c: any) => ({ a: 1, b: 2 }), ['a', 'b'], 'trailing comma normalized']
+		[(c: any) => ({ a: 1, b: 2 }), ['a', 'b'], 'trailing comma normalized'],
+		// a regex is skipped whole, so its quote or brace ends nothing
+		[
+			(c: any) => ({
+				bearer: c.headers.authorization?.replace(/^Bearer /, ''),
+				mobile: /[}'"]/.test(c.path)
+			}),
+			['bearer', 'mobile'],
+			'regex in value'
+		],
+		// a keyword after `.` is a property, so `/` divides: read as a regex
+		// it would swallow `b` up to the next `/` on the line
+		[
+			new Function('return (c) => ({ a: c.in / 2, b: c?.of / 3 })')(),
+			['a', 'b'],
+			'division after a keyword-named member'
+		],
+		[
+			new (class {
+				#in = 4
+				derive = () => ({ a: this.#in / 2, b: this.#in / 4 })
+			})().derive,
+			['a', 'b'],
+			'division after a keyword-named private member'
+		],
+		[
+			new Function('return (c) => ({ a: 1./2, b: 1./3 })')(),
+			['a', 'b'],
+			'division after a trailing-dot number'
+		]
 	]
 
 	for (const [fn, expected, label] of analyzable)
@@ -133,7 +162,18 @@ describe('derive key codegen', () => {
 			},
 			'block returns non-object'
 		],
-		[Object.assign, 'native fn']
+		[Object.assign, 'native fn'],
+		// `new Function`: the transpiler folds `({ a: 1 }).a` to `1`
+		[
+			new Function('return (c) => ({ a: 1 }).a')(),
+			'literal is not the whole returned value'
+		],
+		// `of` may be a variable (minifiers emit it), so `of / 2` may divide:
+		// read as a regex it would swallow `b` up to the next `/`
+		[
+			new Function('of', 'return (c) => ({ a: of / 2, b: of / 3 })')(12),
+			'division by a variable named `of`'
+		]
 	]
 
 	for (const [fn, label] of bails)
@@ -170,6 +210,94 @@ describe('end-to-end derived keys reach the handler', () => {
 
 		const res = await app.handle('/')
 		await expect(res.text()).resolves.toBe('bob:admin')
+	})
+
+	// the keyed path would store `undefined` under the literal's keys
+	it('a literal that is not the returned value merges no key', async () => {
+		const app = new Elysia()
+			.derive(new Function('return () => ({ a: 1 }).a')())
+			.get('/', (c: any) => String('a' in c))
+
+		const res = await app.handle('/')
+		await expect(res.text()).resolves.toBe('false')
+	})
+
+	it('division after a keyword-named member keeps every key', async () => {
+		const app = new Elysia()
+			.derive(
+				new Function(
+					'return ({ query }) => ({ ratio: query.in / 60, total: query.out / 60 })'
+				)()
+			)
+			.get('/', (c: any) => `${c.ratio}|${c.total}`)
+
+		const res = await app.handle('/?in=120&out=180')
+		await expect(res.text()).resolves.toBe('2|3')
+	})
+
+	it('division by a variable named `of` keeps every key', async () => {
+		const app = new Elysia()
+			.derive(
+				new Function(
+					'return ({ query: { offset: of, user: n } }) => ({ page: of / 10, banned: n === "mallory", size: of / 2 })'
+				)()
+			)
+			.get('/', (c: any) => `${c.page}|${c.banned}|${c.size}`)
+
+		const res = await app.handle('/?user=mallory&offset=20')
+		await expect(res.text()).resolves.toBe('2|true|10')
+	})
+
+	// a regex after an `if` / `for` header or a block `}` read as a division
+	// scans its body as code: `[/]` opens a phantom regex, the returned
+	// object ends early and the keyed merge drops `banned`
+	it.each([
+		['an `if` header', 'if (s) /[/]/.test(s)'],
+		['a `for` header', 'for (const x of s) /[/]/.test(x)'],
+		['a `for await` header', 'for await (const x of s) /[/]/.test(x)'],
+		['a block', 'if (s) { s }\n/[/]/.test(s)']
+	])('a regex statement after %s keeps every key', async (_, statement) => {
+		const app = new Elysia()
+			.derive(
+				new Function(
+					`return ({ query }) => {\n return { check: async (s) => { ${statement} }, banned: query.user === "mallory" }\n}`
+				)()
+			)
+			.get('/', (c: any) => `${typeof c.check}|${c.banned}`)
+
+		const res = await app.handle('/?user=mallory')
+		await expect(res.text()).resolves.toBe('function|true')
+	})
+
+	// U+2028 ends a `//` comment: the `if` after it runs, so there are two
+	// returns and the merge must not be keyed on the last one
+	it('a comment ended by U+2028 does not hide an early return', async () => {
+		const app = new Elysia()
+			.derive(
+				new Function(
+					'return ({ query }) => { // note\u2028if (query.ban) return { banned: true, user: query.name }\n return { user: query.name } }'
+				)()
+			)
+			.get('/', (c: any) => `${c.banned}|${c.user}`)
+
+		const res = await app.handle('/?ban=1&name=mallory')
+		await expect(res.text()).resolves.toBe('true|mallory')
+	})
+
+	// `.5` is a number (Bun reprints `0.5`, Node keeps it): read as a `.` it
+	// makes `void` a property name, so the regex after it divides and the
+	// `/` in the comment opens a regex that hides the early return
+	it('a line ending in `.5` does not hide an early return', async () => {
+		const app = new Elysia()
+			.derive(
+				new Function(
+					"return ({ query }) => {\n let r = .5\n void /a*/.test(''); if (query.ban) return { banned: true, user: query.name } // y/\n return { user: query.name }\n}"
+				)()
+			)
+			.get('/', (c: any) => `${c.banned}|${c.user}`)
+
+		const res = await app.handle('/?ban=1&name=mallory')
+		await expect(res.text()).resolves.toBe('true|mallory')
 	})
 
 	it('multiple derives merge in order', async () => {

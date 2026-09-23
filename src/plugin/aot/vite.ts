@@ -1,18 +1,13 @@
-import { createAotPluginHooks } from './hooks'
+import { createAotPluginHooks, type AotPluginHooks } from './hooks'
 import type { ElysiaAotOptions } from './core'
 
-export interface ElysiaAotVitePlugin {
+export interface ElysiaAotVitePlugin extends Omit<
+	AotPluginHooks,
+	'isTransformCandidate'
+> {
 	name: string
 	enforce?: 'pre'
 	apply?: 'build'
-	buildStart(): Promise<void>
-	buildEnd(): void
-	resolveId(id: string): string | undefined
-	load(id: string): string | undefined
-	transform(
-		code: string,
-		id: string
-	): string | undefined | Promise<string | undefined>
 }
 
 /**

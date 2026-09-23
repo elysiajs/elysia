@@ -231,6 +231,34 @@ describe('t.Uint8Array ArrayBuffer input', () => {
 	})
 })
 
+// The base type already refines the instance check, so an option-carrying
+// buffer type must not stack a second copy of it: a wrong-type value would
+// otherwise report the same "must be …" error twice in `errors`
+describe('buffer type wrong-type errors', () => {
+	const messages = (schema: any, value: unknown) =>
+		[...Value.Errors(schema, value)].map((error) => error.message)
+
+	it('t.ArrayBuffer with options reports "must be ArrayBuffer" once', () => {
+		expect(messages(t.ArrayBuffer({ minByteLength: 1 }), 'abc')).toEqual([
+			'must be ArrayBuffer',
+			'Expect byte to be more than 1'
+		])
+		expect(
+			messages(t.ArrayBuffer({ description: 'x' }), new Uint8Array(3))
+		).toEqual(['must be ArrayBuffer'])
+	})
+
+	it('t.Uint8Array with options reports "must be Uint8Array" once', () => {
+		expect(messages(t.Uint8Array({ maxByteLength: 1 }), 5)).toEqual([
+			'must be Uint8Array',
+			'Expect byte to be less than 1'
+		])
+		expect(messages(t.Uint8Array({ description: 'x' }), 'abc')).toEqual([
+			'must be Uint8Array'
+		])
+	})
+})
+
 describe('t.Integer query coercion', () => {
 	const app = new Elysia().get(
 		'/',

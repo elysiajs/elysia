@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import { describe, it, expect } from 'bun:test'
-import { sucrose, findAlias, removeColonAlias } from '../../src/sucrose'
+import { sucrose } from '../../src/sucrose'
 import { fixtures } from './fixtures'
 
 const LIFECYCLE = {
@@ -44,30 +44,4 @@ describe('context property inference', () => {
 			})
 		}
 	}
-})
-
-describe('context alias parsing', () => {
-	it('removeColonAlias reduces braced rename to bare keyword', () => {
-		expect(removeColonAlias('{headers:rs}')).toBe('{headers}')
-		expect(removeColonAlias('{query:q}')).toBe('{query}')
-		expect(removeColonAlias('{ headers: rs }')).toBe('{ headers }')
-		expect(removeColonAlias('{ headers: reqHeaders }')).toBe('{ headers }')
-	})
-
-	it('findAlias preserves a renamed destructured key', () => {
-		expect(findAlias('c', '{const{query:q}=c;q.a}')).toEqual(['{query}'])
-	})
-
-	it('minified transitive aliases match the spaced form', () => {
-		expect(findAlias('body', '{ const a = body, b = a }')).toEqual([
-			'a',
-			'b'
-		])
-		expect(findAlias('body', '{const a=body,b=a}')).toEqual(['a', 'b'])
-		expect(findAlias('body', '{const a=body,b=a,c=b}')).toEqual([
-			'a',
-			'b',
-			'c'
-		])
-	})
 })

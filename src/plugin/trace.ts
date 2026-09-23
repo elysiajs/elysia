@@ -33,11 +33,7 @@ const provider = {
 export const trace = () => {
 	const app = new Elysia({ name: '@elysia/trace', seed: provider.id })
 
-	;(
-		app as unknown as {
-			'~ext': { capability: { trace: { provider: TraceCapability } } }
-		}
-	)['~ext'] = { capability: { trace: { provider } } }
+	app['~ext'] = { capability: { trace: { provider } } }
 
 	return app
 }

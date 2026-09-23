@@ -165,18 +165,6 @@ export interface ElysiaConfig<
 	 */
 	normalize?: boolean | 'exactMirror' | 'typebox'
 
-	handler?: {
-		/**
-		 * optimization for standard internet hostname
-		 * this will assume hostname is always use a standard internet hostname
-		 * assuming hostname is at minimum of 11 length of string (http://a.bc)
-		 *
-		 * setting this to true will skip the first 11 character of the hostname
-		 *
-		 * @default true
-		 */
-		standardHostname?: boolean
-	}
 	/**
 	 * Enable Bun adapter native static response collection for eligible literal
 	 * static routes.
@@ -838,7 +826,7 @@ export type ErrorHandler<
 			derive: {}
 		}
 	> & {
-		error: T[number]['error'] | Error
+		error: T[number]['error'] | unknown
 	}
 ) => unknown
 
@@ -1373,17 +1361,6 @@ export type UnwrapModels<
 		}
 
 // ? Macro stuff
-type LocalLifecycleProperty =
-	| 'detail'
-	| 'parse'
-	| 'transform'
-	| 'beforeHandle'
-	| 'afterHandle'
-	| 'mapResponse'
-	| 'afterResponse'
-	| 'error'
-	| 'tags'
-
 export type MacroToProperty<in out T> = Prettify<{
 	[K in keyof T]: T[K] extends Function
 		? T[K] extends (a: infer Params) => any
@@ -1391,11 +1368,6 @@ export type MacroToProperty<in out T> = Prettify<{
 			: boolean
 		: boolean
 }>
-
-export type NonResolvableMacroKey =
-	| LocalLifecycleProperty
-	| keyof InputSchema
-	| 'derive'
 
 interface RouteSchemaWithResolvedMacro extends RouteSchema {
 	response: PossibleResponse
@@ -1796,11 +1768,6 @@ type RefDefSchema<D> = {
 	cookie: AsMacroSchemaField<D extends { cookie: infer X } ? X : undefined>
 	response: undefined
 }
-
-export type MacroSchemaChannel<Definitions extends DefinitionBase> = Record<
-	keyof any,
-	AnySchema | (keyof Definitions['typebox'] & string)
->
 
 /**
  * Captures the verbatim `.macro()` definition record into a separate first-pass
@@ -2965,17 +2932,5 @@ export interface StaticMapAliases {
 	method: string
 	paths: string[]
 }
-
-export type LazyComposeEntry =
-	| { kind: 'route'; route: InternalRoute; source?: string }
-	| {
-			kind: 'use'
-			child: AnyElysia
-			preChain: ChainNode | undefined
-			childBaseLen: number
-			childPlan: LazyComposeEntry[] | undefined
-			childPlanLen: number
-			source?: string
-	  }
 
 export type { TypeBoxSchema, AnySchema, StandardSchemaV1Like } from './type'

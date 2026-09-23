@@ -15,7 +15,6 @@ const query = {
 }
 
 Compiled.register({
-	bf: 1,
 	fingerprint: createAotFingerprint(),
 	handlers: {
 		GET: { '/__probe': { a: [], f: () => () => new Response() } }

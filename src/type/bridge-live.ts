@@ -2,7 +2,7 @@ import type { useTypebox as bridgeUseTypebox } from './bridge'
 
 import { Compile } from 'typebox/compile'
 import { Ref } from 'typebox/type'
-import { Create, Decode, HasCodec, Default, Clone, Check } from 'typebox/value'
+import { Create, Decode, HasCodec, Clone, Check } from 'typebox/value'
 import { Settings } from 'typebox/system'
 
 import { applyCoercions } from './coerce'
@@ -51,7 +51,6 @@ export {
 	mayHaveFileType,
 	HasCodec,
 	Intersect,
-	Default,
 	Ref,
 	Clone,
 	Check

@@ -27,58 +27,17 @@ import {
 } from '../../compile/handler'
 import { JITProbe, type JITProbeResult } from '../../compile/jit-probe'
 import { Validator } from '../../validator'
+import type { ElysiaAotOptions } from './core'
 
 export type AotTarget = 'bun' | 'node' | 'workerd'
 export type AotModuleCondition = 'esm' | 'cjs'
 
-export interface CompileToSourceOptions {
-	/** Emit a self-registering fingerprinted program (`Compiled.register(...)`). */
-	register?: boolean
-
+export interface CompileToSourceOptions extends Pick<
+	ElysiaAotOptions,
+	'registerFrom' | 'reconstructFrom' | 'lazy' | 'target'
+> {
 	/** @internal Package condition used by the entry that owns this manifest. */
 	moduleCondition?: AotModuleCondition
-
-	/**
-	 * Deploy target for build-time-baked codegen consts. Lets you build on one
-	 * runtime and deploy to another e.g. build under Bun with
-	 * `target: 'workerd'` so the manifest bakes `Object.fromEntries(...)` instead
-	 * of the Bun-only `Headers.toJSON()`. Removes the need to generate the
-	 * manifest under Node for a workerd deploy.
-	 *
-	 * @default the build runtime
-	 */
-	target?: AotTarget
-
-	/**
-	 * Split the emitted validator manifest into lazily-materialized groups
-	 *
-	 * Validator entries are registered as grouped thunks: a group's
-	 * validators are constructed on the first request to any route in that
-	 * group, trading first-request latency in unbuilt groups for lower
-	 * startup cost. Handlers are always eager. Only validator construction
-	 * is deferred. Pass a number to set the group size explicitly.
-	 *
-	 * @default decided by Elysia based on route batch scale
-	 */
-	lazy?: boolean | number
-
-	/**
-	 * Specifier the generated module imports `Compiled` from
-	 * Must resolve to the same `elysia` instance the app runs
-	 *
-	 * @default 'elysia'
-	 */
-	registerFrom?: string
-
-	/**
-	 * Specifier the generated module imports the `Reconstruct` table from,
-	 * only emitted when the manifest carries validators. The table is pure,
-	 * so unlike `registerFrom` it may resolve to any elysia copy the
-	 * registration itself goes through `Compiled` (from `registerFrom`)
-	 *
-	 * @default 'elysia/reconstruct'
-	 */
-	reconstructFrom?: string
 }
 
 export const autoGroupSize = (routes: number): number =>
@@ -186,7 +145,6 @@ export function replayStubbability(
 
 		const fingerprint = createAotFingerprint()
 		Compiled.register({
-			bf: 1,
 			fingerprint,
 			handlers: materialiseHandlersForReplay(handlers)
 		})
@@ -246,18 +204,11 @@ const normalizeCheckIdentifiers = (src: string): string => {
 	})
 }
 
-interface EntryEncoder {
-	unionTable: (u: { identifier: string; code: string }[][]) => string
-	setCoercePlan: () => void
-	readonly branchDecls: string
-	readonly unionDecls: string
-	readonly hasCoercePlan: boolean
-}
+type EntryEncoder = ReturnType<typeof createEntryEncoder>
 
-function createEntryEncoder(): EntryEncoder {
+function createEntryEncoder() {
 	// Codec branch-checks (`u`) are universal boilerplate, hoist to shared `_b`
 	const branchRef = new Map<string, string>()
-	let branchDecls = ''
 
 	const branchTable = (u: { identifier: string; code: string }[][]) =>
 		'[' +
@@ -275,7 +226,7 @@ function createEntryEncoder(): EntryEncoder {
 							if (ref === undefined) {
 								ref = `_b${branchRef.size}`
 								branchRef.set(src, ref)
-								branchDecls += `const ${ref} = ${src}\n`
+								enc.branchDecls += `const ${ref} = ${src}\n`
 							}
 
 							return ref
@@ -288,36 +239,25 @@ function createEntryEncoder(): EntryEncoder {
 
 	// Dedup the whole `u` array (`[[_b0,_b1],…]`) into a shared `_uN` const
 	const unionRef = new Map<string, string>()
-	let unionDecls = ''
 
-	// any emitted `cp:` needs the coerce-plan rebuilder registered at runtime
-	let hasCoercePlan = false
-	const unionTable = (u: { identifier: string; code: string }[][]) => {
-		const str = branchTable(u)
-		let ref = unionRef.get(str)
-		if (ref === undefined) {
-			ref = `_u${unionRef.size}`
-			unionRef.set(str, ref)
-			unionDecls += `const ${ref} = ${str}\n`
-		}
-		return ref
-	}
-
-	return {
-		unionTable,
-		setCoercePlan() {
-			hasCoercePlan = true
-		},
-		get branchDecls() {
-			return branchDecls
-		},
-		get unionDecls() {
-			return unionDecls
-		},
-		get hasCoercePlan() {
-			return hasCoercePlan
+	const enc = {
+		branchDecls: '',
+		unionDecls: '',
+		// any emitted `cp:` needs the coerce-plan rebuilder registered at runtime
+		hasCoercePlan: false,
+		unionTable(u: { identifier: string; code: string }[][]) {
+			const str = branchTable(u)
+			let ref = unionRef.get(str)
+			if (ref === undefined) {
+				ref = `_u${unionRef.size}`
+				unionRef.set(str, ref)
+				enc.unionDecls += `const ${ref} = ${str}\n`
+			}
+			return ref
 		}
 	}
+
+	return enc
 }
 
 function entryParts(c: CapturedValidator, enc: EntryEncoder) {
@@ -413,7 +353,7 @@ function entryParts(c: CapturedValidator, enc: EntryEncoder) {
 	}
 
 	if (c.coercePlan) {
-		enc.setCoercePlan()
+		enc.hasCoercePlan = true
 		parts.push(`cp: ${JSON.stringify(c.coercePlan)}`)
 	}
 
@@ -462,7 +402,6 @@ function emitModule(
 	}
 
 	let validatorDecls = ''
-	// eslint-disable-next-line no-useless-assignment
 	let validatorExport = ''
 
 	// bucket captured entries by route (all slots of a route share a group)
@@ -646,10 +585,6 @@ function emitModule(
 
 		validatorDecls += `const _groups = [${thunks.join(', ')}]\n`
 		validatorDecls += `const _groupOf = ${JSON.stringify(groupOf)}\n`
-
-		validatorExport = options?.register
-			? ''
-			: 'export const groups = _groups\nexport const groupOf = _groupOf\n'
 	} else {
 		const factoryRef = new Map<string, string>()
 		const tree = nullObject() as Record<
@@ -680,9 +615,7 @@ function emitModule(
 			validatorDecls += d
 		})
 
-		validatorExport = options?.register
-			? `const validators = ${treeStr}\n`
-			: `export const validators = ${treeStr}\n`
+		validatorExport = `const validators = ${treeStr}\n`
 	}
 
 	const aliasRef = new Map<string, string>()
@@ -715,9 +648,7 @@ function emitModule(
 		;(handlerTree[h.method] ??= {})[h.path] = wref
 	}
 
-	let handlerExport = options?.register
-		? 'const handlers = {\n'
-		: 'export const handlers = {\n'
+	let handlerExport = 'const handlers = {\n'
 	for (const method in handlerTree) {
 		handlerExport += `\t${JSON.stringify(method)}: {\n`
 		for (const path in handlerTree[method])
@@ -727,26 +658,21 @@ function emitModule(
 
 	handlerExport += '}\n'
 
-	const fingerprintExport = options?.register
-		? `export const fingerprint = ${JSON.stringify(fingerprint)}\n`
-		: ''
-
 	let body = '// Generated by Elysia build plugin. Do not edit.\n'
 	const importNamed = (name: string, specifier: string) =>
 		moduleCondition === 'cjs'
 			? `const { ${name} } = require(${JSON.stringify(specifier)})\n`
 			: `import { ${name} } from ${JSON.stringify(specifier)}\n`
 
-	if (options?.register)
-		body += importNamed('Compiled', options.registerFrom ?? 'elysia')
+	body += importNamed('Compiled', options?.registerFrom ?? 'elysia')
 
-	if (options?.register && enc.hasCoercePlan)
+	if (enc.hasCoercePlan)
 		body += importNamed('buildCoercedFromPlan', 'elysia/coerce-plan')
 
-	if (options?.register && captured.length)
+	if (captured.length)
 		body += importNamed(
 			'Reconstruct',
-			options.reconstructFrom ?? 'elysia/reconstruct'
+			options?.reconstructFrom ?? 'elysia/reconstruct'
 		)
 
 	const generated =
@@ -760,52 +686,34 @@ function emitModule(
 	if (needs('Format')) body += importNamed('Format', 'typebox/format')
 	if (needs('Hashing')) body += importNamed('Hashing', 'typebox/system')
 
-	if (options?.register) {
-		// every decl lives inside the registration IIFE: after
-		// `Compiled.release` the module retains nothing but the fingerprint
-		body += '\n'
+	// every decl lives inside the registration IIFE: after
+	// `Compiled.release` the module retains nothing but the fingerprint
+	body += '\n'
 
-		// wire the reconstruction table before the app can observe a frozen
-		// entry top-level, ahead of the register call
-		if (captured.length) body += 'Compiled.reconstruct = Reconstruct\n'
+	// wire the reconstruction table before the app can observe a frozen
+	// entry top-level, ahead of the register call
+	if (captured.length) body += 'Compiled.reconstruct = Reconstruct\n'
 
-		body +=
-			fingerprintExport +
-			'Compiled.register((() => {\n' +
-			enc.branchDecls +
-			(enc.branchDecls && '\n') +
-			enc.unionDecls +
-			(enc.unionDecls && '\n') +
-			validatorDecls +
-			handlerDecls +
-			'\n' +
-			validatorExport +
-			'\n' +
-			handlerExport +
-			'\n' +
-			'return { bf: 1, fingerprint, ' +
-			(lazy
-				? 'lazyGroups: _groups, lazyGroupOf: _groupOf, '
-				: 'validators, ') +
-			`handlers${enc.hasCoercePlan ? ', planRebuilder: buildCoercedFromPlan' : ''} }\n` +
-			'})())\n'
-	} else {
-		body +=
-			'\n' +
-			enc.branchDecls +
-			(enc.branchDecls && '\n') +
-			enc.unionDecls +
-			(enc.unionDecls && '\n') +
-			validatorDecls +
-			handlerDecls +
-			'\n' +
-			validatorExport +
-			'\n' +
-			handlerExport +
-			'\n'
-
-		if (!lazy) body += '\nexport default validators\n'
-	}
+	body +=
+		`export const fingerprint = ${JSON.stringify(fingerprint)}\n` +
+		'Compiled.register((() => {\n' +
+		enc.branchDecls +
+		(enc.branchDecls && '\n') +
+		enc.unionDecls +
+		(enc.unionDecls && '\n') +
+		validatorDecls +
+		handlerDecls +
+		'\n' +
+		validatorExport +
+		'\n' +
+		handlerExport +
+		'\n' +
+		'return { fingerprint, ' +
+		(lazy
+			? 'lazyGroups: _groups, lazyGroupOf: _groupOf, '
+			: 'validators, ') +
+		`handlers${enc.hasCoercePlan ? ', planRebuilder: buildCoercedFromPlan' : ''} }\n` +
+		'})())\n'
 
 	return body
 }

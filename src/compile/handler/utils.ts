@@ -12,13 +12,8 @@ import { origin } from '../../adapter/origin'
 import { ElysiaStatus } from '../../error'
 import { adoptErrorType } from '../../handler/error'
 import { ELYSIA_TYPES } from '../../type/constants'
-import { isSpace, isIdentChar, skipString } from '../lexer'
+import { scanTokens } from '../lexer'
 import { registerDeriveDisposable } from '../../handler/utils'
-export {
-	emptyResponse,
-	drainDisposables,
-	registerDeriveDisposable
-} from '../../handler/utils'
 
 import type { ElysiaAdapter } from '../../adapter'
 import type { AppEvent, AppHook, MaybeArray } from '../../types'
@@ -113,17 +108,124 @@ function extractDeriveKeys(fn: Function) {
 		src = undefined
 	}
 
-	let result: string[] | null
-	if (src === undefined) result = null
-	else if (src.includes('[native code]')) result = null
-	else if (src.includes('...')) result = null
-	else {
-		const objStart = findReturnedObjectStart(src)
-		result = objStart === -1 ? null : scanObjectLiteralKeys(src, objStart)
-	}
+	const result =
+		src === undefined ||
+		src.includes('[native code]') ||
+		src.includes('...')
+			? null
+			: returnedObjectKeys(src)
 
 	deriveKeyCache.set(fn, result)
 	return result
+}
+
+// Keys of the plain object literal `src` returns, `null` when unprovable:
+// computed, numeric, shorthand, method or escaped key, several returns, a
+// comment inside `=> ({` / `return ({` / `key:`, trailing expression
+function returnedObjectKeys(src: string): string[] | null {
+	const tokens = scanTokens(src)
+	if (!tokens) return null
+
+	const is = (i: number, value: string) =>
+		tokens[i]?.k === 'p' && tokens[i].value === value
+
+	const blank = (i: number) => {
+		const token = tokens[i]
+
+		return /^[ \t\n\r]*$/.test(
+			src.slice(
+				token.at + token.value.length + (token.k === 's' ? 2 : 0),
+				tokens[i + 1]?.at
+			)
+		)
+	}
+
+	// the returned `{`, and how many `(` wrap it
+	let open = -1
+	let parens = 0
+	let depth = 0
+	for (let i = 0; i < tokens.length; i++) {
+		const { k, value } = tokens[i]
+		if (k === 'i') {
+			if (depth === 0 && value === 'function') break
+		} else if (k !== 'p') continue
+		else if (value === '(' || value === '[' || value === '{') depth++
+		else if (value === ')' || value === ']' || value === '}') depth--
+		else if (depth === 0 && value === '=>') {
+			if (!blank(i)) return null
+			if (is(i + 1, '(')) {
+				if (!blank(i + 1) || !is(i + 2, '{')) return null
+				open = i + 2
+				parens = 1
+			} else if (!is(i + 1, '{')) return null
+			break
+		}
+	}
+
+	// block body: the single `return`, then `(`* `{`
+	if (open === -1) {
+		let at = -1
+		for (let i = 0; i < tokens.length; i++) {
+			const { k, value } = tokens[i]
+			if (k !== 'i') continue
+			if (value === 'return') {
+				if (at !== -1) return null
+				at = i
+			}
+			// kept generic: an ASCII word-boundary `return` scan would count
+			// the one inside `éreturn` as a second return
+			else if (value.includes('return') && /[^\w$]/.test(value))
+				return null
+		}
+		if (at === -1) return null
+
+		for (; blank(at) && is(at + 1, '('); at++) parens++
+		if (!blank(at) || !is(at + 1, '{')) return null
+		open = at + 1
+	}
+
+	const keys: string[] = []
+	let i = open + 1
+	while (!is(i, '}')) {
+		const key = tokens[i]
+		if (
+			!key ||
+			(key.k === 's'
+				? key.value.includes('\\')
+				: key.k !== 'i' || !/^[\w$]+$/.test(key.value)) ||
+			!blank(i) ||
+			!is(i + 1, ':')
+		)
+			return null
+
+		keys.push(key.value)
+
+		// the value runs to the `,` or `}` closing it at depth 0
+		for (depth = 0, i += 2; ; i++) {
+			const token = tokens[i]
+			if (!token) return null
+			if (token.k !== 'p') continue
+
+			const { value } = token
+			if (value === '(' || value === '[' || value === '{') depth++
+			else if (value === ')' || value === ']' || value === '}') {
+				if (depth === 0) {
+					if (value !== '}') return null
+					break
+				}
+				depth--
+			} else if (value === ',' && depth === 0) break
+		}
+
+		if (is(i, ',')) i++
+	}
+
+	// the literal must be the whole returned expression, not `({ a }).a`
+	for (; parens; parens--) if (!is(++i, ')')) return null
+
+	return i + 1 === tokens.length || is(i + 1, ';') || is(i + 1, '}')
+		? keys
+		: null
 }
 
 export function replaceDeriveContext(context: any, derivative: any) {
@@ -190,256 +292,6 @@ export function deriveModes(
 	}
 
 	return found ? modes : undefined
-}
-
-function findReturnedObjectStart(src: string) {
-	let arrow = -1
-	let depth = 0
-	for (let i = 0; i < src.length; ) {
-		const ch = src[i]
-		if (ch === '"' || ch === "'" || ch === '`') {
-			i = skipString(src, i)
-			continue
-		}
-
-		if (ch === '/' && src[i + 1] === '/') {
-			const nl = src.indexOf('\n', i)
-			if (nl === -1) break
-			i = nl + 1
-			continue
-		}
-
-		if (ch === '/' && src[i + 1] === '*') {
-			const end = src.indexOf('*/', i)
-			if (end === -1) break
-			i = end + 2
-			continue
-		}
-
-		if (
-			depth === 0 &&
-			ch === 'f' &&
-			src.startsWith('function', i) &&
-			!isIdentChar(src[i - 1] ?? ' ') &&
-			!isIdentChar(src[i + 8] ?? ' ')
-		)
-			break
-
-		if (ch === '(' || ch === '[' || ch === '{') {
-			depth++
-			i++
-			continue
-		}
-
-		if (ch === ')' || ch === ']' || ch === '}') {
-			depth--
-			i++
-			continue
-		}
-
-		if (depth === 0 && ch === '=' && src[i + 1] === '>') {
-			arrow = i
-			break
-		}
-		i++
-	}
-
-	if (arrow !== -1) {
-		let i = arrow + 2
-		while (i < src.length && isSpace(src[i])) i++
-
-		if (src[i] === '(') {
-			let j = i + 1
-
-			while (j < src.length && isSpace(src[j])) j++
-			if (src[j] === '{') return j
-
-			// `=> (` not followed by an object literal → not a plain object
-			// implicit return, bail.
-			return -1
-		}
-
-		if (src[i] !== '{') return -1
-		// `=> {` is a block body: fall through to the single-return logic below.
-	}
-
-	let returns = 0
-	let idx = -1
-	for (let i = 0; i < src.length; ) {
-		const ch = src[i]
-		if (ch === '"' || ch === "'" || ch === '`') {
-			i = skipString(src, i)
-			continue
-		}
-
-		if (ch === '/' && src[i + 1] === '/') {
-			const nl = src.indexOf('\n', i)
-			if (nl === -1) break
-			i = nl
-			continue
-		}
-
-		if (ch === '/' && src[i + 1] === '*') {
-			const end = src.indexOf('*/', i)
-			if (end === -1) break
-			i = end + 2
-			continue
-		}
-
-		if (
-			ch === 'r' &&
-			src.startsWith('return', i) &&
-			!isIdentChar(src[i - 1] ?? ' ') &&
-			!isIdentChar(src[i + 6] ?? ' ')
-		) {
-			if (idx === -1) idx = i
-			returns++
-			i += 6
-			continue
-		}
-
-		i++
-	}
-	if (returns !== 1) return -1
-
-	if (idx === -1) return -1
-	let i = idx + 6
-	while (i < src.length && isSpace(src[i])) i++
-	while (i < src.length && src[i] === '(') {
-		i++
-		while (i < src.length && isSpace(src[i])) i++
-	}
-	return src[i] === '{' ? i : -1
-}
-
-function scanObjectLiteralKeys(src: string, open: number): string[] | null {
-	const keys: string[] = []
-	let i = open + 1
-	let expectKey = true
-
-	while (i < src.length) {
-		const ch = src[i]
-
-		if (isSpace(ch)) {
-			i++
-			continue
-		}
-
-		if (ch === '/' && src[i + 1] === '/') {
-			const nl = src.indexOf('\n', i)
-			if (nl === -1) return null
-			i = nl + 1
-			continue
-		}
-
-		if (ch === '/' && src[i + 1] === '*') {
-			const end = src.indexOf('*/', i)
-			if (end === -1) return null
-			i = end + 2
-			continue
-		}
-
-		if (ch === '}') return keys
-
-		if (expectKey) {
-			// computed key, spread, getter/setter/method → bail
-			if (ch === '[') return null
-
-			let key: string
-			if (ch === '"' || ch === "'") {
-				const end = skipString(src, i)
-				key = src.slice(i + 1, end - 1)
-
-				if (key.includes('\\')) return null
-				i = end
-			} else if (isIdentChar(ch) && !(ch >= '0' && ch <= '9')) {
-				const start = i
-				while (i < src.length && isIdentChar(src[i])) i++
-				key = src.slice(start, i)
-			} else {
-				return null
-			}
-
-			let j = i
-			while (j < src.length && isSpace(src[j])) j++
-			if (src[j] !== ':') return null // shorthand / method / getter → bail
-
-			keys.push(key)
-			i = j + 1
-
-			let depth = 0
-			let found = false
-			while (i < src.length) {
-				const ch = src[i]
-				if (ch === '"' || ch === "'" || ch === '`') {
-					i = skipString(src, i)
-					continue
-				}
-
-				if (ch === '/' && src[i + 1] === '/') {
-					const nl = src.indexOf('\n', i)
-					if (nl === -1) {
-						i = -1
-						found = true
-						break
-					}
-					i = nl + 1
-					continue
-				}
-
-				if (ch === '/' && src[i + 1] === '*') {
-					const end = src.indexOf('*/', i)
-					if (end === -1) {
-						i = -1
-						found = true
-						break
-					}
-					i = end + 2
-					continue
-				}
-
-				if (ch === '{' || ch === '(' || ch === '[') {
-					depth++
-					i++
-					continue
-				}
-
-				if (ch === '}' || ch === ')' || ch === ']') {
-					if (depth === 0) {
-						if (ch !== '}') i = -1
-						found = true
-						break
-					}
-
-					depth--
-					i++
-					continue
-				}
-
-				if (ch === ',' && depth === 0) {
-					found = true
-					break
-				}
-				i++
-			}
-			if (!found) i = -1
-
-			if (i === -1) return null
-			expectKey = false
-
-			continue
-		}
-
-		if (ch === ',') {
-			expectKey = true
-			i++
-			continue
-		}
-
-		return null
-	}
-
-	return null
 }
 
 export function mapBeforeHandle(

@@ -1,5 +1,6 @@
 import { fnv1a, evictOldestHalf } from './utils'
 import { getCompilerSession } from './compile/aot'
+import { scanTokens, type ScanToken } from './compile/lexer'
 
 import type { Handler, AppHook } from './types'
 
@@ -17,602 +18,19 @@ export namespace Sucrose {
 	export type LifeCycle = Partial<Partial<AppHook>>
 }
 
-/**
- * Separate stringified function body and parameter
- *
- * @example
- * ```typescript
- * separateFunction('async ({ hello }) => { return hello }') // => ['({ hello })', '{ return hello }']
- * ```
- */
-export function separateFunction(code: string): [string, string] {
-	// Remove async keyword without removing space (both minify and non-minify)
-	if (code.startsWith('async')) code = code.slice(5)
-	code = code.trimStart()
-
-	let index: number
-
-	// JSC: Starts with '(', is an arrow function
-	if (code.charCodeAt(0) === 40) {
-		const parameterEnd = findClosingParenthesis(code, 0)
-		index = code.indexOf('=>', parameterEnd)
-
-		if (index !== -1) {
-			let body = code.slice(index + 2)
-			if (body.charCodeAt(0) === 32) body = body.trimStart()
-
-			return [code.slice(1, parameterEnd), body]
-		}
-	}
-
-	// V8: bracket is removed for 1 parameter arrow function
-	if (/^([\w$]+)=>/g.test(code)) {
-		index = code.indexOf('=>')
-
-		if (index !== -1) {
-			let body = code.slice(index + 2)
-			if (body.charCodeAt(0) === 32) body = body.trimStart()
-
-			return [code.slice(0, index), body]
-		}
-	}
-
-	// Using function keyword
-	if (code.startsWith('function')) {
-		index = code.indexOf('(')
-		const end = findClosingParenthesis(code, index)
-
-		return [code.slice(index + 1, end), code.slice(end + 2)]
-	}
-
-	// Probably Declare as method
-	const start = code.indexOf('(')
-
-	if (start !== -1) {
-		const sep = code.indexOf('\n', 2)
-		const parameter = code.slice(0, sep)
-		const end = parameter.lastIndexOf(')') + 1
-
-		const body = code.slice(sep + 1)
-
-		return [parameter.slice(start, end), '{' + body]
-	}
-
-	// Unknown case
-	const x = code.split('\n', 2)
-
-	return [x[0], x[1]]
-}
-
-function findClosingParenthesis(code: string, start: number) {
-	let deep = 1
-
-	for (let index = start + 1; index < code.length; index++) {
-		const char = code.charCodeAt(index)
-
-		if (char === 40) deep++
-		else if (char === 41 && --deep === 0) return index
-	}
-
-	return start
-}
-
-/**
- * Get range between bracket pair
- *
- * @example
- * ```typescript
- * bracketPairRange('hello: { world: { a } }, elysia') // [6, 20]
- * ```
- */
-export function bracketPairRange(parameter: string): [number, number] {
-	const start = parameter.indexOf('{')
-	if (start === -1) return [-1, 0]
-
-	let end = start + 1
-	let deep = 1
-
-	for (; end < parameter.length; end++) {
-		const char = parameter.charCodeAt(end)
-
-		// Open bracket
-		if (char === 123) deep++
-		// Close bracket
-		else if (char === 125) deep--
-
-		if (deep === 0) break
-	}
-
-	if (deep !== 0) return [0, parameter.length]
-
-	return [start, end + 1]
-}
-
-/**
- * Similar to `bracketPairRange` but in reverse order
- * Get range between bracket pair from end to beginning
- *
- * @example
- * ```typescript
- * bracketPairRange('hello: { world: { a } }, elysia') // [6, 20]
- * ```
- */
-export function bracketPairRangeReverse(parameter: string): [number, number] {
-	const end = parameter.lastIndexOf('}')
-	if (end === -1) return [-1, 0]
-
-	let start = end - 1
-	let deep = 1
-
-	for (; start >= 0; start--) {
-		const char = parameter.charCodeAt(start)
-
-		// Open bracket
-		if (char === 125) deep++
-		// Close bracket
-		else if (char === 123) deep--
-
-		if (deep === 0) break
-	}
-
-	if (deep !== 0) return [-1, 0]
-
-	return [start, end + 1]
-}
-
-export function removeColonAlias(parameter: string) {
-	while (true) {
-		const start = parameter.indexOf(':')
-		if (start === -1) break
-
-		// Drop the `:alias`
-		let end = start + 1
-		while (end < parameter.length) {
-			const char = parameter.charCodeAt(end)
-			if (char !== 32 && char !== 9 && char !== 10) break
-			end++
-		}
-
-		// Consume the alias identifier up to the next delimiter/whitespace.
-		while (end < parameter.length) {
-			const char = parameter.charCodeAt(end)
-
-			// , } space \t \n
-			if (
-				char === 44 ||
-				char === 125 ||
-				char === 32 ||
-				char === 9 ||
-				char === 10
-			)
-				break
-			end++
-		}
-
-		parameter = parameter.slice(0, start) + parameter.slice(end)
-	}
-
-	return parameter
-}
-
-/**
- * Retrieve only root parameters of a function
- *
- * @example
- * ```typescript
- * retrieveRootParameters('({ hello: { world: { a } }, elysia })') // => {
- *   parameters: ['hello', 'elysia'],
- *   hasParenthesis: true
- * }
- * ```
- */
-export function retrieveRootparameters(parameter: string) {
-	let hasParenthesis = false
-
-	// Remove () from parameter
-	if (parameter.charCodeAt(0) === 40) parameter = parameter.slice(1, -1)
-
-	parameter = parameter.trim()
-
-	if (parameter.indexOf('=') !== -1)
-		parameter = removeDefaultParameter(parameter)
-
-	// Remove {} from parameter
-	if (parameter.charCodeAt(0) === 123) {
-		hasParenthesis = true
-		const [, end] = bracketPairRange(parameter)
-		parameter = parameter.slice(1, end - 1)
-	}
-
-	parameter = parameter.replace(/\s+/g, '')
-	const parameters = <string[]>[]
-
-	// Object destructuring
-	while (true) {
-		let [start, end] = bracketPairRange(parameter)
-		if (start === -1) break
-
-		// Remove colon from object structuring cast
-		parameters.push(removeColonAlias(parameter.slice(0, start - 1)))
-		if (parameter.charCodeAt(end) === 44) end++
-		parameter = parameter.slice(end)
-	}
-
-	parameter = removeColonAlias(parameter)
-	if (parameter) parameters.push(parameter)
-
-	// Defaults are gone and every whitespace character has been stripped, so
-	// what is left is a plain comma-separated list of names
-	const parameterMap: Record<string, true> = Object.create(null)
-	for (const p of parameters) {
-		if (p.indexOf(',') === -1) {
-			parameterMap[p] = true
-			continue
-		}
-
-		for (const q of p.split(',')) parameterMap[q] = true
-	}
-
-	return {
-		hasParenthesis,
-		parameters: parameterMap
-	}
-}
-
-function findEndIndex(
-	type: string,
-	content: string,
-	index?: number | undefined
-) {
-	let search = index ?? 0
-
-	while (true) {
-		const found = content.indexOf(type, search)
-		if (found === -1) return -1
-
-		switch (content.charCodeAt(found + type.length)) {
-			case 10: // \n
-			case 9: // \t
-			case 44: // ,
-			case 59: // ;
-			case 32: // space
-			case 41: // )
-			case 125: // } end of a minified block, e.g. `{const a=body}`
-				return found
-		}
-
-		search = found + 1
-	}
-}
-
-/**
- * Find alias of variable from function body
- *
- * @example
- * ```typescript
- * findAlias('body', '{ const a = body, b = body }') // => ['a', 'b']
- * ```
- */
-export function findAlias(
-	type: string,
-	body: string,
-	seen: Set<string> = new Set()
-) {
-	const aliases: string[] = []
-
-	let content = body
-
-	const spaced = ' = ' + type
-	const minified = '=' + type
-
-	while (true) {
-		let matchedLength = spaced.length
-		let index = findEndIndex(spaced, content)
-		// V8 engine minified the code
-		if (index === -1) {
-			index = findEndIndex(minified, content)
-			matchedLength = minified.length
-		}
-
-		if (index === -1) {
-			/**
-			 * Check if pattern is at the end of the string
-			 *
-			 * @example
-			 * ```typescript
-			 * 'const a = body' // true
-			 * ```
-			 **/
-			let lastIndex = content.indexOf(spaced)
-			matchedLength = spaced.length
-			if (lastIndex === -1) {
-				lastIndex = content.indexOf(minified)
-				matchedLength = minified.length
-			}
-
-			if (lastIndex === -1) break
-			if (lastIndex + matchedLength !== content.length) break
-
-			index = lastIndex
-		}
-
-		const part = content.slice(0, index)
-
-		let boundary = -1
-		for (let i = part.length - 1; i >= 0; i--) {
-			const char = part.charCodeAt(i)
-			// space , ( ; ) \t \n
-			if (
-				char === 32 ||
-				char === 44 ||
-				char === 40 ||
-				char === 59 ||
-				char === 41 ||
-				char === 9 ||
-				char === 10
-			) {
-				boundary = i
-				break
-			}
-		}
-
-		/**
-		 * aliased variable last character
-		 *
-		 * @example
-		 * ```typescript
-		 * const { hello } = body // } is the last character
-		 * ```
-		 **/
-		const variable = part.slice(boundary + 1)
-
-		// Variable is using object destructuring, find the bracket pair
-		if (variable.charCodeAt(variable.length - 1) === 125) {
-			const [start, end] = bracketPairRangeReverse(part)
-
-			aliases.push(removeColonAlias(content.slice(start, end)))
-
-			content = content.slice(index + matchedLength)
-
-			continue
-		}
-
-		if (variable && !variable.includes('(')) aliases.push(variable)
-
-		content = content.slice(index + matchedLength)
-	}
-
-	for (let i = 0; i < aliases.length; i++) {
-		const alias = aliases[i]
-		if (alias.charCodeAt(0) === 123 || seen.has(alias)) continue
-
-		seen.add(alias)
-		aliases.push(...findAlias(alias, body, seen))
-	}
-
-	return aliases
-}
-
-/**
- * Words that lex as an identifier but are operators, so a `/` after one opens a
- * regex instead of dividing. Padded so a lookup cannot match a substring.
- */
-const operatorKeyword =
-	' typeof void delete in of instanceof new return case do else yield await throw '
-
-/**
- * Skip a regular expression literal, so a `,`, `}` or quote inside it is not
- * mistaken for structure.
- */
-function skipRegexLiteral(parameter: string, start: number, regexEnd: number) {
-	let previous = start - 1
-	while (previous >= 0) {
-		const char = parameter.charCodeAt(previous)
-
-		if (
-			// Whitespace as JavaScript defines it, which is what `\s` matches:
-			// everything `String.prototype.trim` removes, not just the three
-			// characters that happen to appear in LF-formatted source.
-			char === 32 ||
-			// \t \n \v \f \r
-			(char >= 9 && char <= 13) ||
-			// Zs, plus <ZWNBSP> and the two line separators
-			char === 160 ||
-			char === 5760 ||
-			(char >= 8192 && char <= 8202) ||
-			char === 8232 ||
-			char === 8233 ||
-			char === 8239 ||
-			char === 8287 ||
-			char === 12288 ||
-			char === 65279
-		)
-			previous--
-		else break
-	}
-
-	if (previous >= 0) {
-		const char = parameter.charCodeAt(previous)
-
-		if (isIdentifierPart(char)) {
-			let identifier = previous
-			while (
-				identifier >= 0 &&
-				isIdentifierPart(parameter.charCodeAt(identifier))
-			)
-				identifier--
-
-			// A member name is never the operator: `x.in / 2` is division.
-			// A number ends at its `.` too, and a number is a value
-			if (
-				parameter.charCodeAt(identifier) === 46 ||
-				!operatorKeyword.includes(
-					' ' + parameter.slice(identifier + 1, previous + 1) + ' '
-				)
-			)
-				return start
-		}
-		// ) ] } ' " `
-		else if (
-			char === 41 ||
-			char === 93 ||
-			char === 125 ||
-			char === 39 ||
-			char === 34 ||
-			char === 96 ||
-			(char === 47 && previous === regexEnd)
-		)
-			return start
-	}
-
-	let inCharacterClass = false
-	for (let index = start + 1; index < parameter.length; index++) {
-		const char = parameter.charCodeAt(index)
-
-		// Escape
-		if (char === 92) index++
-		// [
-		else if (char === 91) inCharacterClass = true
-		// ]
-		else if (char === 93) inCharacterClass = false
-		// /
-		else if (char === 47 && !inCharacterClass) return index
-	}
-
-	return start
-}
-
-/**
- * Find where a default parameter value ends: the first `,` or `}` that is
- * outside a string or regex literal and not nested inside `()`, `[]`, or `{}`
- *
- * Returns -1 when the value runs until the end of the string
- */
-function findDefaultValueEnd(parameter: string, start: number) {
-	let deep = 0
-	let quote = 0
-	// Index of the `/` that closed the last regex literal, see `skipRegexLiteral`
-	let regexEnd = -1
-	// `deep` of each open `${`, so the `}` that closes an interpolation resumes
-	// the template literal instead of being read as structure
-	let template: number[] | undefined
-
-	for (let index = start; index < parameter.length; index++) {
-		const char = parameter.charCodeAt(index)
-
-		if (quote !== 0) {
-			// Escape
-			if (char === 92) index++
-			else if (char === quote) quote = 0
-			// `${` opens an expression inside a template literal
-			else if (
-				quote === 96 &&
-				char === 36 &&
-				parameter.charCodeAt(index + 1) === 123
-			) {
-				;(template ??= []).push(deep)
-				quote = 0
-				deep++
-				index++
-			}
-
-			continue
-		}
-
-		switch (char) {
-			// ' " `
-			case 39:
-			case 34:
-			case 96:
-				quote = char
-				break
-
-			// /
-			case 47: {
-				const closing = skipRegexLiteral(parameter, index, regexEnd)
-				if (closing !== index) regexEnd = closing
-				// eslint-disable-next-line sonarjs/updated-loop-counter
-				index = closing
-				break
-			}
-
-			// ( [ {
-			case 40:
-			case 91:
-			case 123:
-				deep++
-				break
-
-			// ) ]
-			case 41:
-			case 93:
-				if (deep !== 0) deep--
-				break
-
-			// }
-			case 125:
-				if (deep === 0) return index
-				deep--
-				// Closes a `${`, so the template literal resumes
-				if (
-					template !== undefined &&
-					template[template.length - 1] === deep
-				) {
-					template.pop()
-					quote = 96
-				}
-				break
-
-			// ,
-			case 44:
-				if (deep === 0) return index
-				break
-		}
-	}
-
-	return -1
-}
-
-export function removeDefaultParameter(parameter: string) {
-	let index = parameter.indexOf('=')
-
-	if (index !== -1) {
-		let kept = ''
-		let copyFrom = 0
-
-		for (; index < parameter.length; index++) {
-			if (parameter.charCodeAt(index) !== 61) continue
-
-			kept += parameter.slice(copyFrom, index)
-
-			const end = findDefaultValueEnd(parameter, index + 1)
-
-			// The value runs to the end of the string, nothing follows it
-			if (end === -1) {
-				copyFrom = parameter.length
-
-				break
-			}
-
-			// `end` is the `,` or `}` that terminates the value, it is structure
-			// and has to survive. It is never `=`, so resuming from it is safe
-			// eslint-disable-next-line sonarjs/updated-loop-counter -- scanner resumes past the consumed value
-			copyFrom = index = end
-		}
-
-		parameter = kept + parameter.slice(copyFrom)
-	}
-
-	return parameter
-		.split(',')
-		.map((i) => i.trim())
-		.join(', ')
-}
-
 function markAllAccessed(i: Sucrose.Inference) {
 	i.query = i.headers = i.body = i.cookie = i.set = i.route = true
 	i.afterResponse = true
 }
+
+const isAllAccessed = (i: Sucrose.Inference) =>
+	i.query &&
+	i.headers &&
+	i.body &&
+	i.cookie &&
+	i.set &&
+	i.route &&
+	i.afterResponse
 
 const DEFAULT_CACHE_LIMIT = 1024
 
@@ -625,8 +43,7 @@ const globalSourceCache: SourceCache = new Map()
 
 let functionCaches = new WeakMap<Function, Sucrose.Inference>()
 
-export function clearSucroseCache(delay?: number | null) {
-	if (delay === null) return
+export function clearSucroseCache() {
 	globalSourceCache.clear()
 	getCompilerSession()?.sucroseCache.clear()
 	functionCaches = new WeakMap()
@@ -656,352 +73,6 @@ const defaultSucrose = (): Sucrose.Inference => ({
 
 const emptyInference = Object.freeze(defaultSucrose())
 
-function push(target: unknown[], array: unknown[]) {
-	for (let i = 0; i < array.length; i++) target.push(array[i])
-}
-
-// Single-pass token scanner
-interface ScanToken {
-	k: 'i' | 's' | 'p'
-	value: string
-}
-
-const prefixKeywords = new Set([
-	'await',
-	'case',
-	'delete',
-	'do',
-	'else',
-	'in',
-	'instanceof',
-	'new',
-	'of',
-	'return',
-	'throw',
-	'typeof',
-	'void',
-	'yield'
-])
-
-const isIdentifierStart = (char: number) =>
-	(char >= 65 && char <= 90) ||
-	(char >= 97 && char <= 122) ||
-	char === 36 ||
-	char === 95 ||
-	char >= 128
-
-const isIdentifierPart = (char: number) =>
-	isIdentifierStart(char) || (char >= 48 && char <= 57)
-
-function scanTokens(source: string): ScanToken[] | undefined {
-	const tokens: ScanToken[] = []
-	let index = 0
-	let canEndExpression = false
-
-	const scanCode = (templateExpression = false) => {
-		let templateDepth = 0
-
-		while (index < source.length) {
-			const char = source.charCodeAt(index)
-
-			if (char === 32 || char === 9 || char === 10 || char === 13) {
-				index++
-				continue
-			}
-
-			if (char === 92 && source.charCodeAt(index + 1) !== 117)
-				return false
-
-			if (char === 47) {
-				const next = source.charCodeAt(index + 1)
-				if (next === 47) {
-					index += 2
-					while (
-						index < source.length &&
-						source.charCodeAt(index) !== 10 &&
-						source.charCodeAt(index) !== 13
-					)
-						index++
-					continue
-				}
-				if (next === 42) {
-					index += 2
-					while (
-						index + 1 < source.length &&
-						!(
-							source.charCodeAt(index) === 42 &&
-							source.charCodeAt(index + 1) === 47
-						)
-					)
-						index++
-					if (index + 1 >= source.length) return false
-					index += 2
-					continue
-				}
-
-				if (!canEndExpression) {
-					index++
-					let escaped = false
-					let characterClass = false
-					let closed = false
-					while (index < source.length) {
-						const regexChar = source.charCodeAt(index++)
-						if (escaped) {
-							escaped = false
-							continue
-						}
-
-						if (regexChar === 92) {
-							escaped = true
-							continue
-						}
-
-						if (regexChar === 91) characterClass = true
-						else if (regexChar === 93) characterClass = false
-						else if (regexChar === 47 && !characterClass) {
-							closed = true
-							break
-						} else if (regexChar === 10 || regexChar === 13)
-							return false
-					}
-
-					if (!closed) return false
-
-					while (isIdentifierPart(source.charCodeAt(index))) index++
-
-					canEndExpression = true
-					continue
-				}
-
-				tokens.push({ k: 'p', value: '/' })
-				index++
-				canEndExpression = false
-				continue
-			}
-
-			if (char === 34 || char === 39) {
-				const quote = char
-				const start = ++index
-				let escaped = false
-
-				while (index < source.length) {
-					const stringChar = source.charCodeAt(index)
-					if (escaped) escaped = false
-					else if (stringChar === 92) escaped = true
-					else if (stringChar === quote) break
-					else if (stringChar === 10 || stringChar === 13)
-						return false
-					index++
-				}
-
-				if (index >= source.length) return false
-
-				tokens.push({
-					k: 's',
-					value: source.slice(start, index)
-				})
-				index++
-				canEndExpression = true
-
-				continue
-			}
-
-			if (char === 96) {
-				index++
-				let closed = false
-				while (index < source.length) {
-					const templateChar = source.charCodeAt(index)
-					if (templateChar === 92) {
-						index += 2
-						continue
-					}
-
-					if (templateChar === 96) {
-						index++
-						closed = true
-						break
-					}
-
-					if (
-						templateChar === 36 &&
-						source.charCodeAt(index + 1) === 123
-					) {
-						index += 2
-						canEndExpression = false
-						if (!scanCode(true)) return false
-						continue
-					}
-
-					index++
-				}
-
-				if (!closed) return false
-				canEndExpression = true
-
-				continue
-			}
-
-			if (
-				isIdentifierStart(char) ||
-				(char === 92 && source.charCodeAt(index + 1) === 117)
-			) {
-				const start = index
-				if (char === 92) {
-					index += 2
-					if (source.charCodeAt(index) === 123) {
-						const end = source.indexOf('}', index + 1)
-						if (end === -1) return false
-						index = end + 1
-					} else {
-						for (let digit = 0; digit < 4; digit++) {
-							const hex = source.charCodeAt(index + digit)
-							if (
-								!(
-									(hex >= 48 && hex <= 57) ||
-									(hex >= 65 && hex <= 70) ||
-									(hex >= 97 && hex <= 102)
-								)
-							)
-								return false
-						}
-						index += 4
-					}
-				} else index++
-
-				while (index < source.length) {
-					const identifierChar = source.charCodeAt(index)
-					if (isIdentifierPart(identifierChar)) {
-						index++
-						continue
-					}
-
-					if (
-						identifierChar === 92 &&
-						source.charCodeAt(index + 1) === 117
-					) {
-						index += 2
-						if (source.charCodeAt(index) === 123) {
-							const end = source.indexOf('}', index + 1)
-							if (end === -1) return false
-							index = end + 1
-						} else {
-							for (let digit = 0; digit < 4; digit++) {
-								const hex = source.charCodeAt(index + digit)
-								if (
-									!(
-										(hex >= 48 && hex <= 57) ||
-										(hex >= 65 && hex <= 70) ||
-										(hex >= 97 && hex <= 102)
-									)
-								)
-									return false
-							}
-							index += 4
-						}
-						continue
-					}
-					break
-				}
-
-				const identifierText = source.slice(start, index)
-				let value: string | undefined
-				if (!identifierText.includes('\\u')) {
-					value = identifierText
-				} else {
-					let decoded = ''
-					let failed = false
-					for (let i = 0; i < identifierText.length; i++) {
-						if (
-							identifierText.charCodeAt(i) !== 92 ||
-							identifierText.charCodeAt(i + 1) !== 117
-						) {
-							decoded += identifierText[i]
-							continue
-						}
-
-						i += 2
-						let hex: string
-						if (identifierText.charCodeAt(i) === 123) {
-							const end = identifierText.indexOf('}', i + 1)
-							if (end === -1) {
-								failed = true
-								break
-							}
-							hex = identifierText.slice(i + 1, end)
-							// eslint-disable-next-line sonarjs/updated-loop-counter -- scanner resumes past the consumed escape
-							i = end
-						} else {
-							hex = identifierText.slice(i, i + 4)
-							if (hex.length !== 4) {
-								failed = true
-								break
-							}
-							i += 3
-						}
-
-						const codePoint = Number.parseInt(hex, 16)
-						if (!Number.isFinite(codePoint) || codePoint > 0x10ffff) {
-							failed = true
-							break
-						}
-						decoded += String.fromCodePoint(codePoint)
-					}
-
-					value = failed ? undefined : decoded
-				}
-				if (value === undefined) return false
-
-				tokens.push({ k: 'i', value })
-				canEndExpression = !prefixKeywords.has(value)
-
-				continue
-			}
-
-			if (char >= 48 && char <= 57) {
-				index++
-				while (isIdentifierPart(source.charCodeAt(index))) index++
-				canEndExpression = true
-				continue
-			}
-
-			if (templateExpression) {
-				if (char === 123) templateDepth++
-				else if (char === 125) {
-					if (templateDepth === 0) {
-						index++
-						return true
-					}
-					templateDepth--
-				}
-			}
-
-			let value = source[index]
-			const pair = source.slice(index, index + 2)
-			const triple = source.slice(index, index + 3)
-
-			if (triple === '...') value = triple
-			else if (
-				pair === '?.' ||
-				pair === '=>' ||
-				pair === '++' ||
-				pair === '--'
-			)
-				value = pair
-
-			tokens.push({ k: 'p', value })
-			index += value.length
-
-			if (value !== '++' && value !== '--')
-				canEndExpression =
-					value === ')' || value === ']' || value === '}'
-		}
-
-		return !templateExpression
-	}
-
-	return scanCode() ? tokens : undefined
-}
-
 const channel = (value: string): keyof Sucrose.Inference | undefined => {
 	switch (value) {
 		case 'query':
@@ -1016,45 +87,50 @@ const channel = (value: string): keyof Sucrose.Inference | undefined => {
 	}
 }
 
-function computedDestructuringChannel(
+function computedDestructuringChannel<K extends string>(
 	tokens: ScanToken[],
-	index: number
-): false | keyof Sucrose.Inference {
+	index: number,
+	channelOf: (value: string) => K | undefined
+): false | K {
 	const property = tokens[index + 1]
 
 	return (
 		(property?.k === 's' &&
 			!property.value.includes('\\') &&
 			tokens[index + 2]?.value === ']' &&
-			channel(property.value)) ||
+			channelOf(property.value)) ||
 		false
 	)
 }
 
-function inferFunction(source: string): Sucrose.Inference {
-	const inference = defaultSucrose()
-
+/**
+ * @internal Which `channelOf`-mapped members of a function's first parameter
+ * the function may read, or `null` when any member may be read
+ */
+export function inferFunction<K extends string>(
+	source: string,
+	channelOf: (value: string) => K | undefined,
+	// bail on any alias made by `=`: the scan does not follow it through a
+	// member store, a forward use or an assignment inside an expression
+	strict = false
+): Set<K> | null {
 	if (
 		!source ||
 		source.includes('[native code]') ||
 		source.trimStart().startsWith('class')
-	) {
-		markAllAccessed(inference)
-		return inference
-	}
+	)
+		return null
 
 	let tokens: ScanToken[] | undefined
 	try {
 		tokens = scanTokens(source)
 	} catch {
-		markAllAccessed(inference)
-		return inference
+		return null
 	}
 
-	if (!tokens?.length) {
-		markAllAccessed(inference)
-		return inference
-	}
+	if (!tokens?.length) return null
+
+	const keys = new Set<K>()
 
 	let arrow = -1
 	const callableStart = tokens[0].value === 'async' ? 1 : 0
@@ -1120,10 +196,8 @@ function inferFunction(source: string): Sucrose.Inference {
 			}
 	}
 
-	if (parameterStart < 0 || parameterEnd < parameterStart || bodyStart < 0) {
-		markAllAccessed(inference)
-		return inference
-	}
+	if (parameterStart < 0 || parameterEnd < parameterStart || bodyStart < 0)
+		return null
 
 	const aliases = new Set<string>()
 	const first = tokens[parameterStart]
@@ -1144,12 +218,13 @@ function inferFunction(source: string): Sucrose.Inference {
 				depth === 1 &&
 				(tokens[i - 1]?.value === '{' || tokens[i - 1]?.value === ',')
 			) {
-				const computed = computedDestructuringChannel(tokens, i)
-				if (computed === false) {
-					markAllAccessed(inference)
-					return inference
-				}
-				if (computed) inference[computed] = true
+				const computed = computedDestructuringChannel(
+					tokens,
+					i,
+					channelOf
+				)
+				if (computed === false) return null
+				keys.add(computed)
 			} else if (token.value === '...' && depth === 1) {
 				const rest = tokens[i + 1]
 				if (rest?.k === 'i') aliases.add(rest.value)
@@ -1170,19 +245,13 @@ function inferFunction(source: string): Sucrose.Inference {
 					continue
 				}
 
-				const key = channel(token.value)
-				if (key) inference[key] = true
+				const key = channelOf(token.value)
+				if (key) keys.add(key)
 			}
 		}
-	} else {
-		markAllAccessed(inference)
-		return inference
-	}
+	} else return null
 
-	type Pattern = [
-		channels: Set<false | keyof Sucrose.Inference>,
-		rest?: string
-	]
+	type Pattern = [channels: Set<false | K>, rest?: string]
 
 	const patterns: Pattern[] = []
 	let closedPattern: Pattern | undefined
@@ -1206,12 +275,16 @@ function inferFunction(source: string): Sucrose.Inference {
 				token.value === '[' &&
 				(tokens[i - 1]?.value === '{' || tokens[i - 1]?.value === ',')
 			) {
-				const computed = computedDestructuringChannel(tokens, i)
+				const computed = computedDestructuringChannel(
+					tokens,
+					i,
+					channelOf
+				)
 				current[0].add(computed)
 			} else if (token.value === '...' && tokens[i + 1]?.k === 'i')
 				current[1] = tokens[i + 1].value
 			else if (token.k === 'i') {
-				const key = channel(token.value)
+				const key = channelOf(token.value)
 				if (key) current[0].add(key)
 			}
 		}
@@ -1219,23 +292,24 @@ function inferFunction(source: string): Sucrose.Inference {
 		if (token.value === '=') {
 			const right = tokens[i + 1]
 			let member = i + 2
-			if (tokens[member]?.value === '?.') member++
+			const optional = tokens[member]?.value === '?.'
+			if (optional) member++
 			if (
 				right?.k === 'i' &&
 				aliases.has(right.value) &&
 				tokens[member]?.value !== '.' &&
 				tokens[member]?.value !== '[' &&
-				tokens[member]?.k !== 'i'
+				// without a semicolon, the next statement may start right here
+				(tokens[member]?.k !== 'i' || (strict && !optional))
 			) {
 				const left = tokens[i - 1]
-				if (left?.k === 'i') aliases.add(left.value)
-				else if (left?.value === '}' && closedPattern) {
+				if (left?.k === 'i') {
+					if (strict) return null
+					aliases.add(left.value)
+				} else if (left?.value === '}' && closedPattern) {
 					for (const key of closedPattern[0]) {
-						if (key === false) {
-							markAllAccessed(inference)
-							return inference
-						}
-						inference[key] = true
+						if (key === false) return null
+						keys.add(key)
 					}
 					if (closedPattern[1]) aliases.add(closedPattern[1])
 				}
@@ -1245,40 +319,31 @@ function inferFunction(source: string): Sucrose.Inference {
 		}
 
 		if (token.k !== 'i') continue
-		if (token.value === 'arguments' || token.value === 'eval') {
-			markAllAccessed(inference)
-			break
-		}
+		if (token.value === 'arguments' || token.value === 'eval') return null
 		if (!aliases.has(token.value)) continue
+
+		// template boundaries emit no token: in `tag`${c}`.x` the `.x` is
+		// on the tag's result, and `c` escapes into `tag`
+		if (i + 1 < tokens.length)
+			for (let j = token.at + 1; j < tokens[i + 1].at; j++)
+				if (source.charCodeAt(j) === 96) return null
 
 		let next = i + 1
 		if (tokens[next]?.value === '?.') next++
 		if (tokens[next]?.value === '.') next++
 
 		if (tokens[next]?.k === 'i' && next > i + 1) {
-			const key = channel(tokens[next].value)
-			if (key) inference[key] = true
+			const key = channelOf(tokens[next].value)
+			if (key) keys.add(key)
 			continue
 		}
 
 		if (tokens[next]?.value === '[') {
 			const property = tokens[next + 1]
-			const key = property?.k === 's' && channel(property.value)
+			const key = property?.k === 's' && channelOf(property.value)
+			if (!key || tokens[next + 2]?.value !== ']') return null
 
-			if (key && tokens[next + 2]?.value === ']') inference[key] = true
-			else markAllAccessed(inference)
-
-			if (
-				inference.query &&
-				inference.headers &&
-				inference.body &&
-				inference.cookie &&
-				inference.set &&
-				inference.route &&
-				inference.afterResponse
-			)
-				break
-
+			keys.add(key)
 			continue
 		}
 
@@ -1288,16 +353,23 @@ function inferFunction(source: string): Sucrose.Inference {
 		)
 			continue
 
-		markAllAccessed(inference)
-		break
+		return null
 	}
 
-	return inference
+	return keys
 }
 
-// Reuse buffer instead of reallocated per call
-const eventsBuffer: Handler[] = []
-let eventsBufferInUse = false
+// scanned after the handler, in order. `parse` also holds content-type names
+const lifeCycleEvents = [
+	'request',
+	'beforeHandle',
+	'parse',
+	'error',
+	'transform',
+	'afterHandle',
+	'mapResponse',
+	'afterResponse'
+] as const
 
 export function sucrose(
 	handler: Handler | undefined,
@@ -1306,111 +378,73 @@ export function sucrose(
 	let inference: Sucrose.Inference | undefined
 	let merged = false
 
-	const reentrant = eventsBufferInUse
-	const events: Handler[] = reentrant ? [] : eventsBuffer
-	eventsBufferInUse = true
-
-	try {
-		if (handler && typeof handler === 'function') events.push(handler)
-		if (lifeCycle) {
-			if (lifeCycle.request?.length) push(events, lifeCycle.request)
-
-			if (lifeCycle.beforeHandle?.length)
-				push(events, lifeCycle.beforeHandle)
-
-			if (lifeCycle.parse?.length) {
-				const target: unknown[] = events
-				const array: unknown[] = lifeCycle.parse
+	const events: Handler[] = []
+	if (handler && typeof handler === 'function') events.push(handler)
+	if (lifeCycle)
+		for (const name of lifeCycleEvents) {
+			const array = lifeCycle[name] as Handler[] | undefined
+			if (array)
 				for (let i = 0; i < array.length; i++)
-					if (typeof array[i] === 'function') target.push(array[i])
-			}
-			if (lifeCycle.error?.length) push(events, lifeCycle.error)
-			if (lifeCycle.transform?.length) push(events, lifeCycle.transform)
-
-			if (lifeCycle.afterHandle?.length)
-				push(events, lifeCycle.afterHandle)
-
-			if (lifeCycle.mapResponse?.length)
-				push(events, lifeCycle.mapResponse)
-
-			if (lifeCycle.afterResponse?.length)
-				push(events, lifeCycle.afterResponse)
+					if (name !== 'parse' || typeof array[i] === 'function')
+						events.push(array[i])
 		}
 
-		const session = getCompilerSession()
-		const caches = session?.external
-			? (session.sucroseCache as SourceCache)
-			: globalSourceCache
+	const session = getCompilerSession()
+	const caches = session?.external
+		? (session.sucroseCache as SourceCache)
+		: globalSourceCache
 
-		for (let i = 0; i < events.length; i++) {
-			const event = events[i]
-			if (!event) continue
+	for (let i = 0; i < events.length; i++) {
+		const event = events[i]
+		if (!event) continue
 
-			let inferred = functionCaches.get(event as Function)
-			if (!inferred) {
-				if (
-					typeof event === 'function' &&
-					Object.hasOwn(event, 'toString')
-				) {
-					// An own `toString` is a forged source: the real behavior
-					// cannot be trusted from it, so widen every channel and memo
-					// by identity only, never by content
-					const forged = defaultSucrose()
-					markAllAccessed(forged)
+		let inferred = functionCaches.get(event as Function)
+		if (!inferred) {
+			if (
+				typeof event === 'function' &&
+				Object.hasOwn(event, 'toString')
+			) {
+				// An own `toString` is a forged source: the real behavior
+				// cannot be trusted from it, so widen every channel and memo
+				// by identity only, never by content
+				const forged = defaultSucrose()
+				markAllAccessed(forged)
 
-					inferred = Object.freeze(forged)
-					functionCaches.set(event, inferred)
-				} else {
-					const content = event.toString()
-					const key = fnv1a(content)
-					const cached = caches.get(key)
+				inferred = Object.freeze(forged)
+			} else {
+				const content = event.toString()
+				const key = fnv1a(content)
+				const cached = caches.get(key)
 
-					if (cached && cached.content === content) {
-						inferred = cached.inference
-						if (caches.size >= DEFAULT_CACHE_LIMIT) {
-							caches.delete(key)
-							caches.set(key, cached)
-						}
-
-						if (typeof event === 'function')
-							functionCaches.set(event, inferred)
-					} else {
-						inferred = Object.freeze(inferFunction(content))
-						if (!cached || cached.content !== content) {
-							if (caches.size >= DEFAULT_CACHE_LIMIT)
-								evictOldestHalf(caches)
-
-							caches.set(key, {
-								content,
-								inference: inferred
-							})
-						}
-
-						if (typeof event === 'function')
-							functionCaches.set(event, inferred)
+				if (cached && cached.content === content) {
+					inferred = cached.inference
+					if (caches.size >= DEFAULT_CACHE_LIMIT) {
+						caches.delete(key)
+						caches.set(key, cached)
 					}
+				} else {
+					const channels = inferFunction(content, channel)
+					const fresh = defaultSucrose()
+					if (channels) for (const c of channels) fresh[c] = true
+					else markAllAccessed(fresh)
+
+					inferred = Object.freeze(fresh)
+					if (caches.size >= DEFAULT_CACHE_LIMIT)
+						evictOldestHalf(caches)
+
+					caches.set(key, { content, inference: inferred })
 				}
 			}
 
-			if (inference) {
-				inference = mergeInference(inference, inferred)
-				merged = true
-			} else inference = inferred
-
-			if (
-				inference.query &&
-				inference.headers &&
-				inference.body &&
-				inference.cookie &&
-				inference.set &&
-				inference.route &&
-				inference.afterResponse
-			)
-				break
+			if (typeof event === 'function') functionCaches.set(event, inferred)
 		}
-	} finally {
-		events.length = 0
-		eventsBufferInUse = reentrant
+
+		if (inference) {
+			inference = mergeInference(inference, inferred)
+			merged = true
+		} else inference = inferred
+
+		if (isAllAccessed(inference)) break
 	}
 
 	// every `inferred` is already frozen, so a single-event result is returned as-is

@@ -5,7 +5,7 @@ import { isBun } from './universal/constants'
 import { Validator } from './validator'
 
 export function flushMemory() {
-	clearSucroseCache(0)
+	clearSucroseCache()
 	clearContextCache()
 	Validator.clear()
 

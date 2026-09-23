@@ -6,7 +6,10 @@ export function schemaSome(
 	test: (node: any) => boolean,
 	seen: WeakSet<object> = new WeakSet(),
 	// stop descending below a matching node (the node itself is still tested)
-	prune?: (node: any) => boolean
+	prune?: (node: any) => boolean,
+	// also descend if/then/else and inherited `properties` keys
+	// (default-precompute walkers)
+	conditional = false
 ) {
 	if (!schema || typeof schema !== 'object' || seen.has(schema)) return false
 	seen.add(schema)
@@ -18,37 +21,44 @@ export function schemaSome(
 	if (props)
 		for (const k in props)
 			if (
-				Object.hasOwn(props, k) &&
-				schemaSome(props[k], test, seen, prune)
+				(conditional || Object.hasOwn(props, k)) &&
+				schemaSome(props[k], test, seen, prune, conditional)
 			)
 				return true
 
 	const items = schema.items
 	if (Array.isArray(items)) {
 		for (const it of items)
-			if (schemaSome(it, test, seen, prune)) return true
-	} else if (items && schemaSome(items, test, seen, prune)) return true
+			if (schemaSome(it, test, seen, prune, conditional)) return true
+	} else if (items && schemaSome(items, test, seen, prune, conditional))
+		return true
 
 	for (const k of ['anyOf', 'allOf', 'oneOf'] as const) {
 		const arr = schema[k]
 		if (Array.isArray(arr))
 			for (const x of arr)
-				if (schemaSome(x, test, seen, prune)) return true
+				if (schemaSome(x, test, seen, prune, conditional)) return true
 	}
 
 	if (
 		schema.additionalProperties &&
 		typeof schema.additionalProperties === 'object' &&
-		schemaSome(schema.additionalProperties, test, seen, prune)
+		schemaSome(schema.additionalProperties, test, seen, prune, conditional)
 	)
 		return true
 
-	if (schema.not && schemaSome(schema.not, test, seen, prune)) return true
+	if (schema.not && schemaSome(schema.not, test, seen, prune, conditional))
+		return true
+
+	if (conditional)
+		for (const k of ['if', 'then', 'else'] as const)
+			if (schema[k] && schemaSome(schema[k], test, seen, prune, true))
+				return true
 
 	const pp = schema.patternProperties
 	if (pp)
 		for (const k in pp)
-			if (schemaSome(pp[k], test, seen, prune)) return true
+			if (schemaSome(pp[k], test, seen, prune, conditional)) return true
 
 	return false
 }

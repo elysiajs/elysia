@@ -1,18 +1,9 @@
 import type { TInteger, TNumberOptions } from 'typebox'
 
-import { isEmpty } from '../../utils'
-import { noEnumerable } from '../constants'
+import { primitive } from './number'
 
-const emptyInteger = Object.freeze(
-	Object.defineProperty(
-		{ type: 'integer', '~kind': 'Integer' },
-		'~kind',
-		noEnumerable
-	) as any as TInteger
-)
+const integer = /* @__PURE__ */ primitive('integer', 'Integer')
+
 export function Integer(options?: TNumberOptions): TInteger {
-	if (!options || isEmpty(options)) return emptyInteger as any
-
-	const schema = { ...options, type: 'integer', '~kind': 'Integer' }
-	return Object.defineProperty(schema, '~kind', noEnumerable) as any
+	return integer(options)
 }

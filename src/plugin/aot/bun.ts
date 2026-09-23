@@ -24,10 +24,11 @@ import type { ElysiaAotOptions } from './core'
 export const aot = (entry: string, options?: ElysiaAotOptions): BunPlugin => ({
 	name: 'elysia-aot',
 	async setup(build) {
-		await setupAotOnLoad(build, createAotPluginHooks(entry, options), {
-			readText: (path) => Bun.file(path).text(),
-			// Bun resolves relative to the project root by default
-			resolveDir: undefined
-		})
+		// Bun resolves relative to the project root by default (no resolveDir)
+		await setupAotOnLoad(
+			build,
+			createAotPluginHooks(entry, options),
+			(path) => Bun.file(path).text()
+		)
 	}
 })

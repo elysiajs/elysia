@@ -5,7 +5,7 @@ import type { ChainNode } from './utils'
 import type { TraceCapability } from './trace'
 import type { WSCapability, WSOptions } from './ws/types'
 
-export interface FrozenRootView {
+interface FrozenRootView {
 	readonly '~config': AnyElysia['~config']
 	readonly '~ext': AnyElysia['~ext']
 	readonly '~hookChain': ChainNode | undefined

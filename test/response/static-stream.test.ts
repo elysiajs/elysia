@@ -284,6 +284,10 @@ describe('static stream preparation', () => {
 
 	it('binds a factory captured before the repair to the unchanged raw owner and runtime mapper', async () => {
 		// Captured from the old runtime, ABI 4. Keep its code and alias order literal.
+		// ABI 5 dropped the manifest `bf` field and changed the emitted trace child
+		// reader (`rp.resolveChild?.shift?.()` -> `rp.shift?.()`); the handler
+		// factory binding contract this pins is unchanged, so re-check it whenever
+		// the ABI moves.
 		const old = {
 			method: 'GET',
 			path: '/old-stream',
@@ -302,7 +306,7 @@ describe('static stream preparation', () => {
 			return Reflect.apply(factory, this, [handler, ...bindings])
 		}
 		try {
-			expect(AOT_MANIFEST_FORMAT).toBe(4)
+			expect(AOT_MANIFEST_FORMAT).toBe(5)
 			registerManifest({ handlers: manifest })
 			const app = new Elysia({ nativeStaticResponse: false })
 				.headers({ 'x-default': 'base' })

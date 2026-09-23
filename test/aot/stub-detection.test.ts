@@ -247,7 +247,6 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			compat: true,
 			bridge: false,
 			typeboxValue: false,
-			typeboxType: true,
 			exactMirror: false,
 			adapter: false,
 			isProduction: true
@@ -267,7 +266,6 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			compat: true,
 			bridge: false,
 			typeboxValue: false,
-			typeboxType: true,
 			exactMirror: false,
 			adapter: false,
 			isProduction: true
@@ -288,7 +286,6 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			compat: false,
 			bridge: false,
 			typeboxValue: true,
-			typeboxType: true,
 			exactMirror: true,
 			adapter: false,
 			isProduction: true
@@ -312,12 +309,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 				({ body }) => body
 			)
 
-		const { validators, handlers } = await captureArtifacts(
-			build() as any,
-			{
-				register: false
-			}
-		)
+		const { validators, handlers } = await captureArtifacts(build() as any)
 		const report = replayStubbability(build() as any, handlers)
 		expect(report.jit).toBe(true)
 

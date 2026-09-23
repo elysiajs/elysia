@@ -311,9 +311,5 @@ export interface WSCapability {
 	 * Fold a single route's server-tuning options into the build-local config,
 	 * warning on conflicting keys (Bun uses one global config per server).
 	 */
-	accumulateOptions(
-		target: WSOptions,
-		routeOptions: WSOptions,
-		path: string
-	): void
+	accumulateOptions(target: WSOptions, routeOptions: WSOptions): void
 }

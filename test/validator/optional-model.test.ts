@@ -89,3 +89,44 @@ describe('optional primitive body', () => {
 			}
 		})
 })
+
+describe('$ref only under if/then/else', () => {
+	// Wrapping this schema into the models Module throws on its (snapshot-
+	// frozen) t.Optional members, which fails the route compile, so every
+	// request would 500 even when the conditional branch is never taken
+	it('keeps serving requests with an optional sibling field', async () => {
+		const app = new Elysia().model({ Inner: t.String() }).post(
+			'/',
+			{
+				body: t.Object({
+					a: t.Optional(t.String()),
+					d: t.Optional(
+						Object.assign(t.Object({ k: t.String() }), {
+							if: t.Object({ k: t.Literal('a') }),
+							then: t.Object({ k: t.String(), b: t.Ref('Inner') })
+						})
+					)
+				})
+			},
+			({ body }) => body
+		)
+
+		const post = (body: unknown) =>
+			app.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(body)
+				})
+			)
+
+		for (const body of [{ a: 'x' }, { d: { k: 'z' } }]) {
+			const response = await post(body)
+			expect(response.status).toBe(200)
+			expect(await response.json()).toEqual(body)
+		}
+
+		// the conditional branch still fails closed
+		expect((await post({ d: { k: 'a', b: 1 } })).status).toBe(422)
+	})
+})

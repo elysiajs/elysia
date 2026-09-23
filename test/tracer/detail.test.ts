@@ -154,6 +154,35 @@ describe('Trace Detail', async () => {
 		expect(headers.get('name')).toBe('luna, kindred')
 	})
 
+	// onRequest runs in the interpreted fetch handler (not the JIT), which
+	// resolves each child span through its own `rp.shift()` reader
+	it('report request units name', async () => {
+		const { promise, resolve } = Promise.withResolvers<string>()
+
+		const app = new Elysia()
+			.use(trace())
+			.trace(({ onRequest }) => {
+				onRequest(({ onEvent, onStop }) => {
+					const names = <string[]>[]
+
+					onEvent(({ name }) => {
+						names.push(name)
+					})
+
+					onStop(() => {
+						resolve(names.join(', '))
+					})
+				})
+			})
+			.request(function luna() {})
+			.request(function kindred() {})
+			.get('/', () => 'a')
+
+		await app.handle('/')
+
+		await expect(promise).resolves.toBe('luna, kindred')
+	})
+
 	it('report afterResponse units name', async () => {
 		const { promise, resolve } = Promise.withResolvers<string>()
 

@@ -11,25 +11,13 @@ const refTarget = (node: any) =>
 		? node.$defs[node.$ref as keyof typeof node.$defs]
 		: undefined
 
-const typeSets = new WeakMap<object, Set<unknown>>()
-
-function typeSetOf(types: (string | ELYSIA_TYPES[keyof ELYSIA_TYPES])[]) {
-	let set = typeSets.get(types)
-	if (set === undefined) {
-		set = new Set<unknown>(types)
-		typeSets.set(types, set)
-	}
-
-	return set
-}
-
 export function hasTypes(
 	types: (string | ELYSIA_TYPES[keyof ELYSIA_TYPES])[],
 	schema: AnySchema
 ) {
 	if ('~standard' in schema) return false
 
-	const set = typeSetOf(types)
+	const set = new Set<unknown>(types)
 	const seen = new WeakSet<object>()
 	const wantsFiles = set.has(ELYSIA_TYPES.Files)
 

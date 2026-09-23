@@ -87,7 +87,7 @@ it('fails before a later scl factory only when its resolver was omitted', async 
 				`export async function exerciseUnexpected() {
 	let factoryCalls = 0
 	const result = { factoryCalls: 0, error: null, response: null, unrelated: resolveHandlerParams(['rm', 'rc'], { res: { map: 'map', compact: 'compact' } }) }
-	Compiled.register({ bf: 1, fingerprint: createAotFingerprint(), handlers: { GET: { '/manual': { a: ['scl', 'rm'], f: (h, scl, rm) => { factoryCalls++; return (c) => rm(scl(h), c.set, c.request, true) } } } } })
+	Compiled.register({ fingerprint: createAotFingerprint(), handlers: { GET: { '/manual': { a: ['scl', 'rm'], f: (h, scl, rm) => { factoryCalls++; return (c) => rm(scl(h), c.set, c.request, true) } } } } })
 	try {
 		const next = new Elysia({ precompile: true }).get('/manual', { response: t.Any(), afterHandle() {} }, { value: 'manual' })
 		next.compile()

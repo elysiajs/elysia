@@ -1,4 +1,4 @@
-import { getAsyncIndexes, getNotFound } from './utils'
+import { hasAsync, getNotFound } from './utils'
 import { parseQueryFromURL } from '../parse-query'
 import {
 	NotFound,
@@ -17,6 +17,14 @@ import { materializeSetHeaders } from '../adapter/utils'
 import type { Context } from '../context'
 import type { AppHook } from '../types'
 
+const defineQuery = (context: Context, value: unknown) =>
+	Object.defineProperty(context, 'query', {
+		value,
+		writable: true,
+		enumerable: true,
+		configurable: true
+	})
+
 function parseQuery(context: Context) {
 	const c = context as any
 
@@ -27,21 +35,11 @@ function parseQuery(context: Context) {
 		enumerable: true,
 		get() {
 			const value = parseQueryFromURL(c.request.url, c.qi)
-			Object.defineProperty(context, 'query', {
-				value,
-				writable: true,
-				enumerable: true,
-				configurable: true
-			})
+			defineQuery(context, value)
 			return value
 		},
 		set(value) {
-			Object.defineProperty(context, 'query', {
-				value,
-				writable: true,
-				enumerable: true,
-				configurable: true
-			})
+			defineQuery(context, value)
 		}
 	})
 }
@@ -301,27 +299,34 @@ function fallbackErrorResponse(
 		)
 	}
 
+	// Tier 1: `value` replaces the whole response. No envelope and no
+	// problem+json — the annotated `status` and `headers` still apply,
+	// only the content is the error's to choose.
 	// Tier 2: `detail` fills the `detail` member of a problem document
-	const serveDetail = (): unknown => {
-		let detail: unknown
+	const tier = (key: 'value' | 'detail'): unknown => {
+		let annotation: unknown
 
 		try {
-			detail = readAnnotation(self, 'detail', claimsProblem)
+			annotation = readAnnotation(self, key, claimsProblem)
 		} catch (cause) {
 			return failed(cause)
 		}
 
-		if (detail === undefined) return serveMessage()
+		if (annotation === undefined)
+			return key === 'value' ? tier('detail') : serveMessage()
 
-		if (detail instanceof Promise)
-			return detail.then((resolved: unknown) => {
-				// Resolving `undefined` annotates nothing, fall to the message
-				if (resolved === undefined) return serveMessage()
+		if (annotation instanceof Promise)
+			return annotation.then((resolved: unknown) => {
+				// Resolving `undefined` annotates nothing, fall to the next tier
+				if (resolved === undefined)
+					return key === 'value' ? tier('detail') : serveMessage()
 
 				mergeHeaders()
 
 				return mapResponse(
-					problemOf(self, resolved, served, claimsProblem),
+					key === 'value'
+						? resolved
+						: problemOf(self, resolved, served, claimsProblem),
 					context.set,
 					context
 				)
@@ -330,7 +335,9 @@ function fallbackErrorResponse(
 		mergeHeaders()
 
 		return mapResponse(
-			problemOf(self, detail, served, claimsProblem),
+			key === 'value'
+				? annotation
+				: problemOf(self, annotation, served, claimsProblem),
 			context.set,
 			context
 		)
@@ -357,33 +364,8 @@ function fallbackErrorResponse(
 			typeof status === 'number' &&
 			status >= 100 &&
 			!(isProduction() && status >= 500))
-	) {
-		// Tier 1: `value` replaces the whole response. No envelope and no
-		// problem+json — the annotated `status` and `headers` still apply,
-		// only the content is the error's to choose
-		let value: unknown
-
-		try {
-			value = readAnnotation(self, 'value', claimsProblem)
-		} catch (cause) {
-			return failed(cause)
-		}
-
-		if (value === undefined) return serveDetail()
-
-		if (value instanceof Promise)
-			return value.then((resolved: unknown) => {
-				if (resolved === undefined) return serveDetail()
-
-				mergeHeaders()
-
-				return mapResponse(resolved, context.set, context)
-			}, failed)
-
-		mergeHeaders()
-
-		return mapResponse(value, context.set, context)
-	}
+	)
+		return tier('value')
 
 	return legacy()
 }
@@ -404,62 +386,7 @@ export function createErrorHandler(
 	defaultError?: Response,
 	allowUnsafe = false
 ) {
-	if (!onErrors)
-		return (context: Context, error: Error) => {
-			// @ts-expect-error
-			context.error = error
-			if (allowUnsafe && error instanceof ValidationError)
-				error.allowUnsafeValidationDetails = true
-			applyErrorStatus(context, error)
-
-			parseQuery(context)
-			return fallbackResponse(context, error, mapResponse, defaultError)
-		}
-
-	const asyncIndexes = getAsyncIndexes(onErrors)
-	if (asyncIndexes)
-		return async (context: Context, error: Error) => {
-			materializeSetHeaders(context.set)
-			// @ts-expect-error
-			context.error = error
-			if (allowUnsafe && error instanceof ValidationError)
-				error.allowUnsafeValidationDetails = true
-			applyErrorStatus(context, error)
-
-			parseQuery(context)
-
-			for (let i = 0; i < onErrors.length; i++) {
-				let result = onErrors[i](context as any)
-				if (typeof (result as any)?.then === 'function')
-					result = await result
-
-				if (result !== undefined) {
-					if (
-						result instanceof ElysiaStatus ||
-						result instanceof Response
-					)
-						context.set.status = result.status
-					else if (
-						context.set.status === undefined ||
-						context.set.status === 200
-					)
-						context.set.status = 500
-
-					return mapResponse(
-						adoptErrorType(result, error),
-						context.set,
-						context
-					)
-				}
-			}
-
-			if (isPristineNotFound(context, error)) return getNotFound()
-
-			return fallbackResponse(context, error, mapResponse, defaultError)
-		}
-
-	return (context: Context, error: Error) => {
-		materializeSetHeaders(context.set)
+	const enter = (context: Context, error: Error) => {
 		// @ts-expect-error
 		context.error = error
 		if (allowUnsafe && error instanceof ValidationError)
@@ -467,31 +394,53 @@ export function createErrorHandler(
 		applyErrorStatus(context, error)
 
 		parseQuery(context)
+	}
+
+	if (!onErrors)
+		return (context: Context, error: Error) => {
+			enter(context, error)
+			return fallbackResponse(context, error, mapResponse, defaultError)
+		}
+
+	const respond = (context: Context, error: Error, result: unknown) => {
+		if (result instanceof ElysiaStatus || result instanceof Response)
+			context.set.status = result.status
+		else if (context.set.status === undefined || context.set.status === 200)
+			context.set.status = 500
+
+		return mapResponse(adoptErrorType(result, error), context.set, context)
+	}
+
+	const settle = (context: Context, error: Error) =>
+		isPristineNotFound(context, error)
+			? getNotFound()
+			: fallbackResponse(context, error, mapResponse, defaultError)
+
+	if (hasAsync(onErrors))
+		return async (context: Context, error: Error) => {
+			materializeSetHeaders(context.set)
+			enter(context, error)
+
+			for (let i = 0; i < onErrors.length; i++) {
+				let result = onErrors[i](context as any)
+				if (typeof (result as any)?.then === 'function')
+					result = await result
+
+				if (result !== undefined) return respond(context, error, result)
+			}
+
+			return settle(context, error)
+		}
+
+	return (context: Context, error: Error) => {
+		materializeSetHeaders(context.set)
+		enter(context, error)
 
 		for (let i = 0; i < onErrors.length; i++) {
 			const result = onErrors[i](context as any)
-			if (result !== undefined) {
-				if (
-					result instanceof ElysiaStatus ||
-					result instanceof Response
-				)
-					context.set.status = (result as any).status
-				else if (
-					context.set.status === undefined ||
-					context.set.status === 200
-				)
-					context.set.status = 500
-
-				return mapResponse(
-					adoptErrorType(result, error),
-					context.set,
-					context
-				)
-			}
+			if (result !== undefined) return respond(context, error, result)
 		}
 
-		if (isPristineNotFound(context, error)) return getNotFound()
-
-		return fallbackResponse(context, error, mapResponse, defaultError)
+		return settle(context, error)
 	}
 }

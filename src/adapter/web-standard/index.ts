@@ -4,54 +4,14 @@ import { normalizeContentType } from '../utils'
 
 import { createAdapter } from '..'
 import { parseQuery } from '../../parse-query'
-import { isBun } from '../../universal/constants'
 import type { Context } from '../../context'
 
-function lowercaseContentType(ct: string) {
-	for (let i = 0; i < ct.length; i++) {
-		const code = ct.charCodeAt(i)
-		if (code >= 65 && code <= 90) return ct.toLowerCase()
-	}
-
-	return ct
-}
-
-function parseFormData(context: Context, contentType?: string) {
-	contentType ??= context.request.headers.get('content-type') ?? ''
-	const ct = lowercaseContentType(contentType)
-
-	if (isBun && ct !== contentType) {
-		const fullCt = context.request.headers.get('content-type') ?? ''
-
-		const semi = fullCt.indexOf(';')
-		const fixedCt =
-			semi === -1
-				? lowercaseContentType(fullCt)
-				: lowercaseContentType(fullCt.slice(0, semi)) +
-					fullCt.slice(semi)
-
-		const headers = new Headers(context.request.headers)
-		headers.set('content-type', fixedCt)
-
-		const rewrapped = new Request(context.request.url, {
-			method: context.request.method,
-			headers,
-			body: context.request.body,
-			duplex: 'half'
-		})
-
-		// @ts-ignore
-		return rewrapped.formData().then(formDataToObject)
-	}
-
+function parseFormData(context: Context) {
 	// @ts-ignore
 	return context.request.formData().then(formDataToObject)
 }
 
 export const WebStandardAdapter = createAdapter({
-	name: 'web-standard',
-	runtime: 'unknown',
-	isWebStandard: true,
 	parse: {
 		arrayBuffer: (context) => context.request.arrayBuffer(),
 		formData: parseFormData,

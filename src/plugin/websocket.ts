@@ -73,18 +73,7 @@ export const websocket = (options?: WSOptions): Elysia => {
 					}
 				]
 
-	;(
-		app as unknown as {
-			'~ext': {
-				capability: {
-					ws: {
-						provider: WSCapability
-						options?: WSOptionsEntry[]
-					}
-				}
-			}
-		}
-	)['~ext'] = {
+	app['~ext'] = {
 		capability: { ws: { provider, options: capabilityOptions } }
 	}
 

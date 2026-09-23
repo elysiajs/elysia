@@ -38,19 +38,20 @@ export function getNotFoundBody() {
 	return notFoundBody
 }
 
+const notFoundInit = {
+	status: 404,
+	headers: { 'content-type': PROBLEM_JSON }
+}
+
 export function getNotFound() {
 	const body = getNotFoundBody()
 
-	if (isPreallocateResponseUnsafe)
-		return new Response(body, {
-			status: 404,
-			headers: { 'content-type': PROBLEM_JSON }
-		})
+	if (isPreallocateResponseUnsafe) return new Response(body, notFoundInit)
 
-	return (notFoundResponse ??= new Response(body, {
-		status: 404,
-		headers: { 'content-type': PROBLEM_JSON }
-	})).clone() as Response
+	return (notFoundResponse ??= new Response(
+		body,
+		notFoundInit
+	)).clone() as Response
 }
 
 export function forwardError<T>(value: T): T {
@@ -95,13 +96,5 @@ export async function drainDisposables(context: any) {
 	}
 }
 
-export function getAsyncIndexes(onRequests: Function[]) {
-	let asyncIndexes: (true | undefined)[] | undefined
-	for (let i = 0; i < onRequests.length; i++)
-		if (isAsyncFunction(onRequests[i]) || mayReturnPromise(onRequests[i])) {
-			asyncIndexes ??= new Array(onRequests.length)
-			asyncIndexes[i] = true
-		}
-
-	return asyncIndexes
-}
+export const hasAsync = (fns: Function[]) =>
+	fns.some((fn) => isAsyncFunction(fn) || mayReturnPromise(fn))

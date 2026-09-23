@@ -41,12 +41,14 @@ const defer = {
 	}
 }
 
-function buildEmptyDecorator() {
+function buildDecorator(members: object) {
 	class Decorator {}
-	Object.assign(Decorator.prototype, { status, problem, redirect })
+	Object.assign(Decorator.prototype, members)
 	Object.defineProperty(Decorator.prototype, 'defer', defer)
 	return Decorator
 }
+
+const buildEmptyDecorator = () => buildDecorator({ status, problem, redirect })
 
 export function createBaseContext(app: AnyElysia) {
 	const ext = app['~ext']
@@ -56,17 +58,13 @@ export function createBaseContext(app: AnyElysia) {
 	if (!decorator && !store)
 		return (sharedEmptyDecorator ??= buildEmptyDecorator())
 
-	class Decorator {}
-	Object.assign(Decorator.prototype, {
+	return buildDecorator({
 		...decorator,
 		store,
 		status,
 		problem,
 		redirect
 	})
-	Object.defineProperty(Decorator.prototype, 'defer', defer)
-
-	return Decorator
 }
 
 export function clearContextCache(app?: AnyElysia) {

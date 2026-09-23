@@ -82,14 +82,15 @@ describe('sealed generation root isolation', () => {
 })
 
 describe('sealed generation replacement', () => {
-	it('~newGeneration publishes routes added since the previous generation', async () => {
+	it('re-sealing publishes routes added since the previous generation', async () => {
 		const app = new Elysia().get('/a', () => 'a')
 		await app.handle('/a')
 		const previous = app['~generation']
 
 		;(app as any)['~generation'] = undefined
 		app.get('/b', () => 'b')
-		app['~newGeneration']()
+		void app.fetch
+		expect(app['~generation']).toBeDefined()
 
 		expect(app['~generation']).not.toBe(previous)
 		expect((await app.handle('/b')).status).toBe(200)
@@ -106,7 +107,8 @@ describe('sealed generation replacement', () => {
 		)
 		;(app as any)['~generation'] = undefined
 		app.get('/b', () => 'b')
-		app['~newGeneration']()
+		void app.fetch
+		expect(app['~generation']).toBeDefined()
 		const after = Promise.all(
 			Array.from({ length: 8 }, () => app.handle('/b'))
 		)

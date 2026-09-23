@@ -1,31 +1,9 @@
-import { traceEvents } from './constants'
-import { separateFunction, retrieveRootparameters, findAlias } from './sucrose'
-import { isIdentCharCode } from './compile/lexer'
+import { traceEvents, type TraceEvent } from './constants'
+import { inferFunction } from './sucrose'
 import type { Context } from './context'
 import type { Prettify, RouteSchema, SingletonBase } from './types'
 
-// Node 20 does not provide Promise.withResolvers.
-const withResolvers =
-	typeof Promise.withResolvers === 'function'
-		? Promise.withResolvers.bind(Promise)
-		: function withResolvers<T>() {
-				let resolve!: (value: T | PromiseLike<T>) => void
-				const promise = new Promise<T>((r) => {
-					resolve = r
-				})
-				return { promise, resolve }
-			}
-
-export type TraceEvent =
-	| 'request'
-	| 'parse'
-	| 'transform'
-	| 'beforeHandle'
-	| 'handle'
-	| 'afterHandle'
-	| 'mapResponse'
-	| 'afterResponse'
-	| 'error'
+export type { TraceEvent }
 
 const phaseGetter: Record<string, TraceEvent> = {
 	onRequest: 'request',
@@ -39,121 +17,8 @@ const phaseGetter: Record<string, TraceEvent> = {
 	onError: 'error'
 }
 
-function phasesFromDestructure(group: string): Set<TraceEvent> | null {
-	let parameters: Record<string, true>
-	try {
-		;({ parameters } = retrieveRootparameters(group))
-	} catch {
-		return null
-	}
-
-	const out = new Set<TraceEvent>()
-	for (const key in parameters) {
-		// `[` computed key, or spread
-		if (key.charCodeAt(0) === 91 || key.startsWith('...')) return null
-
-		const phase = phaseGetter[key]
-		if (phase) out.add(phase)
-	}
-
-	return out
-}
-
-function phasesFromMemberAccess(
-	p: string,
-	body: string
-): Set<TraceEvent> | null {
-	const out = new Set<TraceEvent>()
-	const len = p.length
-	let i = 0
-
-	while (i < body.length) {
-		const idx = body.indexOf(p, i)
-		if (idx === -1) break
-
-		// word boundary: `p` must be a standalone identifier
-		const before = idx > 0 ? body.charCodeAt(idx - 1) : 0
-		if (
-			isIdentCharCode(before) ||
-			isIdentCharCode(body.charCodeAt(idx + len))
-		) {
-			i = idx + len
-			continue
-		}
-
-		let j = idx + len
-		let optional = false
-		if (body.charCodeAt(j) === 63 /* ? */) {
-			optional = true
-			j++
-		}
-
-		const next = body.charCodeAt(j)
-
-		// `p.onHandle` static member
-		if (next === 46 /* . */) {
-			j++
-			const s = j
-			while (isIdentCharCode(body.charCodeAt(j))) j++
-			const phase = phaseGetter[body.slice(s, j)]
-			if (phase) out.add(phase)
-
-			// non-phase members (`p.context`, `p.set`) expose no getter
-			i = j
-			continue
-		}
-
-		// `p['onHandle']` computed member, only accountable as a string literal
-		if (next === 91 /* [ */) {
-			j++
-			const q = body.charCodeAt(j)
-			if (q !== 34 && q !== 39) return null // not a string literal → dynamic
-			j++
-			const s = j
-			while (j < body.length && body.charCodeAt(j) !== q) {
-				if (body.charCodeAt(j) === 92 /* \ */) return null // escape → bail
-				j++
-			}
-			const name = body.slice(s, j)
-			j++ // closing quote
-			if (body.charCodeAt(j) !== 93 /* ] */) return null
-			j++
-			const phase = phaseGetter[name]
-			if (phase) out.add(phase)
-			i = j
-			continue
-		}
-
-		// `p?` not followed by `.`/`[` → bare reference
-		if (optional) return null
-
-		// bare `p`: accountable ONLY as the RHS of a destructure (`{ … } = p`).
-		// Walk back over `= ` to a `}`.
-		let k = idx - 1
-		while (
-			k >= 0 &&
-			(body.charCodeAt(k) === 32 || body.charCodeAt(k) === 9)
-		)
-			k--
-		if (body.charCodeAt(k) === 61 /* = */) {
-			k--
-			while (
-				k >= 0 &&
-				(body.charCodeAt(k) === 32 || body.charCodeAt(k) === 9)
-			)
-				k--
-			if (body.charCodeAt(k) === 125 /* } */) {
-				i = idx + len
-				continue
-			}
-		}
-
-		// passed to a function, returned, aliased, dynamically indexed → bail
-		return null
-	}
-
-	return out
-}
+const phaseOf = (member: string): TraceEvent | undefined =>
+	Object.hasOwn(phaseGetter, member) ? phaseGetter[member] : undefined
 
 const tracePhaseCache = new WeakMap<Function, Set<TraceEvent> | null>()
 
@@ -161,64 +26,24 @@ function scanTracePhases(fn: Function) {
 	const cached = tracePhaseCache.get(fn)
 	if (cached !== undefined) return cached
 
-	const result = computeTracePhases(fn)
+	let result: Set<TraceEvent> | null = null
+	// a handler without a (plain) first parameter still has to run, so it
+	// traces every phase
+	if (fn.length)
+		try {
+			// the prototype method, so an own `toString` cannot forge the source
+			result = inferFunction(
+				Function.prototype.toString.call(fn),
+				phaseOf,
+				true
+			)
+		} catch {
+			result = null
+		}
+
 	tracePhaseCache.set(fn, result)
 
 	return result
-}
-
-function computeTracePhases(fn: Function): Set<TraceEvent> | null {
-	let src: string
-	try {
-		src = Function.prototype.toString.call(fn)
-	} catch {
-		return null
-	}
-
-	if (src.includes('[native code]')) return null
-
-	let param: string
-	let body: string
-	try {
-		;[param, body] = separateFunction(src)
-	} catch {
-		return null
-	}
-
-	if (!param) return null
-
-	let roots: ReturnType<typeof retrieveRootparameters>
-	try {
-		roots = retrieveRootparameters(param)
-	} catch {
-		return null
-	}
-
-	// destructure form: `({ onHandle, set }) => …`
-	if (roots.hasParenthesis) return phasesFromDestructure(param)
-
-	// bare-identifier form: the lifecycle is the first parameter
-	const first = Object.keys(roots.parameters)[0]
-	if (!first) return null
-
-	const inner = body.charCodeAt(0) === 123 ? body.slice(1, -1) : body
-
-	const phases = phasesFromMemberAccess(first, inner)
-	if (phases === null) return null
-
-	// nested destructure aliases: `const { onHandle } = t`
-	const aliases = findAlias(first, inner)
-	for (const alias of aliases) {
-		// a non-destructure alias (`const a = t`) can reach getters we cannot
-		// re-scan for bail. Destructure aliases (`{ … }`) are accountable.
-		if (alias.charCodeAt(0) !== 123) return null
-
-		const aliasPhases = phasesFromDestructure(alias)
-		if (aliasPhases === null) return null
-		for (const p of aliasPhases) phases.add(p)
-	}
-
-	return phases
 }
 
 export function unionTracePhases(
@@ -341,9 +166,8 @@ export type TraceHandler<
 		lifecycle: Prettify<
 			{
 				/**
-				 * Per-request id. Sourced from `crypto.randomUUIDv7()` when
-				 * the runtime supports it (Bun ≥ 1.1.40), otherwise
-				 * `crypto.randomUUID()`. Useful for log correlation.
+				 * Per-request id. Sourced from `Bun.randomUUIDv7()` on Bun,
+				 * otherwise `crypto.randomUUID()`. Useful for log correlation.
 				 */
 				id: string
 				context: Context<Route, Singleton>
@@ -399,7 +223,7 @@ class TraceRecorder {
 
 		// pre-subscription: settle at `begin()`
 		const { promise, resolve } =
-			withResolvers<TraceProcess<'begin'>>()
+			Promise.withResolvers<TraceProcess<'begin'>>()
 		this.pendingPromise = promise
 		this.pendingResolve = resolve
 
@@ -427,7 +251,8 @@ class TraceRecorder {
 						slot.endError
 					))
 
-				const { promise, resolve } = withResolvers<Error | null>()
+				const { promise, resolve } =
+					Promise.withResolvers<Error | null>()
 				slot.errorPromise = promise
 				slot.errorResolve = resolve
 
@@ -449,7 +274,7 @@ class TraceRecorder {
 		if (this.endPromise) return this.endPromise
 		if (this.ended) return (this.endPromise = Promise.resolve(this.endTime))
 
-		const { promise, resolve } = withResolvers<number>()
+		const { promise, resolve } = Promise.withResolvers<number>()
 		this.endPromise = promise
 		this.endResolve = resolve
 
@@ -478,10 +303,6 @@ class TraceRecorder {
 		return this
 	}
 
-	get resolveChild() {
-		return this
-	}
-
 	shift() {
 		if (this.remaining <= 0) return
 		this.remaining--
@@ -500,9 +321,9 @@ class TraceRecorder {
 
 		return (process: TraceStream) => {
 			const { promise: end, resolve: resolveEnd } =
-				withResolvers<number>()
+				Promise.withResolvers<number>()
 			const { promise: error, resolve: resolveError } =
-				withResolvers<Error | null>()
+				Promise.withResolvers<Error | null>()
 			const callbacksEnd: Function[] = []
 
 			const result = {

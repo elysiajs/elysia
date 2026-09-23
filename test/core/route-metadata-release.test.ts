@@ -8,8 +8,9 @@ import { Elysia } from '../../src'
  * `~routeTable`. Every consumer rematerializes the array on demand from the
  * table. WHY these tests exist: the release is a pure memory optimization and
  * MUST be invisible — introspection getters (`routes`/`history`), the re-seal
- * mutation path (`~newGeneration`), and merging a sealed app as a child must
- * all behave exactly as if the array had never been released. A missing guard
+ * mutation path (clear `~generation`, register, re-seal), and merging a sealed
+ * app as a child must all behave exactly as if the array had never been
+ * released. A missing guard
  * or a broken rematerializer surfaces here as lost routes or empty getters,
  * not as a silent memory win.
  *
@@ -101,7 +102,8 @@ describe('plan 007 — declaredRoutes release + rematerialize', () => {
 			// appending — the append-vs-rebuild hazard), then re-seal.
 			;(app as any)['~generation'] = undefined
 			app.get('/c', () => 'c')
-			app['~newGeneration']()
+			void app.fetch
+			expect(app['~generation']).toBeDefined()
 
 			// Old AND new routes must respond; none dropped on rebuild.
 			await expect((await app.handle('/a')).text()).resolves.toBe('a')

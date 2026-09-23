@@ -465,3 +465,147 @@ describe('TypeBoxValidator default precompute — codegen failure is loud', () =
 		expect(healthy!.FromSync({} as any)).toEqual(Default(schema, {}) as any)
 	})
 })
+
+describe('default precompute declines reference schemas', () => {
+	const {
+		verifyPreallocatableDefault
+	} = require('../../src/type/validator/default-precompute')
+
+	// A `$ref` target (and its defaults) is only known once models resolve, so
+	// a baked default could miss them. A raw JSON Schema `$ref` has no `~kind`,
+	// so the `$ref` key itself must be enough to decline, at any depth
+	it('declines a raw $ref property with no ~kind', () => {
+		const withRaw = (ref: object) =>
+			Type.Object({ a: Type.Number({ default: 1 }), r: ref as any })
+
+		expect(verifyPreallocatableDefault(withRaw({}), false)).toBeDefined()
+		expect(
+			verifyPreallocatableDefault(withRaw({ $ref: 'Foo' }), false)
+		).toBeUndefined()
+		expect(
+			verifyPreallocatableDefault(
+				Object.assign(Type.Object({ a: Type.Number({ default: 1 }) }), {
+					then: { $ref: 'Foo' }
+				}),
+				false
+			)
+		).toBeUndefined()
+	})
+})
+
+// A default is baked into `Function()` source, so the emitter is the only guard
+// between a schema literal and executable code: it must refuse anything that
+// does not round-trip as plain data, at every depth, not just at the root
+describe('default cloner emits only plain data', () => {
+	const cycle: any = { a: 1 }
+	cycle.self = cycle
+
+	const withKey = (key: string) =>
+		Object.defineProperty({}, key, {
+			value: { polluted: true },
+			enumerable: true,
+			writable: true,
+			configurable: true
+		})
+
+	const refused: [string, unknown][] = [
+		['nested undefined', { a: undefined }],
+		// eslint-disable-next-line no-sparse-arrays
+		['array hole', [, 1]],
+		['nested NaN', { a: NaN }],
+		['nested Infinity', [Infinity]],
+		['nested -0', { a: [-0] }],
+		['nested bigint', { a: 1n }],
+		['nested function', { a: () => 1 }],
+		['cycle', cycle],
+		['own __proto__ at depth', { a: [withKey('__proto__')] }],
+		['own constructor at depth', { a: { b: withKey('constructor') } }],
+		['own prototype at depth', [withKey('prototype')]],
+		[
+			'accessor',
+			{
+				get a() {
+					return 1
+				}
+			}
+		],
+		['symbol key', { a: { [Symbol('s')]: 1 } }],
+		['class instance', { a: new Date(0) }],
+		['custom prototype', { a: Object.create({ inherited: 1 }) }]
+	]
+
+	for (const [name, value] of refused)
+		it(`refuses ${name}`, () => {
+			expect(createDefaultCloner(value)).toBeUndefined()
+		})
+
+	it('accepts a shared, acyclic reference and clones each use', () => {
+		const shared = { x: 1 }
+		const cloner = createDefaultCloner({ a: shared, b: [shared, shared] })!
+		const out = cloner() as any
+
+		expect(out).toEqual({ a: { x: 1 }, b: [{ x: 1 }, { x: 1 }] })
+		expect(out.a).not.toBe(out.b[0])
+		expect(out.b[0]).not.toBe(out.b[1])
+	})
+
+	it('accepts undefined only as the whole default', () => {
+		expect(createDefaultCloner(undefined)!()).toBeUndefined()
+	})
+
+	it('emits hostile strings and keys as inert data', () => {
+		const payload =
+			"'\"`${globalThis.__pwned=1}`</script>\u2028\u2029\0\\"
+		const value = { [payload]: [payload], 'a b': payload }
+
+		const out = createDefaultCloner(value)!()
+
+		expect(out).toEqual(value)
+		expect((globalThis as any).__pwned).toBeUndefined()
+	})
+})
+
+// The precomputed default replaces an explicit `null` (legacy parity), but only
+// when there IS a default to put there. typebox never applies a default under
+// if/then/else, so one there must not arm the default path at all: `null` has
+// to reach validation untouched
+describe('default precompute null handling', () => {
+	const conditional = {
+		if: t.Object({ k: t.Literal('a') }),
+		then: t.Object({ b: t.String({ default: 'x' }) })
+	}
+
+	const post = async (schema: any) => {
+		const app = new Elysia().post('/', { body: schema }, ({ body }) => ({
+			body
+		}))
+
+		const res = await app.handle(
+			req('/', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: 'null'
+			})
+		)
+
+		return [res.status, await res.json()]
+	}
+
+	it('keeps null for a nullable schema whose defaults sit under then', async () => {
+		expect(await post(Object.assign(t.Null(), conditional))).toEqual([
+			200,
+			{ body: null }
+		])
+		expect(await post(Object.assign(t.Any(), conditional))).toEqual([
+			200,
+			{ body: null }
+		])
+	})
+
+	it('still replaces null with a root default', async () => {
+		expect(await post(t.String({ default: 'x' }))).toEqual([
+			200,
+			{ body: 'x' }
+		])
+	})
+})

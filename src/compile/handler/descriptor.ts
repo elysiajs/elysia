@@ -85,7 +85,6 @@ export interface RouteCompileState {
 
 export interface DescribeRouteInput {
 	method: string
-	path: string
 	handler: unknown
 	root: AnyElysia
 	adapter: ElysiaAdapter
@@ -108,7 +107,7 @@ export const routeDescriptors = new WeakMap<
 // Read-only: consumers only call `.has` (`jit.ts` `phaseOn`, `descriptor.ts` `phaseOn`)
 const noTracePhases: ReadonlySet<TraceEvent> = new Set<TraceEvent>()
 
-export const lifecycleMayReturnPromise = (
+const lifecycleMayReturnPromise = (
 	handlers: MaybeArray<Function> | undefined
 ) =>
 	handlers
@@ -185,29 +184,7 @@ function compactPrefixForcesAsync(prefix: CompactBeforeHandlePrefix) {
 }
 
 const isAsyncValidator = (vali: Validator | undefined) =>
-	(vali as Validator | undefined)?.isAsync ?? true
-
-const mayReturnPromiseValidator = (vali: Validator | undefined) =>
-	(vali as Validator | undefined)?.mayReturnPromise === true
-
-/** Whether a hook can be skipped by a native static response. */
-export function isEmptyPipelineHook(hook: AnyLocalHook | undefined) {
-	if (!hook) return true
-
-	for (const key in hook) {
-		if (key === 'detail' || key === 'tags' || key === 'error') continue
-
-		const value = (hook as any)[key]
-		if (
-			value !== undefined &&
-			value !== false &&
-			(!Array.isArray(value) || value.length)
-		)
-			return false
-	}
-
-	return true
-}
+	(vali?.isAsync ?? true) || vali?.mayReturnPromise === true
 
 export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 	const {
@@ -252,29 +229,11 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 			(parseLength > 0 || inference.body) &&
 			parseFirst !== 'none')
 
-	const bodyValiIsAsync =
-		hasBody &&
-		(isAsyncValidator(vali?.body) || mayReturnPromiseValidator(vali?.body))
-
-	const headersValiIsAsync =
-		vali?.headers &&
-		(isAsyncValidator(vali?.headers) ||
-			mayReturnPromiseValidator(vali?.headers))
-
-	const paramsValiIsAsync =
-		vali?.params &&
-		(isAsyncValidator(vali?.params) ||
-			mayReturnPromiseValidator(vali?.params))
-
-	const queryValiIsAsync =
-		vali?.query &&
-		(isAsyncValidator(vali?.query) ||
-			mayReturnPromiseValidator(vali?.query))
-
-	const cookieValidIsAsync =
-		vali?.cookie &&
-		(isAsyncValidator(vali?.cookie) ||
-			mayReturnPromiseValidator(vali?.cookie))
+	const bodyValiIsAsync = hasBody && isAsyncValidator(vali?.body)
+	const headersValiIsAsync = vali?.headers && isAsyncValidator(vali.headers)
+	const paramsValiIsAsync = vali?.params && isAsyncValidator(vali.params)
+	const queryValiIsAsync = vali?.query && isAsyncValidator(vali.query)
+	const cookieValidIsAsync = vali?.cookie && isAsyncValidator(vali.cookie)
 
 	const appCookieConfig = frozenRootOf(root)['~config']?.cookie
 	const needsCookie = !!vali?.cookie || !!inference.cookie
@@ -328,10 +287,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 	let responseValiAsync = false
 	if (vali?.response)
 		for (const code in vali.response)
-			if (
-				isAsyncValidator(vali.response[code]) ||
-				mayReturnPromiseValidator(vali.response[code])
-			) {
+			if (isAsyncValidator(vali.response[code])) {
 				responseValiAsync = true
 				break
 			}
@@ -387,17 +343,10 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		lifecycleForcesAsync ||
 		asyncCookieSign ||
 		responseValiAsync ||
-		(hook &&
-			(!!isAsyncLifecycle(hook?.afterHandle) ||
-				!!isAsyncLifecycle(hook?.beforeHandle) ||
-				!!isAsyncLifecycle(hook?.transform) ||
-				!!isAsyncLifecycle(hook?.mapResponse) ||
-				!!isAsyncLifecycle(hook?.error) ||
-				bodyValiIsAsync ||
-				headersValiIsAsync ||
-				paramsValiIsAsync ||
-				queryValiIsAsync ||
-				cookieValidIsAsync))
+		headersValiIsAsync ||
+		paramsValiIsAsync ||
+		queryValiIsAsync ||
+		cookieValidIsAsync
 
 	const callHandlerSyncOnAsync =
 		isAsync && isHandleFunction && !handlerIsAsync
@@ -458,7 +407,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 	const descriptor: RouteDescriptor = {
 		handlerKind,
 		async: !!isAsync,
-		generator,
+		generator: generator as boolean,
 		responseMode,
 
 		hasBeforeHandle,

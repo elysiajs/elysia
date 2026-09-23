@@ -67,7 +67,7 @@ describe('isContextPassToFunction', () => {
 	})
 
 	it('treats a dollar-prefixed context passed to a function conservatively', () => {
-		clearSucroseCache(null)
+		clearSucroseCache()
 		const handler = new Function('$ctx', 'return log($ctx)')
 
 		const result = sucrose(handler, lifecycle)
@@ -81,7 +81,7 @@ describe('isContextPassToFunction', () => {
 	})
 
 	it('infers direct access through a dollar-prefixed context narrowly', () => {
-		clearSucroseCache(null)
+		clearSucroseCache()
 		const handler = new Function('$ctx', 'return $ctx.query.a')
 
 		const result = sucrose(handler, lifecycle)

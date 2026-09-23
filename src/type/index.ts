@@ -39,9 +39,6 @@ type TypeBuilder = Omit<typeof TypeBoxType, keyof typeof TypeRegistry> &
 
 setupTypebox()
 
-const hasOwn = (target: object, key: PropertyKey) =>
-	Object.prototype.hasOwnProperty.call(target, key)
-
 /**
  * A namespace object that materializes `typebox/type` only when a key it does
  * not own is actually read
@@ -69,11 +66,11 @@ const lazyNamespace = <T extends object>(
 			return keys
 		},
 		getOwnPropertyDescriptor(target, key) {
-			if (hasOwn(target, key))
+			if (Object.hasOwn(target, key))
 				return Reflect.getOwnPropertyDescriptor(target, key)
 
 			const ns = resolve()
-			if (!hasOwn(ns, key)) return
+			if (!Object.hasOwn(ns, key)) return
 
 			return {
 				value: ns[key],
@@ -87,10 +84,7 @@ const lazyNamespace = <T extends object>(
 		// Refuse up front so `Object.freeze(t)` throws before it makes the
 		// target non-extensible; otherwise the failed freeze would leave `ownKeys` permanently
 		preventExtensions: () => false,
-		set: (target, key, value) => Reflect.set(target, key, value),
-		defineProperty: (target, key, descriptor) =>
-			Reflect.defineProperty(target, key, descriptor),
-		deleteProperty: (target, key) => Reflect.deleteProperty(target, key)
+		set: (target, key, value) => Reflect.set(target, key, value)
 	}) as T
 
 export const t = lazyNamespace<TypeBuilder>(() => loadTypeNamespace().type, {

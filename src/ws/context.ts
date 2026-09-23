@@ -135,14 +135,14 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		data?: FlattenResponse<Route['response']> | BufferSource
 	) => ServerWebSocketSendStatus {
 		const self = (this.raw.data.elysia as ElysiaWS<Route>) ?? this
-		return memoize(this, 'ping', self.#ping.bind(self))
+		return memoize(this, 'ping', self.#control.bind(self, 'ping'))
 	}
 
 	get pong(): (
 		data?: FlattenResponse<Route['response']> | BufferSource
 	) => ServerWebSocketSendStatus {
 		const self = (this.raw.data.elysia as ElysiaWS<Route>) ?? this
-		return memoize(this, 'pong', self.#pong.bind(self))
+		return memoize(this, 'pong', self.#control.bind(self, 'pong'))
 	}
 
 	get publish(): (
@@ -237,32 +237,19 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		return this.raw.send(frame!, compress)
 	}
 
-	#ping(
+	#control(
+		kind: 'ping' | 'pong',
 		data?: FlattenResponse<Route['response']> | BufferSource
 	): ServerWebSocketSendStatus {
-		if (data === undefined) return this.raw.ping()
+		if (data === undefined) return this.raw[kind]()
 		if (data instanceof ArrayBuffer || ArrayBuffer.isView(data))
-			return this.raw.ping(data as unknown as BufferSource)
+			return this.raw[kind](data as unknown as BufferSource)
 
 		const frame = this.#frame(data)
 		if (frame instanceof ValidationError)
 			return this.raw.send(frame.message)
 
-		return this.raw.ping(frame!)
-	}
-
-	#pong(
-		data?: FlattenResponse<Route['response']> | BufferSource
-	): ServerWebSocketSendStatus {
-		if (data === undefined) return this.raw.pong()
-		if (data instanceof ArrayBuffer || ArrayBuffer.isView(data))
-			return this.raw.pong(data as unknown as BufferSource)
-
-		const frame = this.#frame(data)
-		if (frame instanceof ValidationError)
-			return this.raw.send(frame.message)
-
-		return this.raw.pong(frame!)
+		return this.raw[kind](frame!)
 	}
 
 	#publish(
@@ -278,7 +265,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 				compress
 			)
 
-		// validate before stringifying (matches #ping/#pong)
+		// validate before stringifying (matches #control)
 		const frame = this.#frame(data)
 		if (frame instanceof ValidationError)
 			return this.raw.send(frame.message)

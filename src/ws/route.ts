@@ -8,7 +8,6 @@ import { isBridgeLive } from '../type/bridge'
 import {
 	assignOwn,
 	deriveEntryFn,
-	isNotEmpty,
 	isSocketQuiet,
 	nullObject,
 	type DeriveEntry
@@ -82,91 +81,6 @@ type Server = {
 }
 
 const EMPTY_HOOKS: readonly AnyFn[] = Object.freeze([]) as any
-
-/**
- * Build-time (route-registration-time) analysis of a WS `message` handler to
- * decide whether the per-frame `ws.body` view must be assigned.
- */
-function handlerMayTouchBody(fn: AnyFn | undefined): boolean {
-	if (!fn) return false
-
-	let source: string
-	try {
-		source = Function.prototype.toString.call(fn)
-	} catch {
-		return true
-	}
-
-	if (source.indexOf('[native code]') !== -1) return true
-
-	if (/\bbody\b/.test(source)) return true
-	if (/\barguments\b/.test(source)) return true
-	if (source.indexOf('[') !== -1) return true
-	if (source.indexOf('...') !== -1) return true
-
-	let parsed:
-		| { name: string; bodyStart: number; paramsEnd: number }
-		| undefined
-
-	const open = source.indexOf('(')
-	if (open === -1) {
-		const m = /^\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*=>/.exec(source)
-		if (m) {
-			const end = m.index + m[0].length
-			parsed = { name: m[1], bodyStart: end, paramsEnd: end }
-		}
-	} else {
-		// Find the matching close paren of the parameter list.
-		let depth = 0
-		let close = -1
-		for (let i = open; i < source.length; i++) {
-			const c = source[i]
-			if (c === '(') depth++
-			else if (c === ')') {
-				depth--
-				if (depth === 0) {
-					close = i
-					break
-				}
-			}
-		}
-
-		if (close !== -1) {
-			const params = source.slice(open + 1, close).trim()
-			if (params.length > 0) {
-				// First param up to the first top-level comma.
-				let first = params
-				const comma = params.indexOf(',')
-				if (comma !== -1) first = params.slice(0, comma).trim()
-
-				// Destructuring patterns handled by the `body`/`...`/`[` checks above.
-				if (first[0] !== '{' && first[0] !== '[') {
-					const m = /^([A-Za-z_$][\w$]*)/.exec(first)
-					if (m)
-						parsed = {
-							name: m[1],
-							bodyStart: close + 1,
-							paramsEnd: close + 1
-						}
-				}
-			}
-		}
-	}
-	if (parsed === undefined) return true
-
-	const { name: wsName, bodyStart, paramsEnd } = parsed
-
-	if (source.slice(0, paramsEnd).indexOf('(', 1) !== -1) return true
-
-	const body = source.slice(bodyStart)
-
-	const safeName = wsName.replace(/[$]/g, '\\$&')
-	const escaped = new RegExp(`(?<![\\w$.])${safeName}(?![\\w$]|\\s*\\.)`)
-
-	if (escaped.test(body)) return true
-
-	return false
-}
 
 function concatHooks(
 	...sources: Array<AnyFn | AnyFn[] | undefined | null>
@@ -413,14 +327,11 @@ function sendErrorFrame(ws: ElysiaWS<any>, error: unknown) {
 function validateUpgradeChannel(
 	validator: any,
 	value: unknown,
-	type: 'params' | 'query' | 'headers' | 'cookie'
+	type: 'body' | 'params' | 'query' | 'headers' | 'cookie'
 ): unknown | Promise<unknown> {
-	if (validator instanceof StandardValidator)
-		return validator.From(value, type)
-
-	if (validator.hasCodec) return validator.From(value, type)
-
-	return validator.EncodeFrom(value, type)
+	return validator.hasCodec || validator instanceof StandardValidator
+		? validator.From(value, type)
+		: validator.EncodeFrom(value, type)
 }
 
 const wsOptions = [
@@ -669,16 +580,6 @@ export function buildWSRoute(
 
 	const bodyValidator = validators.body as any
 
-	function validateMessageBody(message: unknown) {
-		if (!bodyValidator) return message
-		if (bodyValidator.hasCodec) return bodyValidator.From(message, 'body')
-
-		if (bodyValidator instanceof StandardValidator)
-			return bodyValidator.From(message, 'body')
-
-		return bodyValidator.EncodeFrom(message, 'body')
-	}
-
 	function onMessageValidationError(ws: ElysiaWS<any>, error: unknown) {
 		if (errorHandlers.length === 0) {
 			if (
@@ -692,11 +593,6 @@ export function buildWSRoute(
 
 		return handleError(ws, error)
 	}
-
-	const messageHandlerTouchesBody =
-		!!bodyValidator ||
-		handlerMayTouchBody(hook.message as AnyFn | undefined) ||
-		errorHandlers.some(handlerMayTouchBody)
 
 	const syncDispatchEligible =
 		transforms.length === 0 &&
@@ -725,7 +621,7 @@ export function buildWSRoute(
 			let decoded: unknown
 
 			try {
-				decoded = validateMessageBody(message)
+				decoded = validateUpgradeChannel(bodyValidator, message, 'body')
 			} catch (error) {
 				return onMessageValidationError(ws, error)
 			}
@@ -744,7 +640,7 @@ export function buildWSRoute(
 
 	function runMessageSync(ws: ElysiaWS<any>, message: unknown) {
 		try {
-			if (messageHandlerTouchesBody) ws.body = message as any
+			ws.body = message as any
 
 			const result = (hook.message as AnyFn)(ws, message)
 
@@ -873,46 +769,32 @@ export function buildWSRoute(
 				if (r instanceof Promise) r = await r
 				context.params = r as any
 			}
-			if (validators.query) {
+			if (validators.query || inference.query) {
 				const url = request.url
-				const query = parseQueryFromURL(
+				let r: unknown = parseQueryFromURL(
 					url,
 					(context as any).qi ?? url.indexOf('?'),
 					queryArray,
 					queryObject
 				)
 
-				let r = validateUpgradeChannel(
-					validators.query as any,
-					query,
-					'query'
-				)
-				if (r instanceof Promise) r = await r
+				if (validators.query) {
+					r = validateUpgradeChannel(validators.query, r, 'query')
+					if (r instanceof Promise) r = await r
+				}
 				;(context as any).query = r
-			} else if (inference.query) {
-				const url = request.url
-				;(context as any).query = parseQueryFromURL(
-					url,
-					(context as any).qi ?? url.indexOf('?')
-				)
 			}
 
-			if (validators.headers) {
-				const headers = isBun
+			if (validators.headers || inference.headers) {
+				let r: unknown = isBun
 					? request.headers.toJSON()
 					: Object.fromEntries(request.headers)
 
-				let r = validateUpgradeChannel(
-					validators.headers as any,
-					headers,
-					'headers'
-				)
-				if (r instanceof Promise) r = await r
+				if (validators.headers) {
+					r = validateUpgradeChannel(validators.headers, r, 'headers')
+					if (r instanceof Promise) r = await r
+				}
 				;(context as any).headers = r
-			} else if (inference.headers) {
-				;(context as any).headers = isBun
-					? request.headers.toJSON()
-					: Object.fromEntries(request.headers)
 			}
 
 			if (cookieConfig) {
@@ -1054,14 +936,12 @@ export function resolveWSOptions(
 	if (!entries || entries.length === 0) return undefined
 	if (entries.length === 1) return { ...entries[0].value }
 
-	const ordered = entries
-		.map((entry, index) => ({ entry, index }))
-		.sort((a, b) => b.entry.depth - a.entry.depth || a.index - b.index)
+	const ordered = entries.toSorted((a, b) => b.depth - a.depth)
 
 	const result = {} as WSOptions
 	let warned: Set<string> | undefined
 
-	for (const { entry } of ordered)
+	for (const entry of ordered)
 		for (const key in entry.value) {
 			const incoming = (entry.value as any)[key]
 			if (
@@ -1086,11 +966,8 @@ const routeOwnedKeys = new WeakMap<WSOptions, Set<string>>()
 
 export function accumulateWSOptions(
 	target: WSOptions,
-	routeOptions: WSOptions,
-	_path: string
+	routeOptions: WSOptions
 ) {
-	if (!isNotEmpty(routeOptions)) return
-
 	let owned = routeOwnedKeys.get(target)
 	if (!owned) routeOwnedKeys.set(target, (owned = new Set()))
 

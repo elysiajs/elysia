@@ -4,28 +4,16 @@ import { evictOldestHalf } from './utils'
 const modelSnapshots = new WeakMap<object, object>()
 const hookSnapshots = new WeakMap<object, object>()
 
-// structural fingerprint -> shared frozen snapshot. Process-wide is safe:
-// functions/Dates/foreign instances are keyed by identity in `fingerprint`,
-// so apps holding different callbacks can never land on the same entry
+// structural fingerprint -> shared frozen snapshot
 const interned = new Map<string, object>()
 
-// insertion-order LRU, same policy as `TypeBoxValidatorCache`
 const INTERN_LIMIT = 1024
 
-// set of snapshots produced for idempotency (snapshot fed back in)
+// snapshots produced for idempotency
 const produced = new WeakSet<object>()
-
-// prototype -> `isClonableProto` verdict (one walk per shared `~kind` proto)
 const clonableProtos = new WeakMap<object, boolean>()
-
-// node -> may the snapshot keep it by reference? A frozen node whose own
-// properties are all primitive data can never change again, so cloning it
-// (e.g. the `t.String()` singleton, once per route) only produces a slower
-// equal. Roots are excluded, see `canShare`
 const immutableNodes = new WeakMap<object, boolean>()
-
 const isEnumerable = Object.prototype.propertyIsEnumerable
-
 const schemaProtoMarkers = new Set(['~kind', '~standard', '~unsafe'])
 const schemaSlots = ['body', 'query', 'params', 'headers', 'cookie'] as const
 
@@ -54,8 +42,6 @@ function isClonableProto(proto: object | null): boolean {
 function isImmutableNode(value: object) {
 	const memo = immutableNodes.get(value)
 	if (memo !== undefined) return memo
-
-	// unfrozen = fresh per-route object; memoising it would only churn the map
 	if (!Object.isFrozen(value)) return false
 
 	let immutable = true
@@ -81,15 +67,10 @@ function isImmutableNode(value: object) {
 
 function deepCloneSchema(
 	value: any,
-	// hook-owned clones freeze on the way out; model-owned clones stay mutable.
-	// Borrowed objects return before this applies and remain untouched
 	freeze: boolean,
-	// plain Map on purpose: call-scoped, WeakMap is ~40% slower per entry on JSC
 	seen?: Map<object, object>,
-	// callers write to the returned root (`.model()` stamps `$id`), so a root
-	// is always a private, mutable clone
 	canShare = true
-): any {
+) {
 	if (value === null || typeof value !== 'object') return value
 
 	const cached = seen?.get(value)
@@ -141,8 +122,6 @@ function deepCloneSchema(
 
 		const cloned = deepCloneSchema(property, freeze, seen)
 
-		// `out.__proto__ = x` reaches the `Object.prototype` setter and
-		// re-parents `out` instead of creating an own property
 		if (key === '__proto__')
 			Object.defineProperty(out, key, {
 				value: cloned,
@@ -206,16 +185,22 @@ function fingerprint(
 			// length-prefixed so `{a:'b',c:''}` and `{a:'b,c'}` cannot collide
 			case 'string':
 				return 's' + value.length + ':' + value
+
 			case 'number':
 				return 'n' + value + ';'
+
 			case 'boolean':
 				return value ? 'T;' : 'F;'
+
 			case 'function':
 				return refKey(value)
+
 			case 'undefined':
 				return 'u;'
+
 			case 'bigint':
 				return 'g' + value + ';'
+
 			default:
 				state.bail = true
 
@@ -275,10 +260,17 @@ function fingerprint(
 	return out + '};'
 }
 
-/**
- * The `.model()` snapshot: a private, MUTABLE clone. `base.ts` stamps `$id` onto
- * the node this returns, so it is never frozen and never interned.
- */
+function cloneOrWarn(object: object, freeze: boolean): object | undefined {
+	try {
+		return deepCloneSchema(object, freeze, undefined, false)
+	} catch (error) {
+		console.warn(
+			'[Elysia] schema snapshot failed; schema kept by reference:',
+			error
+		)
+	}
+}
+
 export function snapshotSchema<T>(schema: T): T {
 	if (schema === null || typeof schema !== 'object') return schema
 
@@ -290,17 +282,8 @@ export function snapshotSchema<T>(schema: T): T {
 	const existing = modelSnapshots.get(object)
 	if (existing) return existing as T
 
-	let cloned: object
-	try {
-		cloned = deepCloneSchema(object, false, undefined, false) as object
-	} catch (error) {
-		console.warn(
-			'[Elysia] schema snapshot failed; schema kept by reference:',
-			error
-		)
-
-		return schema
-	}
+	const cloned = cloneOrWarn(object, false)
+	if (cloned === undefined) return schema
 
 	modelSnapshots.set(object, cloned)
 	produced.add(cloned)
@@ -351,17 +334,8 @@ function internSchema<T>(schema: T, intern: boolean): T {
 		}
 	}
 
-	let cloned: object
-	try {
-		cloned = deepCloneSchema(object, true, undefined, false) as object
-	} catch (error) {
-		console.warn(
-			'[Elysia] schema snapshot failed; schema kept by reference:',
-			error
-		)
-
-		return schema
-	}
+	const cloned = cloneOrWarn(object, true)
+	if (cloned === undefined) return schema
 
 	hookSnapshots.set(object, cloned)
 	produced.add(cloned)
@@ -406,36 +380,24 @@ function isStatusMap(response: Record<string, any>): boolean {
 	return true
 }
 
+const hasSlot = (target: Record<string, any>) =>
+	schemaSlots.some((slot) => target[slot] != null) || target.response != null
+
 export function snapshotHookSchemas<T extends Record<string, any> | undefined>(
 	hook: T
 ): T {
 	if (!hook) return hook
 
 	// detect whether anything needs snapshotting without mutating the original
-	let needsCopy = false
-
-	if (schemaSlots.some((slot) => hook[slot] != null) || hook.response != null)
-		needsCopy = true
-
+	const needsCopy = hasSlot(hook)
 	const schemas = hook.schemas
-	if (!needsCopy && Array.isArray(schemas)) {
-		for (const entry of schemas)
-			if (
-				entry &&
-				(schemaSlots.some((slot) => entry[slot] != null) ||
-					entry.response != null)
-			) {
-				needsCopy = true
-				break
-			}
-	}
 
-	if (!needsCopy) return hook
+	if (
+		!needsCopy &&
+		!(Array.isArray(schemas) && schemas.some((e) => e && hasSlot(e)))
+	)
+		return hook
 
-	// an AOT build must see one snapshot per registration, not the intern
-	// table's shared graph. `ELYSIA_AOT_BUILD` (unlike `Capture.isCapturing()`)
-	// cannot throw on this every-route path. Freezing is NOT gated: writes must
-	// fail identically in both modes.
 	const intern = !env.ELYSIA_AOT_BUILD
 
 	const copy: Record<string, any> = Object.assign(

@@ -212,7 +212,8 @@ describe('compile rebuild and sealed-app immutability', () => {
 		expect(previous).toBeDefined()
 		;(app as any)['~generation'] = undefined
 		app.get('/b', () => 'b')
-		app['~newGeneration']()
+		void app.fetch
+		expect(app['~generation']).toBeDefined()
 		expect(app['~generation']).not.toBe(previous)
 
 		expect((await capturedFetch(req('/b'))).status).toBe(200)
@@ -226,7 +227,8 @@ describe('compile rebuild and sealed-app immutability', () => {
 		expect((await capturedFetch(req('/u/1'))).status).toBe(200)
 		;(app as any)['~generation'] = undefined
 		app.get('/v/:id', ({ params }: any) => 'v' + params.id)
-		app['~newGeneration']()
+		void app.fetch
+		expect(app['~generation']).toBeDefined()
 
 		const res = await capturedFetch(req('/v/9'))
 		expect(res.status).toBe(200)

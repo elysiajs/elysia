@@ -8,7 +8,7 @@ import {
 
 import { isBun } from '../../universal/constants'
 import { isProduction } from '../../universal/is-production'
-import { ElysiaFile, mime } from '../../universal/file'
+import { ElysiaFile } from '../../universal/file'
 import { Cookie } from '../../cookie/cookie'
 import {
 	formToFormData,
@@ -37,16 +37,12 @@ function handleElysiaFile(
 	},
 	request?: Request
 ) {
-	const path = file.path
-	const contentType =
-		mime[
-			path
-				.slice(path.lastIndexOf('.') + 1)
-				.toLowerCase() as any as keyof typeof mime
-		]
+	const contentType = file.type
 
 	const headers = materializeSetHeaders(set)
-	if (contentType) headers['content-type'] = contentType
+	// unknown extension: keep the user's or the runtime's content-type
+	if (contentType !== 'application/octet-stream')
+		headers['content-type'] = contentType
 
 	const stats = file.stats
 	if (stats)
@@ -132,14 +128,7 @@ function mapResponseWithSet(
 
 		case 'Number':
 		case 'Boolean':
-			return new Response(
-				typeof response === 'boolean'
-					? response
-						? 'true'
-						: 'false'
-					: (response as number).toString(),
-				set as ResponseInit
-			)
+			return new Response(String(response), set as ResponseInit)
 
 		case 'ElysiaFile':
 			return handleElysiaFile(response as ElysiaFile, set, request)
@@ -149,15 +138,8 @@ function mapResponseWithSet(
 			return handleFile(response as Blob, set, request)
 
 		case 'ElysiaStatus':
-			set.status = (response as ElysiaStatus<200>).status
-			if ((response as ElysiaStatus<200>).headers)
-				Object.assign(
-					materializeSetHeaders(set),
-					(response as ElysiaStatus<200>).headers
-				)
-
-			return mapResponseWithSet(
-				(response as ElysiaStatus<200>).response,
+			return withStatus(
+				response as ElysiaStatus<200>,
 				set,
 				request,
 				owned
@@ -195,6 +177,25 @@ function mapResponseWithSet(
 	}
 }
 
+function withStatus(
+	response: ElysiaStatus<any, any>,
+	set: Context['set'] | undefined,
+	request?: Request,
+	owned?: boolean
+) {
+	if (set) set.status = response.status
+	else
+		set = {
+			status: response.status,
+			headers: nullObject()
+		} as Context['set']
+
+	if (response.headers)
+		Object.assign(materializeSetHeaders(set), response.headers)
+
+	return mapResponseWithSet(response.response, set, request, owned)
+}
+
 // Keep this constant so production builds can remove the check.
 const checkRemovedSetRedirect = !isProduction()
 
@@ -224,18 +225,8 @@ export function mapResponse(
 	)
 		return mapResponseWithSet(response, set, request, owned)
 
-	if (response instanceof ElysiaStatus) {
-		set.status = (response as ElysiaStatus<200>).status
-		if ((response as ElysiaStatus<200>).headers)
-			Object.assign(set.headers, (response as ElysiaStatus<200>).headers)
-
-		return mapResponse(
-			(response as ElysiaStatus<200>).response,
-			set,
-			request,
-			owned
-		)
-	}
+	if (response instanceof ElysiaStatus)
+		return withStatus(response, set, request, owned)
 
 	if (response instanceof Response)
 		return owned
@@ -288,13 +279,7 @@ export function mapCompactResponse(
 
 		case 'Number':
 		case 'Boolean':
-			return new Response(
-				typeof response === 'boolean'
-					? response
-						? 'true'
-						: 'false'
-					: (response as number).toString()
-			)
+			return new Response(String(response))
 
 		case 'ElysiaFile':
 			return handleElysiaFile(response as ElysiaFile, undefined, request)
@@ -304,17 +289,9 @@ export function mapCompactResponse(
 			return handleFile(response as File, undefined, request)
 
 		case 'ElysiaStatus':
-			return mapResponse(
-				(response as ElysiaStatus<200>).response,
-				{
-					status: (response as ElysiaStatus<200>).status,
-					headers: (response as ElysiaStatus<200>).headers
-						? Object.assign(
-								nullObject(),
-								(response as ElysiaStatus<200>).headers
-							)
-						: nullObject()
-				} as Context['set'],
+			return withStatus(
+				response as ElysiaStatus<200>,
+				undefined,
 				request,
 				owned
 			)
@@ -392,32 +369,20 @@ function mapFallback(
 	if (response instanceof Response)
 		return handleResponse(response, set, request, owned)
 
-	if (response instanceof Promise)
-		return response.then((x) =>
-			set
-				? mapResponse(x, set, request, owned)
-				: mapCompactResponse(x, request, owned)
-		) as any
-
 	if (response instanceof Error)
 		return errorToResponse(response as Error, set, request, owned)
 
 	if (response instanceof ElysiaStatus) {
-		if (set) {
+		// Spread, not withStatus: once >= 2 cookies turn set.headers into a
+		// Headers instance, withStatus drops the status headers, this drops
+		// set.headers instead (reached by subclasses and minified class names)
+		if (set && response.headers) {
 			set.status = response.status
-			if (response.headers)
-				set.headers = { ...set.headers, ...response.headers }
+			set.headers = { ...set.headers, ...response.headers }
 			return mapResponse(response.response, set, request, owned)
-		} else
-			return mapResponse(
-				(response as ElysiaStatus<200>).response,
-				{
-					status: (response as ElysiaStatus<200>).status,
-					headers: response.headers ? { ...response.headers } : {}
-				} as Context['set'],
-				request,
-				owned
-			)
+		}
+
+		return withStatus(response, set, request, owned)
 	}
 
 	if (response instanceof ElysiaFile)
@@ -444,9 +409,7 @@ function mapFallback(
 
 	if (typeof (response as Promise<unknown>)?.then === 'function')
 		return (response as Promise<unknown>).then((x) =>
-			set
-				? mapResponse(x, set, request, owned)
-				: mapCompactResponse(x, request, owned)
+			remap(x, set, request, owned)
 		) as any
 
 	// custom class with an array-like value
@@ -456,16 +419,23 @@ function mapFallback(
 
 	// @ts-expect-error
 	if (typeof response?.toResponse === 'function')
-		return set
-			? mapResponse((response as any).toResponse(), set, request, owned)
-			: mapCompactResponse((response as any).toResponse(), request, owned)
+		return remap((response as any).toResponse(), set, request, owned)
 
 	if (responseTag(response) === 'Cookie' && Cookie.isCookie(response))
-		return set
-			? mapResponse((response as any).value, set, request, owned)
-			: mapCompactResponse((response as any).value, request, owned)
+		return remap((response as any).value, set, request, owned)
 
 	return new Response(response as any, set as ResponseInit)
+}
+
+function remap(
+	response: unknown,
+	set: Context['set'] | undefined,
+	request?: Request,
+	owned?: boolean
+) {
+	return set
+		? mapResponse(response, set, request, owned)
+		: mapCompactResponse(response, request, owned)
 }
 
 const handleResponse = createResponseHandler({

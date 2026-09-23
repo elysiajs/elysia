@@ -10,7 +10,6 @@ import {
 	Create,
 	Decode,
 	HasCodec,
-	Default,
 	Clone,
 	Check,
 	injectTypebox,
@@ -46,28 +45,18 @@ export function setupTypebox(options?: {
 
 	const typebox = options?.typebox
 	if (typebox) {
-		const typeSide = [typebox.type, typebox.system] as const
-		const typeSideProvided = typeSide.filter(Boolean).length
-		if (typeSideProvided > 0 && typeSideProvided < typeSide.length)
+		if (!typebox.type !== !typebox.system)
 			throw new Error(
 				`setupTypebox({ typebox }) received an incomplete type-side namespace (only '${typebox.type ? 'type' : 'system'}' was set). 'type' and 'system' must be provided together.`
 			)
 
-		const valueSide = [
-			typebox.value,
-			typebox.schema,
-			typebox.compile
-		] as const
-		const valueSideProvided = valueSide.filter(Boolean).length
-		if (valueSideProvided > 0 && valueSideProvided < valueSide.length) {
-			const missing = (['value', 'schema', 'compile'] as const).filter(
-				(key) => !typebox[key]
-			)
-
+		const missing = (['value', 'schema', 'compile'] as const).filter(
+			(key) => !typebox[key]
+		)
+		if (missing.length === 1 || missing.length === 2)
 			throw new Error(
 				`setupTypebox({ typebox }) received an incomplete value-side namespace (missing '${missing.join("', '")}'). 'value', 'schema', and 'compile' must be provided together.`
 			)
-		}
 
 		// Type side first: the value side ensures the `Settings` default
 		// through the type leaf, which would otherwise try to `require` it
@@ -98,7 +87,6 @@ export function setupTypebox(options?: {
 		mayHaveFileType,
 		HasCodec,
 		Intersect,
-		Default,
 		Ref,
 		Clone,
 		Check,

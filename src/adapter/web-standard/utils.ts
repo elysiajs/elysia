@@ -42,7 +42,7 @@ function resolveValue(entries: FormDataEntryValue[]): unknown {
 	}
 
 	let jsonObj: Record<string, unknown> | undefined
-	let fileCount = 0
+	let files: File[] | undefined
 	const result = new Array<unknown>(length)
 
 	for (let i = 0; i < length; i++) {
@@ -53,28 +53,14 @@ function resolveValue(entries: FormDataEntryValue[]): unknown {
 				jsonObj = parsed as Record<string, unknown>
 			result[i] = parsed ?? e
 		} else {
-			if (HAS_FILE && e instanceof File) fileCount++
+			if (HAS_FILE && e instanceof File) (files ??= []).push(e)
 			result[i] = e
 		}
 	}
 
-	if (fileCount && jsonObj) {
-		if (fileCount === 1 && !('file' in jsonObj)) {
-			for (let i = 0; i < length; i++) {
-				const e = entries[i]
-				if (HAS_FILE && e instanceof File) {
-					jsonObj.file = e
-					break
-				}
-			}
-		} else if (!('files' in jsonObj)) {
-			const files: File[] = []
-			for (let i = 0; i < length; i++) {
-				const e = entries[i]
-				if (HAS_FILE && e instanceof File) files.push(e)
-			}
-			jsonObj.files = files
-		}
+	if (files && jsonObj) {
+		if (files.length === 1 && !('file' in jsonObj)) jsonObj.file = files[0]
+		else if (!('files' in jsonObj)) jsonObj.files = files
 		return jsonObj
 	}
 

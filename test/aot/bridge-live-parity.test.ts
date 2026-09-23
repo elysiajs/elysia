@@ -19,7 +19,7 @@ describe('statically wired TypeBox bridge', () => {
 	// time, so it holds the pre-load stubs and cannot be identity-compared.
 	// `typebox-value` is the seam the stubs resolve to, so the mirror must match
 	// THAT, otherwise a statically wired build calls a different function
-	const DEFERRED = ['Compile', 'Decode', 'HasCodec', 'Default', 'Clone'] as const
+	const DEFERRED = ['Compile', 'Decode', 'HasCodec', 'Clone'] as const
 
 	// Same, one seam over: `Ref` is a `typebox/type` builder, deferred behind
 	// the separate `typebox-type` latch

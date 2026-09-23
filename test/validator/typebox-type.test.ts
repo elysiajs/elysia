@@ -117,7 +117,6 @@ describe('typebox-type', () => {
 		for (const key of Object.keys(live) as (keyof typeof live)[]) {
 			if (
 				key === 'injectTypeboxType' ||
-				key === 'ensureTypeSettings' ||
 				key === 'loadTypeNamespace' ||
 				key === 'markTypeUsed' ||
 				key === 'isTypeUsed' ||

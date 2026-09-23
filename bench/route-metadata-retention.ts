@@ -68,9 +68,9 @@ async function main() {
 
 	const preSeal = snapshot()
 
-	// Seal: forces #buildRouter(true) -> #publishGeneration under production,
-	// which is where the declaredRoutes release would live.
-	;(app as any)['~newGeneration']()
+	// Seal: the first `fetch` read runs #buildRouter(true) -> #publishGeneration
+	// under production, which is where the declaredRoutes release would live.
+	void app.fetch
 
 	// Warm one route so dispatch structures exist; still NO introspection.
 	await app.handle(new Request('http://localhost/r0'))

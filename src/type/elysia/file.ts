@@ -8,8 +8,8 @@ import {
 	cloneSchema,
 	createSharedReference,
 	elyType,
-	getMeta,
 	Refines,
+	withMeta,
 	type Refines as RefinesType
 } from './utils'
 
@@ -20,19 +20,6 @@ import {
 	maybeQueueFileTypeCheck,
 	parseFileUnit,
 	type FileTypeBudget
-} from './file-type'
-
-export {
-	ASYNC_REFINE,
-	checkFileExtension,
-	collectFileTypeChecks,
-	fileType,
-	maybeQueueFileTypeCheck,
-	parseFileUnit,
-	setFileTypeDetector,
-	takeFileTypeChecks,
-	type FileTypeDetector,
-	type PendingFileTypeCheck
 } from './file-type'
 
 export let BaseFile: Type.TRefine<Type.TUnsafe<File>>
@@ -108,12 +95,8 @@ function FileWithProperty(options: FilesOptions) {
 		refines.push([checkType, message])
 	}
 
-	let schema = Refines(BaseFile, refines)
-	const [, meta] = getMeta(options as any)
-	if (meta) {
-		schema = cloneSchema(schema)
-		Object.assign(schema, meta)
-	}
-
-	return elyType(ELYSIA_TYPES.File, schema)
+	return elyType(
+		ELYSIA_TYPES.File,
+		withMeta(Refines(BaseFile, refines), options)
+	)
 }

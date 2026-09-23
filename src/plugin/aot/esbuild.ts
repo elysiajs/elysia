@@ -55,10 +55,12 @@ export const aot = (entry: string, options?: ElysiaAotOptions) => ({
 			await hooks.buildStart()
 		})
 
-		await setupAotOnLoad(build, hooks, {
-			readText: (path) => readFile(path, 'utf8'),
-			resolveDir: dirname(entryPath)
-		})
+		await setupAotOnLoad(
+			build,
+			hooks,
+			(path) => readFile(path, 'utf8'),
+			dirname(entryPath)
+		)
 
 		const allowedKinds =
 			moduleCondition === 'cjs'

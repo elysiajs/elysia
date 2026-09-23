@@ -59,18 +59,14 @@ export function externalsMatch(a: unknown[], b: unknown[]) {
 			continue
 		}
 
-		if (Array.isArray(x) && Array.isArray(y)) {
-			if (x.length !== y.length) return false
-
-			let ok = true
-			for (let j = 0; j < x.length; j++)
-				if (x[j] !== y[j]) {
-					ok = false
-					break
-				}
-
-			if (ok) continue
-		}
+		// `findIndex` (not `every`) also compares holes
+		if (
+			Array.isArray(x) &&
+			Array.isArray(y) &&
+			x.length === y.length &&
+			x.findIndex((v, j) => v !== y[j]) === -1
+		)
+			continue
 
 		return false
 	}

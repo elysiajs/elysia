@@ -81,7 +81,7 @@ describe('route introspection cache', () => {
 		// the only legal post-seal mutation path (see test/core/generation.test.ts)
 		;(app as any)['~generation'] = undefined
 		app.get('/late', () => 'late')
-		app['~newGeneration']()
+		seal(app)
 
 		expect(app['~generation']).not.toBe(generation)
 		expect(app.routes.length).toBe(3)
@@ -97,7 +97,7 @@ describe('route introspection cache', () => {
 
 		;(app as any)['~generation'] = undefined
 		app.use(new Elysia({ name: 'late-plugin' }).get('/plugged', () => 'p'))
-		app['~newGeneration']()
+		seal(app)
 
 		expect(app.routes.map((route) => route.path)).toContain('/plugged')
 		expect(app.history.map((entry) => entry.path)).toContain('/plugged')
@@ -111,7 +111,7 @@ describe('route introspection cache', () => {
 
 		;(app as any)['~generation'] = undefined
 		app.get('/late', () => 'late')
-		app['~newGeneration']()
+		seal(app)
 
 		expect(app.history.length).toBe(3)
 		expect(app.routes.length).toBe(3)

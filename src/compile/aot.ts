@@ -3,8 +3,8 @@ import { nullObject } from '../utils'
 import packageJson from '../../package.json'
 import type { CoerceNode } from '../type/coerce'
 
-export const AOT_MANIFEST_FORMAT = 4
-export const AOT_ABI = `${packageJson.version}:${AOT_MANIFEST_FORMAT}`
+export const AOT_MANIFEST_FORMAT = 5
+const AOT_ABI = `${packageJson.version}:${AOT_MANIFEST_FORMAT}`
 
 export interface AotFingerprint {
 	abi: string
@@ -184,7 +184,6 @@ export interface CompiledSnapshot {
 }
 
 export interface CompiledProgramRegistration {
-	bf: 1
 	fingerprint: AotFingerprint
 	validators?: ValidatorManifest
 	handlers?: HandlerManifest
@@ -267,18 +266,11 @@ export abstract class Compiled {
 		if (!registered || claimed) return false
 
 		const manifest = registered
-		const differences: string[] = []
 		const expected = manifest.fingerprint
 
-		if (manifest.bf !== 1)
-			differences.push(`bf (manifest ${manifest.bf}, app 1)`)
 		if (expected.abi !== fingerprint.abi)
-			differences.push(
-				`abi (manifest ${expected.abi}, app ${fingerprint.abi})`
-			)
-		if (differences.length)
 			throw new Error(
-				`[elysia-aot] Registered manifest fingerprint mismatch: ${differences.join('; ')}.`
+				`[elysia-aot] Registered manifest fingerprint mismatch: abi (manifest ${expected.abi}, app ${fingerprint.abi}).`
 			)
 
 		claimed = new WeakRef(id)
@@ -297,10 +289,6 @@ export abstract class Compiled {
 		throw new Error(
 			'[elysia-aot] A second Elysia app built a router in this process. An AOT build seals one app per process.'
 		)
-	}
-
-	static get reconstruct(): ReconstructImpl | undefined {
-		return reconstructImpl
 	}
 
 	static set reconstruct(impl: ReconstructImpl | undefined) {
@@ -521,7 +509,7 @@ function captureSet(
 	let e = capture.get(k)
 	if (!e) capture.set(k, (e = { method, path, slot }))
 
-	if (e) Object.assign(e, partial)
+	Object.assign(e, partial)
 }
 
 const captureGet = (loc: {
@@ -533,19 +521,10 @@ const captureGet = (loc: {
 const isAotBuildEnv = () => !!env.ELYSIA_AOT_BUILD
 
 const isValidatorCapturing = () => {
-	if (activeSession?.capture !== undefined) {
-		if (captureImpl === undefined) throw aotActivationError()
+	if (activeSession?.capture === undefined && !isAotBuildEnv()) return false
+	if (captureImpl === undefined) throw aotActivationError()
 
-		return true
-	}
-
-	if (isAotBuildEnv()) {
-		if (captureImpl === undefined) throw aotActivationError()
-
-		return true
-	}
-
-	return false
+	return true
 }
 
 export const Capture = {

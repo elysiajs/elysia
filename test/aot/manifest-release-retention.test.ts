@@ -44,7 +44,6 @@ const build = () => {
 
 const manifest = (options?: { lazy?: number }) =>
 	compileToSource(build() as any, {
-		register: true,
 		registerFrom: REGISTER_FROM,
 		reconstructFrom: RECONSTRUCT_FROM,
 		...options

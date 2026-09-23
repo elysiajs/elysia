@@ -8,6 +8,7 @@ import { ELYSIA_TYPES } from '../../type/constants'
 
 import {
 	Compiled,
+	EMPTY_EXTERNALS,
 	reconstruct,
 	type CapturedValidator,
 	type FrozenValidator,
@@ -80,10 +81,6 @@ function isBridgeFreeComplete(
 	return true
 }
 
-// Local empty externals, avoids importing `compile/aot`'s runtime const
-// Non-codec `cm` never reads its `External` arg, so any empty frozen array works
-const EMPTY_EXTERNALS = Object.freeze([]) as unknown as unknown[]
-
 interface DefaultFastPath {
 	value: unknown
 	appliesToNull: boolean
@@ -97,13 +94,6 @@ interface CompactError {
 	instancePath: string
 	params: Record<string, unknown>
 	message: string
-}
-
-/** `{ check, clean?, decode? }` the slot's compiled predicate + cleaner. */
-interface SlotCheckClean {
-	check: (value: unknown) => boolean
-	clean?: (value: unknown) => unknown
-	decode?: (value: unknown) => unknown
 }
 
 const typeError = (
@@ -214,79 +204,22 @@ function walkCompactError(
 		return
 	}
 
-	if (typeof type === 'string') {
-		let matches: boolean
-		switch (type) {
-			case 'string':
-				matches = typeof value === 'string'
-				break
+	const matches =
+		type === 'string' || type === 'number' || type === 'boolean'
+			? typeof value === type
+			: type === 'integer'
+				? Number.isInteger(value)
+				: type !== 'null' || value === null
 
-			case 'number':
-				matches = typeof value === 'number'
-				break
-
-			case 'integer':
-				matches = typeof value === 'number' && Number.isInteger(value)
-				break
-
-			case 'boolean':
-				matches = typeof value === 'boolean'
-				break
-
-			case 'null':
-				matches = value === null
-				break
-
-			case 'array':
-				matches = Array.isArray(value)
-				break
-
-			case 'object':
-				matches =
-					typeof value === 'object' &&
-					value !== null &&
-					!Array.isArray(value)
-				break
-
-			default:
-				matches = true
-		}
-
-		if (!matches) return typeError(schema, instancePath, schemaPath)
-	}
+	if (!matches) return typeError(schema, instancePath, schemaPath)
 }
 
-export function isCompactDiagnosable(schema: any) {
-	if (!schema || typeof schema !== 'object') return false
-	if (schema.anyOf || schema.oneOf || schema.allOf) return false
-
-	const type = schema.type
-
-	if (type === 'object') {
-		const properties = schema.properties
-		if (properties)
-			for (const key in properties)
-				if (!isCompactDiagnosable(properties[key])) return false
-
-		return true
-	}
-
-	if (type === 'array') return isCompactDiagnosable(schema.items)
-
-	return (
-		type === 'string' ||
-		type === 'number' ||
-		type === 'integer' ||
-		type === 'boolean' ||
-		type === 'null'
-	)
-}
-
-export function isCompactWalkable(schema: any) {
+export function isCompactWalkable(schema: any, lookThrough = true): boolean {
 	if (!schema || typeof schema !== 'object') return false
 
 	const elyTyp = schema['~elyTyp']
 	if (
+		lookThrough &&
 		schema.anyOf &&
 		(elyTyp === ELYSIA_TYPES.ObjectString ||
 			elyTyp === ELYSIA_TYPES.ArrayString)
@@ -301,12 +234,13 @@ export function isCompactWalkable(schema: any) {
 		const properties = schema.properties
 		if (properties)
 			for (const key in properties)
-				if (!isCompactWalkable(properties[key])) return false
+				if (!isCompactWalkable(properties[key], lookThrough))
+					return false
 
 		return true
 	}
 
-	if (type === 'array') return isCompactWalkable(schema.items)
+	if (type === 'array') return isCompactWalkable(schema.items, lookThrough)
 
 	return (
 		type === 'string' ||
@@ -342,14 +276,28 @@ class FrozenSlotValidator {
 		this.schema = schema
 		this.hasCodec = frozen.k === 1
 
-		// Overridable seam: the base is the non-codec (helper-free `cm`) path;
-		// the codec subclass below overrides to add the reconstruct-based
-		// codec/inner-codec path. Private `#check`/`#clean`/`#decode` are
-		// assigned here so the subclass only supplies the values.
-		const built = this.buildCheckClean(frozen, schema, raw, normalize)
-		this.#check = built.check
-		this.#clean = built.clean
-		this.#decode = built.decode
+		if (frozen.ic) reconstruct().reconstructInnerCodecs(frozen.ic, schema)
+
+		if (frozen.k === 1 && frozen.dm) {
+			const both = reconstruct().instantiateFrozenBoth(
+				frozen,
+				schema,
+				raw
+			)
+			this.#check = both.check!
+			if (normalize !== false) {
+				this.#clean = both.clean
+				this.#decode = reconstruct().instantiateFrozenDecodeMirror(
+					frozen.dm,
+					schema
+				)
+			}
+		} else {
+			// non-codec covered slot: `e`/`u` are refused, so no externals/unions
+			const both = frozen.cm!(EMPTY_EXTERNALS, undefined)
+			this.#check = both.check!
+			if (normalize !== false) this.#clean = both.clean
+		}
 
 		this.#hasOptional = !!(schema as any)?.['~optional']
 		this.#noValidate =
@@ -363,22 +311,6 @@ class FrozenSlotValidator {
 				clone: frozen.dc,
 				merge: frozen.pm
 			}
-	}
-
-	protected buildCheckClean(
-		frozen: FrozenValidator,
-		schema: unknown,
-		raw: unknown,
-		normalize: boolean | 'exactMirror' | 'typebox' | undefined
-	): SlotCheckClean {
-		void schema
-		void raw
-		// non-codec covered slot: `e`/`u` are refused, so no externals/unions
-		const both = frozen.cm!(EMPTY_EXTERNALS, undefined)
-		return {
-			check: both.check!,
-			clean: normalize === false ? undefined : both.clean
-		}
 	}
 
 	Check(value: unknown): boolean {
@@ -401,7 +333,7 @@ class FrozenSlotValidator {
 		)
 			for (const key in schema.properties) {
 				if (!(key in (value as object))) continue
-				if (isCompactDiagnosable(schema.properties[key])) continue
+				if (isCompactWalkable(schema.properties[key], false)) continue
 
 				error = {
 					keyword: 'type',
@@ -487,44 +419,6 @@ class FrozenSlotValidator {
 		if (!this.#noValidate && !this.#check(value))
 			throw this.#error(value, type)
 		return this.#clean ? this.#clean(value) : value
-	}
-}
-
-/**
- * The JIT/frozen slot validator: the reconstruct-free `FrozenSlotValidator`
- * base plus the codec/inner-codec branch re-added via the `buildCheckClean`
- * override
- */
-class CodecFrozenSlotValidator extends FrozenSlotValidator {
-	protected buildCheckClean(
-		frozen: FrozenValidator,
-		schema: unknown,
-		raw: unknown,
-		normalize: boolean | 'exactMirror' | 'typebox' | undefined
-	): SlotCheckClean {
-		if (frozen.ic) reconstruct().reconstructInnerCodecs(frozen.ic, schema)
-
-		if (frozen.k === 1 && frozen.dm) {
-			const both = reconstruct().instantiateFrozenBoth(
-				frozen,
-				schema,
-				raw
-			)
-
-			return {
-				check: both.check!,
-				clean: normalize === false ? undefined : both.clean,
-				decode:
-					normalize === false
-						? undefined
-						: reconstruct().instantiateFrozenDecodeMirror(
-								frozen.dm,
-								schema
-							)
-			}
-		}
-
-		return super.buildCheckClean(frozen, schema, raw, normalize)
 	}
 }
 
@@ -616,12 +510,7 @@ export function buildFrozenRouteValidator(
 
 		if (!isBridgeFreeComplete(frozen, coerced, schema)) return undefined
 
-		out[slot] = new CodecFrozenSlotValidator(
-			frozen,
-			coerced,
-			schema,
-			normalize
-		)
+		out[slot] = new FrozenSlotValidator(frozen, coerced, schema, normalize)
 	}
 
 	const response = hook?.response
@@ -657,8 +546,12 @@ export function buildFrozenRouteValidator(
 			if (!frozen || !isBridgeFreeComplete(frozen, schema, schema))
 				return undefined
 
-			responseOut[status as unknown as number] =
-				new CodecFrozenSlotValidator(frozen, schema, schema, normalize)
+			responseOut[status as unknown as number] = new FrozenSlotValidator(
+				frozen,
+				schema,
+				schema,
+				normalize
+			)
 		}
 
 		out.response = responseOut

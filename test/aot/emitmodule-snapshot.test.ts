@@ -54,17 +54,15 @@ describe('emitModule output stability (entryParts hoist)', () => {
 
 	it('is deterministic across two builds of the same app', async () => {
 		process.env.ELYSIA_AOT_BUILD = '1'
-		const a = await compileToSource(validatorHeavyApp(), { register: false })
+		const a = await compileToSource(validatorHeavyApp())
 		Compiled.clear()
-		const b = await compileToSource(validatorHeavyApp(), { register: false })
+		const b = await compileToSource(validatorHeavyApp())
 		expect(a).toBe(b)
 	})
 
 	it('emits the shared `_b`/`_u` branch/union interning (hoist reused it)', async () => {
 		process.env.ELYSIA_AOT_BUILD = '1'
-		const src = await compileToSource(validatorHeavyApp(), {
-			register: false
-		})
+		const src = await compileToSource(validatorHeavyApp())
 		// the union route interns branch (`_b`) + union (`_u`) consts through the
 		// shared encoder; their presence proves the hoisted encoder still runs
 		expect(src).toMatch(/const _u0 = /)

@@ -10,6 +10,19 @@ import { Compiled } from '../../src/compile/aot'
 import { Validator } from '../../src/validator'
 
 describe('AOT plugin source transforms', () => {
+	// Sealed builds still run user `t.*()`, so typebox-type must always resolve
+	// to its statically-importing `-live` mirror; a loader-less runtime crashes
+	// at startup otherwise
+	it('always re-routes typebox-type to its live mirror', async () => {
+		const packageRoot = resolve(import.meta.dir, '../..')
+		const hooks = createAotPluginHooks(resolve(packageRoot, 'src/index.ts'))
+
+		for (const leaf of ['src/type/typebox-type.ts', 'dist/type/typebox-type.mjs'])
+			expect(
+				await hooks.transform('', resolve(packageRoot, leaf))
+			).toContain(`export * from './typebox-type-live`)
+	})
+
 	it('refreshes static clone omission without touching a nested package', async () => {
 		const packageRoot = resolve(import.meta.dir, '../..')
 		const directory = await mkdtemp(resolve(import.meta.dir, '_clone-hooks-'))

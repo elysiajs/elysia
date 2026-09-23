@@ -48,10 +48,7 @@ describe('no automatic GC', () => {
 		const [source, plugin] = await Promise.all([
 			compileToSource(
 				new Elysia().get('/x', () => 'ok'),
-				{
-					register: true,
-					registerFrom: '../../src/compile/aot'
-				}
+				{ registerFrom: '../../src/compile/aot' }
 			),
 			readFile(
 				resolve(import.meta.dir, '../../src/plugin/aot/core.ts'),

@@ -171,7 +171,7 @@ describe('AOT handler emit dedup', () => {
 				({ body }: any) => body
 			)
 
-		const src = await compileToSource(app as any, { register: false })
+		const src = await compileToSource(app as any)
 		delete process.env.ELYSIA_AOT_BUILD
 
 		expect((src.match(/const _h\d+ =/g) ?? []).length).toBe(1)

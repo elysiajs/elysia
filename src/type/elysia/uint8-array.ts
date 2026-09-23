@@ -1,27 +1,18 @@
 import { Codec, Refine, Unsafe } from '../typebox-type'
-import type { Type } from 'typebox'
 
-import { isEmpty } from '../../utils'
 import { ELYSIA_TYPES } from '../constants'
 import type { ArrayBufferOptions } from '../types'
-import {
-	cloneSchema,
-	elyType,
-	getMeta,
-	Refines,
-	type Refines as RefinesType
-} from './utils'
+import { bufferType } from './array-buffer'
 
-let BaseUint8Array: Type.TCodec<Type.TRefine<Type.TUnsafe<Uint8Array>>, Uint8Array>
-let emptyUint8Array: Readonly<
-	Type.TCodec<Type.TRefine<Type.TUnsafe<Uint8Array>>, Uint8Array>
->
-export function Uint8ArrayType(property?: ArrayBufferOptions) {
-	BaseUint8Array ??= Codec(
+// Accept both Uint8Array and ArrayBuffer (L09)
+const isUint8Array = (value: unknown) =>
+	value instanceof Uint8Array || value instanceof ArrayBuffer
+
+const uint8Array = /* @__PURE__ */ bufferType(ELYSIA_TYPES.Uint8Array, () =>
+	Codec(
 		Refine(
 			Unsafe<Uint8Array>({ '~kind': 'Uint8Array' }),
-			(value: unknown) =>
-				value instanceof Uint8Array || value instanceof ArrayBuffer,
+			isUint8Array,
 			() => 'must be Uint8Array'
 		)
 	)
@@ -31,40 +22,7 @@ export function Uint8ArrayType(property?: ArrayBufferOptions) {
 				: new Uint8Array(value as ArrayBuffer)
 		)
 		.Encode((value) => value)
+)
 
-	if (!property || isEmpty(property))
-		return (emptyUint8Array ??= Object.freeze(
-			elyType(ELYSIA_TYPES.Uint8Array, BaseUint8Array)
-		))
-
-	// Accept both Uint8Array and ArrayBuffer (same as the base schema) (L09)
-	const refines: RefinesType<Uint8Array> = [
-		[
-			(value: unknown) =>
-				value instanceof Uint8Array || value instanceof ArrayBuffer,
-			'must be Uint8Array'
-		]
-	]
-
-	if (property.minByteLength !== undefined) {
-		refines.push([
-			(value) => value.byteLength >= property.minByteLength!,
-			`Expect byte to be more than ${property.minByteLength}`
-		])
-	}
-
-	if (property.maxByteLength !== undefined)
-		refines.push([
-			(value) => value.byteLength <= property.maxByteLength!,
-			`Expect byte to be less than ${property.maxByteLength}`
-		])
-
-	let schema: any = Refines(BaseUint8Array, refines)
-	const [, meta] = getMeta(property as any)
-	if (meta) {
-		schema = cloneSchema(schema)
-		Object.assign(schema, meta)
-	}
-
-	return elyType(ELYSIA_TYPES.Uint8Array, schema)
-}
+export const Uint8ArrayType = (property?: ArrayBufferOptions) =>
+	uint8Array(property)

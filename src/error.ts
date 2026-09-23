@@ -109,24 +109,27 @@ export function elysiaErrorProblem(error: ElysiaError): Problem {
 	}
 }
 
-/**
- * Install the `type` mirror on an error prototype. Reads `code` off the
- * instance so a subclass that renames its own `code` retags with it, and keeps
- * `type` assignable — a value written onto an instance lands as an own
- * property instead of throwing against a getter-only slot
- */
+function defineData(
+	target: object,
+	key: PropertyKey,
+	value: unknown,
+	enumerable = true
+) {
+	Object.defineProperty(target, key, {
+		value,
+		writable: true,
+		enumerable,
+		configurable: true
+	})
+}
+
 function defineProblemType(prototype: object) {
 	Object.defineProperty(prototype, 'type', {
 		get(this: { code?: string }) {
 			return problemTypeOf(this.code)
 		},
 		set(this: object, value: string) {
-			Object.defineProperty(this, 'type', {
-				value,
-				writable: true,
-				enumerable: true,
-				configurable: true
-			})
+			defineData(this, 'type', value)
 		},
 		enumerable: true,
 		configurable: true
@@ -460,12 +463,7 @@ export class ValidationError extends ElysiaError {
 		Object.defineProperty(this, 'errors', {
 			get: () => this['~resolve']().errors,
 			set(v) {
-				Object.defineProperty(this, 'errors', {
-					value: v,
-					writable: true,
-					enumerable: true,
-					configurable: true
-				})
+				defineData(this, 'errors', v)
 			},
 			enumerable: true,
 			configurable: true
@@ -483,7 +481,6 @@ export class ValidationError extends ElysiaError {
 
 		let resolved: any[]
 		let custom: unknown
-		let message: string
 
 		if (production && !allowUnsafe && findCustomError) {
 			const hit = findCustomError(value)
@@ -498,44 +495,38 @@ export class ValidationError extends ElysiaError {
 								found: undefined
 							})
 						: hit.error
+		} else {
+			resolved = this.#thunk() ?? []
+			if (resolved.length > MAX_ERRORS)
+				resolved = resolved.slice(0, MAX_ERRORS)
+			resolved = scopeIssues(resolved)
 
-			message =
-				custom !== undefined
-					? typeof custom === 'string'
-						? custom
-						: JSON.stringify(custom)
-					: `Validation error on ${type ?? 'unknown'}`
+			const sub: any = walkSubSchema(
+				this.schema,
+				resolved[0]?.instancePath
+			)
 
-			return (this.#state = { errors: resolved, custom, message })
+			if (sub?.error !== undefined)
+				custom =
+					typeof sub.error === 'function'
+						? sub.error(
+								production && !allowUnsafe
+									? {
+											type: 'validation',
+											on: type,
+											found: undefined
+										}
+									: {
+											type: 'validation',
+											on: type,
+											value,
+											errors: resolved
+										}
+							)
+						: sub.error
 		}
 
-		resolved = this.#thunk() ?? []
-		if (resolved.length > MAX_ERRORS)
-			resolved = resolved.slice(0, MAX_ERRORS)
-		resolved = scopeIssues(resolved)
-
-		const sub: any = walkSubSchema(this.schema, resolved[0]?.instancePath)
-
-		if (sub?.error !== undefined)
-			custom =
-				typeof sub.error === 'function'
-					? sub.error(
-							production && !allowUnsafe
-								? {
-										type: 'validation',
-										on: type,
-										found: undefined
-									}
-								: {
-										type: 'validation',
-										on: type,
-										value,
-										errors: resolved
-									}
-						)
-					: sub.error
-
-		message =
+		const message =
 			custom !== undefined
 				? typeof custom === 'string'
 					? custom
@@ -554,12 +545,7 @@ export class ValidationError extends ElysiaError {
 	}
 
 	set customError(v: unknown) {
-		Object.defineProperty(this, 'customError', {
-			value: v,
-			writable: true,
-			enumerable: true,
-			configurable: true
-		})
+		defineData(this, 'customError', v)
 	}
 
 	get all() {
@@ -809,12 +795,7 @@ Object.defineProperty(ValidationError.prototype, 'message', {
 		return this['~resolve']().message
 	},
 	set(this: ValidationError, v: string) {
-		Object.defineProperty(this, 'message', {
-			value: v,
-			writable: true,
-			enumerable: false,
-			configurable: true
-		})
+		defineData(this, 'message', v, false)
 	},
 	enumerable: false,
 	configurable: true

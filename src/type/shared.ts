@@ -1,7 +1,3 @@
-// typebox-free leaf: shared caches + schema-node clone helpers used by both
-// `coerce.ts` and `coerce-plan.ts` (and the elysia string/utils caches).
-// Imports NOTHING from coerce, coerce-plan, validator, or type/elysia
-// keep it a leaf so `validator/index.ts` doesn't drag `typebox/type` in eagerly
 import { noEnumerable } from './constants'
 import type { BaseSchema } from '.'
 
@@ -21,18 +17,9 @@ export function clearSharedReferenceCaches() {
 }
 
 // Elysia-owned refinement predicates
-// They are pure and stateless, this let `collectRefinements` skip the single-evaluation recording pool
-// the failure-path `Errors()` walk can simply call the predicate again
-//
 // Not a cache, provenance, never cleared
 const pureRefinements = new WeakSet<object>()
 
-/**
- * @internal Tag every `~refine` entry of a framework-built node as pure.
- * Only ever call this on nodes whose predicates are self-contained: a predicate
- * that can transitively reach a USER refinement (e.g. ObjectString, which runs
- * `Check` over the inner schema) is NOT pure and must keep the pool.
- */
 export function pureRefine<T>(node: T): T {
 	const refinements = (node as any)?.['~refine']
 
@@ -57,15 +44,14 @@ export function clearCoerceLeafCache() {
 	coerceLeafCache.clear()
 }
 
-// clone `node` preserving prototype + non-enumerable markers (`~kind`, ...)
-// only when `out` hasn't already been cloned (`out !== node`)
-export function cloneNode(node: BaseSchema, out: any) {
-	if (out !== node) return out
-
-	const target: any = { ...node, '~kind': (node as any)['~kind'] }
-	for (const key of Object.getOwnPropertyNames(node)) {
-		const desc = Object.getOwnPropertyDescriptor(node, key)
-		if (!desc || desc.enumerable || key === '~kind') continue
+export function copyNonEnumerable(
+	src: object,
+	target: object,
+	skipKey?: string
+) {
+	for (const key of Object.getOwnPropertyNames(src)) {
+		const desc = Object.getOwnPropertyDescriptor(src, key)
+		if (!desc || desc.enumerable || key === skipKey) continue
 
 		Object.defineProperty(target, key, {
 			value: desc.value,
@@ -74,6 +60,13 @@ export function cloneNode(node: BaseSchema, out: any) {
 			configurable: true
 		})
 	}
+}
+
+export function cloneNode(node: BaseSchema, out: any) {
+	if (out !== node) return out
+
+	const target: any = { ...node, '~kind': (node as any)['~kind'] }
+	copyNonEnumerable(node, target, '~kind')
 
 	return Object.defineProperty(target, '~kind', noEnumerable)
 }

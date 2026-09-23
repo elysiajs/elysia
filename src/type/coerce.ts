@@ -136,58 +136,6 @@ export function coerce(
 
 		if (stopped) return node
 
-		if (options?.rootPropertiesOnly && isRootProperty) {
-			let out: any = node
-			for (const key of ['anyOf', 'oneOf', 'allOf'] as const) {
-				const arr = node[key]
-				if (!Array.isArray(arr)) continue
-				let newArr: BaseSchema[] | undefined
-				for (let i = 0, len = arr.length; i < len; i++) {
-					const item = arr[i]!
-					const r = walk(item, false, true)
-					if (stopped && !newArr) {
-						memo.set(node, node)
-						return node
-					}
-					if (r !== item) {
-						newArr ??= arr.slice()
-						newArr[i] = r
-					}
-				}
-				if (newArr) {
-					out = cloneNode(node, out)
-					out[key] = newArr
-				}
-			}
-
-			if (node.items) {
-				const items = node.items
-				if (Array.isArray(items)) {
-					let newItems: BaseSchema[] | undefined
-					for (let i = 0, len = items.length; i < len; i++) {
-						const r = walk(items[i]!, false, true)
-						if (r !== items[i]) {
-							newItems ??= items.slice()
-							newItems[i] = r
-						}
-					}
-					if (newItems) {
-						out = cloneNode(node, out)
-						out.items = newItems
-					}
-				} else {
-					const r = walk(items, false, true)
-					if (r !== items) {
-						out = cloneNode(node, out)
-						out.items = r
-					}
-				}
-			}
-
-			memo.set(node, out)
-			return out
-		}
-
 		let out: any = node
 
 		// Combinators
@@ -198,7 +146,7 @@ export function coerce(
 			let newArr: BaseSchema[] | undefined
 			for (let i = 0, len = arr.length; i < len; i++) {
 				const item = arr[i]!
-				const r = walk(item, false)
+				const r = walk(item, false, isRootProperty)
 
 				if (stopped && !newArr) return node
 
@@ -215,7 +163,7 @@ export function coerce(
 		}
 
 		// Not
-		if (node.not) {
+		if (node.not && !isRootProperty) {
 			const r = walk(node.not, false)
 			if (r !== node.not) {
 				out = cloneNode(node, out)
@@ -230,7 +178,7 @@ export function coerce(
 				let newItems: BaseSchema[] | undefined
 				for (let i = 0, len = items.length; i < len; i++) {
 					const item = items[i]!
-					const r = walk(item, false)
+					const r = walk(item, false, isRootProperty)
 					if (r !== item) {
 						newItems ??= items.slice()
 						newItems[i] = r
@@ -242,12 +190,18 @@ export function coerce(
 					out.items = newItems
 				}
 			} else {
-				const r = walk(items, false)
+				const r = walk(items, false, isRootProperty)
 				if (r !== items) {
 					out = cloneNode(node, out)
 					out.items = r
 				}
 			}
+		}
+
+		// a rootPropertiesOnly root property only reaches its combinators and items
+		if (isRootProperty) {
+			memo.set(node, out)
+			return out
 		}
 
 		if (node.properties) {

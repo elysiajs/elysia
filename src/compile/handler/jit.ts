@@ -26,6 +26,7 @@ import { isDynamicRegex, traceEventIndex } from '../../constants'
 import { fallbackResponse } from '../../handler/error'
 import {
 	drainDisposables,
+	emptyResponse,
 	finalizeRouteError,
 	forwardError
 } from '../../handler/utils'
@@ -38,7 +39,6 @@ import {
 	awaitGuard,
 	cloneResponse,
 	cloneStaticValue,
-	emptyResponse,
 	getQueryParseChannels,
 	hasRequestBody,
 	mapAfterHandle,
@@ -73,8 +73,7 @@ import type {
 	BodyHandler,
 	ContentType,
 	CompiledHandler,
-	AnyLocalHook,
-	MaybeArray
+	AnyLocalHook
 } from '../../types'
 
 const awaitValue = (value: string, arm = '') =>
@@ -86,7 +85,7 @@ let captureHeaderShorthand: boolean | undefined
  * generator route is returned behind a small driver, so `toString()` of the
  * compiled handler no longer shows the body
  */
-export let onEmit: ((code: string) => void) | undefined
+let onEmit: ((code: string) => void) | undefined
 export const setOnEmit = (fn: typeof onEmit) => {
 	onEmit = fn
 }
@@ -137,16 +136,14 @@ function builtinParser(
 
 function parse(
 	adapter: ElysiaAdapter['parse'],
-	parsers: MaybeArray<ContentType | BodyHandler> | undefined,
+	// `describeRoute` already wrapped a bare function parser in an array
+	parsers: ContentType | (ContentType | BodyHandler)[] | undefined,
 	bodyVali: Validator | undefined,
 	hasHeaders: boolean,
 	link: Link,
 	report: TraceReporter | undefined,
 	arm: string
 ) {
-	if (parsers && typeof parsers === 'function')
-		parsers = [parsers] as ContentType[] | BodyHandler[]
-
 	if (
 		typeof parsers === 'string' ||
 		// is probably array
@@ -254,7 +251,7 @@ function parse(
 	return hasFn ? 'let hasBody=false,_bp\n' + code : code
 }
 
-export function schemaMediaKind(schema: any): number | undefined {
+function schemaMediaKind(schema: any): number | undefined {
 	if (!schema || typeof schema !== 'object' || '~standard' in schema) return
 
 	const elyType = schema['~elyTyp']
@@ -328,7 +325,6 @@ export interface CompileHandlerJitOptions {
 	method: string
 	path: string
 	handler: unknown
-	instance: AnyElysia
 	root: AnyElysia
 	errorRoot: AnyElysia
 	hook: AnyLocalHook | undefined
@@ -485,7 +481,7 @@ export function compileHandlerJit({
 				let begin = ''
 				for (let i = 0; i < traceCount; i++)
 					begin +=
-						`rpc${i}=rp${i}.resolveChild?.shift?.()?.({` +
+						`rpc${i}=rp${i}.shift?.()?.({` +
 						`id:c.rid,event:'${phase}',name:${JSON.stringify(name)},` +
 						`begin:performance.now()` +
 						`})\n`
@@ -664,29 +660,17 @@ export function compileHandlerJit({
 		if (transformLen) code += abortCheck()
 	}
 
-	if (vali?.body) {
-		link(vali, 'va')
-		const value = `va.body.From(c.body,${fromArgs('body', bodyValiIsAsync)})`
-		code += `c.body=${bodyValiIsAsync ? awaitValue(value, arm) : value}\n`
-	}
-
-	if (vali?.headers) {
-		link(vali, 'va')
-		const value = `va.headers.From(c.headers,${fromArgs('headers', !!headersValiIsAsync)})`
-		code += `c.headers=${headersValiIsAsync ? awaitValue(value, arm) : value}\n`
-	}
-
-	if (vali?.params) {
-		link(vali, 'va')
-		const value = `va.params.From(c.params,${fromArgs('params', !!paramsValiIsAsync)})`
-		code += `c.params=${paramsValiIsAsync ? awaitValue(value, arm) : value}\n`
-	}
-
-	if (vali?.query) {
-		link(vali, 'va')
-		const value = `va.query.From(c.query,${fromArgs('query', !!queryValiIsAsync)})`
-		code += `c.query=${queryValiIsAsync ? awaitValue(value, arm) : value}\n`
-	}
+	for (const [slot, slotIsAsync] of [
+		['body', bodyValiIsAsync],
+		['headers', headersValiIsAsync],
+		['params', paramsValiIsAsync],
+		['query', queryValiIsAsync]
+	] as const)
+		if (vali?.[slot]) {
+			link(vali, 'va')
+			const value = `va.${slot}.From(c.${slot},${fromArgs(slot, slotIsAsync)})`
+			code += `c.${slot}=${slotIsAsync ? awaitValue(value, arm) : value}\n`
+		}
 
 	if (cookieConfig) {
 		link(buildCookieJar, 'bcj')
@@ -1116,9 +1100,7 @@ export function compileHandlerJit({
 				? `let _m=${finalMap}\nif(typeof _m?.then==='function')_m=(yield _m)\nreturn _m\n`
 				: isAsync
 					? `return await ${finalMap}\n`
-					: syncErrorHook
-					? `if(typeof _r?.then==='function')_r=Promise.resolve(_r).then(fe)\nconst _m=${finalMap}\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>_ce(_e,c)):_m\n`
-					: `if(typeof _r?.then==='function')_r=Promise.resolve(_r).then(fe)\nconst _m=${finalMap}\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n`)
+					: `if(typeof _r?.then==='function')_r=Promise.resolve(_r).then(fe)\nconst _m=${finalMap}\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>${syncErrorHook ? '_ce(_e,c)' : 'fre(rt,c,_e)'}):_m\n`)
 	} else {
 		code +=
 			`const _m=${mapReturn.trim()}\n` +

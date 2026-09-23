@@ -1,6 +1,6 @@
 import type { TOptional, TSchema } from 'typebox'
 
-import { copyNonEnumerable } from './utils'
+import { copyNonEnumerable } from '../shared'
 
 let optionalPropertyWithValue: {
 	value: true

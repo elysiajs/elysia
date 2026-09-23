@@ -36,43 +36,72 @@ describe('AOT capture of precompiled schemas', () => {
 		)
 	})
 
-	it('warns without throwing during normal runtime compilation', () => {
-		const warnings: string[] = []
-		const original = console.warn
-		console.warn = (...a: unknown[]) => warnings.push(String(a[0]))
-
-		try {
-			try {
-				;(build() as any).compile()
-			} catch {}
-		} finally {
-			console.warn = original
-		}
-
-		expect(warnings.some((w) => /Compiled schema detected/.test(w))).toBe(
-			true
+	// A compiled validator is never usable as a route schema, so runtime
+	// compilation must name the actual cause, not the generic
+	// "support only TypeBox and Standard Schema" fallthrough
+	it('rejects a precompiled schema with the same descriptive error at runtime', () => {
+		expect(() => (build() as any).compile()).toThrow(
+			/Compiled schema detected/
 		)
 	})
 
-	it('accepts a plain TypeBox schema without warning', () => {
-		const warnings: string[] = []
-		const original = console.warn
-		console.warn = (...a: unknown[]) => warnings.push(String(a[0]))
-
-		try {
-			const app = new Elysia().post(
+	it('rejects a precompiled schema merged with a guard schema', () => {
+		const app = new Elysia()
+			.guard({ body: t.Object({ age: t.Number() }) })
+			.post(
 				'/x',
-				{ body: t.Object({ name: t.String() }) },
+				{ body: Compile(t.Object({ name: t.String() })) as any },
 				({ body }: any) => body
 			)
-			;(app as any).compile()
-		} finally {
-			console.warn = original
+
+		expect(() => (app as any).compile()).toThrow(/Compiled schema detected/)
+	})
+
+	// Only a bare compiled validator is unusable: a Standard Schema that also
+	// carries Check/buildResult (e.g. an adapter around Compile()) still validates
+	it('accepts a Standard Schema that also carries Check and buildResult', async () => {
+		const schema = {
+			'~standard': {
+				version: 1,
+				vendor: 'x',
+				validate: (value: unknown) =>
+					(value as any)?.a === 1
+						? { value }
+						: { issues: [{ message: 'a must be 1' }] }
+			},
+			Check: () => true,
+			buildResult: {}
 		}
 
-		expect(warnings.some((w) => /Compiled schema detected/.test(w))).toBe(
-			false
+		const app = new Elysia().post(
+			'/x',
+			{ body: schema as any },
+			({ body }: any) => body
 		)
+
+		const post = (body: unknown) =>
+			app.handle(
+				new Request('http://localhost/x', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify(body)
+				})
+			)
+
+		const ok = await post({ a: 1 })
+		expect(ok.status).toBe(200)
+		expect(await ok.json()).toEqual({ a: 1 })
+		expect((await post({ a: 2 })).status).toBe(422)
+	})
+
+	it('accepts a plain TypeBox schema', () => {
+		const app = new Elysia().post(
+			'/x',
+			{ body: t.Object({ name: t.String() }) },
+			({ body }: any) => body
+		)
+
+		expect(() => (app as any).compile()).not.toThrow()
 	})
 })
 

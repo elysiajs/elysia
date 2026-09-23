@@ -4,30 +4,23 @@ import type { Static, TSchema } from 'typebox'
 import { fnv1a, evictOldestHalf } from '../../utils'
 import type { BaseSchema } from '../types'
 import type { ELYSIA_TYPES } from '../constants'
-import { referenceCache, SHARED_REFERENCE_CACHE_LIMIT } from '../shared'
-
-export function copyNonEnumerable(
-	src: object,
-	target: object,
-	skipKey?: string
-) {
-	for (const key of Object.getOwnPropertyNames(src)) {
-		const desc = Object.getOwnPropertyDescriptor(src, key)
-		if (!desc || desc.enumerable || key === skipKey) continue
-
-		Object.defineProperty(target, key, {
-			value: desc.value,
-			enumerable: false,
-			writable: true,
-			configurable: true
-		})
-	}
-}
+import {
+	copyNonEnumerable,
+	referenceCache,
+	SHARED_REFERENCE_CACHE_LIMIT
+} from '../shared'
 
 export function cloneSchema<T extends TSchema>(schema: T): T {
 	const target = { ...schema } as T
 	copyNonEnumerable(schema, target)
 	return target
+}
+
+// `schema`, or a clone of it carrying `property`'s meta (title, default, ...)
+export function withMeta<T extends TSchema>(schema: T, property: object): T {
+	const [, meta] = getMeta(property as any)
+
+	return meta ? Object.assign(cloneSchema(schema), meta) : schema
 }
 
 export function elyType<T extends TSchema>(
@@ -44,8 +37,6 @@ export function elyType<T extends TSchema>(
 
 	return target
 }
-
-export { clearSharedReferenceCaches } from '../shared'
 
 export function createSharedReference<
 	const P extends Record<keyof any, unknown>,
