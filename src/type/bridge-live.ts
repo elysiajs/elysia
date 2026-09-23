@@ -29,6 +29,10 @@ export function useTypebox(_mod?: Parameters<typeof bridgeUseTypebox>[0]) {}
 // AOT imports TypeBox eagerly.
 export function warmTypebox() {}
 
+export function preloadTypebox(): Promise<void> | undefined {
+	return undefined
+}
+
 export const isBridgeLive = () => true
 
 export {

@@ -3,7 +3,7 @@ import type { System as TypeBoxSystem } from 'typebox/system'
 import type * as TypeRegistry from './exports'
 
 import { setupTypebox } from './compat'
-import { loadTypeNamespace } from './typebox-type'
+import { loadTypeNamespace, markTypeUsed } from './typebox-type'
 
 import { Accelerate } from './elysia/accelerate'
 import { ArrayType } from './elysia/array'
@@ -48,13 +48,17 @@ const hasOwn = (target: object, key: PropertyKey) =>
  */
 const lazyNamespace = <T extends object>(
 	resolve: () => Record<PropertyKey, any>,
-	overrides: object
+	overrides: object,
+	onRead?: () => void
 ): T =>
 	new Proxy(overrides, {
-		get: (target, key, receiver) =>
-			key in target
+		get: (target, key, receiver) => {
+			onRead?.()
+
+			return key in target
 				? Reflect.get(target, key, receiver)
-				: resolve()[key as any],
+				: resolve()[key as any]
+		},
 		has: (target, key) => key in target || key in resolve(),
 		ownKeys(target) {
 			const keys = Object.keys(resolve())
@@ -118,7 +122,7 @@ export const t = lazyNamespace<TypeBuilder>(() => loadTypeNamespace().type, {
 	Uint8Array: Uint8ArrayType,
 	Union,
 	UnionEnum
-})
+}, markTypeUsed)
 
 export { setupTypebox } from './compat'
 

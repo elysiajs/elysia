@@ -23,6 +23,10 @@ const namespaces: TypeboxTypeNamespaces = { type, system }
 export function injectTypeboxType(_typebox?: TypeboxTypeNamespaces) {}
 export function ensureTypeSettings() {}
 export const loadTypeNamespace = () => namespaces
+// statically wired: already loaded, nothing to track or preload
+export function markTypeUsed() {}
+export const isTypeUsed = () => true
+export const isTypeNamespaceLoaded = () => true
 
 export {
 	Codec,

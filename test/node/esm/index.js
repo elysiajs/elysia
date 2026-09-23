@@ -1,9 +1,10 @@
-import { Elysia, file, t } from 'elysia'
+import { Elysia, file, status, t } from 'elysia'
 import * as adapterUtils from 'elysia/adapter/utils'
 import * as compiled from 'elysia/compiled'
 import { trace } from 'elysia/trace'
 import assertListenError from '../assert-listen-error.cjs'
 import assertTrace from '../assert-trace.cjs'
+import assertNullBodyStatus from '../assert-null-body-status.cjs'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -27,6 +28,7 @@ if (!('validators' in compiled) || !('handlers' in compiled))
 
 assertListenError(Elysia, 'ESM')
 await assertTrace(Elysia, trace, 'ESM')
+await assertNullBodyStatus(Elysia, status, 'ESM')
 
 const app = new Elysia().get(
 	'/',

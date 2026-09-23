@@ -1,5 +1,5 @@
 import { Elysia, t } from '../../src'
-import { compileHandler } from '../../src/compile/handler'
+import { emittedSource } from '../utils'
 import { drainDisposables } from '../../src/handler/utils'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
@@ -29,8 +29,7 @@ const disposable = (log: string[], name: string) => ({
 	}
 })
 
-const source = (app: any) =>
-	compileHandler(app['~routes']![0] as any, app).toString()
+const source = (app: any) => emittedSource(app)
 
 describe('derive dispose', () => {
 	it('disposes after the response, never before the handler runs', async () => {

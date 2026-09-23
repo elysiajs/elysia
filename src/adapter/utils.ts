@@ -436,10 +436,12 @@ export function createStreamHandler({
 			} catch {}
 		}
 
-		const enqueueValue = async (
+		// Synchronous except for a Blob, whose bytes arrive later: an async
+		// function here cost a Promise and an await per chunk
+		const enqueueValue = (
 			controller: ReadableStreamDefaultController,
 			value: unknown
-		) => {
+		): Promise<void> | undefined => {
 			// @ts-ignore
 			if (value.toSSE) {
 				// @ts-ignore
@@ -447,11 +449,10 @@ export function createStreamHandler({
 				return
 			}
 
-			let p: Promise<true> | boolean
+			let p: Promise<void> | boolean
 			if (value instanceof Blob)
 				p = value.arrayBuffer().then((buffer) => {
 					controller.enqueue(new Uint8Array(buffer))
-					return true as const
 				})
 			else if (value instanceof Uint8Array) {
 				controller.enqueue(value)
@@ -470,7 +471,7 @@ export function createStreamHandler({
 				p = true
 			} else p = false
 
-			if (p !== false) return void (await p)
+			if (p !== false) return p === true ? undefined : p
 
 			if (typeof value === 'object')
 				try {
@@ -491,7 +492,7 @@ export function createStreamHandler({
 		return new Response(
 			new ReadableStream(
 				{
-					async start(controller) {
+					start(controller) {
 						if (signal) {
 							onAbort = () => finalize('close', controller)
 
@@ -510,30 +511,71 @@ export function createStreamHandler({
 						)
 							return
 
-						try {
-							await enqueueValue(controller, init.value)
-						} catch (error) {
+						const fail = (error: unknown) => {
 							finalize('error', controller, error)
+						}
+
+						try {
+							return enqueueValue(controller, init.value)?.catch(
+								fail
+							)
+						} catch (error) {
+							fail(error)
 						}
 					},
 
-					async pull(controller) {
+					pull(controller) {
 						// Respect abort/cancel that happened between pull() calls.
 						if (end) return
 
-						try {
-							const { value: chunk, done } = await iterator.next()
-
-							if (done || end) {
-								finalize('close', controller)
-								return
-							}
-
-							if (chunk === undefined || chunk === null) return
-
-							await enqueueValue(controller, chunk)
-						} catch (error) {
+						const fail = (error: unknown) => {
 							finalize('error', controller, error)
+						}
+
+						// `null` / `undefined` are skipped; returning without an
+						// enqueue would leave the stream waiting for a pull
+						// that never comes
+						const step = (
+							result: IteratorResult<unknown>
+						): Promise<void> | undefined => {
+							while (true) {
+								if (result.done || end) {
+									finalize('close', controller)
+									return
+								}
+
+								const chunk = result.value
+								if (chunk !== undefined && chunk !== null)
+									return enqueueValue(controller, chunk)
+
+								const next = iterator.next() as
+									| IteratorResult<unknown>
+									| Promise<IteratorResult<unknown>>
+								if (
+									typeof (next as Promise<unknown>).then ===
+									'function'
+								)
+									return Promise.resolve(next).then(step)
+
+								result = next as IteratorResult<unknown>
+							}
+						}
+
+						// A sync generator steps without a microtask per chunk
+						try {
+							const next = iterator.next() as
+								| IteratorResult<unknown>
+								| Promise<IteratorResult<unknown>>
+
+							// a custom async iterator may hand back any thenable
+							return (
+								typeof (next as Promise<unknown>).then ===
+								'function'
+									? Promise.resolve(next).then(step)
+									: step(next as IteratorResult<unknown>)
+							)?.catch(fail)
+						} catch (error) {
+							fail(error)
 						}
 					},
 
@@ -572,10 +614,22 @@ export function handleSet(set: Context['set']) {
 		const cookie = serializeCookie(set.cookie)
 
 		if (cookie) {
-			const existing = set.headers[setCookie]
-			if (Array.isArray(existing))
-				set.headers[setCookie] = existing.concat(cookie)
-			else set.headers[setCookie] = cookie
+			const existing = set.headers[setCookie] as
+				| string
+				| string[]
+				| undefined
+
+			if (existing) {
+				const kept =
+					typeof existing === 'string' ? [existing] : existing
+				const added = (
+					typeof cookie === 'string' ? [cookie] : cookie
+				).filter((value) => !kept.includes(value))
+
+				set.headers[setCookie] = (
+					added.length ? kept.concat(added) : existing
+				) as any
+			} else set.headers[setCookie] = cookie
 		}
 	}
 
@@ -776,6 +830,54 @@ const doneResult = { done: true as const, value: undefined } as const
 interface Pending<T> {
 	resolve: (r: IteratorResult<T>) => void
 	reject: (e: unknown) => void
+}
+
+/**
+ * A returned `ReadableStream` is consumed after the handler returns, so
+ * afterResponse, `defer()` and derive dispose must wait for it the way a tee'd
+ * generator is waited on
+ *
+ * A returned `Response` is not observed, reading `.body` would move
+ * every Response on these routes off Bun's native send path; a `bytes()`
+ * stream keeps its exact-stream contract and releases early as before
+ */
+export function observeStream(
+	source: ReadableStream
+): [ReadableStream, AsyncIterable<unknown>] | undefined {
+	if (source.locked || isByteStream(source)) return
+
+	const reader = source.getReader()
+	const [value, observer] = tee({
+		[Symbol.asyncIterator]: () => ({
+			next: () => reader.read() as Promise<IteratorResult<unknown>>,
+			return: (reason?: unknown) =>
+				reader
+					.cancel(reason)
+					.then(() => ({ done: true, value: undefined }))
+		})
+	})
+
+	const body = new ReadableStream(
+		{
+			async pull(controller) {
+				try {
+					const result = await value.next()
+					if (result.done) controller.close()
+					else controller.enqueue(result.value)
+				} catch (error) {
+					controller.error(error)
+				}
+			},
+			cancel(reason) {
+				return value.return?.(reason) as Promise<void> | undefined
+			}
+		},
+		{ highWaterMark: 0 }
+	)
+
+	if ((source as any).sse === true) (body as any).sse = true
+
+	return [body, observer]
 }
 
 /**

@@ -9,7 +9,7 @@ import {
 } from '../../src/compile/aot-capture'
 import { compileHandler } from '../../src/compile/handler'
 import { materialise, materialiseHandlers, registerManifest } from './_manifest'
-import { post, req } from '../utils'
+import { post, req, suspendsOnThenables } from '../utils'
 
 afterEach(() => {
 	Compiled.clear()
@@ -110,7 +110,7 @@ describe('sync handler returning a stored Promise is awaited', () => {
 		)
 		const route = (app as any)['~routes']![0]
 		const fn = compileHandler(route, app)
-		expect(fn.constructor.name).toBe('AsyncFunction')
+		expect(suspendsOnThenables(fn)).toBe(true)
 		const response = await app.handle('/x')
 		expect(response.status).toBe(200)
 		await expect(response.json()).resolves.toEqual({ ok: true })

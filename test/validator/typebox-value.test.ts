@@ -115,7 +115,12 @@ describe('typebox-value', () => {
 
 		for (const key of Object.keys(live) as (keyof typeof live)[]) {
 			// The live module already loaded TypeBox, so its loaders are no-ops.
-			if (key === 'injectTypebox' || key === 'warmTypebox') continue
+			if (
+				key === 'injectTypebox' ||
+				key === 'warmTypebox' ||
+				key === 'preloadTypebox'
+			)
+				continue
 
 			expect(ops[key]).toBe(live[key])
 		}

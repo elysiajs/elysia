@@ -1,39 +1,21 @@
 import { t } from '../src'
 import { Elysia } from '../src/base'
 
-class Dependency {
-	doThing() {
-		return 'Hi!'
+import Schema from 'typebox/schema'
+
+const a = t.Object(
+	{
+		a: t.String(),
+		b: t.Number()
+	},
+	{
+		additionalProperties: false
 	}
-}
+)
 
-class Service {
-	constructor(protected dependency: Dependency) {}
-
-	doSomething() {
-		return this.dependency.doThing()
-	}
-}
-
-new Elysia()
-	.decorate({
-		dependency: new Dependency()
+console.log(
+	Schema.Compile(a).Errors({
+		a: 'b',
+		c: 'a'
 	})
-	.decorate((rest) => ({
-		...rest,
-		service: new Service(rest.dependency)
-	}))
-	// use derive for per request instances
-	.derive(({ dependency }) => ({
-		service: new Service(dependency)
-	}))
-	.get(
-		'/',
-		{
-			response: {
-				418: t.Literal('a')
-			}
-		},
-		({ service, status }) => service.doSomething()
-	)
-	.listen(3000)
+)

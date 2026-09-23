@@ -25,6 +25,7 @@ import type { AnyElysia } from '../../base'
 import {
 	materializeSetHeaders,
 	normalizeContentType,
+	observeStream,
 	tee
 } from '../../adapter/utils'
 import {
@@ -34,7 +35,8 @@ import {
 	hasRequestBody,
 	replaceDeriveContext,
 	runBeforeHandlePrefix,
-	armEntryAbort
+	armEntryAbort,
+	resumeRoute
 } from './utils'
 import { staticCloneResolver } from './static-clone-resolver'
 
@@ -91,6 +93,8 @@ const handlerParams = (): Record<string, Resolver | undefined> =>
 	// allowUnsafeValidationDetails opt-in: `e instanceof verr` in the error catch
 	verr: () => ValidationError,
 	tee: () => tee,
+	obs: () => observeStream,
+	rs: () => resumeRoute,
 	msh: () => materializeSetHeaders,
 	cr: () => cloneResponse,
 	scl: staticCloneResolver,

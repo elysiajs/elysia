@@ -8,6 +8,7 @@ import {
 	endValidatorCapture
 } from '../../src/compile/aot-capture'
 import { compileHandler } from '../../src/compile/handler'
+import { suspendsOnThenables } from '../utils'
 import {
 	materialise,
 	materialiseHandlers,
@@ -336,7 +337,7 @@ describe('request abort short-circuits lifecycle hooks', () => {
 			.get('/derived', ({ user }) => user)
 		const handler = compileHandler(app['~routes']![0] as any, app)
 
-		expect(handler.constructor.name).toBe('AsyncFunction')
+		expect(suspendsOnThenables(handler)).toBe(true)
 		await expect((await app.handle('/derived')).text()).resolves.toBe('a')
 	})
 

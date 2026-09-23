@@ -395,6 +395,37 @@ export function createFetchHandler(
 			if (afterResponses?.length || queue?.length)
 				materializeSetHeaders(context.set)
 
+			// Bracket the hooks like the compiled lane does, so the reported
+			// duration is the hooks' and not ~0
+			let cache: any[] | undefined
+			let reports: unknown[] | undefined
+			if (traceAfterResponsePhase) {
+				cache = (context as any).trace as any[] | undefined
+
+				if (!cache && tracerFactories) {
+					context.rid ??= requestId()
+					cache = tracerFactories.map((f) => f(context as any))
+					;(context as any).trace = cache
+				}
+
+				if (cache) {
+					const total = afterResponses?.length ?? 0
+					reports = new Array(cache.length)
+					for (let i = 0; i < cache.length; i++)
+						// subscription-gated: unsubscribed = flat
+						// timestamps only (no recorder/literal)
+						reports[i] =
+							cache[i].b(7, total) ||
+							cache[i].begin(7, {
+								id: context.rid ?? '',
+								event: 'afterResponse',
+								name: 'afterResponse',
+								begin: performance.now(),
+								total
+							})
+				}
+			}
+
 			if (afterResponses)
 				for (let i = 0; i < afterResponses.length; i++)
 					try {
@@ -421,35 +452,12 @@ export function createFetchHandler(
 			// derive values are released after the user's own callbacks
 			await drainDisposables(context)
 
-			if (traceAfterResponsePhase) {
-				let cache = (context as any).trace as any[] | undefined
-
-				if (!cache && tracerFactories) {
-					context.rid ??= requestId()
-					cache = tracerFactories.map((f) => f(context as any))
-					;(context as any).trace = cache
+			if (reports)
+				for (let i = 0; i < reports.length; i++) {
+					const report = reports[i] as { resolve?: () => void }
+					if (typeof report.resolve === 'function') report.resolve()
+					else cache![i].r(report)
 				}
-
-				if (cache)
-					for (let i = 0; i < cache.length; i++) {
-						// subscription-gated: unsubscribed = flat
-						// timestamps only (no recorder/literal)
-						const fast = cache[i].b(7, afterResponses?.length ?? 0)
-						if (fast) {
-							cache[i].r(fast)
-							continue
-						}
-
-						const r = cache[i].begin(7, {
-							id: context.rid ?? '',
-							event: 'afterResponse',
-							name: 'afterResponse',
-							begin: performance.now(),
-							total: afterResponses?.length ?? 0
-						})
-						r.resolve()
-					}
-			}
 		})
 	}
 

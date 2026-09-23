@@ -732,12 +732,17 @@ export type InlineResponse =
 	| Error
 
 export type InlineHandlerResponse<Route extends RouteSchema['response']> = {
-	[Status in keyof Route]: ElysiaStatus<
-		// @ts-ignore Status is always a number
-		Status,
-		Route[Status],
-		Status
-	>
+	[Status in keyof Route]:
+		| ElysiaStatus<
+				// @ts-ignore Status is always a number
+				Status,
+				Route[Status],
+				Status
+		  >
+		// `status('Not Found', …)` carries the name as its `Code`
+		| (Status extends keyof StatusMapBack
+				? ElysiaStatus<StatusMapBack[Status], Route[Status]>
+				: never)
 }[keyof Route]
 
 export type InlineHandler<
@@ -1783,14 +1788,12 @@ type AsMacroSchemaField<T> = [T] extends [never]
 			? T
 			: undefined
 
-type MacroDefSchema<K, MBody, MHeaders, MQuery, MParams, MCookie> = {
-	body: AsMacroSchemaField<K extends keyof MBody ? MBody[K] : undefined>
-	headers: AsMacroSchemaField<
-		K extends keyof MHeaders ? MHeaders[K] : undefined
-	>
-	query: AsMacroSchemaField<K extends keyof MQuery ? MQuery[K] : undefined>
-	params: AsMacroSchemaField<K extends keyof MParams ? MParams[K] : undefined>
-	cookie: AsMacroSchemaField<K extends keyof MCookie ? MCookie[K] : undefined>
+type RefDefSchema<D> = {
+	body: AsMacroSchemaField<D extends { body: infer X } ? X : undefined>
+	headers: AsMacroSchemaField<D extends { headers: infer X } ? X : undefined>
+	query: AsMacroSchemaField<D extends { query: infer X } ? X : undefined>
+	params: AsMacroSchemaField<D extends { params: infer X } ? X : undefined>
+	cookie: AsMacroSchemaField<D extends { cookie: infer X } ? X : undefined>
 	response: undefined
 }
 
@@ -1799,21 +1802,9 @@ export type MacroSchemaChannel<Definitions extends DefinitionBase> = Record<
 	AnySchema | (keyof Definitions['typebox'] & string)
 >
 
-type MacroChannel<
-	Channel,
-	Key extends keyof InputSchema,
-	Definitions extends DefinitionBase
-> = {
-	[K in keyof Channel]: MaybeValueOrVoidFunction<
-		{
-			[F in Key]?: Channel[K] | (keyof Definitions['typebox'] & string)
-		} & Record<string, unknown>
-	>
-}
-
 /**
  * Captures the verbatim `.macro()` definition record into a separate first-pass
- * generic (mirrors {@link MacroChannel}). This lets each definition's enabled
+ * generic. This lets each definition's enabled
  * sibling flags (`{ auth: true }`) be read back without reusing the contextually
  * typed `NewMacro`, which would form the record -> handler-typing inference
  * cycle documented on {@link ObjectMacroDefs}.
@@ -1855,11 +1846,6 @@ type MacroRefResolve<MacroFn, SelectedMacro, Definitions> =
  * `Metadata['macroFn']` for the consuming route)
  */
 export type ObjectMacroDefs<
-	Body,
-	Headers,
-	Query,
-	Params,
-	Cookie,
 	N,
 	AmbientSchema extends RouteSchema,
 	ScopedSchemas extends RouteSchema,
@@ -1870,26 +1856,14 @@ export type ObjectMacroDefs<
 	MacroFn = {},
 	// Verbatim definition record captured in a first inference pass
 	Refs = {}
-> = MacroChannel<Body, 'body', Definitions> &
-	MacroChannel<Headers, 'headers', Definitions> &
-	MacroChannel<Query, 'query', Definitions> &
-	MacroChannel<Params, 'params', Definitions> &
-	MacroChannel<Cookie, 'cookie', Definitions> &
-	MacroRefChannel<Refs> & {
+> = MacroRefChannel<Refs> & {
 		[K in keyof N]: MaybeValueOrVoidFunction<
 			MacroProperty<
 				MacroNames & InputSchema<keyof Definitions['typebox'] & string>,
 				IntersectIfObjectSchema<
 					MergeSchema<
 						UnwrapMacroSchema<
-							MacroDefSchema<
-								K,
-								Body,
-								Headers,
-								Query,
-								Params,
-								Cookie
-							>,
+							RefDefSchema<K extends keyof Refs ? Refs[K] : {}>,
 							Definitions['typebox']
 						>,
 						AmbientSchema

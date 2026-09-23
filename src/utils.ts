@@ -506,7 +506,7 @@ export const assignOwn = <T extends object>(target: T, source: any): T =>
 export const getLoosePath = (path: string) =>
 	path.charCodeAt(path.length - 1) === 47 ? path.slice(0, -1) : path + '/'
 
-import type { SSEPayload, Prettify } from './types'
+import type { SSEPayload, Prettify, BunHTMLBundlelike } from './types'
 
 const byteStreams = new WeakSet<ReadableStream<Uint8Array>>()
 
@@ -597,6 +597,8 @@ export const sse = <
 		else if (typeof payload.data === 'string') s += sseData(payload.data)
 		else if (typeof payload.data === 'object')
 			s += `data: ${JSON.stringify(payload.data)}\n`
+		// number / boolean / bigint: `data: 0` is a valid event, not an empty one
+		else if (payload.data !== undefined) s += sseData(String(payload.data))
 
 		if (s) s += '\n'
 		return s
@@ -805,8 +807,6 @@ export function hookToGuard(
 		schema?: GuardSchemaType
 	}
 ): Partial<AppHook & Macro> {
-	if (a.schema !== 'merge') return a
-
 	if (a.body || a.headers || a.params || a.query || a.cookie || a.response) {
 		a.schemas ??= []
 		const schema = Object.create(null)
@@ -1343,5 +1343,10 @@ export const isSocketQuiet = (socket: {
 	!socket.data.inflight &&
 	!socket.data.opening &&
 	!socket.data.settling
+
+export const isHTMLBundle = (value: unknown): value is BunHTMLBundlelike =>
+	Object.prototype.toString.call(value) === '[object HTMLBundle]' ||
+	(typeof (value as BunHTMLBundlelike)?.index === 'string' &&
+		Array.isArray((value as { files?: unknown }).files))
 
 export { prefix }

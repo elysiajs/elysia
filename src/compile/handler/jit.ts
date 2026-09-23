@@ -47,13 +47,16 @@ import {
 	mapError,
 	mapMapResponse,
 	mapTransform,
+	resumeRoute,
 	runBeforeHandlePrefix,
 	runBeforeHandlePrefixAsync,
+	type AsyncMode,
 	type TraceReporter
 } from './utils'
 import {
 	materializeSetHeaders,
 	normalizeContentType,
+	observeStream,
 	tee
 } from '../../adapter/utils'
 import { ELYSIA_TYPES } from '../../type/constants'
@@ -78,6 +81,16 @@ const awaitValue = (value: string, arm = '') =>
 	arm ? `await (_av=(${value}),${arm},_av)` : `await ${value}`
 
 let captureHeaderShorthand: boolean | undefined
+/**
+ * @internal test hook: receives each route's emitted source. A sync-first
+ * generator route is returned behind a small driver, so `toString()` of the
+ * compiled handler no longer shows the body
+ */
+export let onEmit: ((code: string) => void) | undefined
+export const setOnEmit = (fn: typeof onEmit) => {
+	onEmit = fn
+}
+
 export const setCaptureHeaderShorthand = (value: boolean | undefined) => {
 	captureHeaderShorthand = value
 }
@@ -354,6 +367,7 @@ export function compileHandlerJit({
 		traceHandleOn,
 		descriptor: {
 			async: isAsync,
+			generator,
 			responseMode,
 			hasBody,
 			bodyValiIsAsync,
@@ -379,6 +393,9 @@ export function compileHandlerJit({
 			syncAfterResponse
 		}
 	} = state
+
+	// `yield` where the route suspends when compiled as a sync-first generator
+	const asyncMode: AsyncMode = generator ? 'yield' : isAsync
 	const hasStaticAfterResponse = !!hook?.afterResponse?.length
 
 	const hasDeriveDispose = !!(hook as { '~deriveEntries'?: unknown[] })?.[
@@ -410,19 +427,10 @@ export function compileHandlerJit({
 		}
 	}
 
-	// Abort short-circuit.
-	//
-	// Capture callback results before arming at an actual await boundary.
-	// Ordinary guards only peek; an immediate result never needs a signal.
 	const abortOn = hasLifecycleHook && root['~config']?.abortSignal !== false
 	const abortPeek = "c['~sig']?.aborted"
 	const arm = abortOn ? "_as??=(c['~sig']??=c.request.signal)" : ''
 
-	// A client disconnect is the most common cause of a leaked per-request
-	// resource, so the drain is scheduled before the early return.
-	//
-	// Assigned once `schedule` is known - the parse/transform probes emit
-	// before that and run before any derive value exists
 	let abortSchedule = ''
 	const abortCheck = () =>
 		abortOn
@@ -516,7 +524,7 @@ export function compileHandlerJit({
 	if (needsStaticClone) link(cloneStaticValue, 'scl')
 
 	const callHandler = isHandleFunction
-		? `_r=h(c)\n${awaitGuard(handler as Function, isAsync, '_r', arm)}`
+		? `_r=h(c)\n${awaitGuard(handler as Function, asyncMode, '_r', arm)}`
 		: isStaticResponse
 			? `_r=cr(h)\n`
 			: isPromiseHandler
@@ -526,7 +534,7 @@ export function compileHandlerJit({
 					: `_r=h\n`
 
 	// va,rm,rc,re,pa,pf,pj,pt,pu,er,ar
-	let code = `${isAsync ? 'async ' : ''}function route(c){\n`
+	let code = `${generator ? 'function* ' : isAsync ? 'async function ' : 'function '}route(c){\n`
 
 	if (abortOn) {
 		link(emptyResponse, 'emp')
@@ -648,7 +656,7 @@ export function compileHandlerJit({
 			if (isAsync) code += 'let _tf\n'
 			code += mapTransform(
 				hook!.transform!,
-				[isAsync, buildReport('transform'), arm],
+				[asyncMode, buildReport('transform'), arm],
 				abortChainGuard()
 			)
 		}
@@ -908,7 +916,7 @@ export function compileHandlerJit({
 						hook.beforeHandle,
 						deriveEntries,
 						link,
-						isAsync,
+						asyncMode,
 						buildReport('beforeHandle'),
 						chainGuard,
 						arm
@@ -923,8 +931,10 @@ export function compileHandlerJit({
 			if (hasBeforeHandle) code += abortCheck()
 		}
 
-		if (hasAfterResponse || traceHandleOn || hasDeriveDispose)
+		if (hasAfterResponse || traceHandleOn || hasDeriveDispose) {
 			link(tee, 'tee')
+			link(observeStream, 'obs')
+		}
 
 		const teeBlock =
 			(hasAfterResponse || traceHandleOn || hasDeriveDispose) &&
@@ -933,7 +943,7 @@ export function compileHandlerJit({
 					`const _s=tee(_r,2)\n` +
 					`_r=_s[0]\n` +
 					(traceHandleOn ? `_trs=_s[1]\n` : `_stl=_s[1]\n`) +
-					`}\n`
+					`}else if(${disposeGuard}_r instanceof ReadableStream){const _o=obs(_r)\nif(_o){_r=_o[0];_stl=_o[1]}}\n`
 				: ''
 
 		if (traceHandleOn) {
@@ -974,10 +984,14 @@ export function compileHandlerJit({
 				`const _s=tee(_r,2)\n` +
 				`return _fin2(c,_s[0],_s[1])\n` +
 				`}\n` +
+				`if(_r instanceof ReadableStream){const _o=obs(_r)\nif(_o)return _fin2(c,_o[0],_o[1])}\n` +
 				`return _fin2(c,_r,undefined)\n` +
 				`}\n` +
 				`function _fin2(c,_r,_stl){\n` +
 				`c.responseValue=_r\n` +
+				// Only a sync signer reaches this lane: an async one forces
+				// `isAsync` (see descriptor), which excludes `syncAfterResponse`
+				signPrefix +
 				(syncScheduleDecl ? `_scf(c,_stl)\n` : scheduleAfterResponse) +
 				`const _m=${mapValue('_r')}\n` +
 				`return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n` +
@@ -1008,7 +1022,7 @@ export function compileHandlerJit({
 					link(hook!.afterHandle!, 'af')
 					code += mapAfterHandle(
 						hook!.afterHandle!,
-						isAsync,
+						asyncMode,
 						buildReport('afterHandle'),
 						abortChainGuard(),
 						arm
@@ -1025,7 +1039,7 @@ export function compileHandlerJit({
 					link(hook!.mapResponse!, 'mr')
 					code += mapMapResponse(
 						hook!.mapResponse!,
-						isAsync,
+						asyncMode,
 						buildReport('mapResponse'),
 						abortChainGuard(),
 						arm
@@ -1071,7 +1085,13 @@ export function compileHandlerJit({
 					? `(_e)=>{${freThenSchedule('_e')}}`
 					: `(_e)=>fre(rt,c,_e)`
 
-			if (isAsync)
+			if (generator)
+				// suspends only on a thenable map, still inside the route's try
+				code +=
+					`let _m=${finalMap}\nif(typeof _m?.then==='function')_m=(yield _m)\n` +
+					(deferSchedule ? schedule : '') +
+					`return _m\n`
+			else if (isAsync)
 				code += deferSchedule
 					? `const _m=await ${finalMap}\n${schedule}return _m\n`
 					: `return await ${finalMap}\n`
@@ -1092,9 +1112,11 @@ export function compileHandlerJit({
 		code +=
 			abortCheck() +
 			`if(_r instanceof Error)throw _r\n` +
-			(isAsync
-				? `return await ${finalMap}\n`
-				: syncErrorHook
+			(generator
+				? `let _m=${finalMap}\nif(typeof _m?.then==='function')_m=(yield _m)\nreturn _m\n`
+				: isAsync
+					? `return await ${finalMap}\n`
+					: syncErrorHook
 					? `if(typeof _r?.then==='function')_r=Promise.resolve(_r).then(fe)\nconst _m=${finalMap}\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>_ce(_e,c)):_m\n`
 					: `if(typeof _r?.then==='function')_r=Promise.resolve(_r).then(fe)\nconst _m=${finalMap}\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n`)
 	} else {
@@ -1152,7 +1174,7 @@ export function compileHandlerJit({
 							? `c.responseValue=_r\n` +
 								mapMapResponse(
 									hook!.mapResponse!,
-									isAsync,
+									asyncMode,
 									undefined,
 									abortChainGuard(),
 									arm
@@ -1163,7 +1185,7 @@ export function compileHandlerJit({
 								? schedule + abortCatch
 								: abortCatch + schedule),
 						signPrefix,
-						isAsync,
+						asyncMode,
 						arm
 					],
 					abortChainGuard()
@@ -1196,12 +1218,27 @@ export function compileHandlerJit({
 		scheduleDecl +
 		code
 
+	if (syncCookieSign || asyncCookieSign) {
+		code = code.replaceAll('fre(rt,c,', '_sfre(rt,c,')
+		factoryHelpers =
+			factoryHelpers.replaceAll('fre(rt,c,', '_sfre(rt,c,') +
+			(syncCookieSign
+				? `function _sfre(rt,c,e){try{scv(c.set.cookie,cc)}catch{}return fre(rt,c,e)}\n`
+				: `function _sfre(rt,c,e){let _p\ntry{_p=scv(c.set.cookie,cc)}catch{}\nreturn _p?_p.then(()=>fre(rt,c,e),()=>fre(rt,c,e)):fre(rt,c,e)}\n`)
+	}
+
+	if (generator) {
+		link(resumeRoute, 'rs')
+		code = `(function(_g){return function route(c){const _i=_g(c),_n=_i.next()\nreturn _n.done?_n.value:rs(_i,_n.value)}})(${code})`
+	}
+
 	if (factoryHelpers)
 		code = `(function(){\n${factoryHelpers}return ${code}})()`
 
 	const alias = aliasKeys.join(',')
 	const fullAlias = alias ? `rt,fre,${alias}` : 'rt,fre'
 	Capture.handler({ method, path, alias: fullAlias, code })
+	onEmit?.(code)
 	const isGeneratorHandler =
 		isHandleFunction &&
 		(handler as Function).constructor.name.endsWith('GeneratorFunction')

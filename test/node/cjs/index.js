@@ -5,12 +5,13 @@ setTimeout(() => {
 	process.exit(1)
 }, 5000)
 
-const { Elysia, file, t } = require('elysia')
+const { Elysia, file, status, t } = require('elysia')
 const adapterUtils = require('elysia/adapter/utils')
 const compiled = require('elysia/compiled')
 const { trace } = require('elysia/trace')
 const assertListenError = require('../assert-listen-error.cjs')
 const assertTrace = require('../assert-trace.cjs')
+const assertNullBodyStatus = require('../assert-null-body-status.cjs')
 const { mkdtemp, readFile, rm, writeFile } = require('node:fs/promises')
 const { tmpdir } = require('node:os')
 const { join, resolve } = require('node:path')
@@ -36,6 +37,7 @@ const app = new Elysia().get(
 
 const main = async () => {
 	await assertTrace(Elysia, trace, 'CommonJS')
+	await assertNullBodyStatus(Elysia, status, 'CommonJS')
 	const response = await app.handle(new Request('http://localhost'))
 
 	if ((await response.text()) !== 'Node.js') {

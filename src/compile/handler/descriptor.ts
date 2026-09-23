@@ -26,6 +26,8 @@ import type { AnyLocalHook, MaybeArray } from '../../types'
 export interface RouteDescriptor {
 	handlerKind: 'function' | 'response' | 'promise' | 'static-value'
 	async: boolean
+	/** `async` only on a maybe-promise: compiled as a sync-first generator */
+	generator: boolean
 	responseMode:
 		| 'compact'
 		| 'default-headers'
@@ -400,6 +402,28 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 	const callHandlerSyncOnAsync =
 		isAsync && isHandleFunction && !handlerIsAsync
 
+	const generator =
+		isAsync &&
+		!hasBody &&
+		!handlerIsAsync &&
+		!asyncCookieSign &&
+		!responseValiAsync &&
+		!hasTrace &&
+		!beforeHandlePrefix?.length &&
+		!bodyValiIsAsync &&
+		!headersValiIsAsync &&
+		!paramsValiIsAsync &&
+		!queryValiIsAsync &&
+		!cookieValidIsAsync &&
+		!(
+			hook &&
+			(isAsyncLifecycle(hook.afterHandle) ||
+				isAsyncLifecycle(hook.beforeHandle) ||
+				isAsyncLifecycle(hook.transform) ||
+				isAsyncLifecycle(hook.mapResponse) ||
+				isAsyncLifecycle(hook.error))
+		)
+
 	const syncErrorHook = hasErrorHook && !isAsync && !hasTrace
 	const syncAfterResponse =
 		hasAfterResponse && !isAsync && !hasTrace && !hasErrorHook
@@ -434,6 +458,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 	const descriptor: RouteDescriptor = {
 		handlerKind,
 		async: !!isAsync,
+		generator,
 		responseMode,
 
 		hasBeforeHandle,

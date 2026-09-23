@@ -48,6 +48,29 @@ describe('1.x argument order', () => {
 		)
 	})
 
+	// `{ auth: true }` carries no schema or event key; without the macro table
+	// the route is silently registered with the hook as its response body and
+	// the auth macro never runs
+	it('treats a macro-only hook as hook data', () => {
+		const app = new Elysia().macro({
+			auth: { beforeHandle: () => 'blocked' }
+		})
+
+		expect(() =>
+			(app as any).get('/secret', () => 'secret', { auth: true })
+		).toThrow(`[Elysia] .get('/secret', handler, hook) is the 1.x order`)
+	})
+
+	it('still serves a static object whose keys are not macros', async () => {
+		const app = (
+			new Elysia().macro({ auth: { beforeHandle: () => 'blocked' } }) as any
+		).get('/x', () => {}, { hello: 'world' })
+
+		await expect((await app.handle('/x')).json()).resolves.toEqual({
+			hello: 'world'
+		})
+	})
+
 	it('would otherwise serve the schema as the response body', async () => {
 		const app = new Elysia()
 

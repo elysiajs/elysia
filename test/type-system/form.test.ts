@@ -43,17 +43,15 @@ describe('TypeSystem - Form', () => {
 			)
 		).toBe(true)
 
-		try {
+		// a form missing a required field must not validate
+		expect(
 			Value.Check(
 				schema,
 				form({
 					name: 'saltyaom'
 				})
 			)
-			expect(true).toBe(false)
-		} catch {
-			expect(true).toBe(true)
-		}
+		).toBe(false)
 	})
 
 	it('validates form responses', async () => {

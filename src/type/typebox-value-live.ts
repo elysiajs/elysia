@@ -25,6 +25,10 @@ export function injectTypebox(_typebox?: TypeboxNamespaces) {}
 // TypeBox was imported above, so there is nothing left to warm.
 export function warmTypebox() {}
 
+export function preloadTypebox(): Promise<void> | undefined {
+	return undefined
+}
+
 export {
 	Check,
 	Clean,

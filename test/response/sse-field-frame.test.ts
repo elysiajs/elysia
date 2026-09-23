@@ -21,6 +21,52 @@ describe('SSE field framing', () => {
 		)
 	})
 
+	// `data: 0` and `data: false` are real events; dropping them silently
+	// loses a counter or flag update the client is waiting for
+	it('frames number and boolean data', () => {
+		expect(sse({ data: 0 }).toSSE()).toBe('data: 0\n\n')
+		expect(sse({ data: 42 }).toSSE()).toBe('data: 42\n\n')
+		expect(sse({ data: false }).toSSE()).toBe('data: false\n\n')
+		expect(sse({ id: 1, data: true }).toSSE()).toBe('id: 1\ndata: true\n\n')
+	})
+
+	it('streams number data from a generator', async () => {
+		const app = new Elysia().get('/', function* () {
+			yield sse({ data: 1 })
+			yield sse({ data: 0 })
+		})
+
+		const res = await app.handle(new Request('http://localhost/'))
+		await expect(res.text()).resolves.toBe('data: 1\n\ndata: 0\n\n')
+	})
+
+	// A skipped `null` chunk returned from pull() without enqueueing, and the
+	// stream never asked for the next one: the response hung forever
+	it('skips null and undefined chunks without stalling', async () => {
+		const app = new Elysia()
+			.get('/sync', function* () {
+				yield 'a'
+				yield null
+				yield undefined
+				yield 'b'
+			})
+			.get('/async', async function* () {
+				yield 'a'
+				yield null
+				yield 'b'
+			})
+
+		for (const path of ['/sync', '/async']) {
+			const res = await app.handle(new Request(`http://localhost${path}`))
+			const body = await Promise.race([
+				res.text(),
+				Bun.sleep(1000).then(() => 'stalled')
+			])
+
+			expect(body).toBe('ab')
+		}
+	})
+
 	it('skips non-finite retry values', () => {
 		const event = sse({
 			retry: Number.NaN,

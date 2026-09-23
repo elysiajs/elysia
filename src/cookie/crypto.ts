@@ -15,12 +15,12 @@ interface NodeCrypto {
 	}
 }
 
-type BunCryptoHasher = new (
-	algorithm: 'sha256',
-	key: string
-) => {
+interface BunKeyedHasher {
 	update: (data: string) => { digest: (encoding: 'base64') => string }
+	copy: () => BunKeyedHasher
 }
+
+type BunCryptoHasher = new (algorithm: 'sha256', key: string) => BunKeyedHasher
 
 // Materialising `node:crypto` costs ~565 KB / 5.2k objects of native module
 // surface at import. Resolve it on demand: under Bun the keyed-hasher probe
@@ -47,7 +47,11 @@ const bunCryptoHasher = (() => {
 		| BunCryptoHasher
 		| undefined
 
-	if (typeof hasher !== 'function') return undefined
+	if (
+		typeof hasher !== 'function' ||
+		typeof hasher.prototype?.copy !== 'function'
+	)
+		return undefined
 
 	try {
 		return (
@@ -79,11 +83,25 @@ function coerceValue(val: unknown) {
 	return val
 }
 
-export const signCookieBun = (val: string, secret: string) =>
-	`${val}.${new bunCryptoHasher!('sha256', secret)
+// Keying HMAC is most of its cost; copy a keyed hasher instead
+const bunHasherCache = new Map<string, BunKeyedHasher>()
+
+export const signCookieBun = (val: string, secret: string) => {
+	let keyed = bunHasherCache.get(secret)
+	if (!keyed) {
+		if (bunHasherCache.size >= 256) evictOldestHalf(bunHasherCache)
+		bunHasherCache.set(
+			secret,
+			(keyed = new bunCryptoHasher!('sha256', secret))
+		)
+	}
+
+	return `${val}.${keyed
+		.copy()
 		.update(val)
 		.digest('base64')
 		.replace(removeTrailingEquals, '')}`
+}
 
 export const signCookieNode = (val: string, secret: string) =>
 	`${val}.${nodeCrypto()!

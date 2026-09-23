@@ -1,3 +1,5 @@
+import { compileHandler } from '../src/compile/handler'
+import { setOnEmit } from '../src/compile/handler/jit'
 export const req = (path: string, options?: RequestInit) =>
 	new Request(`http://localhost${path}`, options)
 
@@ -103,3 +105,27 @@ export function parseCount(validator: any, value: unknown) {
 
 	return calls
 }
+
+/**
+ * Emitted source of a route: the body, also for a sync-first generator route,
+ * whose compiled handler is a small driver around the generator
+ */
+export const emittedSource = (app: any, index = 0) => {
+	let code = ''
+	setOnEmit((emitted) => (code = emitted))
+
+	try {
+		const fn = compileHandler(app['~routes'][index], app)
+
+		return code || fn.toString()
+	} finally {
+		setOnEmit(undefined)
+	}
+}
+
+/**
+ * The route suspends on thenables (never treats a pending value as settled):
+ * an `async` route, or a sync-first generator route driven by `resumeRoute`
+ */
+export const suspendsOnThenables = (fn: Function) =>
+	fn.constructor.name === 'AsyncFunction' || fn.toString().includes('rs(_i,')

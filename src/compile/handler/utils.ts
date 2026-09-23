@@ -90,7 +90,7 @@ const toArray = <T>(v: MaybeArray<T>): T[] => (Array.isArray(v) ? v : [v])
 
 export const mapTransform = /*#__PURE__*/ map<
 	'transform',
-	[isAsync: boolean, report?: TraceReporter, arm?: string]
+	[isAsync: AsyncMode, report?: TraceReporter, arm?: string]
 >((i, fn, [isAsync, report, arm]) => {
 	const t = trace(report, fn)
 	const call = isAsync
@@ -446,7 +446,7 @@ export function mapBeforeHandle(
 	_hooks: AppHook['beforeHandle'] | AppHook['beforeHandle'][0],
 	derive: readonly DeriveEntry[] | undefined,
 	link: Link,
-	isAsync: boolean,
+	isAsync: AsyncMode,
 	report?: TraceReporter,
 	abortGuard?: string,
 	arm?: string
@@ -565,7 +565,7 @@ export async function runBeforeHandlePrefixAsync(
 function mapChainHook(
 	hooks: Function[],
 	prefix: string,
-	isAsync: boolean,
+	isAsync: AsyncMode,
 	report?: TraceReporter,
 	abortGuard?: string,
 	arm?: string
@@ -594,7 +594,7 @@ function mapChainHook(
 
 export const mapAfterHandle = (
 	_hooks: AppHook['afterHandle'] | AppHook['afterHandle'][0],
-	isAsync: boolean,
+	isAsync: AsyncMode,
 	report?: TraceReporter,
 	abortGuard?: string,
 	arm?: string
@@ -602,7 +602,7 @@ export const mapAfterHandle = (
 
 export const mapMapResponse = (
 	_hooks: AppHook['mapResponse'] | AppHook['mapResponse'][0],
-	isAsync: boolean,
+	isAsync: AsyncMode,
 	report?: TraceReporter,
 	abortGuard?: string,
 	arm?: string
@@ -628,7 +628,7 @@ export const mapError = /*#__PURE__*/ map<
 		mapResponse: ElysiaAdapter['response']['map'],
 		schedule: string,
 		sign: string,
-		isAsync: boolean,
+		isAsync: AsyncMode,
 		arm?: string
 	]
 >((i, fn, [map, link, mapResponse, schedule, sign, isAsync, arm]) => {
@@ -778,14 +778,50 @@ export function getQueryParseChannels(
 	return result ?? undefined
 }
 
+/**
+ * How a compiled route suspends on a value that may be a thenable:
+ * `await` in an `async` route, `yield` in a sync-first generator route
+ * (driven by {@link resumeRoute}), nothing in a sync route
+ */
+export type AsyncMode = boolean | 'yield'
+
+/**
+ * Continues a sync-first route after its first real thenable
+ *
+ * A route whose callbacks only *might* return a promise is compiled as a
+ * generator that yields exactly the values that are thenables. It runs to
+ * completion synchronously until one is, and only then pays for async.
+ */
+export async function resumeRoute(
+	route: Generator<unknown, unknown, unknown>,
+	pending: unknown
+) {
+	while(true) {
+		let value: unknown
+		let failed = false
+
+		try {
+			value = await pending
+		} catch (error) {
+			value = error
+			failed = true
+		}
+
+		const next = failed ? route.throw(value) : route.next(value)
+		if (next.done) return next.value
+
+		pending = next.value
+	}
+}
+
 export function awaitGuard(
 	fn: Function,
-	isAsync: boolean,
+	isAsync: AsyncMode,
 	target: string,
 	arm = ''
 ) {
 	if (!isAsync) return ''
-	const code = `${arm ? `;${arm}\n` : ''}${target}=await ${target}\n`
+	const code = `${arm ? `;${arm}\n` : ''}${target}=${isAsync === 'yield' ? `(yield ${target})` : `await ${target}`}\n`
 	return isAsyncFunction(fn)
 		? code
 		: `if(typeof ${target}?.then==='function'){${code}}\n`

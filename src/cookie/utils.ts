@@ -268,6 +268,9 @@ function collectSignPending(
 
 		let value = property.value
 		if (value === undefined || value === null) continue
+		// Already signed by an earlier exit of the same request (a throw after
+		// the success lane signed): signing again would double-sign
+		if ((property as any)['~signed'] === value) continue
 
 		if (typeof value === 'object') {
 			value = JSON.stringify(value)
@@ -302,7 +305,10 @@ export function signCookieValues(
 	if (hasSyncHmac) {
 		for (let i = 0; i < pending.length; i++) {
 			const [property, value, key] = pending[i]!
-			property.value = signCookieSyncImpl(value, key)
+			;(property as any)['~signed'] = property.value = signCookieSyncImpl(
+				value,
+				key
+			)
 		}
 
 		return
@@ -316,6 +322,9 @@ async function signPending(
 ) {
 	for (let i = 0; i < pending.length; i++) {
 		const [property, value, key] = pending[i]!
-		property.value = await signCookie(value, key)
+		;(property as any)['~signed'] = property.value = await signCookie(
+			value,
+			key
+		)
 	}
 }

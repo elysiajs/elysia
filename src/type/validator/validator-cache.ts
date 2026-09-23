@@ -289,6 +289,9 @@ export const mayHaveFileType = (schema: object) =>
 	!('~standard' in schema) &&
 	TypeBoxValidatorCache.meta(schema as TSchema).hasFileType
 
+type ClearWeak = (ref: WeakRef<TypeBoxValidatorCache>) => void
+let clearWeak: ClearWeak | undefined
+
 export class TypeBoxValidatorCache {
 	private static EMPTY = nullObject() as {}
 
@@ -430,7 +433,17 @@ export class TypeBoxValidatorCache {
 		if (!isCloudflareWorker) {
 			if (this.#gc) clearTimeout(this.#gc)
 
-			this.#gc = setTimeout(() => this.clear(), this.#gcTime)
+			this.#gc = setTimeout(
+				(clearWeak ??= (() => {
+					try {
+						return Function('r', 'r.deref()?.clear()') as ClearWeak
+					} catch {
+						return (ref) => ref.deref()?.clear()
+					}
+				})()),
+				this.#gcTime,
+				new WeakRef(this)
+			)
 			;(this.#gc as any).unref?.()
 		}
 

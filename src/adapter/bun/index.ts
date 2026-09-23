@@ -7,12 +7,15 @@ import {
 	disposeDecorators,
 	flattenChain,
 	getLoosePath,
+	isHTMLBundle,
 	isSocketQuiet,
 	nullObject,
 	throwLifecycleErrors
 } from '../../utils'
 import { frozenRootOf, resolvedWsOf } from '../../generation'
 import { origin } from '../origin'
+import { isProduction } from '../../universal/is-production'
+import { preloadTypebox } from '../../type/bridge'
 
 import type { AnyElysia } from '../../base'
 import type { BunHTMLBundlelike, GracefulHandler } from '../../types'
@@ -159,24 +162,130 @@ const isNativeStaticMethod = (method: string) =>
 	method === 'HEAD' ||
 	method === 'OPTIONS'
 
-export const isHTMLBundle = (value: unknown): value is BunHTMLBundlelike =>
-	typeof value === 'object' &&
-	value !== null &&
-	typeof (value as BunHTMLBundlelike).index === 'string'
+export { isHTMLBundle }
 
-export function collectHTMLBundleRoutes(app: AnyElysia) {
-	let routes: Record<string, Record<string, BunHTMLBundlelike>> | undefined
+type NativeRoutes = Record<string, Record<string, unknown>>
+
+// `/a/:id?` answers `/a` and `/a/:id`; Bun has no optional segment
+function expandOptional(path: string): string[] {
+	const at = path.indexOf('?')
+	if (at === -1) return [path]
+
+	const start = path.lastIndexOf('/', at)
+	const rest = path.slice(at + 1)
+
+	return [
+		...expandOptional(path.slice(0, start) + rest),
+		...expandOptional(path.slice(0, at) + rest)
+	].map((variant) => variant || '/')
+}
+
+// Only what Bun's router takes as-is: a `:name` whole segment (unique name,
+// not starting with a digit) and a trailing `*`. Anything else it rejects or
+// reads differently, e.g. `/time/12:30`
+function isNativePath(path: string) {
+	const names = new Set<string>()
+	const segments = path.split('/')
+
+	for (let i = 0; i < segments.length; i++) {
+		const segment = segments[i]!
+
+		if (segment.indexOf('*') !== -1) {
+			if (segment !== '*' || i !== segments.length - 1) return false
+		} else if (segment.indexOf(':') !== -1) {
+			if (!/^:[A-Za-z_$][\w$]*$/.test(segment)) return false
+			if (names.has(segment)) return false
+			names.add(segment)
+		}
+	}
+
+	return true
+}
+
+/**
+ * HTML bundles served by Bun's native router.
+ *
+ * A `:param` / `*` bundle (SPA fallback) matches before `fetch`, so with a
+ * `handoff` every other route of that method is registered natively too,
+ * handing off to `fetch`: Bun's specificity (exact > param > wildcard) then
+ * picks the Elysia route, and only unmatched paths reach the bundle (Elysia's
+ * own router leaves these bundles out, see `#buildRouterUnsafe`).
+ *
+ * All or nothing: when any route cannot be expressed in Bun's router, dynamic
+ * bundles are not served natively at all, since that route would be shadowed.
+ */
+export function collectHTMLBundleRoutes(
+	app: AnyElysia,
+	handoff?: (request: Request, server: unknown) => unknown,
+	routes?: NativeRoutes
+) {
+	let dynamic: Set<string> | undefined
+	let bundles: [method: string, path: string, bundle: unknown][] | undefined
+
+	for (const route of app['~routes']) {
+		const [method, path, handler] = route
+		if (!isNativeStaticMethod(method) || !isHTMLBundle(handler)) continue
+
+		if (path.indexOf(':') !== -1 || path.indexOf('*') !== -1) {
+			if (!handoff) continue
+			;(dynamic ??= new Set()).add(method)
+			;(bundles ??= []).push([method, path, handler])
+		} else
+			((routes ??= nullObject())[path] ??= nullObject())[method] = handler
+
+		// Bun serves the bundle before any JS runs
+		if (!isProduction() && (route[4] || route[5] || route[6]))
+			console.warn(
+				`[Elysia] ${method} ${path} is an HTML bundle served natively, hooks do not run for it`
+			)
+	}
+
+	if (!dynamic) return routes
+
+	const strictPath = app['~config']?.strictPath === true
+	const handoffs: [key: string, method: string][] = []
 
 	for (const [method, path, handler] of app['~routes']) {
-		if (
-			!isNativeStaticMethod(method) ||
-			!isHTMLBundle(handler) ||
-			path.indexOf(':') !== -1 ||
-			path.indexOf('*') !== -1
-		)
-			continue
-		;((routes ??= nullObject())[path] ??= nullObject())[method] = handler
+		if (isHTMLBundle(handler)) continue
+
+		const targets =
+			method === '*' ? dynamic : dynamic.has(method) ? [method] : undefined
+		if (!targets) continue
+
+		for (const variant of expandOptional(path)) {
+			// a trailing `*` already matches the trailing slash
+			const loose =
+				strictPath || variant.endsWith('*')
+					? variant
+					: getLoosePath(variant)
+
+			for (const raw of loose === variant ? [variant] : [variant, loose]) {
+				if (!isNativePath(raw)) {
+					if (!isProduction())
+						console.warn(
+							`[Elysia] ${method} ${path} cannot be expressed in Bun's router, so :param / * HTML bundles are not served natively (they would shadow it)`
+						)
+
+					return routes
+				}
+
+				// Bun matches the request as sent, so the encoded form is needed
+				// too; a raw non-ASCII key is rejected outright
+				const encoded = encodeURI(raw)
+				for (const target of targets) {
+					if (!/[^ -~]/.test(raw)) handoffs.push([raw, target])
+					if (encoded !== raw) handoffs.push([encoded, target])
+				}
+			}
+		}
 	}
+
+	for (const [method, path, bundle] of bundles!)
+		((routes ??= nullObject())[path] ??= nullObject())[method] = bundle
+
+	// a promoted static Response or bundle keeps its slot
+	for (const [key, method] of handoffs)
+		(routes![key] ??= nullObject())[method] ??= handoff
 
 	return routes
 }
@@ -343,7 +452,15 @@ export const BunAdapter = createAdapter({
 		const _config = (app['~config'] as any)?.serve
 		const serve = _config ? { ..._config, ..._options } : _options
 
-		const htmlRoutes = collectHTMLBundleRoutes(app as AnyElysia)
+		// resolved per request: the start-up gate first, the live handler later
+		const handoff = (request: Request, server: unknown) =>
+			(serve.fetch as Function)(request, server)
+		// routes of pending async plugins are unknown yet, a dynamic bundle
+		// would shadow them during the start-up gate: add it at publish
+		const htmlRoutes = collectHTMLBundleRoutes(
+			app as AnyElysia,
+			(app as AnyElysia).pending ? undefined : handoff
+		)
 
 		const server = (app.server = Bun.serve(
 			serve.routes || serve.error || htmlRoutes
@@ -378,6 +495,13 @@ export const BunAdapter = createAdapter({
 					error
 				)
 			}
+
+			// a reload replaces the table, keep dynamic bundles and their hand-offs
+			routes = collectHTMLBundleRoutes(
+				app as AnyElysia,
+				handoff,
+				routes as NativeRoutes | undefined
+			) as typeof routes
 
 			let websocket:
 				| (NonNullable<
@@ -827,8 +951,13 @@ export const BunAdapter = createAdapter({
 		try {
 			// defer building app so it doesn't block main thread and allow other synchronous code to run first
 			const modules = (modulesReady = app.modules)
+			// the TypeBox value graph loads faster asynchronously, and here it
+			// overlaps async plugins instead of stalling the first request
+			const preload = preloadTypebox()
 
-			ready = modules.then(start).catch((error) => stop(true, { error }))
+			ready = (preload ? Promise.all([modules, preload]) : modules)
+				.then(start)
+				.catch((error) => stop(true, { error }))
 			ready.catch((error) => {
 				console.error('[Elysia] listen() failed:', error)
 				if (typeof process !== 'undefined') process.exitCode = 1

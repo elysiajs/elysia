@@ -62,6 +62,17 @@ function applySettings() {
 
 export const loadTypeNamespace = () => namespaces ?? load()
 
+let typeUsed = false
+
+// A `t.*` member was read: this app builds TypeBox validators
+export const markTypeUsed = () => {
+	typeUsed = true
+}
+
+export const isTypeUsed = () => typeUsed || namespaces !== undefined
+
+export const isTypeNamespaceLoaded = () => namespaces !== undefined
+
 export function ensureTypeSettings() {
 	if (settingsApplied) return
 

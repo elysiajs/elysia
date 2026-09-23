@@ -9,7 +9,7 @@ import {
 } from '../../src/compile/aot-capture'
 import { compileHandler } from '../../src/compile/handler'
 import { materialise, materialiseHandlers, registerManifest } from './_manifest'
-import { post, json } from '../utils'
+import { post, json, emittedSource, suspendsOnThenables } from '../utils'
 import { hasSyncHmac } from '../../src/cookie/utils'
 
 /** Synchronous routes stay synchronous unless their work may return a Promise. */
@@ -22,11 +22,17 @@ afterEach(() => {
 const compileRoute = (app: any, index = 0) => {
 	const route = (app as Elysia)['~routes']![index]
 	const fn = compileHandler(route as any, app)
-	return { fn, name: fn.constructor.name, source: fn.toString() }
+	return {
+		fn,
+		name: fn.constructor.name,
+		source: emittedSource(app, index)
+	}
 }
 
+// Suspends on thenables: an `async` route, or a sync-first generator route
+// for work that only *may* return a Promise
 const isAsync = (app: any, index = 0) =>
-	compileRoute(app, index).name === 'AsyncFunction'
+	suspendsOnThenables(compileRoute(app, index).fn)
 
 describe('synchronous route emission', () => {
 	it('plain sync GET is a plain Function', async () => {
@@ -613,6 +619,69 @@ describe('Promise-returning synchronous functions', () => {
 
 		const { source } = compileRoute(app)
 		expect(source).toContain("typeof tmp?.then==='function'")
+	})
+})
+
+// A route that is async only because a callback *may* return a Promise is a
+// sync-first generator: it answers synchronously while nothing is a thenable
+// (an async route paid a Promise + microtask per request) and still waits for
+// a real Promise at exactly the point it appears
+describe('sync-first generator routes', () => {
+	const dispatch = (app: any, headers: Record<string, string> = {}) =>
+		compileRoute(app).fn({
+			request: new Request('http://localhost/', { headers }),
+			set: { headers: {} },
+			headers,
+			path: '/'
+		} as any)
+
+	it('answers synchronously when no callback returns a thenable', () => {
+		const app = new Elysia()
+			.derive(({ headers }) => ({ user: headers['x-user'] }))
+			.beforeHandle(({ user, status }) => {
+				if (!user) return status(401)
+			})
+			.get('/', ({ user }) => `hi ${user}`)
+
+		expect(isAsync(app)).toBe(true)
+
+		const response = dispatch(app, { 'x-user': 'a' })
+		expect(response).toBeInstanceOf(Response)
+	})
+
+	it('waits for a thenable at the point it appears', async () => {
+		const order: string[] = []
+		const app = new Elysia()
+			.beforeHandle(() =>
+				(Math.random() < 2
+					? Promise.resolve().then(() => {
+							order.push('beforeHandle')
+						})
+					: undefined) as any
+			)
+			.get('/', () => {
+				order.push('handler')
+
+				return 'ok'
+			})
+
+		const response = dispatch(app)
+		expect(response).toBeInstanceOf(Promise)
+		expect(await (await response).text()).toBe('ok')
+		expect(order).toEqual(['beforeHandle', 'handler'])
+	})
+
+	it('routes a rejected thenable to the error pipeline', async () => {
+		const app = new Elysia()
+			.error(() => 'recovered')
+			.get('/', { response: t.String() }, () =>
+				(Math.random() < 2
+					? Promise.reject(new Error('late'))
+					: 'never') as any
+			)
+
+		const response = await app.handle(new Request('http://localhost/'))
+		expect(await response.text()).toBe('recovered')
 	})
 })
 

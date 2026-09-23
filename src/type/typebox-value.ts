@@ -17,7 +17,12 @@ import type {
 	HasCodec as HasCodecType
 } from 'typebox/value'
 
-import { ensureTypeSettings } from './typebox-type'
+import {
+	ensureTypeSettings,
+	injectTypeboxType,
+	isTypeNamespaceLoaded,
+	isTypeUsed
+} from './typebox-type'
 
 export interface TypeboxNamespaces {
 	value: typeof import('typebox/value')
@@ -40,6 +45,31 @@ function load() {
 // Load every TypeBox namespace before the first validated request.
 export { load as warmTypebox }
 
+export function preloadTypebox(): Promise<void> | undefined {
+	if (loaded || !isTypeUsed()) return
+
+	const load = (name: string) =>
+		import(/* webpackIgnore: true */ /* @vite-ignore */ 'typebox/' + name)
+
+	return Promise.all([
+		load('type'),
+		load('system'),
+		load('value'),
+		load('schema'),
+		load('compile')
+	]).then(
+		([type, system, value, schema, compile]) => {
+			if (loaded) return
+
+			if (!isTypeNamespaceLoaded()) injectTypeboxType({ type, system })
+			ensureTypeSettings()
+			injectTypebox({ value, schema, compile })
+		},
+		// the synchronous loader still runs at build and reports the failure
+		() => {}
+	)
+}
+
 function resolveNamespaces(): TypeboxNamespaces {
 	const meta = import.meta as ImportMeta & {
 		require?: (specifier: string) => any
@@ -53,7 +83,7 @@ function resolveNamespaces(): TypeboxNamespaces {
 
 	if (!req)
 		throw new Error(
-			"TypeBox couldn't be loaded: this runtime has no synchronous module loader. Build with the AOT plugin ('elysia/plugin/aot') so TypeBox is wired statically, or register it manually with setupTypebox({ typebox: { value, schema, compile, type, system } }). All five namespaces are required together — `value`/`schema`/`compile` alone still reaches the type leaf through `ensureTypeSettings()` and crashes the same way."
+			"TypeBox couldn't be loaded: runtime has no synchronous module loader. Try building with the AOT plugin or register it with setupTypebox()"
 		)
 
 	return {

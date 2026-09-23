@@ -6,6 +6,9 @@ describe('context.path', () => {
 		const warnings: string[] = []
 		const warn = console.warn
 		console.warn = (...values) => warnings.push(values.join(' '))
+		// the warning is dev-only
+		const nodeEnv = process.env.NODE_ENV
+		process.env.NODE_ENV = 'development'
 
 		try {
 			const app = new Elysia()
@@ -24,6 +27,8 @@ describe('context.path', () => {
 			expect(warnings[0]).toContain('context.path is readonly')
 		} finally {
 			console.warn = warn
+			if (nodeEnv === undefined) delete process.env.NODE_ENV
+			else process.env.NODE_ENV = nodeEnv
 		}
 	})
 

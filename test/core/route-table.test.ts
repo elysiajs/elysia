@@ -30,8 +30,22 @@ const buildFixture = () => {
 
 const rawTuples = (app: any): readonly any[] => app['~routes']
 
+// Tuple identity only holds where route arrays are cached (development);
+// production rebuilds them per read
+const inDevelopment = <T>(fn: () => T) => {
+	const nodeEnv = process.env.NODE_ENV
+	process.env.NODE_ENV = 'development'
+
+	try {
+		return fn()
+	} finally {
+		if (nodeEnv === undefined) delete process.env.NODE_ENV
+		else process.env.NODE_ENV = nodeEnv
+	}
+}
+
 describe('columnar route table', () => {
-	it('stores every authoring tuple field', () => {
+	it('stores every authoring tuple field', () => inDevelopment(() => {
 		const app = buildFixture()
 		const table = app['~routeTable']
 		const tuples = rawTuples(app)
@@ -59,9 +73,9 @@ describe('columnar route table', () => {
 				/[:*]/.test(t[1])
 			)
 		}
-	})
+	}))
 
-	it('routeRow returns a fresh tuple with every stored field', () => {
+	it('routeRow returns a fresh tuple with every stored field', () => inDevelopment(() => {
 		const app = buildFixture()
 		const table = app['~routeTable']
 		const tuples = rawTuples(app)
@@ -74,7 +88,7 @@ describe('columnar route table', () => {
 
 			expect(row).not.toBe(t)
 		}
-	})
+	}))
 
 	it('does not retain authoring tuple arrays', () => {
 		const app = buildFixture()

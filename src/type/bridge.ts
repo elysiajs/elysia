@@ -47,6 +47,7 @@ interface TypeboxModule {
 	Clone: typeof CloneType
 	Check: typeof CheckType
 	warmTypebox: () => void
+	preloadTypebox: () => Promise<void> | undefined
 }
 
 let live: TypeboxModule | undefined
@@ -108,6 +109,7 @@ export let Ref: typeof RefType = stub('Ref')
 export let Clone: typeof CloneType = stub('Clone')
 export let Check: typeof CheckType = stub('Check')
 export let warmTypebox: () => void = stub('warmTypebox')
+export let preloadTypebox: () => Promise<void> | undefined = () => undefined
 
 export const isBridgeLive = () => live !== undefined
 
@@ -134,4 +136,5 @@ export function useTypebox(mod: TypeboxModule) {
 	Clone = mod.Clone
 	Check = mod.Check
 	warmTypebox = mod.warmTypebox
+	preloadTypebox = mod.preloadTypebox
 }

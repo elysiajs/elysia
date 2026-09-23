@@ -90,6 +90,17 @@ function mapResponseWithSet(
 	handleSet(set)
 	const headers = set.headers
 
+	// A body with a null-body status is a TypeError per the Fetch spec (Node,
+	// Deno, workerd); only Bun accepts it. Serve what the status allows
+	// instead of a 500, a returned `status()` carries its own status
+	if (
+		!isBun &&
+		(set.status === 204 || set.status === 304 || set.status === 205) &&
+		!(response instanceof Response) &&
+		!(response instanceof ElysiaStatus)
+	)
+		return new Response(null, set as ResponseInit)
+
 	switch (responseTag(response)) {
 		case 'String':
 			if (!isBun && !headers['content-type'])

@@ -33,6 +33,7 @@ import {
 	mergeHook,
 	nullObject,
 	replaceUrlPath,
+	isHTMLBundle,
 	type ChainNode
 } from '../../utils'
 
@@ -682,6 +683,15 @@ export function compileHandler(
 
 	if (handler instanceof Error) {
 		const error = handler
+		handler = () => {
+			throw error
+		}
+	} else if (isHTMLBundle(handler)) {
+		// Only Bun.serve's native router can serve a bundle; mapping it here
+		// would answer `{}` with a 200
+		const error = new Error(
+			`[Elysia] ${method} ${path} is an HTML bundle, only Bun's native router serves it`
+		)
 		handler = () => {
 			throw error
 		}

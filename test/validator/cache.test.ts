@@ -685,3 +685,24 @@ describe('TypeBoxValidatorCache walk reentrancy', () => {
 		).toBe(true)
 	})
 })
+
+// The idle-clear timer must not keep an abandoned cache (and every validator
+// it holds) alive for the whole idle window; under `bun --hot` that pinned
+// each previous reload's module graph
+describe('TypeBoxValidatorCache idle timer', () => {
+	it('does not retain an abandoned cache', () => {
+		let ref: WeakRef<TypeBoxValidatorCache> | undefined
+
+		;(() => {
+			const cache = new TypeBoxValidatorCache(60_000)
+			cache.set(Type.Object({ gone: Type.String() }), undefined, {
+				tag: 0
+			} as any)
+			ref = new WeakRef(cache)
+		})()
+
+		for (let i = 0; i < 10 && ref!.deref(); i++) Bun.gc(true)
+
+		expect(ref!.deref()).toBeUndefined()
+	})
+})

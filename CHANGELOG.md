@@ -58,16 +58,20 @@ Breaking Change:
 
 Behavior Change:
 
-- the 1.x `(path, handler, hook)` argument order now throws at registration instead of serving the hook object as the response
+- the 1.x `(path, handler, hook)` argument order now throws at registration instead of serving the hook object as the response, including a hook that only enables macros (`{ auth: true }`)
 - `.macro(name, definition)` and `.macro(fn)` now throw at registration instead of silently registering nothing
 - writing `set.redirect` now throws in development — production is unchanged, so a 1.x auth-redirect guard still serves the body it was protecting
 - a non-schema value in a `body` / `query` / `params` / `headers` / `cookie` / `response` slot now throws at registration instead of failing per request
 - a response schema violation now answers `500` `internal-server-error` in both development and production — v1 answered `422`, blaming the client for a server-side mistake
 - `app.routes` is frozen, and a sealed app no longer re-caches it under `NODE_ENV=production` (two reads return equal but distinct arrays)
-- `HTTPError.typeBase` now applies to the router-miss `404` and the generic `500`, and every problem document carries `code`
+- `HTTPError.typeBase` now applies to the router-miss `404` and the generic `500`, and every problem document except validation (`422`) carries `code`; on a `ValidationError`, `type` is the validated slot (`body`, `query`, …) and `code` is `undefined`
 - `afterResponse` now fires exactly once, and after `error`, when a generator throws before its first yield
 - a throwing `afterResponse` / `defer` on the JIT lane and a rejected async `trace` callback are now reported with `console.error` instead of being swallowed
 - `stop(true)` no longer waits on an async plugin that never settles
+- `context.route` is set only for dynamic routes; on a static route it is `undefined`, use `context.path` (1.x always set it)
+- an unknown hook or guard scope (1.x `{ as: 'scoped' }`, `'scoped'`, …) now throws at registration instead of silently registering the hook as `local`
+- a `.guard()` / `.group()` `schema` other than `'merge'` / `'override'` now throws at registration: a 1.x `schema: 'standalone'` silently fell back to `override`, dropping the guard's own validation on routes with a schema
+- the error thrown when registering on a sealed app names the method that was called (`.get()`, `.beforeHandle()`) and what sealed it (first request, `listen` or `compile`)
 - `context.path` is now readonly, and its notice now fires only when a request hook actually changes the value
 - Validation error `payload.expected` values are shared and deeply froze
 - Schemas are cloned on first registration and reused by identity
@@ -99,6 +103,11 @@ Improvement:
 - shared schema reference
 - Cookie schema field
 - plain `t.File()` / `t.Files()` (no `type` option) no longer force the async validation path
+- a route that is async only because a callback *may* return a Promise (a response schema over `() => ({...})`, an expression-bodied `derive`, a `beforeHandle` with a `return`) is compiled as a sync-first generator: it answers synchronously and suspends only on a real thenable, instead of paying a Promise and a microtask per request (in-process: hook routes −28%, response-schema routes −19%)
+- generator / SSE streams enqueue synchronously, with a Promise only for a `Blob` chunk (−25% allocation, −6.5% server CPU per 10-event SSE request)
+- `listen()` loads the TypeBox graph asynchronously, overlapping async plugins, once the app has used `t` (time to first response −31% for a 100-schema-route app); apps that never touch `t` still do not load TypeBox
+- signed-cookie HMAC on Bun copies a keyed hasher per secret instead of re-keying per sign/verify (signed-cookie route −5%)
+- [Type] `.macro()` definitions infer each macro's schema from the definition record instead of five reverse-mapped channels: ~8.7k fewer instantiations per macro (repo type benchmark −13%)
 - an `.error()` hook no longer disqualifies static-literal `GET` routes from Bun native static promotion: those routes are now promoted even when a global or route-local `.error()` hook exists, because no user code runs on a promoted route and the hook can therefore never fire for it. `afterResponse`, `mapResponse`, `parse`, `transform`, schemas, `trace` and every other hook still keep the route on the JS lane. Since Bun's native static table now serves more routes, be aware that a promoted route answers `HEAD` (200) and conditional `GET` (`If-None-Match` matching Bun's `etag` -> 304) natively, without reaching the JS lane or your `.error()` hook (see Known issue)
 
 Bug fix:
@@ -110,7 +119,7 @@ Bug fix:
 - `normalize: false` returned the precomputed default object by reference, so one request's handler mutation of a defaulted body/query leaked into subsequent requests
 - a standalone `response` schema without a `200` entry threw `'~kind' in undefined`
 - dynamic (parameterized) routes did not match a trailing slash under the default `strictPath: false`
-- Bun HTML import handlers (`app.get('/', index)` with `import index from './index.html'`) were serialized as `{}`; they are now promoted to Bun's native routes even when a `request`/`trace` hook or `nativeStaticResponse: false` blocks static Response promotion
+- Bun HTML import handlers (`app.get('/', index)` with `import index from './index.html'`) were serialized as `{}`; they are now promoted to Bun's native routes even when a `request`/`trace` hook or `nativeStaticResponse: false` blocks static Response promotion. `:param` and `*` bundle paths (SPA fallback) are served natively too, with every other route of the same method (including `.all()`, `.mount()`, optional-param and percent-encoded paths) registered as a hand-off to Elysia so a bundle never shadows them and the more specific route wins; if a route cannot be expressed in Bun's router (e.g. `/time/12:30`), dynamic bundles are not served natively and a development warning names it; a bundle the JS lane cannot serve (`app.handle()`, optional `:param?` path) answers a descriptive `500` instead of `200 {}`, and `bun build` output (a plain `{ index, files }` manifest) is recognised as a bundle
 - Bun HTML import routes lost HMR: Bun starts its HTML dev server only for bundle routes present at `Bun.serve()` creation, and `listen()` installed every route through `server.reload()`; bundle routes are now passed to the initial `Bun.serve()` call
 - per-app `loosePath`/decoded-path caches grew without bound on attacker-controlled request paths
 - an `onError` returning a `File`/`Blob` threw a `TypeError`
@@ -124,6 +133,15 @@ Bug fix:
 - Bun native static routes were never installed when every static response was synchronous
 - error-path `mapResponse` codegen assigned an undeclared `tmp`, leaking the mapped response onto `globalThis`
 - schema-less body routes now treat `Transfer-Encoding` as body-present before touching `request.body`, preserving the fast framing-header path for chunked/proxy-framed requests without `Content-Length`
+- signed cookies were sent unsigned from a route with an `afterResponse` hook, a `defer()` call or a context passed to a helper, and from error responses of routes without an `.error()` hook, so the next request rejected them with `400`; every response now signs them exactly once
+- `derive` values were disposed, and `defer()` / `afterResponse` ran, before a returned `ReadableStream` was read, truncating it to an empty body; they now wait for the stream (a `bytes()` stream keeps its exact-stream contract and is not waited on)
+- `sse({ data })` dropped a number or boolean `data` (`data: 0` sent an empty event)
+- a generator yielding `null` / `undefined` left the response hanging forever
+- a raw `set.headers['set-cookie']` string was overwritten when the cookie jar was also written
+- on Node (undici), `set.status` `204` / `205` / `304` with a returned body answered `500`; the body is now dropped as Bun does
+- under `bun --hot`, the validator cache idle timer kept every previous reload's module graph alive for 60 s (~1.7 MB per reload)
+- the `afterResponse` trace on a router miss (`404`) reported ~0 ms instead of the hooks' duration
+- [Type] returning `status('Not Found', …)` against a response map declaring `404` was rejected
 
 Chore:
 - declare the minimum supported Node.js version (`engines.node`) and test it in CI
@@ -132,6 +150,8 @@ Chore:
 
 Known issue:
 - `t.ObjectString` with an optional or coercing inner field drops those fields on the default `normalize`, use `normalize: 'typebox'` until the next `exact-mirror` release
+- a returned `new Response(stream)` is not observed like a bare `ReadableStream`, so `derive` dispose / `defer()` / `afterResponse` still run before its body is read; return the stream itself
+- an infinite stream or generator that a later hook replaces (or whose mapping throws) is never drained, so `afterResponse` / dispose for that request do not run
 - routes served by Bun native static promotion (static-literal `GET` handlers with no hooks other than `error`) answer `HEAD` natively (200) and honour `If-None-Match` against Bun's own `etag` (304), while non-promoted routes answer `HEAD` only when `autoHead` is enabled (404 otherwise) and never send an `etag`. Accepted for 2.0; both divergences are pinned in `test/adapter/bun/native-head-policy.test.ts`
 
 # 1.4.28 - 17 Mar 2025

@@ -55,6 +55,7 @@ import {
 	hookToGuard,
 	isDisposable,
 	isEmpty,
+	isHTMLBundle,
 	isNotEmpty,
 	isRecordNumber,
 	joinPath,
@@ -104,7 +105,6 @@ import type {
 	InputSchema,
 	InputSchemaKey,
 	MacroToContext,
-	NonResolvableMacroKey,
 	OptionalHandler,
 	ErrorHandler,
 	ErrorDefinitionEntry,
@@ -135,7 +135,6 @@ import type {
 	DocumentDecoration,
 	Handler,
 	HistoryEntry,
-	MacroSchemaChannel,
 	MacroToProperty,
 	ObjectMacroDefs,
 	WrapFn,
@@ -259,6 +258,20 @@ const hookKeys = new Set([
 	'detail',
 	'tags'
 ])
+
+// Any other value would register as local: a 1.x `'scoped'` auth hook or
+// guard silently stops guarding the parent
+const assertScope = (scope: unknown) => {
+	if (
+		scope !== undefined &&
+		scope !== 'local' &&
+		scope !== 'plugin' &&
+		scope !== 'global'
+	)
+		throw new Error(
+			`[Elysia] Invalid hook scope ${JSON.stringify(scope)}, expected 'local', 'plugin' or 'global' (1.x 'scoped' is 'plugin')`
+		)
+}
 
 const hasHookKeys = (value: object) => {
 	for (const key in value) if (hookKeys.has(key)) return true
@@ -1164,7 +1177,9 @@ export class Elysia<
 		fn: UnwrapArray<AppHook[Event]>,
 		scope: EventScope = this['~config']?.as as EventScope
 	): this {
-		this.#assertMutable('on' + (type[0].toUpperCase() + type.slice(1)))
+		this.#assertMutable(type)
+
+		assertScope(scope)
 
 		const added: Partial<AppHook> = nullObject()
 		;(added as any)[type] = fn
@@ -2718,7 +2733,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
@@ -2800,7 +2815,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
@@ -2886,7 +2901,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
@@ -2981,7 +2996,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
@@ -3080,7 +3095,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
@@ -3160,7 +3175,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
@@ -3245,7 +3260,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
@@ -3325,7 +3340,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
@@ -3410,7 +3425,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
@@ -3495,7 +3510,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
@@ -3606,6 +3621,8 @@ export class Elysia<
 	}
 
 	#guard(scope: EventScope, hook: Partial<AnyLocalHook>): this {
+		assertScope(scope)
+
 		// Invalid guard schemas would disable every nested route.
 		if (hook) assertSchemaShape(hook as Record<string, unknown>, '.guard()')
 
@@ -3698,7 +3715,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
@@ -3799,7 +3816,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const BeforeHandle extends MaybeArray<
@@ -4067,24 +4084,11 @@ export class Elysia<
 	 *             beforeHandle() { ... }
 	 *         })
 	 *     })
-	 *     .get('/', ({ user }) => user, { auth: true, role: 'admin' })
+	 *     .get('/', { auth: true, role: 'admin' }, ({ user }) => user)
 	 * ```
 	 */
-	macro<
-		const Body extends MacroSchemaChannel<Definitions>,
-		const Headers extends MacroSchemaChannel<Definitions>,
-		const Query extends MacroSchemaChannel<Definitions>,
-		const Params extends MacroSchemaChannel<Definitions>,
-		const Cookie extends MacroSchemaChannel<Definitions>,
-		const NewMacro,
-		const Refs = {}
-	>(
+	macro<const NewMacro, const Refs = {}>(
 		macro: ObjectMacroDefs<
-			Body,
-			Headers,
-			Query,
-			Params,
-			Cookie,
 			NewMacro,
 			MergeSchema<
 				Volatile['schema'],
@@ -5362,16 +5366,28 @@ export class Elysia<
 		else if (path && path.charCodeAt(0) !== 47) path = '/' + path
 
 		// Only flag the old order when a plain handler is followed by hook data;
-		// both positions otherwise accept several kinds of value.
+		// both positions otherwise accept several kinds of value. A hook that
+		// only enables macros (`{ auth: true }`) is hook data too, otherwise the
+		// macro never runs and the object is served as the response body
 		if (
 			typeof hookOrFn === 'function' &&
 			!hasHookKeys(hookOrFn) &&
-			isPlainObject(fn) &&
-			hasHookKeys(fn)
-		)
-			throw new Error(
-				`[Elysia] .${method === '*' ? 'all' : method.toLowerCase()}('${path}', handler, hook) is the 1.x order; Elysia 2 takes (path, hook, handler) — see the 2.0 migration guide`
-			)
+			isPlainObject(fn)
+		) {
+			let isHook = hasHookKeys(fn)
+			const macro = this['~ext']?.macro
+			if (!isHook && macro)
+				for (const key in fn)
+					if (key in macro) {
+						isHook = true
+						break
+					}
+
+			if (isHook)
+				throw new Error(
+					`[Elysia] .${method === '*' ? 'all' : method.toLowerCase()}('${path}', handler, hook) is the 1.x order; Elysia 2 takes (path, hook, handler) — see the 2.0 migration guide`
+				)
+		}
 
 		if (hasHook && hookOrFn)
 			assertSchemaShape(
@@ -5386,7 +5402,8 @@ export class Elysia<
 
 		const appHook = this['~hookChain']
 
-		this.#assertMutable('route')
+		const verb = method === '*' ? 'all' : method.toLowerCase()
+		this.#assertMutable(verb in this ? verb : 'method')
 		;(this.declaredRoutes ?? this.#materializeDeclaredRoutes()).push(
 			(appHook
 				? [method, path, handler, this, hook, appHook]
@@ -5414,7 +5431,9 @@ export class Elysia<
 
 		if (this['~generation'] === undefined) return
 
-		throw new Error(`[Elysia] .${api}() called after the app was sealed`)
+		throw new Error(
+			`[Elysia] .${api}() called after the app was sealed by its first request, listen or compile`
+		)
 	}
 
 	get #isCacheable() {
@@ -5650,7 +5669,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const Handle extends {} extends MacroContext
@@ -5783,7 +5802,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const Handle extends {} extends MacroContext
@@ -5916,7 +5935,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const Handle extends {} extends MacroContext
@@ -6049,7 +6068,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const Handle extends {} extends MacroContext
@@ -6182,7 +6201,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const Handle extends {} extends MacroContext
@@ -6315,7 +6334,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const Handle extends {} extends MacroContext
@@ -6448,7 +6467,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const Handle extends {} extends MacroContext
@@ -6581,7 +6600,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const Handle extends {} extends MacroContext
@@ -6714,7 +6733,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const Handle extends {} extends MacroContext
@@ -6846,7 +6865,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const Handle extends {} extends MacroContext
@@ -6937,7 +6956,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>
 	>(
@@ -6995,7 +7014,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const Handler extends WSMessageHandler<
@@ -7054,7 +7073,7 @@ export class Elysia<
 			? {}
 			: MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
+					Input,
 					Definitions['typebox']
 				>,
 		const Handler extends WSMessageHandler<
@@ -8006,6 +8025,11 @@ export class Elysia<
 			)
 
 			if (isDynamic) {
+				// A `:param` / `*` HTML bundle is served by Bun's router; a request
+				// reaching fetch under it was handed off to a more specific route,
+				// which must win here too (see `collectHTMLBundleRoutes`)
+				if (isHTMLBundle(table.handler[i])) continue
+
 				const router = (this['~router'] ??=
 					new Memoirist<CompiledHandler>({
 						loosePath: isLoose

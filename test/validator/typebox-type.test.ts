@@ -118,7 +118,10 @@ describe('typebox-type', () => {
 			if (
 				key === 'injectTypeboxType' ||
 				key === 'ensureTypeSettings' ||
-				key === 'loadTypeNamespace'
+				key === 'loadTypeNamespace' ||
+				key === 'markTypeUsed' ||
+				key === 'isTypeUsed' ||
+				key === 'isTypeNamespaceLoaded'
 			)
 				continue
 

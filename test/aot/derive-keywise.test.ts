@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia } from '../../src'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
-import { compileHandler } from '../../src/compile/handler'
+import { emittedSource } from '../utils'
 
 /** Derive keys must be recovered exactly or fall back to Object.assign. */
 
@@ -11,11 +11,9 @@ afterEach(() => {
 	Validator.clear()
 })
 
-const compileRoute = (app: any, index = 0) => {
-	const route = (app as Elysia)['~routes']![index]
-	const fn = compileHandler(route as any, app)
-	return { fn, source: fn.toString() }
-}
+const compileRoute = (app: any, index = 0) => ({
+	source: emittedSource(app, index)
+})
 
 const compileDerive = (derive: Function) =>
 	compileRoute(
