@@ -39,10 +39,6 @@ interface CoerceOptions {
 	 */
 	root?: boolean | undefined
 	/**
-	 * Replace only the first specified type found
-	 **/
-	onlyFirst?: 'object' | 'array' | (string & {})
-	/**
 	 * Only root object
 	 */
 	rootPropertiesOnly?: boolean
@@ -68,7 +64,6 @@ export function coerce(
 	const rootOption = options?.root
 
 	const memo = new WeakMap<BaseSchema, BaseSchema | null>()
-	let stopped = false
 
 	function walk(
 		node: BaseSchema,
@@ -77,7 +72,6 @@ export function coerce(
 	): BaseSchema {
 		if (
 			!node ||
-			stopped ||
 			typeof node !== 'object' ||
 			(node['~elyTyp'] &&
 				primitiveElysiaTypes.has(node['~elyTyp'] as any))
@@ -109,8 +103,6 @@ export function coerce(
 				const { type, ...rest } = node
 				let result = to(rest)
 				if (result !== null) {
-					if (options?.onlyFirst === kind) stopped = true
-
 					if ('~optional' in node) {
 						if (Object.isFrozen(result))
 							result = Object.defineProperty(
@@ -134,8 +126,6 @@ export function coerce(
 			}
 		}
 
-		if (stopped) return node
-
 		let out: any = node
 
 		// Combinators
@@ -147,8 +137,6 @@ export function coerce(
 			for (let i = 0, len = arr.length; i < len; i++) {
 				const item = arr[i]!
 				const r = walk(item, false, isRootProperty)
-
-				if (stopped && !newArr) return node
 
 				if (r !== item) {
 					newArr ??= arr.slice()
@@ -342,8 +330,7 @@ export const coerceFormData = () =>
 		[
 			[['Array', toArrayString]],
 			{
-				root: false,
-				onlyFirst: 'array'
+				root: false
 			}
 		]
 	])
