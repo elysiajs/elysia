@@ -4949,10 +4949,12 @@ export class Elysia<
 		// both positions otherwise accept several kinds of value. A hook that
 		// only enables macros (`{ auth: true }`) is hook data too, otherwise the
 		// macro never runs and the object is served as the response body
+		// isPlainObject first: for..in over the handler reifies its lazy
+		// name/length, +~115 B and ~3x slower per route
 		if (
 			typeof hookOrFn === 'function' &&
-			!hasHookKeys(hookOrFn) &&
-			isPlainObject(fn)
+			isPlainObject(fn) &&
+			!hasHookKeys(hookOrFn)
 		) {
 			let isHook = hasHookKeys(fn)
 			const macro = this['~ext']?.macro
@@ -4982,7 +4984,14 @@ export class Elysia<
 
 		const appHook = this['~hookChain']
 
-		const verb = method === '*' ? 'all' : method.toLowerCase()
+		// The name is only read by the sealed error; toLowerCase + `in` on every
+		// route doubles registration time
+		const verb =
+			this['~generation'] === undefined
+				? 'method'
+				: method === '*'
+					? 'all'
+					: method.toLowerCase()
 		this.#assertMutable(verb in this ? verb : 'method')
 		;(this.declaredRoutes ?? this.#materializeDeclaredRoutes()).push(
 			(appHook

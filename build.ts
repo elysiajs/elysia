@@ -15,6 +15,9 @@ await build({
 	},
 	minify: false,
 	unbundle: true,
+	// keep literal `require('typebox/*')` so user bundlers can embed TypeBox
+	// the polyfill would add a static `node:module` import instead
+	outputOptions: { polyfillRequire: false },
 	dts: true,
 	outExtensions(c) {
 		return {

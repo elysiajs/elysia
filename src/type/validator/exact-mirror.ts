@@ -1,10 +1,13 @@
 import { syncRequire } from '../sync-require'
+import { requireExactMirror } from './exact-mirror-require'
 
 export type CreateMirror = (schema: any, options?: any) => any
 
 let exactMirror: CreateMirror | undefined
 try {
-	const module = syncRequire(import.meta, import.meta.url)?.('exact-mirror')
+	const module =
+		requireExactMirror() ??
+		syncRequire(import.meta, import.meta.url)?.('exact-mirror')
 	const mirror = module?.default ?? module
 
 	exactMirror = typeof mirror === 'function' ? mirror : undefined

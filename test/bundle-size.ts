@@ -4,7 +4,7 @@ const cases = {
 		source: `import Elysia from './dist/index.mjs'; globalThis.app = new Elysia()`
 	},
 	schema: {
-		limit: 400 * 1024,
+		limit: 560 * 1024,
 		source: `import { Elysia, t } from './dist/index.mjs'; globalThis.app = new Elysia().get('/', { query: t.Object({ q: t.String() }) }, () => 'ok')`
 	}
 } as const

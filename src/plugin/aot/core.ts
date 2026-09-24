@@ -405,10 +405,14 @@ export const ADAPTER_BUN_FILTER =
 export const IS_PRODUCTION_FILTER =
 	/[\\/]elysia[\\/](dist|src)[\\/]universal[\\/]is-production\.(m?js|ts)$/
 
-// Always re-routed to the `-live` mirror, sealed included (unlike `typeboxValue`): sealed
-// still runs user `t.*()`, so skipping it only buys a startup crash on loader-less runtimes
 export const TYPEBOX_TYPE_FILTER =
 	/[\\/]elysia[\\/](dist|src)[\\/]type[\\/]typebox-type\.(m?js|ts)$/
+
+export const TYPEBOX_REQUIRE_FILTER =
+	/[\\/]elysia[\\/](dist|src)[\\/]type[\\/]typebox-value-require\.(m?js|ts)$/
+
+export const EXACT_MIRROR_REQUIRE_FILTER =
+	/[\\/]elysia[\\/](dist|src)[\\/]type[\\/]validator[\\/]exact-mirror-require\.(m?js|ts)$/
 
 export const ELYSIA_MODULE_FILTER =
 	/[\\/]elysia[\\/](dist|src)[\\/].+\.(m?js|ts)x?$/
@@ -511,8 +515,7 @@ export const STUB_SOURCES: Record<
 	cookie: [
 		{
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]crypto\.(m?js|ts)$/,
-			source:
-				`export function resolvePendingCookie(){throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a signed cookie was read. Rebuild with strip:false.")}\n`
+			source: `export function resolvePendingCookie(){throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a signed cookie was read. Rebuild with strip:false.")}\n`
 		},
 		{
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]utils\.(m?js|ts)$/,

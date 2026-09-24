@@ -18,6 +18,7 @@ import type {
 } from 'typebox/value'
 
 import { syncRequire } from './sync-require'
+import { importTypebox, requireTypebox } from './typebox-value-require'
 import {
 	injectTypeboxType,
 	isTypeNamespaceLoaded,
@@ -49,16 +50,7 @@ export { load as warmTypebox }
 export function preloadTypebox(): Promise<void> | undefined {
 	if (loaded || !isTypeUsed()) return
 
-	const load = (name: string) =>
-		import(/* webpackIgnore: true */ /* @vite-ignore */ 'typebox/' + name)
-
-	return Promise.all([
-		load('type'),
-		load('system'),
-		load('value'),
-		load('schema'),
-		load('compile')
-	]).then(
+	return importTypebox()?.then(
 		([type, system, value, schema, compile]) => {
 			if (loaded) return
 
@@ -71,6 +63,9 @@ export function preloadTypebox(): Promise<void> | undefined {
 }
 
 function resolveNamespaces(): TypeboxNamespaces {
+	const bundled = requireTypebox()
+	if (bundled) return bundled
+
 	const req = syncRequire(import.meta, import.meta.url)
 
 	if (!req)

@@ -35,6 +35,16 @@ function load() {
 }
 
 function resolveNamespaces(): TypeboxTypeNamespaces {
+	/* eslint-disable @typescript-eslint/no-require-imports -- lazy load bundlers can follow */
+	if (typeof require === 'function')
+		try {
+			return {
+				type: require('typebox/type'),
+				system: require('typebox/system')
+			}
+		} catch {}
+
+	/* eslint-enable @typescript-eslint/no-require-imports */
 	const req = syncRequire(import.meta, import.meta.url)
 
 	if (!req)

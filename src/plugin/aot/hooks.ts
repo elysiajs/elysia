@@ -13,6 +13,8 @@ import {
 	ADAPTER_BUN_FILTER,
 	IS_PRODUCTION_FILTER,
 	TYPEBOX_TYPE_FILTER,
+	TYPEBOX_REQUIRE_FILTER,
+	EXACT_MIRROR_REQUIRE_FILTER,
 	ELYSIA_MODULE_FILTER,
 	NO_STUB,
 	adapterConstantsSource,
@@ -125,6 +127,12 @@ export const createAotPluginHooks = (
 					if (filter.test(cleanId))
 						return alignStubExtensions(stubSource, cleanId)
 			}
+
+			if (TYPEBOX_REQUIRE_FILTER.test(cleanId))
+				return `export const requireTypebox = () => undefined\nexport const importTypebox = () => undefined\n`
+
+			if (EXACT_MIRROR_REQUIRE_FILTER.test(cleanId))
+				return `export const requireExactMirror = () => undefined\n`
 
 			if (TYPEBOX_TYPE_FILTER.test(cleanId))
 				return alignStubExtensions(

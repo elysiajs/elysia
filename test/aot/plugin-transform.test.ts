@@ -23,6 +23,30 @@ describe('AOT plugin source transforms', () => {
 			)
 	})
 
+	// Their literal `require` would drag TypeBox / exact-mirror into sealed
+	// builds; every other mode re-routes the caller to `-live` and never reaches it
+	it('always stubs the literal require leaves', () => {
+		const packageRoot = resolve(import.meta.dir, '../..')
+		const hooks = createAotPluginHooks(resolve(packageRoot, 'src/index.ts'))
+
+		for (const [leaf, stub] of [
+			[
+				'type/typebox-value-require',
+				'export const requireTypebox = () => undefined\nexport const importTypebox = () => undefined\n'
+			],
+			[
+				'type/validator/exact-mirror-require',
+				'export const requireExactMirror = () => undefined\n'
+			]
+		])
+			for (const file of [
+				`src/${leaf}.ts`,
+				`dist/${leaf}.mjs`,
+				`dist/${leaf}.js`
+			])
+				expect(hooks.transform('', resolve(packageRoot, file))).toBe(stub)
+	})
+
 	it('refreshes static clone omission without touching a nested package', async () => {
 		const packageRoot = resolve(import.meta.dir, '../..')
 		const directory = await mkdtemp(resolve(import.meta.dir, '_clone-hooks-'))

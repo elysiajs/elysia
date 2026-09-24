@@ -19,6 +19,10 @@ const { Elysia } = (await import('elysia')) as typeof import('../../src')
 
 // Validator dependencies determine whether a build is sealed or wired.
 const SEALED_APP = resolve(import.meta.dir, 'fixtures/sealed-app.ts')
+const SEALED_COERCE_APP = resolve(
+	import.meta.dir,
+	'fixtures/sealed-coerce-app.ts'
+)
 const WIRED_APP = resolve(import.meta.dir, 'fixtures/wired-app.ts')
 const MERGE_SCHEMA_APP = resolve(import.meta.dir, 'fixtures/mode-guard-app.ts')
 const MACRO_SCHEMA_APP = resolve(import.meta.dir, 'fixtures/mode-macro-app.ts')
@@ -95,7 +99,7 @@ async function buildEsbuild(
 	}
 }
 
-async function buildBun(app: string): Promise<string> {
+async function buildBun(app: string, minify = true): Promise<string> {
 	const { aot } = await import('elysia/plugin/aot/bun')
 
 	const previous = process.env.ELYSIA_AOT_BUILD
@@ -104,7 +108,7 @@ async function buildBun(app: string): Promise<string> {
 		const result = await Bun.build({
 			entrypoints: [app],
 			target: 'bun',
-			minify: true,
+			minify,
 			// Preserve validation details asserted below.
 			plugins: [aot(app, { production: false })]
 		})
@@ -127,6 +131,8 @@ beforeAll(async () => {
 	code.esbuildSealedProduction = await buildEsbuild(SEALED_APP, true)
 	code.esbuildWired = await buildEsbuild(WIRED_APP)
 	code.bunWired = await buildBun(WIRED_APP)
+	// unminified: the minifier would drop the loader and hide a missing stub
+	code.bunSealed = await buildBun(SEALED_COERCE_APP, false)
 	code.esbuildGuard = await buildEsbuild(MERGE_SCHEMA_APP)
 	code.esbuildMacro = await buildEsbuild(MACRO_SCHEMA_APP)
 	code.esbuildLate = await buildEsbuild(LATE_ROUTE_APP)
@@ -620,6 +626,21 @@ describe('sealed esbuild output', () => {
 			expect(/setupTypebox\(\)/.test(code[label]!)).toBe(false)
 		}
 	)
+
+	// An unstubbed `require('typebox/value')` loader makes Bun wrap typebox/type
+	// as a whole namespace (+~73KB) even though the loader is later dropped;
+	// esbuild is unaffected. Tree-shaken it is ~13 modules, the leak ~300
+	it('bunSealed keeps typebox/type tree-shakeable', async () => {
+		expect((await generateCompiledArtifacts(SEALED_COERCE_APP)).mode).toBe(
+			'sealed'
+		)
+
+		const modules = code.bunSealed!.match(
+			/^\/\/ .*typebox\/build\/type\//gm
+		)
+		expect(modules?.length).toBeGreaterThan(0)
+		expect(modules!.length).toBeLessThan(50)
+	})
 
 	it('keeps production output below the sealed bundle size ceiling', () => {
 		const min = Buffer.byteLength(code.esbuildSealedProduction!)
