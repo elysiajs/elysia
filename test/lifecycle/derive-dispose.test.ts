@@ -964,14 +964,11 @@ describe('drainDisposables', () => {
 
 	it('releases the recorded stack LIFO and contains a failure', async () => {
 		const log: string[] = []
-		const stack = new AsyncDisposableStack()
-		stack.use(disposable(log, 'first'))
-		stack.use({
-			[Symbol.dispose]() {
-				throw new Error('disposer failed')
-			}
-		})
-		stack.use(disposable(log, 'last'))
+		const stack = [
+			() => log.push('first'),
+			() => { throw new Error('disposer failed') },
+			() => log.push('last')
+		]
 
 		const reported = await captureErrors({ '~dispose': stack })
 

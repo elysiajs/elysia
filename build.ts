@@ -8,7 +8,7 @@ if ('elysia' in pack.dependencies)
 await build({
 	entry: ['src/**/*.ts'],
 	cjsDefault: false,
-	target: 'node24',
+	target: 'node22',
 	format: ['esm', 'cjs'],
 	checks: {
 		emptyImportMeta: false

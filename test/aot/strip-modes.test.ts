@@ -242,6 +242,7 @@ describe('automatic AOT stripping', () => {
 		expect(text).not.toContain('mapTransform')
 		expect(text).not.toContain('mapAfterResponse')
 		expect(text).not.toContain('mapError')
+		expect(text).not.toContain('function scanTokens')
 
 		const app = await load(text)
 		const res = await app.handle('/u', json({ name: 'a' }))
@@ -257,6 +258,7 @@ describe('automatic AOT stripping', () => {
 		expect(text).toContain('cookie support was stripped')
 		expect(text).not.toContain('importSecretKey')
 		expect(text).not.toContain('crypto.subtle.importKey')
+		expect(text).not.toContain('function unsignCookie')
 
 		const app = await load(text)
 		const res = await app.handle('/echo', json({ name: 'a' }))
@@ -284,6 +286,7 @@ describe('automatic AOT stripping', () => {
 			'auto'
 		)
 		expect(text).toContain('handler compiler JIT was stripped')
+		expect(text).toContain('function scanTokens')
 
 		const app = await load(text)
 		const res = await app.handle('/infer')

@@ -510,6 +510,11 @@ export const STUB_SOURCES: Record<
 	],
 	cookie: [
 		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]crypto\.(m?js|ts)$/,
+			source:
+				`export function resolvePendingCookie(){throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a signed cookie was read. Rebuild with strip:false.")}\n`
+		},
+		{
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]utils\.(m?js|ts)$/,
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a route used cookies. Rebuild with strip:false.")}\n` +

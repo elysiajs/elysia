@@ -69,7 +69,7 @@ jobs:
 
         strategy:
             matrix:
-                node-version: ['24.x']
+                node-version: ['22.x', '24.x']
 
         steps:
             - name: Checkout

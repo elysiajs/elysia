@@ -394,6 +394,11 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 				)
 			)
 		).toBe(true)
+		expect(
+			STUB_SOURCES.cookie.some(({ filter }) =>
+				filter.test('/x/elysia/src/cookie/crypto.ts')
+			)
+		).toBe(true)
 		// Filters ignore user modules with matching paths.
 		expect(
 			STUB_SOURCES.cookie.some(({ filter }) =>

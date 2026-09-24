@@ -81,17 +81,34 @@ export function registerDeriveDisposable(
 	if (isSingleton(value as object)) return
 
 	for (const key in scan) if (scan[key] === value) return
-	;(context['~dispose'] ??= new AsyncDisposableStack()).use(
-		value as Disposable
-	)
+	const disposable = value as Disposable & AsyncDisposable
+	const asyncDispose = disposable[Symbol.asyncDispose]
+	const dispose =
+		typeof asyncDispose === 'function'
+			? asyncDispose
+			: disposable[Symbol.dispose]
+
+	;(context['~dispose'] ??= []).push(() => dispose.call(value))
 }
 
 export async function drainDisposables(context: any) {
-	const stack = context['~dispose'] as AsyncDisposableStack | undefined
+	const stack = context['~dispose'] as (() => unknown)[] | undefined
 	if (!stack) return
 
 	try {
-		await stack.disposeAsync()
+		if (!Array.isArray(stack)) throw new TypeError('Invalid disposable stack')
+		const errors: unknown[] = []
+		while (stack.length) {
+			try {
+				await stack.pop()!()
+			} catch (error) {
+				errors.push(error)
+			}
+		}
+		if (errors.length)
+			throw errors.length === 1
+				? errors[0]
+				: new AggregateError(errors, 'Multiple disposers failed')
 	} catch (error) {
 		console.error(error)
 	}
