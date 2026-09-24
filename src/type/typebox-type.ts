@@ -15,7 +15,13 @@ import { syncRequire } from './sync-require'
 
 export interface TypeboxTypeNamespaces {
 	type: typeof import('typebox/type')
-	system: typeof import('typebox/system')
+	// `System` is optional: the default loader skips it (every locale table),
+	// `TypeSystem.Locale` loads it separately when it is actually read
+	system: Pick<
+		typeof import('typebox/system'),
+		'Arguments' | 'Environment' | 'Hashing' | 'Memory' | 'Settings'
+	> &
+		Partial<Pick<typeof import('typebox/system'), 'System'>>
 }
 
 let namespaces: TypeboxTypeNamespaces | undefined
@@ -40,7 +46,7 @@ function resolveNamespaces(): TypeboxTypeNamespaces {
 		try {
 			return {
 				type: require('typebox/type'),
-				system: require('typebox/system')
+				system: require('./typebox-system-lite')
 			}
 		} catch {}
 

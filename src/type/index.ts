@@ -4,6 +4,7 @@ import type * as TypeRegistry from './exports'
 
 import { setupTypebox } from './compat'
 import { loadTypeNamespace, markTypeUsed } from './typebox-type'
+import { typeSystem } from './typebox-system-require'
 
 import { Accelerate } from './elysia/accelerate'
 import { ArrayType } from './elysia/array'
@@ -72,6 +73,10 @@ const lazyNamespace = <T extends object>(
 			const ns = resolve()
 			if (!Object.hasOwn(ns, key)) return
 
+			// an accessor stays lazy: `TypeSystem.Locale` loads when read, not listed
+			const get = Reflect.getOwnPropertyDescriptor(ns, key)!.get
+			if (get) return { get, enumerable: true, configurable: true }
+
 			return {
 				value: ns[key],
 				enumerable: true,
@@ -128,7 +133,7 @@ export { setupTypebox } from './compat'
  * the ordering the eager `setupTypebox()` used to provide
  */
 export const TypeSystem: typeof TypeBoxSystem = lazyNamespace(
-	() => loadTypeNamespace().system.System,
+	() => typeSystem(loadTypeNamespace().system),
 	Object.create(null)
 )
 export {

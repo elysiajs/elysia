@@ -26,10 +26,24 @@ import {
 	loadTypeNamespace
 } from './typebox-type'
 
+// Only the members Elysia reads, so a named-export shim satisfies it too
 export interface TypeboxNamespaces {
-	value: typeof import('typebox/value')
-	schema: typeof import('typebox/schema')
-	compile: typeof import('typebox/compile')
+	value: Pick<
+		typeof import('typebox/value'),
+		| 'Check'
+		| 'Clean'
+		| 'Clone'
+		| 'Create'
+		| 'Decode'
+		| 'DecodeUnsafe'
+		| 'Default'
+		| 'Encode'
+		| 'EncodeUnsafe'
+		| 'Errors'
+		| 'HasCodec'
+	>
+	schema: Pick<typeof import('typebox/schema'), 'Compile' | 'Build'>
+	compile: Pick<typeof import('typebox/compile'), 'Compile'>
 }
 
 let loaded = false
@@ -51,11 +65,11 @@ export function preloadTypebox(): Promise<void> | undefined {
 	if (loaded || !isTypeUsed()) return
 
 	return importTypebox()?.then(
-		([type, system, value, schema, compile]) => {
+		([typeSide, valueSide]) => {
 			if (loaded) return
 
-			if (!isTypeNamespaceLoaded()) injectTypeboxType({ type, system })
-			injectTypebox({ value, schema, compile })
+			if (!isTypeNamespaceLoaded()) injectTypeboxType(typeSide)
+			injectTypebox(valueSide)
 		},
 		// the synchronous loader still runs at build and reports the failure
 		() => {}

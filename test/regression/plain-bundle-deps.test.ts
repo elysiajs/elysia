@@ -147,3 +147,80 @@ describe('bundled server uses its embedded TypeBox', () => {
 			])
 		})
 })
+
+// TypeBox loads through a lazy `require`, which hands bundlers a whole
+// namespace they cannot tree-shake. Elysia requires named-export shims instead,
+// and leaves `TypeSystem.Locale` (every locale table, ~160 KB) out unless the
+// app registers the full `typebox/system` itself
+describe('plain bundle tree-shakes TypeBox', () => {
+	// value/delta/diff: a TypeBox value function Elysia never calls
+	const unusedValue = 'Cannot create diffs for objects with symbols keys'
+	// de_DE locale table
+	const locale = 'darf keine zusätzlichen Eigenschaften haben'
+
+	const localeApp = (from: string) => `
+import { Elysia, t, TypeSystem, setupTypebox } from '${from}'
+
+const app = new Elysia().post(
+	'/json',
+	{ body: t.Object({ name: t.String() }) },
+	({ body }) => body
+)
+const ok = await app.handle(new Request('http://e.ly/json', {
+	method: 'POST',
+	headers: { 'content-type': 'application/json' },
+	body: JSON.stringify({ name: 'a' })
+}))
+
+let locale
+try {
+	locale = Object.keys(TypeSystem.Locale).length
+} catch (error) {
+	locale = error.message
+}
+
+console.log(JSON.stringify([
+	ok.status,
+	TypeSystem.Settings.Get().unionPrioritySort,
+	// listing keys must not trip the Locale opt-in
+	Object.keys(TypeSystem).includes('Locale'),
+	locale
+]))
+`
+
+	for (const [name, from] of [
+		['src', join(root, 'src', 'index.ts')],
+		['dist', join(root, 'dist', 'index.mjs')],
+		// the CJS build requires the same ESM shims, so it tree-shakes too
+		['dist-cjs', join(root, 'dist', 'index.js')]
+	])
+		it(`keeps unused TypeBox out and Locale opt-in (${name})`, async () => {
+			const entry = join(dir, `shake-${name}.ts`)
+			writeFileSync(entry, localeApp(from))
+
+			const built = await Bun.build({
+				entrypoints: [entry],
+				outdir: join(dir, `shake-${name}`),
+				target: 'bun'
+			})
+			expect(built.success).toBe(true)
+
+			const code = await built.outputs[0]!.text()
+			expect(code).not.toContain(unusedValue)
+			expect(code).not.toContain(locale)
+
+			const run = Bun.spawnSync({
+				cmd: [process.execPath, '--no-install', built.outputs[0]!.path],
+				cwd: dir
+			})
+			const [status, unionPrioritySort, listsLocale, message] =
+				JSON.parse(run.stdout.toString())
+
+			expect(status).toBe(200)
+			expect(unionPrioritySort).toBe(false)
+			expect(listsLocale).toBe(true)
+			// Bun bakes a bundled CJS module's `__filename` as the build path, so
+			// its runtime fallback still finds this repo's node_modules here
+			if (name !== 'dist-cjs') expect(message).toContain('setupTypebox')
+		})
+})

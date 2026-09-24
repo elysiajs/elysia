@@ -33,6 +33,17 @@ const CEILING = 1_000_000
  * Measured: 2,549,614 B both eager · 1,804,643 B value deferred · 793,907 B both.
  */
 describe('eager import graph', () => {
+	// The published build, not just src: its TypeBox shims load through a lazy
+	// `require` that the build tool would otherwise hoist into a static import
+	it('keeps TypeBox out of the dist import graph', () => {
+		const loaded = run(
+			`await import(${JSON.stringify(resolve(import.meta.dir, '../../dist/index.mjs'))})\n` +
+				`console.log(Object.keys(require.cache).filter((k) => k.includes('/node_modules/typebox/')).length)`
+		)
+
+		expect(loaded).toBe('0')
+	})
+
 	it('keeps TypeBox out of the import graph', () => {
 		const heapDelta = Number(
 			run(
