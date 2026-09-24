@@ -7,7 +7,7 @@ describe('macro beforeHandle lifecycle order', () => {
 
 		// Auth service with resolve + macro
 		const authService = new Elysia({ name: 'auth-service' })
-			.resolve(() => {
+			.derive(() => {
 				executionOrder.push('authService.resolve')
 				return { userId: undefined } // Simulating no auth
 			})
@@ -19,17 +19,17 @@ describe('macro beforeHandle lifecycle order', () => {
 					}
 				}
 			})
-			.as('scoped')
+			.as('plugin')
 
 		// DB client that requires userId
 		const dbClient = new Elysia({ name: 'db-client' })
-			.resolve((ctx) => {
+			.derive((ctx) => {
 				executionOrder.push('dbClient.resolve')
 				const userId = (ctx as { userId?: string }).userId
 				if (!userId) throw new Error('User ID is required')
 				return { db: { userId } }
 			})
-			.as('scoped')
+			.as('plugin')
 
 		// Feature module using dbClient
 		const feature = new Elysia({ name: 'feature' })
@@ -62,18 +62,18 @@ describe('macro beforeHandle lifecycle order', () => {
 		const executionOrder: string[] = []
 
 		const app = new Elysia()
-			.resolve(() => {
+			.derive(() => {
 				executionOrder.push('resolve1')
 				return { val1: 1 }
 			})
-			.onBeforeHandle(() => {
+			.beforeHandle(() => {
 				executionOrder.push('beforeHandle1')
 			})
-			.resolve(() => {
+			.derive(() => {
 				executionOrder.push('resolve2')
 				return { val2: 2 }
 			})
-			.onBeforeHandle(() => {
+			.beforeHandle(() => {
 				executionOrder.push('beforeHandle2')
 			})
 			.get('/', () => 'ok')
@@ -97,7 +97,7 @@ describe('macro beforeHandle lifecycle order', () => {
 		let errorMessage = ''
 
 		const authPlugin = new Elysia({ name: 'auth' })
-			.resolve(() => {
+			.derive(() => {
 				executionOrder.push('auth.resolve')
 				return { userId: 'user123' } // Auth succeeds
 			})
@@ -109,18 +109,18 @@ describe('macro beforeHandle lifecycle order', () => {
 					}
 				}
 			})
-			.as('scoped')
+			.as('plugin')
 
 		const dataPlugin = new Elysia({ name: 'data' })
-			.resolve((ctx) => {
+			.derive((ctx) => {
 				executionOrder.push('data.resolve')
 				return { data: 'some data' }
 			})
-			.as('scoped')
+			.as('plugin')
 
 		const app = new Elysia()
 			.use(authPlugin)
-			.onError(({ error }) => {
+			.error(({ error }) => {
 				// @ts-ignore
 				errorMessage = error.message
 				return errorMessage
@@ -158,11 +158,11 @@ describe('macro beforeHandle lifecycle order', () => {
 					}
 				}
 			})
-			.as('scoped')
+			.as('plugin')
 
 		const nestedPlugin = new Elysia({ name: 'nested' })
-			.resolve(() => ({ nested: true }))
-			.as('scoped')
+			.derive(() => ({ nested: true }))
+			.as('plugin')
 
 		const app = new Elysia()
 			.use(validatedMacro)
@@ -179,7 +179,7 @@ describe('macro beforeHandle lifecycle order', () => {
 			})
 		)
 		expect(validResponse.status).toBe(200)
-		expect(await validResponse.text()).toBe('test')
+		await expect(validResponse.text()).resolves.toBe('test')
 
 		// Invalid request - should fail validation (macro schema should be preserved)
 		const invalidResponse = await app.handle(
@@ -191,5 +191,46 @@ describe('macro beforeHandle lifecycle order', () => {
 		)
 		// If macro schema is lost, this would be 200 instead of 422
 		expect(invalidResponse.status).toBe(422)
+	})
+
+	// elysiajs/elysia#1958: a macro's `derive` must run AFTER inherited
+	// `.derive()` entries (1.x parity: macro resolve saw instance-derived
+	// values). Both fold into the beforeHandle phase; if the route-local
+	// (macro) derive is promoted only after the chain merge it lands at the
+	// FRONT of the merged pipeline, and an auth macro reading plugin-derived
+	// services gets `undefined` and fails closed.
+	it('macro derive sees values from plugin and instance derive', async () => {
+		const dbValue = { findUser: async () => ({ id: 'u1' }) }
+
+		const services = new Elysia({ name: 'svc' }).derive('plugin', () => ({
+			db: dbValue
+		}))
+
+		const seen: unknown[] = []
+
+		const app = new Elysia()
+			.use(services)
+			.derive(() => ({ local: 'L' }))
+			.macro({
+				auth(enabled: boolean) {
+					return {
+						derive: async ({ db, local }: any) => {
+							seen.push(typeof db, local)
+
+							return { user: db ? await db.findUser() : null }
+						},
+						beforeHandle: ({ user, status }: any) => {
+							if (!user) return status(401, 'no user')
+						}
+					}
+				}
+			})
+			.get('/me', { auth: true }, ({ user }: any) => user)
+
+		const response = await app.handle(new Request('http://localhost/me'))
+
+		expect(response.status).toBe(200)
+		await expect(response.json()).resolves.toEqual({ id: 'u1' })
+		expect(seen).toEqual(['object', 'L'])
 	})
 })

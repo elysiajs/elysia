@@ -6,7 +6,7 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: () => ({
+				derive: () => ({
 					account: 'A'
 				})
 			})
@@ -32,13 +32,12 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: () => ({
+				derive: () => ({
 					account: 'A'
 				})
 			})
 		})
-		.guard({
-			as: 'scoped',
+		.guard('plugin', {
 			account: true
 		})
 		.get('/', ({ account }) => {
@@ -60,13 +59,12 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: () => ({
+				derive: () => ({
 					account: 'A'
 				})
 			})
 		})
-		.guard({
-			as: 'global',
+		.guard('global', {
 			account: true
 		})
 		.get('/', ({ account }) => {
@@ -89,13 +87,12 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: () => ({
+				derive: () => ({
 					account: 'A'
 				})
 			})
 		})
-		.guard({
-			as: 'local',
+		.guard('local', {
 			account: true
 		})
 		.get('/', ({ account }) => {
@@ -111,12 +108,110 @@ import { expectTypeOf } from 'expect-type'
 	})
 }
 
+// `.guard(scope, hooks)` applies macro-derived values at the selected scope.
+{
+	const plugin = new Elysia()
+		.macro({
+			account: (a: boolean) => ({
+				derive: () => ({
+					account: 'A'
+				})
+			})
+		})
+		.guard('plugin', {
+			account: true
+		})
+		.get('/', ({ account }) => {
+			expectTypeOf(account).toEqualTypeOf<string>()
+		})
+
+	const parent = new Elysia().use(plugin).get('/', (context) => {
+		expectTypeOf(context).toHaveProperty('account')
+		expectTypeOf(context.account).toEqualTypeOf<string>()
+	})
+
+	const app = new Elysia().use(parent).get('/', (context) => {
+		expectTypeOf(context).not.toHaveProperty('account')
+	})
+}
+
+{
+	const plugin = new Elysia()
+		.macro({
+			account: (a: boolean) => ({
+				derive: () => ({
+					account: 'A'
+				})
+			})
+		})
+		.guard('global', {
+			account: true
+		})
+		.get('/', ({ account }) => {
+			expectTypeOf(account).toEqualTypeOf<string>()
+		})
+
+	const parent = new Elysia().use(plugin).get('/', (context) => {
+		expectTypeOf(context).toHaveProperty('account')
+		expectTypeOf(context.account).toEqualTypeOf<string>()
+	})
+
+	const app = new Elysia().use(parent).get('/', (context) => {
+		expectTypeOf(context).toHaveProperty('account')
+		expectTypeOf(context.account).toEqualTypeOf<string>()
+	})
+}
+
+{
+	const plugin = new Elysia()
+		.macro({
+			account: (a: boolean) => ({
+				derive: () => ({
+					account: 'A'
+				})
+			})
+		})
+		.guard('local', {
+			account: true
+		})
+		.get('/', ({ account }) => {
+			expectTypeOf(account).toEqualTypeOf<string>()
+		})
+
+	const parent = new Elysia().use(plugin).get('/', (context) => {
+		expectTypeOf(context).not.toHaveProperty('account')
+	})
+
+	const app = new Elysia().use(parent).get('/', (context) => {
+		expectTypeOf(context).not.toHaveProperty('account')
+	})
+}
+
+// `.guard(scope, hooks)` applies hook schemas at the selected scope.
+{
+	const plugin = new Elysia()
+		.guard('plugin', {
+			query: t.Object({ name: t.String() })
+		})
+		.get('/', ({ query }) => {
+			expectTypeOf(query).toEqualTypeOf<{ name: string }>()
+		})
+
+	const parent = new Elysia().use(plugin).get('/', ({ query }) => {
+		expectTypeOf(query).toEqualTypeOf<{ name: string }>()
+	})
+
+	const app = new Elysia().use(parent).get('/', ({ query }) => {
+		expectTypeOf(query).toEqualTypeOf<Record<string, string | undefined>>()
+	})
+}
+
 // guard handle resolve macro with error
 {
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: ({ status }) => {
+				derive: ({ status }) => {
 					if (Math.random() > 0.5) return status(401)
 
 					return {
@@ -146,7 +241,7 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: async ({ status }) => {
+				derive: async ({ status }) => {
 					if (Math.random() > 0.5) return status(401)
 
 					return {
@@ -155,8 +250,7 @@ import { expectTypeOf } from 'expect-type'
 				}
 			})
 		})
-		.guard({
-			as: 'scoped',
+		.guard('plugin', {
 			account: true
 		})
 		.get('/', ({ account }) => {
@@ -176,14 +270,14 @@ import { expectTypeOf } from 'expect-type'
 // Handle ephemeral and volatile property
 {
 	const app = new Elysia()
-		.resolve(() => {
+		.derive(() => {
 			return {
 				hello: 'world'
 			}
 		})
 		.macro({
 			user: (enabled: boolean) => ({
-				resolve: ({ hello, query: { name = 'anon' } }) => {
+				derive: ({ hello, query: { name = 'anon' } }) => {
 					expectTypeOf(hello).toEqualTypeOf<'world' | undefined>()
 
 					return {
@@ -194,9 +288,13 @@ import { expectTypeOf } from 'expect-type'
 				}
 			})
 		})
-		.get('/', ({ user }) => user, {
-			user: true
-		})
+		.get(
+			'/',
+			{
+				user: true
+			},
+			({ user }) => user
+		)
 }
 
 // Handle shorthand function macro
@@ -204,7 +302,7 @@ import { expectTypeOf } from 'expect-type'
 	const app = new Elysia()
 		.macro({
 			user: {
-				resolve: ({ query: { name = 'anon' } }) => ({
+				derive: ({ query: { name = 'anon' } }) => ({
 					user: {
 						name
 					}
@@ -213,20 +311,20 @@ import { expectTypeOf } from 'expect-type'
 		})
 		.get(
 			'/',
-			({ user }) => {
-				expectTypeOf(user).toEqualTypeOf<{ name: string }>()
-			},
 			{
 				user: true
+			},
+			({ user }) => {
+				expectTypeOf(user).toEqualTypeOf<{ name: string }>()
 			}
 		)
 		.get(
 			'/no',
-			(context) => {
-				expectTypeOf(context).not.toHaveProperty('user')
-			},
 			{
 				user: false
+			},
+			(context) => {
+				expectTypeOf(context).not.toHaveProperty('user')
 			}
 		)
 }
@@ -236,7 +334,7 @@ import { expectTypeOf } from 'expect-type'
 	const app = new Elysia()
 		.macro({
 			auth: {
-				resolve: [
+				derive: [
 					({ status }) => {
 						if (Math.random() > 0.5) return status(401)
 
@@ -245,16 +343,20 @@ import { expectTypeOf } from 'expect-type'
 				]
 			}
 		})
-		.get('/', ({ user }) => user, {
-			auth: true
-		})
+		.get(
+			'/',
+			{
+				auth: true
+			},
+			({ user }) => user
+		)
 }
 
 // retrieve resolve conditionally
 const app = new Elysia()
 	.macro({
 		user: (enabled: true) => ({
-			resolve() {
+			derive() {
 				if (!enabled) return
 
 				return {
@@ -265,57 +367,125 @@ const app = new Elysia()
 	})
 	.get(
 		'/',
+		{
+			user: true
+		},
 		({ user, status }) => {
 			if (!user) return status(401)
 
 			return { hello: 'hanabi' }
-		},
-		{
-			user: true
 		}
 	)
 
-// Macro name extends macro
+// Macro hooks receive their own schema; inheriting routes receive both schemas.
 {
 	new Elysia()
-		.macro('a', {
-			body: t.Object({ a: t.Literal('A') }),
-			beforeHandle({ body }) {
-				expectTypeOf(body).toEqualTypeOf<{ a: 'A' }>()
+		.macro({
+			a: {
+				body: t.Object({ a: t.Literal('A') }),
+				beforeHandle({ body }) {
+					expectTypeOf(body).toEqualTypeOf<{ a: 'A' }>()
+				}
 			}
 		})
-		.macro('b', {
-			a: true,
-			body: t.Object({ b: t.Literal('B') }),
-			beforeHandle({ body }) {
-				expectTypeOf(body).toEqualTypeOf<{
-					a: 'A'
-					b: 'B'
-				}>()
+		.macro({
+			b: {
+				a: true,
+				body: t.Object({ b: t.Literal('B') }),
+				beforeHandle({ body }) {
+					expectTypeOf(body).toEqualTypeOf<{ b: 'B' }>()
+				}
 			}
+		})
+		.post('/', { b: true }, ({ body }) => {
+			expectTypeOf(body).toEqualTypeOf<{ b: 'B'; a: 'A' }>()
 		})
 }
 
 // handle function
 {
 	new Elysia()
-		.macro('a', (a: 'a') => ({
-			resolve: () => ({ a: 'a' as const })
-		}))
+		.macro({
+			a: (a: 'a') => ({
+				derive: () => ({ a: 'a' as const })
+			})
+		})
 		.get(
 			'/',
+			{
+				a: 'a'
+			},
 			({ a }) => {
 				expectTypeOf(a).toEqualTypeOf<'a'>()
 
 				return a
-			},
-			{
-				a: 'a'
 			}
 		)
-		.get('/', 'ok', {
-			// @ts-expect-error
-			a: 'b'
-		})
+		.get(
+			'/',
+			{
+				// @ts-expect-error macro `a` accepts only the literal "a"
+				a: 'b'
+			},
+			'ok'
+		)
 		.listen(3000)
+}
+
+// Function-form macros require their declared option type.
+{
+	new Elysia()
+		.macro({
+			level: (_opt: { min: number }) => ({
+				beforeHandle() {}
+			})
+		})
+		.get('/ok', { level: { min: 1 } }, 'ok')
+		.get(
+			'/bad-bool',
+			{
+				// @ts-expect-error boolean is not assignable to { min: number }
+				level: true
+			},
+			'ok'
+		)
+		.get(
+			'/bad-shape',
+			{
+				// @ts-expect-error wrong option shape
+				level: { min: 'high' }
+			},
+			'ok'
+		)
+}
+
+// Macro lifecycle handlers may return values alongside a response schema.
+{
+	new Elysia().macro({
+		ok: {
+			response: t.Object({ ok: t.Boolean() }),
+			beforeHandle() {
+				return { ok: true }
+			}
+		}
+	})
+}
+
+// A route sees values derived through an inherited macro.
+{
+	new Elysia()
+		.macro({
+			auth: {
+				derive: () => ({ userId: 1 })
+			}
+		})
+		.macro({
+			admin: {
+				auth: true
+			}
+		})
+		.get('/', { admin: true }, (ctx) => {
+			expectTypeOf(ctx.userId).toEqualTypeOf<number>()
+			return ctx.userId
+		})
 }

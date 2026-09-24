@@ -1,9 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable no-constant-condition */
-import { checksum } from './utils'
-import { isBun, isCloudflareWorker } from './universal/utils'
+import { fnv1a, evictOldestHalf } from './utils'
+import { getCompilerSession } from './compile/aot'
+import { scanTokens, type ScanToken } from './compile/lexer'
 
-import type { Handler, HookContainer, LifeCycleStore } from './types'
+import type { Handler, AppHook } from './types'
 
 export namespace Sucrose {
 	export interface Inference {
@@ -12,752 +11,440 @@ export namespace Sucrose {
 		body: boolean
 		cookie: boolean
 		set: boolean
-		server: boolean
 		route: boolean
-		url: boolean
-		path: boolean
+		afterResponse?: boolean
 	}
 
-	export interface LifeCycle extends Partial<LifeCycleStore> {
-		handler?: Handler
-	}
+	export type LifeCycle = Partial<Partial<AppHook>>
+}
 
-	export interface Settings {
-		/**
-		 * If no sucrose usage is found in time
-		 * it's likely that server is either idle or
-		 * no new compilation is happening
-		 * clear the cache to free up memory
-		 *
-		 * @default 4 * 60 * 1000 + 55 * 1000 (4 minutes 55 seconds)
-		 */
-		gcTime?: number | null
+const allAccessed = Object.freeze({
+	query: true,
+	headers: true,
+	body: true,
+	cookie: true,
+	set: true,
+	route: true,
+	afterResponse: true
+})
+
+const isAllAccessed = (i: Sucrose.Inference) =>
+	i.query &&
+	i.headers &&
+	i.body &&
+	i.cookie &&
+	i.set &&
+	i.route &&
+	i.afterResponse
+
+const DEFAULT_CACHE_LIMIT = 1024
+
+type SourceCache = Map<
+	number,
+	{ content: string; inference: Sucrose.Inference }
+>
+
+const globalSourceCache: SourceCache = new Map()
+
+let functionCaches = new WeakMap<Function, Sucrose.Inference>()
+
+export function clearSucroseCache() {
+	globalSourceCache.clear()
+	getCompilerSession()?.sucroseCache.clear()
+	functionCaches = new WeakMap()
+}
+
+export const mergeInference = (
+	a: Sucrose.Inference,
+	b: Sucrose.Inference
+): Sucrose.Inference => ({
+	body: a.body || b.body,
+	cookie: a.cookie || b.cookie,
+	headers: a.headers || b.headers,
+	query: a.query || b.query,
+	set: a.set || b.set,
+	route: a.route || b.route,
+	...(a.afterResponse || b.afterResponse ? { afterResponse: true } : {})
+})
+
+const defaultSucrose = (): Sucrose.Inference => ({
+	query: false,
+	headers: false,
+	body: false,
+	cookie: false,
+	set: false,
+	route: false
+})
+
+const emptyInference = Object.freeze(defaultSucrose())
+
+const channel = (value: string): keyof Sucrose.Inference | undefined => {
+	switch (value) {
+		case 'query':
+		case 'headers':
+		case 'body':
+		case 'cookie':
+		case 'set':
+		case 'route':
+			return value
+		case 'defer':
+			return 'afterResponse'
 	}
 }
 
-/**
- * Separate stringified function body and parameter
- *
- * @example
- * ```typescript
- * separateFunction('async ({ hello }) => { return hello }') // => ['({ hello })', '{ return hello }']
- * ```
- */
-export const separateFunction = (
-	code: string
-): [string, string, { isArrowReturn: boolean }] => {
-	// Remove async keyword without removing space (both minify and non-minify)
-	if (code.startsWith('async')) code = code.slice(5)
-	code = code.trimStart()
+function computedDestructuringChannel<K extends string>(
+	tokens: ScanToken[],
+	index: number,
+	channelOf: (value: string) => K | undefined
+): false | K {
+	const property = tokens[index + 1]
 
-	let index = -1
-
-	// JSC: Starts with '(', is an arrow function
-	if (code.charCodeAt(0) === 40) {
-		index = code.indexOf('=>', code.indexOf(')'))
-
-		if (index !== -1) {
-			let bracketEndIndex = index
-			// Walk back to find bracket end
-			while (bracketEndIndex > 0)
-				if (code.charCodeAt(--bracketEndIndex) === 41) break
-
-			let body = code.slice(index + 2)
-			if (body.charCodeAt(0) === 32) body = body.trimStart()
-
-			return [
-				code.slice(1, bracketEndIndex),
-				body,
-				{
-					isArrowReturn: body.charCodeAt(0) !== 123
-				}
-			]
-		}
-	}
-
-	// V8: bracket is removed for 1 parameter arrow function
-	if (/^(\w+)=>/g.test(code)) {
-		index = code.indexOf('=>')
-
-		if (index !== -1) {
-			let body = code.slice(index + 2)
-			if (body.charCodeAt(0) === 32) body = body.trimStart()
-
-			return [
-				code.slice(0, index),
-				body,
-				{
-					isArrowReturn: body.charCodeAt(0) !== 123
-				}
-			]
-		}
-	}
-
-	// Using function keyword
-	if (code.startsWith('function')) {
-		index = code.indexOf('(')
-		const end = code.indexOf(')')
-
-		return [
-			code.slice(index + 1, end),
-			code.slice(end + 2),
-			{
-				isArrowReturn: false
-			}
-		]
-	}
-
-	// Probably Declare as method
-	const start = code.indexOf('(')
-
-	if (start !== -1) {
-		const sep = code.indexOf('\n', 2)
-		const parameter = code.slice(0, sep)
-		const end = parameter.lastIndexOf(')') + 1
-
-		const body = code.slice(sep + 1)
-
-		return [
-			parameter.slice(start, end),
-			'{' + body,
-			{
-				isArrowReturn: false
-			}
-		]
-	}
-
-	// Unknown case
-	const x = code.split('\n', 2)
-
-	return [x[0], x[1], { isArrowReturn: false }]
-}
-
-/**
- * Get range between bracket pair
- *
- * @example
- * ```typescript
- * bracketPairRange('hello: { world: { a } }, elysia') // [6, 20]
- * ```
- */
-export const bracketPairRange = (parameter: string): [number, number] => {
-	const start = parameter.indexOf('{')
-	if (start === -1) return [-1, 0]
-
-	let end = start + 1
-	let deep = 1
-
-	for (; end < parameter.length; end++) {
-		const char = parameter.charCodeAt(end)
-
-		// Open bracket
-		if (char === 123) deep++
-		// Close bracket
-		else if (char === 125) deep--
-
-		if (deep === 0) break
-	}
-
-	if (deep !== 0) return [0, parameter.length]
-
-	return [start, end + 1]
-}
-
-/**
- * Similar to `bracketPairRange` but in reverse order
- * Get range between bracket pair from end to beginning
- *
- * @example
- * ```typescript
- * bracketPairRange('hello: { world: { a } }, elysia') // [6, 20]
- * ```
- */
-export const bracketPairRangeReverse = (
-	parameter: string
-): [number, number] => {
-	const end = parameter.lastIndexOf('}')
-	if (end === -1) return [-1, 0]
-
-	let start = end - 1
-	let deep = 1
-
-	for (; start >= 0; start--) {
-		const char = parameter.charCodeAt(start)
-
-		// Open bracket
-		if (char === 125) deep++
-		// Close bracket
-		else if (char === 123) deep--
-
-		if (deep === 0) break
-	}
-
-	if (deep !== 0) return [-1, 0]
-
-	return [start, end + 1]
-}
-
-export const removeColonAlias = (parameter: string) => {
-	while (true) {
-		const start = parameter.indexOf(':')
-		if (start === -1) break
-
-		let end = parameter.indexOf(',', start)
-		if (end === -1) end = parameter.indexOf('}', start) - 1
-		if (end === -2) end = parameter.length
-
-		parameter = parameter.slice(0, start) + parameter.slice(end)
-	}
-
-	return parameter
-}
-
-/**
- * Retrieve only root parameters of a function
- *
- * @example
- * ```typescript
- * retrieveRootParameters('({ hello: { world: { a } }, elysia })') // => {
- *   parameters: ['hello', 'elysia'],
- *   hasParenthesis: true
- * }
- * ```
- */
-export const retrieveRootparameters = (parameter: string) => {
-	let hasParenthesis = false
-
-	// Remove () from parameter
-	if (parameter.charCodeAt(0) === 40) parameter = parameter.slice(1, -1)
-
-	// Remove {} from parameter
-	if (parameter.charCodeAt(0) === 123) {
-		hasParenthesis = true
-		parameter = parameter.slice(1, -1)
-	}
-
-	parameter = parameter.replace(/( |\t|\n)/g, '').trim()
-	let parameters = <string[]>[]
-
-	// Object destructuring
-	while (true) {
-		// eslint-disable-next-line prefer-const
-		let [start, end] = bracketPairRange(parameter)
-		if (start === -1) break
-
-		// Remove colon from object structuring cast
-		parameters.push(parameter.slice(0, start - 1))
-		if (parameter.charCodeAt(end) === 44) end++
-		parameter = parameter.slice(end)
-	}
-
-	parameter = removeColonAlias(parameter)
-	if (parameter) parameters = parameters.concat(parameter.split(','))
-
-	const parameterMap: Record<string, true> = Object.create(null)
-	for (const p of parameters) {
-		if (p.indexOf(',') === -1) {
-			parameterMap[p] = true
-			continue
-		}
-
-		for (const q of p.split(',')) parameterMap[q.trim()] = true
-	}
-
-	return {
-		hasParenthesis,
-		parameters: parameterMap
-	}
-}
-
-/**
- * Find inference from parameter
- *
- * @param parameter stringified parameter
- */
-export const findParameterReference = (
-	parameter: string,
-	inference: Sucrose.Inference
-) => {
-	const { parameters, hasParenthesis } = retrieveRootparameters(parameter)
-
-	// Check if root is an object destructuring
-	if (parameters.query) inference.query = true
-	if (parameters.headers) inference.headers = true
-	if (parameters.body) inference.body = true
-	if (parameters.cookie) inference.cookie = true
-	if (parameters.set) inference.set = true
-	if (parameters.server) inference.server = true
-	if (parameters.route) inference.route = true
-	if (parameters.url) inference.url = true
-	if (parameters.path) inference.path = true
-
-	if (hasParenthesis) return `{ ${Object.keys(parameters).join(', ')} }`
-
-	return Object.keys(parameters).join(', ')
-}
-
-const findEndIndex = (
-	type: string,
-	content: string,
-	index?: number | undefined
-) => {
-	const regex = new RegExp(
-		`${type.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\n\\t,; ]`
-	)
-
-	if (index !== undefined) regex.lastIndex = index
-
-	const match = regex.exec(content)
-
-	return match ? match.index : -1
-}
-
-const findEndQueryBracketIndex = (
-	type: string,
-	content: string,
-	index?: number | undefined
-) => {
-	const bracketEndIndex = content.indexOf(type + ']', index)
-	const singleQuoteIndex = content.indexOf(type + "'", index)
-	const doubleQuoteIndex = content.indexOf(type + '"', index)
-
-	// Pick the smallest index that is not -1 or 0
 	return (
-		[bracketEndIndex, singleQuoteIndex, doubleQuoteIndex]
-			.filter((i) => i > 0)
-			.sort((a, b) => a - b)[0] || -1
+		(property?.k === 's' &&
+			!property.value.includes('\\') &&
+			tokens[index + 2]?.value === ']' &&
+			channelOf(property.value)) ||
+		false
 	)
 }
 
 /**
- * Find alias of variable from function body
- *
- * @example
- * ```typescript
- * findAlias('body', '{ const a = body, b = body }') // => ['a', 'b']
- * ```
+ * @internal Which `channelOf`-mapped members of a function's first parameter
+ * the function may read, or `null` when any member may be read
  */
-export const findAlias = (type: string, body: string, depth = 0) => {
-	if (depth > 5) return []
+export function inferFunction<K extends string>(
+	source: string,
+	channelOf: (value: string) => K | undefined,
+	// bail on any alias made by `=`: the scan does not follow it through a
+	// member store, a forward use or an assignment inside an expression
+	strict = false
+): Set<K> | null {
+	if (
+		!source ||
+		source.includes('[native code]') ||
+		source.trimStart().startsWith('class')
+	)
+		return null
 
-	const aliases: string[] = []
-
-	let content = body
-
-	while (true) {
-		let index = findEndIndex(' = ' + type, content)
-		// V8 engine minified the code
-		if (index === -1) index = findEndIndex('=' + type, content)
-
-		if (index === -1) {
-			/**
-			 * Check if pattern is at the end of the string
-			 *
-			 * @example
-			 * ```typescript
-			 * 'const a = body' // true
-			 * ```
-			 **/
-			let lastIndex = content.indexOf(' = ' + type)
-			if (lastIndex === -1) lastIndex = content.indexOf('=' + type)
-
-			if (lastIndex + 3 + type.length !== content.length) break
-
-			index = lastIndex
-		}
-
-		const part = content.slice(0, index)
-
-		// V8 engine minified the code
-		const lastPart = part.lastIndexOf(' ')
-		/**
-		 * aliased variable last character
-		 *
-		 * @example
-		 * ```typescript
-		 * const { hello } = body // } is the last character
-		 * ```
-		 **/
-		let variable = part.slice(lastPart !== -1 ? lastPart + 1 : -1)
-
-		// Variable is using object destructuring, find the bracket pair
-		if (variable === '}') {
-			const [start, end] = bracketPairRangeReverse(part)
-
-			aliases.push(removeColonAlias(content.slice(start, end)))
-
-			content = content.slice(index + 3 + type.length)
-
-			continue
-		}
-
-		// Remove comma
-		while (variable.charCodeAt(0) === 44) variable = variable.slice(1)
-		while (variable.charCodeAt(0) === 9) variable = variable.slice(1)
-
-		if (!variable.includes('(')) aliases.push(variable)
-
-		content = content.slice(index + 3 + type.length)
-	}
-
-	for (const alias of aliases) {
-		if (alias.charCodeAt(0) === 123) continue
-
-		const deepAlias = findAlias(alias, body)
-		if (deepAlias.length > 0) aliases.push(...deepAlias)
-	}
-
-	return aliases
-}
-
-// ? This is normalized to dot notation in Bun
-// const accessor = <T extends string, P extends string>(parent: T, prop: P) =>
-// 	[
-// 		parent + '.' + prop,
-// 		parent + '["' + prop + '"]',
-// 		parent + "['" + prop + "']"
-// 	] as const
-
-export const extractMainParameter = (parameter: string) => {
-	if (!parameter) return
-
-	if (parameter.charCodeAt(0) !== 123) return parameter
-
-	parameter = parameter.slice(2, -2)
-
-	const hasComma = parameter.includes(',')
-	if (!hasComma) {
-		const index = parameter.indexOf('...')
-		// This happens when spread operator is used as the only parameter
-		if (index !== -1) return parameter.slice(parameter.indexOf('...') + 3)
-
-		return
-	}
-
-	const spreadIndex = parameter.indexOf('...')
-	if (spreadIndex === -1) return
-
-	// Spread parameter is always the last parameter, no need for further checking
-	return parameter.slice(spreadIndex + 3).trimEnd()
-}
-
-/**
- * Analyze if context is mentioned in body
- */
-export const inferBodyReference = (
-	code: string,
-	aliases: string[],
-	inference: Sucrose.Inference
-) => {
-	const access = (type: string, alias: string) =>
-		new RegExp(
-			`${alias}\\.(${type})|${alias}\\["${type}"\\]|${alias}\\['${type}'\\]`
-		).test(code)
-
-	for (const alias of aliases) {
-		if (!alias) continue
-
-		// Scan object destructured property
-		if (alias.charCodeAt(0) === 123) {
-			const parameters = retrieveRootparameters(alias).parameters
-
-			if (parameters.query) inference.query = true
-			if (parameters.headers) inference.headers = true
-			if (parameters.body) inference.body = true
-			if (parameters.cookie) inference.cookie = true
-			if (parameters.set) inference.set = true
-			if (parameters.server) inference.server = true
-			if (parameters.url) inference.url = true
-			if (parameters.route) inference.route = true
-			if (parameters.path) inference.path = true
-
-			continue
-		}
-
-		if (
-			!inference.query &&
-			(access('query', alias) ||
-				code.includes('return ' + alias) ||
-				code.includes('return ' + alias + '.query'))
-		)
-			inference.query = true
-
-		if (!inference.headers && access('headers', alias))
-			inference.headers = true
-
-		if (!inference.body && access('body', alias)) inference.body = true
-
-		if (!inference.cookie && access('cookie', alias))
-			inference.cookie = true
-
-		if (!inference.set && access('set', alias)) inference.set = true
-		if (!inference.server && access('server', alias))
-			inference.server = true
-
-		if (!inference.route && access('route', alias)) inference.route = true
-		if (!inference.url && access('url', alias)) inference.url = true
-		if (!inference.path && access('path', alias)) inference.path = true
-
-		if (
-			inference.query &&
-			inference.headers &&
-			inference.body &&
-			inference.cookie &&
-			inference.set &&
-			inference.server &&
-			inference.route &&
-			inference.url &&
-			inference.path
-		)
-			break
-	}
-
-	return aliases
-}
-
-export const removeDefaultParameter = (parameter: string) => {
-	while (true) {
-		const index = parameter.indexOf('=')
-		if (index === -1) break
-
-		const commaIndex = parameter.indexOf(',', index)
-		const bracketIndex = parameter.indexOf('}', index)
-
-		const end =
-			[commaIndex, bracketIndex]
-				.filter((i) => i > 0)
-				.sort((a, b) => a - b)[0] || -1
-
-		if (end === -1) {
-			parameter = parameter.slice(0, index)
-
-			break
-		}
-
-		parameter = parameter.slice(0, index) + parameter.slice(end)
-	}
-
-	return parameter
-		.split(',')
-		.map((i) => i.trim())
-		.join(', ')
-}
-
-export const isContextPassToFunction = (
-	context: string,
-	body: string,
-	inference: Sucrose.Inference
-) => {
-	// ! Function is passed to another function, assume as all is accessed
+	let tokens: ScanToken[] | undefined
 	try {
-		const captureFunction = new RegExp(
-			`\\w\\((?:.*?)?${context}(?:.*?)?\\)`,
-			'gs'
-		)
-		const exactParameter = new RegExp(`${context}(,|\\))`, 'gs')
+		tokens = scanTokens(source)
+	} catch {
+		return null
+	}
 
-		const length = body.length
-		let fn
+	if (!tokens?.length) return null
 
-		fn = captureFunction.exec(body) + ''
-		while (
-			captureFunction.lastIndex !== 0 &&
-			captureFunction.lastIndex < length + (fn ? fn.length : 0)
-		) {
-			if (fn && exactParameter.test(fn)) {
-				inference.query = true
-				inference.headers = true
-				inference.body = true
-				inference.cookie = true
-				inference.set = true
-				inference.server = true
-				inference.url = true
-				inference.route = true
-				inference.path = true
+	const keys = new Set<K>()
 
-				return true
+	let arrow = -1
+	const callableStart = tokens[0].value === 'async' ? 1 : 0
+	if (tokens[callableStart]?.value !== 'function') {
+		let parentheses = 0
+		let brackets = 0
+		let braces = 0
+		for (let i = callableStart; i < tokens.length; i++) {
+			const value = tokens[i].value
+			if (value === '(') parentheses++
+			else if (value === ')') parentheses--
+			else if (value === '[') brackets++
+			else if (value === ']') brackets--
+			else if (value === '{') {
+				if (parentheses === 0 && brackets === 0 && braces === 0) break
+				braces++
+			} else if (value === '}') braces--
+			else if (
+				value === '=>' &&
+				parentheses === 0 &&
+				brackets === 0 &&
+				braces === 0
+			) {
+				arrow = i
+				break
+			}
+		}
+	}
+
+	let parameterStart = -1
+	let parameterEnd = -1
+	let bodyStart = -1
+	if (arrow !== -1) {
+		bodyStart = arrow + 1
+		if (tokens[arrow - 1]?.value === ')') {
+			let depth = 1
+			for (let i = arrow - 2; i >= 0; i--) {
+				if (tokens[i].value === ')') depth++
+				else if (tokens[i].value === '(' && --depth === 0) {
+					parameterStart = i + 1
+					parameterEnd = arrow - 1
+					break
+				}
+			}
+		} else {
+			parameterStart = arrow - 1
+			parameterEnd = arrow
+		}
+	} else {
+		for (let i = 0; i < tokens.length; i++)
+			if (tokens[i].value === '(') {
+				parameterStart = i + 1
+				let depth = 1
+				for (let j = i + 1; j < tokens.length; j++) {
+					if (tokens[j].value === '(') depth++
+					else if (tokens[j].value === ')' && --depth === 0) {
+						parameterEnd = j
+						bodyStart = j + 1
+						break
+					}
+				}
+				break
+			}
+	}
+
+	if (parameterStart < 0 || parameterEnd < parameterStart || bodyStart < 0)
+		return null
+
+	const aliases = new Set<string>()
+	const first = tokens[parameterStart]
+	if (parameterStart === parameterEnd) {
+		// A zero-parameter handler cannot name the context except through
+		// `arguments`, which is handled conservatively in the body scan
+	} else if (first?.k === 'i') aliases.add(first.value)
+	else if (first?.value === '{') {
+		let depth = 0
+		for (let i = parameterStart; i < parameterEnd; i++) {
+			const token = tokens[i]
+			if (token.value === '{') depth++
+			else if (token.value === '}') depth--
+			// later parameters (message body, close code) never carry the context
+			else if (token.value === ',' && depth === 0) break
+			else if (
+				token.value === '[' &&
+				depth === 1 &&
+				(tokens[i - 1]?.value === '{' || tokens[i - 1]?.value === ',')
+			) {
+				const computed = computedDestructuringChannel(
+					tokens,
+					i,
+					channelOf
+				)
+				if (computed === false) return null
+				keys.add(computed)
+			} else if (token.value === '...' && depth === 1) {
+				const rest = tokens[i + 1]
+				if (rest?.k === 'i') aliases.add(rest.value)
+			} else if (token.k === 'i' && depth === 1) {
+				// `ws` is the WS context's self-reference: `({ ws })` binds
+				// the whole context, so channels read through it must count
+				if (
+					token.value === 'ws' &&
+					(tokens[i - 1]?.value === '{' ||
+						tokens[i - 1]?.value === ',')
+				) {
+					const renamed =
+						tokens[i + 1]?.value === ':' &&
+						tokens[i + 2]?.k === 'i'
+							? tokens[i + 2].value
+							: token.value
+					aliases.add(renamed)
+					continue
+				}
+
+				const key = channelOf(token.value)
+				if (key) keys.add(key)
+			}
+		}
+	} else return null
+
+	type Pattern = [channels: Set<false | K>, rest?: string]
+
+	const patterns: Pattern[] = []
+	let closedPattern: Pattern | undefined
+
+	for (let i = bodyStart; i < tokens.length; i++) {
+		const token = tokens[i]
+		if (token.value === '{') {
+			patterns.push([new Set()])
+			closedPattern = undefined
+			continue
+		}
+
+		if (token.value === '}') {
+			closedPattern = patterns.pop()
+			continue
+		}
+
+		if (patterns.length) {
+			const current = patterns[patterns.length - 1]
+			if (
+				token.value === '[' &&
+				(tokens[i - 1]?.value === '{' || tokens[i - 1]?.value === ',')
+			) {
+				const computed = computedDestructuringChannel(
+					tokens,
+					i,
+					channelOf
+				)
+				current[0].add(computed)
+			} else if (token.value === '...' && tokens[i + 1]?.k === 'i')
+				current[1] = tokens[i + 1].value
+			else if (token.k === 'i') {
+				const key = channelOf(token.value)
+				if (key) current[0].add(key)
+			}
+		}
+
+		if (token.value === '=') {
+			const right = tokens[i + 1]
+			let member = i + 2
+			const optional = tokens[member]?.value === '?.'
+			if (optional) member++
+			if (
+				right?.k === 'i' &&
+				aliases.has(right.value) &&
+				tokens[member]?.value !== '.' &&
+				tokens[member]?.value !== '[' &&
+				// without a semicolon, the next statement may start right here
+				(tokens[member]?.k !== 'i' || (strict && !optional))
+			) {
+				const left = tokens[i - 1]
+				if (left?.k === 'i') {
+					if (strict) return null
+					aliases.add(left.value)
+				} else if (left?.value === '}' && closedPattern) {
+					for (const key of closedPattern[0]) {
+						if (key === false) return null
+						keys.add(key)
+					}
+					if (closedPattern[1]) aliases.add(closedPattern[1])
+				}
 			}
 
-			fn = captureFunction.exec(body) + ''
+			continue
 		}
 
-		/*
-		Since JavaScript engine already format the code (removing whitespace, newline, etc.),
-		we can safely assume that the next character is either a closing bracket or a comma
-		if the function is passed to another function
-		*/
-		const nextChar = body.charCodeAt(captureFunction.lastIndex)
+		if (token.k !== 'i') continue
+		if (token.value === 'arguments' || token.value === 'eval') return null
+		if (!aliases.has(token.value)) continue
 
-		if (nextChar === 41 || nextChar === 44) {
-			inference.query = true
-			inference.headers = true
-			inference.body = true
-			inference.cookie = true
-			inference.set = true
-			inference.server = true
-			inference.url = true
-			inference.route = true
-			inference.path = true
+		// template boundaries emit no token: in `tag`${c}`.x` the `.x` is
+		// on the tag's result, and `c` escapes into `tag`
+		if (i + 1 < tokens.length)
+			for (let j = token.at + 1; j < tokens[i + 1].at; j++)
+				if (source.charCodeAt(j) === 96) return null
 
-			return true
+		let next = i + 1
+		if (tokens[next]?.value === '?.') next++
+		if (tokens[next]?.value === '.') next++
+
+		if (tokens[next]?.k === 'i' && next > i + 1) {
+			const key = channelOf(tokens[next].value)
+			if (key) keys.add(key)
+			continue
 		}
 
-		return false
-	} catch (error) {
-		console.log(
-			'[Sucrose] warning: unexpected isContextPassToFunction error, you may continue development as usual but please report the following to maintainers:'
+		if (tokens[next]?.value === '[') {
+			const property = tokens[next + 1]
+			const key = property?.k === 's' && channelOf(property.value)
+			if (!key || tokens[next + 2]?.value !== ']') return null
+
+			keys.add(key)
+			continue
+		}
+
+		if (
+			tokens[i - 1]?.value === '=' &&
+			(tokens[i - 2]?.k === 'i' || tokens[i - 2]?.value === '}')
 		)
-		console.log('--- body ---')
-		console.log(body)
-		console.log('--- context ---')
-		console.log(context)
+			continue
 
-		return true
+		return null
 	}
+
+	return keys
 }
 
-let pendingGC: Timer | undefined
-let caches = <Record<number, Sucrose.Inference>>{}
+// scanned after the handler, in order. `parse` also holds content-type names
+const lifeCycleEvents = [
+	'request',
+	'beforeHandle',
+	'parse',
+	'error',
+	'transform',
+	'afterHandle',
+	'mapResponse',
+	'afterResponse'
+] as const
 
-export const clearSucroseCache = (delay: Sucrose.Settings['gcTime']) => {
-	// Can't setTimeout outside fetch in Cloudflare Worker
-	if (delay === null || isCloudflareWorker()) return
-	if (delay === undefined) delay = 4 * 60 * 1000 + 55 * 1000
+export function sucrose(
+	handler: Handler | undefined,
+	lifeCycle: Sucrose.LifeCycle | undefined
+): Sucrose.Inference {
+	let inference: Sucrose.Inference | undefined
 
-	if (pendingGC) clearTimeout(pendingGC)
+	const events: Handler[] = []
+	if (handler && typeof handler === 'function') events.push(handler)
+	if (lifeCycle)
+		for (const name of lifeCycleEvents) {
+			const array = lifeCycle[name] as Handler[] | undefined
+			if (array)
+				for (let i = 0; i < array.length; i++)
+					if (name !== 'parse' || typeof array[i] === 'function')
+						events.push(array[i])
+		}
 
-	pendingGC = setTimeout(() => {
-		caches = {}
-
-		pendingGC = undefined
-		if (isBun) Bun.gc(false)
-	}, delay)
-
-	pendingGC.unref?.()
-}
-
-export const mergeInference = (a: Sucrose.Inference, b: Sucrose.Inference) => {
-	return {
-		body: a.body || b.body,
-		cookie: a.cookie || b.cookie,
-		headers: a.headers || b.headers,
-		query: a.query || b.query,
-		set: a.set || b.set,
-		server: a.server || b.server,
-		url: a.url || b.url,
-		route: a.route || b.route,
-		path: a.path || b.path
-	}
-}
-
-export const sucrose = (
-	lifeCycle: Sucrose.LifeCycle,
-	inference: Sucrose.Inference = {
-		query: false,
-		headers: false,
-		body: false,
-		cookie: false,
-		set: false,
-		server: false,
-		url: false,
-		route: false,
-		path: false
-	},
-	settings: Sucrose.Settings = {}
-): Sucrose.Inference => {
-	const events = <(Handler | HookContainer)[]>[]
-
-	if (lifeCycle.request?.length) events.push(...lifeCycle.request)
-	if (lifeCycle.beforeHandle?.length) events.push(...lifeCycle.beforeHandle)
-	if (lifeCycle.parse?.length) events.push(...lifeCycle.parse)
-	if (lifeCycle.error?.length) events.push(...lifeCycle.error)
-	if (lifeCycle.transform?.length) events.push(...lifeCycle.transform)
-	if (lifeCycle.afterHandle?.length) events.push(...lifeCycle.afterHandle)
-	if (lifeCycle.mapResponse?.length) events.push(...lifeCycle.mapResponse)
-	if (lifeCycle.afterResponse?.length) events.push(...lifeCycle.afterResponse)
-
-	if (lifeCycle.handler && typeof lifeCycle.handler === 'function')
-		events.push(lifeCycle.handler as Handler)
+	const session = getCompilerSession()
+	const caches = session?.external
+		? (session.sucroseCache as SourceCache)
+		: globalSourceCache
 
 	for (let i = 0; i < events.length; i++) {
-		const e = events[i]
-		if (!e) continue
+		const event = events[i]
+		if (!event) continue
 
-		const event = typeof e === 'object' ? e.fn : e
-
-		// parse can be either a function or string
-		if (typeof event !== 'function') continue
-
-		const content = event.toString()
-		const key = checksum(content)
-		const cachedInference = caches[key]
-		if (cachedInference) {
-			inference = mergeInference(inference, cachedInference)
-			continue
-		}
-
-		// If no sucrose usage is found in 4:55 minutes
-		// it's likely that server is either idle or
-		// no new compilation is happening
-		// Clear the cache to free up memory
-		clearSucroseCache(settings.gcTime)
-
-		const fnInference: Sucrose.Inference = {
-			query: false,
-			headers: false,
-			body: false,
-			cookie: false,
-			set: false,
-			server: false,
-			url: false,
-			route: false,
-			path: false
-		}
-
-		const [parameter, body] = separateFunction(content)
-
-		const rootParameters = findParameterReference(parameter, fnInference)
-		const mainParameter = extractMainParameter(rootParameters)
-
-		if (mainParameter) {
-			const aliases = findAlias(mainParameter, body.slice(1, -1))
-			aliases.splice(0, -1, mainParameter)
-
-			let code = body
-
+		let inferred = functionCaches.get(event as Function)
+		if (!inferred) {
 			if (
-				code.charCodeAt(0) === 123 &&
-				code.charCodeAt(body.length - 1) === 125
-			)
-				code = code.slice(1, -1).trim()
+				typeof event === 'function' &&
+				Object.hasOwn(event, 'toString')
+			) {
+				// An own `toString` is a forged source: the real behavior
+				// cannot be trusted from it, so widen every channel and memo
+				// by identity only, never by content
+				inferred = allAccessed
+			} else {
+				const content = event.toString()
+				const key = fnv1a(content)
+				const cached = caches.get(key)
 
-			if (!isContextPassToFunction(mainParameter, code, fnInference))
-				inferBodyReference(code, aliases, fnInference)
+				if (cached && cached.content === content) {
+					inferred = cached.inference
+					if (caches.size >= DEFAULT_CACHE_LIMIT) {
+						caches.delete(key)
+						caches.set(key, cached)
+					}
+				} else {
+					const channels = inferFunction(content, channel)
+					if (channels) {
+						const fresh = defaultSucrose()
+						for (const c of channels) fresh[c] = true
+						inferred = Object.freeze(fresh)
+					} else inferred = allAccessed
 
-			if (
-				!fnInference.query &&
-				code.includes('return ' + mainParameter + '.query')
-			)
-				fnInference.query = true
+					if (caches.size >= DEFAULT_CACHE_LIMIT)
+						evictOldestHalf(caches)
+
+					caches.set(key, { content, inference: inferred })
+				}
+			}
+
+			if (typeof event === 'function') functionCaches.set(event, inferred)
 		}
 
-		if (!caches[key]) caches[key] = fnInference
+		inference = inference ? mergeInference(inference, inferred) : inferred
 
-		inference = mergeInference(inference, fnInference)
-
-		if (
-			inference.query &&
-			inference.headers &&
-			inference.body &&
-			inference.cookie &&
-			inference.set &&
-			inference.server &&
-			inference.url &&
-			inference.route &&
-			inference.path
-		)
-			break
+		if (isAllAccessed(inference)) break
 	}
 
-	return inference
+	return inference ? Object.freeze(inference) : emptyInference
 }

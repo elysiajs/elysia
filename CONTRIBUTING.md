@@ -16,6 +16,8 @@ To run Elysia locally:
 2. run `bun install` in project's root
 3. Run development with `bun run dev`
 
+Before changing `src/`, read [ARCHITECTURE.md](./ARCHITECTURE.md) for a map of the internals (lifecycle, execution lanes, AOT, gate commands).
+
 ### Unit Testing
 
 All of the test files are located inside the [`test/`](test/) directory. Unit testing are powered by [bun's test](https://github.com/oven-sh/bun/tree/main/packages/bun-internal-test).

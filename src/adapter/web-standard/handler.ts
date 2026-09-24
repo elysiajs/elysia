@@ -1,194 +1,242 @@
-/* eslint-disable sonarjs/no-nested-switch */
-/* eslint-disable sonarjs/no-duplicate-string */
 import {
 	createResponseHandler,
 	createStreamHandler,
 	handleFile,
-	handleSet
+	handleSet,
+	materializeSetHeaders
 } from '../utils'
 
-import { ElysiaFile, mime } from '../../universal/file'
-import { isNotEmpty } from '../../utils'
-import { Cookie } from '../../cookies'
-import { ElysiaCustomStatusResponse } from '../../error'
+import { isBun } from '../../universal/constants'
+import { isProduction } from '../../universal/is-production'
+import { ElysiaFile } from '../../universal/file'
+import { Cookie } from '../../cookie/cookie'
+import {
+	formToFormData,
+	isElysiaForm,
+	isNotEmpty,
+	nullObject
+} from '../../utils'
+import {
+	ElysiaStatus,
+	internalServerErrorBody,
+	PROBLEM_JSON
+} from '../../error'
 
+import { defaultHeaders } from '../default-headers'
 import type { Context } from '../../context'
-import type { AnyLocalHook, MaybePromise } from '../../types'
+import type { MaybePromise } from '../../types'
 
-const handleElysiaFile = (
+const textPlainInit = {
+	headers: { 'content-type': 'text/plain' }
+} as const
+
+function handleElysiaFile(
 	file: ElysiaFile,
 	set: Context['set'] = {
-		headers: {}
+		headers: nullObject()
 	},
 	request?: Request
-) => {
-	const path = file.path
-	const contentType =
-		mime[path.slice(path.lastIndexOf('.') + 1) as any as keyof typeof mime]
+) {
+	const contentType = file.type
 
-	if (contentType) set.headers['content-type'] = contentType
+	const headers = materializeSetHeaders(set)
+	// unknown extension: keep the user's or the runtime's content-type
+	if (contentType !== 'application/octet-stream')
+		headers['content-type'] = contentType
 
-	if (
-		file.stats &&
-		set.status !== 206 &&
-		set.status !== 304 &&
-		set.status !== 412 &&
-		set.status !== 416
-	)
-		return file.stats!.then((stat) => {
+	const stats = file.stats
+	if (stats)
+		return stats.then((stat) => {
 			const size = stat.size as number
 
-			if (size !== undefined) {
-				set.headers['content-range'] = `bytes 0-${size - 1}/${size}`
-				set.headers['content-length'] = size
+			if (
+				size !== undefined &&
+				set.status !== 206 &&
+				set.status !== 304 &&
+				set.status !== 412 &&
+				set.status !== 416
+			) {
+				headers['content-length'] = size
 			}
 
-			return handleFile(file.value as any, set, request)
+			return handleFile(file, set, request, size)
 		}) as any
 
 	return handleFile(file.value as any, set, request)
 }
 
-export const mapResponse = (
+function responseTag(response: unknown) {
+	if (response == null) return
+
+	const constructor = Object.getPrototypeOf(response)?.constructor
+	// a generator's `constructor` is non-callable and already reaches `mapFallback`
+	if (typeof constructor !== 'function')
+		// @ts-expect-error
+		return typeof response.next === 'function' ? '' : undefined
+
+	return constructor.name
+}
+
+function mapResponseWithSet(
 	response: unknown,
 	set: Context['set'],
-	request?: Request
-): Response => {
-	if (isNotEmpty(set.headers) || set.status !== 200 || set.cookie) {
-		handleSet(set)
+	request?: Request,
+	owned?: boolean
+): Response {
+	handleSet(set)
+	const headers = set.headers
 
-		switch (response?.constructor?.name) {
-			case 'String':
-				if (!set.headers['content-type'])
-					set.headers['content-type'] = 'text/plain'
+	// A body with a null-body status is a TypeError per the Fetch spec (Node,
+	// Deno, workerd); only Bun accepts it. Serve what the status allows
+	// instead of a 500, a returned `status()` carries its own status
+	if (
+		!isBun &&
+		(set.status === 204 || set.status === 304 || set.status === 205) &&
+		!(response instanceof Response) &&
+		!(response instanceof ElysiaStatus)
+	)
+		return new Response(null, set as ResponseInit)
 
-				return new Response(response as string, set as any)
+	switch (responseTag(response)) {
+		case 'String':
+			if (!isBun && !headers['content-type'])
+				materializeSetHeaders(set)['content-type'] = 'text/plain'
 
-			case 'Array':
-			case 'Object':
-				if (!set.headers['content-type'])
-					set.headers['content-type'] = 'application/json'
+			return new Response(response as string, set as ResponseInit)
 
-				return new Response(JSON.stringify(response), set as any)
+		case 'Array':
+			return Response.json(response, set as ResponseInit)
 
-			case 'ElysiaFile':
-				return handleElysiaFile(response as ElysiaFile, set, request)
+		case 'ElysiaForm':
+			return new Response(
+				formToFormData(response as Record<string, unknown>),
+				set as ResponseInit
+			)
 
-			case 'File':
-				return handleFile(response as File, set, request)
-
-			case 'Blob':
-				return handleFile(response as Blob, set, request)
-
-			case 'ElysiaCustomStatusResponse':
-				set.status = (response as ElysiaCustomStatusResponse<200>).code
-
-				return mapResponse(
-					(response as ElysiaCustomStatusResponse<200>).response,
+		case 'Object':
+			// @ts-expect-error
+			if (typeof response?.next === 'function')
+				return handleStream(
+					response as any,
 					set,
-					request
-				)
-
-			case undefined:
-				if (!response) return new Response('', set as any)
-
-				return new Response(JSON.stringify(response), set as any)
-
-			case 'Response':
-				return handleResponse(response as Response, set, request)
-
-			case 'Error':
-				return errorToResponse(response as Error, set)
-
-			case 'Promise':
-				return (response as Promise<any>).then((x) =>
-					mapResponse(x, set, request)
+					request,
+					undefined,
+					owned
 				) as any
 
-			case 'Function':
-				return mapResponse((response as Function)(), set, request)
+			return Response.json(response, set as ResponseInit)
 
-			case 'Number':
-			case 'Boolean':
-				return new Response(
-					(response as number | boolean).toString(),
-					set as any
-				)
+		case 'Number':
+		case 'Boolean':
+			return new Response(String(response), set as ResponseInit)
 
-			case 'Cookie':
-				if (response instanceof Cookie)
-					return new Response(response.value, set as any)
+		case 'ElysiaFile':
+			return handleElysiaFile(response as ElysiaFile, set, request)
 
-				return new Response(response?.toString(), set as any)
+		case 'File':
+		case 'Blob':
+			return handleFile(response as Blob, set, request)
 
-			case 'FormData':
-				return new Response(response as FormData, set as any)
+		case 'ElysiaStatus':
+			return withStatus(
+				response as ElysiaStatus<200>,
+				set,
+				request,
+				owned
+			)
 
-			default:
-				// recheck Response, Promise, Error because some library may extends Response
-				if (response instanceof Response)
-					return handleResponse(response as Response, set, request)
+		case undefined:
+			return response
+				? Response.json(response, set as ResponseInit)
+				: new Response(null, set as ResponseInit)
 
-				if (response instanceof Promise)
-					return response.then((x) => mapResponse(x, set)) as any
+		case 'Response':
+			return handleResponse(response as Response, set, request, owned)
 
-				if (response instanceof Error)
-					return errorToResponse(response as Error, set)
+		case 'Error':
+			return errorToResponse(response as Error, set, request, owned)
 
-				if (response instanceof ElysiaCustomStatusResponse) {
-					set.status = (
-						response as ElysiaCustomStatusResponse<200>
-					).code
+		case 'Promise':
+			return (response as Promise<any>).then((x) =>
+				mapResponseWithSet(x, set, request, owned)
+			) as any
 
-					return mapResponse(
-						(response as ElysiaCustomStatusResponse<200>).response,
-						set,
-						request
-					)
-				}
+		case 'Function':
+			return mapResponseWithSet(
+				(response as Function)(),
+				set,
+				request,
+				owned
+			)
 
-				if (
-					// @ts-expect-error
-					typeof response?.next === 'function' ||
-					response instanceof ReadableStream
-				)
-					return handleStream(response as any, set, request) as any
+		case 'FormData':
+			return new Response(response as FormData, set as ResponseInit)
 
-				if (typeof (response as Promise<unknown>)?.then === 'function')
-					return (response as Promise<unknown>).then((x) =>
-						mapResponse(x, set)
-					) as any
-
-				// custom class with an array-like value
-				// eg. Bun.sql`` result
-				if (Array.isArray(response))
-					return new Response(JSON.stringify(response), {
-						headers: {
-							'Content-Type': 'application/json'
-						}
-					}) as any
-
-				// @ts-expect-error
-				if (typeof response?.toResponse === 'function')
-					return mapResponse((response as any).toResponse(), set)
-
-				if ('charCodeAt' in (response as any)) {
-					const code = (response as any).charCodeAt(0)
-
-					if (code === 123 || code === 91) {
-						if (!set.headers['Content-Type'])
-							set.headers['Content-Type'] = 'application/json'
-
-						return new Response(
-							JSON.stringify(response),
-							set as any
-						) as any
-					}
-				}
-
-				return new Response(response as any, set as any)
-		}
+		default:
+			return mapFallback(response, set, request, owned) as Response
 	}
+}
+
+function withStatus(
+	response: ElysiaStatus<any, any>,
+	set: Context['set'] | undefined,
+	request?: Request,
+	owned?: boolean
+) {
+	if (set) set.status = response.status
+	else
+		set = {
+			status: response.status,
+			headers: nullObject()
+		} as Context['set']
+
+	if (response.headers)
+		Object.assign(materializeSetHeaders(set), response.headers)
+
+	return mapResponseWithSet(response.response, set, request, owned)
+}
+
+// Keep this constant so production builds can remove the check.
+const checkRemovedSetRedirect = !isProduction()
+
+export function mapResponse(
+	response: unknown,
+	set: Context['set'],
+	request?: Request,
+	owned?: boolean
+): Response {
+	if (
+		checkRemovedSetRedirect &&
+		Object.hasOwn(set, 'redirect') &&
+		!isProduction()
+	) {
+		delete (set as any).redirect
+		throw new Error(
+			'[Elysia] set.redirect was removed in 2.0 — return redirect(url) instead'
+		)
+	}
+
+	const headers = set.headers
+	if (
+		set.status !== undefined ||
+		set.cookie ||
+		(headers as any)[defaultHeaders] === headers ||
+		isNotEmpty(headers)
+	)
+		return mapResponseWithSet(response, set, request, owned)
+
+	if (response instanceof ElysiaStatus)
+		return withStatus(response, set, request, owned)
+
+	if (response instanceof Response)
+		return owned
+			? handleResponse(response, undefined, request, true)
+			: response
+
+	if (response instanceof Promise)
+		return (response as Promise<any>).then((x) =>
+			mapResponse(x, set, request, owned)
+		) as any
 
 	// Stream response defers a 'set' API, assume that it may include 'set'
 	if (
@@ -196,467 +244,198 @@ export const mapResponse = (
 		typeof response?.next === 'function' ||
 		response instanceof ReadableStream
 	)
-		return handleStream(response as any, set, request) as any
+		return handleStream(
+			response as any,
+			set,
+			request,
+			undefined,
+			owned
+		) as any
 
-	return mapCompactResponse(response, request)
+	return mapCompactResponse(response, request, owned)
 }
 
-export const mapEarlyResponse = (
+const textHeaders = isBun ? undefined : textPlainInit
+
+export function mapCompactResponse(
 	response: unknown,
-	set: Context['set'],
-	request?: Request
-): Response | undefined => {
-	if (response === undefined || response === null) return
-
-	if (isNotEmpty(set.headers) || set.status !== 200 || set.cookie) {
-		handleSet(set)
-
-		switch (response?.constructor?.name) {
-			case 'String':
-				if (!set.headers['content-type'])
-					set.headers['content-type'] = 'text/plain'
-
-				return new Response(response as string, set as any)
-
-			case 'Array':
-			case 'Object':
-				if (!set.headers['content-type'])
-					set.headers['content-type'] = 'application/json'
-
-				return new Response(JSON.stringify(response), set as any)
-
-			case 'ElysiaFile':
-				return handleElysiaFile(response as ElysiaFile, set, request)
-
-			case 'File':
-				return handleFile(response as File, set, request)
-
-			case 'Blob':
-				return handleFile(response as File | Blob, set, request)
-
-			case 'ElysiaCustomStatusResponse':
-				set.status = (response as ElysiaCustomStatusResponse<200>).code
-
-				return mapEarlyResponse(
-					(response as ElysiaCustomStatusResponse<200>).response,
-					set,
-					request
-				)
-
-			case undefined:
-				if (!response) return
-
-				return new Response(JSON.stringify(response), set as any)
-
-			case 'Response':
-				return handleResponse(response as Response, set, request)
-
-			case 'Promise':
-				return (response as Promise<unknown>).then((x) =>
-					mapEarlyResponse(x, set)
-				) as any
-
-			case 'Error':
-				return errorToResponse(response as Error, set)
-
-			case 'Function':
-				return mapEarlyResponse((response as Function)(), set)
-
-			case 'Number':
-			case 'Boolean':
-				return new Response(
-					(response as number | boolean).toString(),
-					set as any
-				)
-
-			case 'FormData':
-				return new Response(response as FormData)
-
-			case 'Cookie':
-				if (response instanceof Cookie)
-					return new Response(response.value, set as any)
-
-				return new Response(response?.toString(), set as any)
-
-			default:
-				if (response instanceof Response)
-					return handleResponse(response, set, request)
-
-				if (response instanceof Promise)
-					return response.then((x) => mapEarlyResponse(x, set)) as any
-
-				if (response instanceof Error)
-					return errorToResponse(response as Error, set)
-
-				if (response instanceof ElysiaCustomStatusResponse) {
-					set.status = (
-						response as ElysiaCustomStatusResponse<200>
-					).code
-
-					return mapEarlyResponse(
-						(response as ElysiaCustomStatusResponse<200>).response,
-						set,
-						request
-					)
-				}
-
-				if (
-					// @ts-expect-error
-					typeof response?.next === 'function' ||
-					response instanceof ReadableStream
-				)
-					return handleStream(response as any, set, request) as any
-
-				if (typeof (response as Promise<unknown>)?.then === 'function')
-					return (response as Promise<unknown>).then((x) =>
-						mapEarlyResponse(x, set)
-					) as any
-
-				// @ts-expect-error
-				if (typeof response?.toResponse === 'function')
-					return mapEarlyResponse((response as any).toResponse(), set)
-
-				// custom class with an array-like value
-				// eg. Bun.sql`` result
-				if (Array.isArray(response))
-					return new Response(JSON.stringify(response), {
-						headers: {
-							'Content-Type': 'application/json'
-						}
-					}) as any
-
-				if ('charCodeAt' in (response as any)) {
-					const code = (response as any).charCodeAt(0)
-
-					if (code === 123 || code === 91) {
-						if (!set.headers['Content-Type'])
-							set.headers['Content-Type'] = 'application/json'
-
-						return new Response(
-							JSON.stringify(response),
-							set as any
-						) as any
-					}
-				}
-
-				return new Response(response as any, set as any)
-		}
-	} else
-		switch (response?.constructor?.name) {
-			case 'String':
-				if (!set.headers['content-type'])
-					set.headers['content-type'] = 'text/plain'
-
-				return new Response(response as string)
-
-			case 'Array':
-			case 'Object':
-				if (!set.headers['content-type'])
-					set.headers['content-type'] = 'application/json'
-
-				return new Response(JSON.stringify(response), set as any)
-
-			case 'ElysiaFile':
-				return handleElysiaFile(response as ElysiaFile, set, request)
-
-			case 'File':
-				return handleFile(response as File, set, request)
-
-			case 'Blob':
-				return handleFile(response as File | Blob, set, request)
-
-			case 'ElysiaCustomStatusResponse':
-				set.status = (response as ElysiaCustomStatusResponse<200>).code
-
-				return mapEarlyResponse(
-					(response as ElysiaCustomStatusResponse<200>).response,
-					set,
-					request
-				)
-
-			case undefined:
-				if (!response) return new Response('')
-
-				return new Response(JSON.stringify(response), {
-					headers: {
-						'content-type': 'application/json'
-					}
-				})
-
-			case 'Response':
-				return response as Response
-
-			case 'Promise':
-				return (response as Promise<unknown>).then((x) => {
-					const r = mapEarlyResponse(x, set)
-					if (r !== undefined) return r
-				}) as any
-
-			case 'Error':
-				return errorToResponse(response as Error, set)
-
-			case 'Function':
-				return mapCompactResponse((response as Function)(), request)
-
-			case 'Number':
-			case 'Boolean':
-				return new Response((response as number | boolean).toString())
-
-			case 'Cookie':
-				if (response instanceof Cookie)
-					return new Response(response.value, set as any)
-
-				return new Response(response?.toString(), set as any)
-
-			case 'FormData':
-				return new Response(response as FormData)
-
-			default:
-				if (response instanceof Response) return response
-
-				if (response instanceof Promise)
-					return response.then((x) => mapEarlyResponse(x, set)) as any
-
-				if (response instanceof Error)
-					return errorToResponse(response as Error, set)
-
-				if (response instanceof ElysiaCustomStatusResponse) {
-					set.status = (
-						response as ElysiaCustomStatusResponse<200>
-					).code
-
-					return mapEarlyResponse(
-						(response as ElysiaCustomStatusResponse<200>).response,
-						set,
-						request
-					)
-				}
-
-				if (
-					// @ts-expect-error
-					typeof response?.next === 'function' ||
-					response instanceof ReadableStream
-				)
-					return handleStream(response as any, set, request) as any
-
-				if (typeof (response as Promise<unknown>)?.then === 'function')
-					return (response as Promise<unknown>).then((x) =>
-						mapEarlyResponse(x, set)
-					) as any
-
-				// @ts-expect-error
-				if (typeof response?.toResponse === 'function')
-					return mapEarlyResponse((response as any).toResponse(), set)
-
-				// custom class with an array-like value
-				// eg. Bun.sql`` result
-				if (Array.isArray(response))
-					return new Response(JSON.stringify(response), {
-						headers: {
-							'Content-Type': 'application/json'
-						}
-					}) as any
-
-				if ('charCodeAt' in (response as any)) {
-					const code = (response as any).charCodeAt(0)
-
-					if (code === 123 || code === 91) {
-						if (!set.headers['Content-Type'])
-							set.headers['Content-Type'] = 'application/json'
-
-						return new Response(
-							JSON.stringify(response),
-							set as any
-						) as any
-					}
-				}
-
-				return new Response(response as any)
-		}
-}
-
-export const mapCompactResponse = (
-	response: unknown,
-	request?: Request
-): Response => {
-	switch (response?.constructor?.name) {
+	request?: Request,
+	owned?: boolean
+): Response {
+	switch (responseTag(response)) {
 		case 'String':
-			return new Response(response as string, {
-				headers: {
-					'Content-Type': 'text/plain'
-				}
-			})
+			return new Response(response as string, textHeaders)
+
+		case 'Array':
+			return Response.json(response)
+
+		case 'ElysiaForm':
+			return new Response(
+				formToFormData(response as Record<string, unknown>)
+			)
 
 		case 'Object':
-		case 'Array':
-			return new Response(JSON.stringify(response), {
-				headers: {
-					'Content-Type': 'application/json'
-				}
-			})
+			return Response.json(response)
+
+		case 'Number':
+		case 'Boolean':
+			return new Response(String(response))
 
 		case 'ElysiaFile':
 			return handleElysiaFile(response as ElysiaFile, undefined, request)
 
 		case 'File':
+		case 'Blob':
 			return handleFile(response as File, undefined, request)
 
-		case 'Blob':
-			return handleFile(response as File | Blob, undefined, request)
-
-		case 'ElysiaCustomStatusResponse':
-			return mapResponse(
-				(response as ElysiaCustomStatusResponse<200>).response,
-				{
-					status: (response as ElysiaCustomStatusResponse<200>).code,
-					headers: {}
-				}
+		case 'ElysiaStatus':
+			return withStatus(
+				response as ElysiaStatus<200>,
+				undefined,
+				request,
+				owned
 			)
 
 		case undefined:
-			if (!response) return new Response('')
-
-			return new Response(JSON.stringify(response), {
-				headers: {
-					'content-type': 'application/json'
-				}
-			})
+			return response ? Response.json(response) : new Response('')
 
 		case 'Response':
-			return response as Response
+			return owned
+				? handleResponse(response as Response, undefined, request, true)
+				: (response as Response)
 
 		case 'Error':
-			return errorToResponse(response as Error)
+			return errorToResponse(response as Error, undefined, request, owned)
 
 		case 'Promise':
 			return (response as any as Promise<unknown>).then((x) =>
-				mapCompactResponse(x, request)
+				mapCompactResponse(x, request, owned)
 			) as any
 
 		// ? Maybe response or Blob
 		case 'Function':
-			return mapCompactResponse((response as Function)(), request)
-
-		case 'Number':
-		case 'Boolean':
-			return new Response((response as number | boolean).toString())
+			return mapCompactResponse((response as Function)(), request, owned)
 
 		case 'FormData':
 			return new Response(response as FormData)
 
 		default:
-			if (response instanceof Response) return response
-
-			if (response instanceof Promise)
-				return response.then((x) =>
-					mapCompactResponse(x, request)
-				) as any
-
-			if (response instanceof Error)
-				return errorToResponse(response as Error)
-
-			if (response instanceof ElysiaCustomStatusResponse)
-				return mapResponse(
-					(response as ElysiaCustomStatusResponse<200>).response,
-					{
-						status: (response as ElysiaCustomStatusResponse<200>)
-							.code,
-						headers: {}
-					}
-				)
-
-			if (
-				// @ts-expect-error
-				typeof response?.next === 'function' ||
-				response instanceof ReadableStream
-			)
-				return handleStream(response as any, undefined, request) as any
-
-			if (typeof (response as Promise<unknown>)?.then === 'function')
-				return (response as Promise<unknown>).then((x) =>
-					mapCompactResponse(x, request)
-				) as any
-
-			// @ts-expect-error
-			if (typeof response?.toResponse === 'function')
-				return mapCompactResponse((response as any).toResponse())
-
-			// custom class with an array-like value
-			// eg. Bun.sql`` result
-			if (Array.isArray(response))
-				return new Response(JSON.stringify(response), {
-					headers: {
-						'Content-Type': 'application/json'
-					}
-				}) as any
-
-			if ('charCodeAt' in (response as any)) {
-				const code = (response as any).charCodeAt(0)
-
-				if (code === 123 || code === 91) {
-					return new Response(JSON.stringify(response), {
-						headers: {
-							'Content-Type': 'application/json'
-						}
-					}) as any
-				}
-			}
-
-			return new Response(response as any)
+			return mapFallback(response, undefined, request, owned) as Response
 	}
 }
 
-export const errorToResponse = (
+export function errorToResponse(
 	error: Error & { toResponse?(): MaybePromise<Response> },
-	set?: Context['set']
-) => {
-	if (typeof error?.toResponse === 'function') {
-		const raw = error.toResponse()
-		const targetSet =
-			set ??
-			({ headers: {}, status: 200, redirect: '' } as Context['set'])
+	set?: Context['set'],
+	request?: Request,
+	owned = false
+) {
+	if (error?.toResponse) {
+		const targetSet = set ?? ({ headers: nullObject() } as Context['set'])
 
 		const apply = (resolved: unknown) => {
 			if (resolved instanceof Response) targetSet.status = resolved.status
-			return mapResponse(resolved, targetSet)
+			return mapResponse(resolved, targetSet, request, owned)
 		}
+
+		const raw = error.toResponse()
 
 		// @ts-ignore
 		return typeof raw?.then === 'function' ? raw.then(apply) : apply(raw)
 	}
 
-	return new Response(
-		JSON.stringify({
-			name: error?.name,
-			message: error?.message,
-			cause: error?.cause
-		}),
-		{
-			status:
-				set?.status !== 200 ? ((set?.status as number) ?? 500) : 500,
-			headers: set?.headers as any
-		}
-	)
+	const status =
+		set?.status && set.status !== 200 ? (set.status as number) : 500
+
+	const body = internalServerErrorBody(error)
+	body.status = status
+
+	const headers = (set ? materializeSetHeaders(set) : nullObject()) as Record<
+		string,
+		string
+	>
+	headers['content-type'] = PROBLEM_JSON
+
+	return new Response(JSON.stringify(body), { status, headers })
 }
 
-export const createStaticHandler = (
-	handle: unknown,
-	hooks: Partial<AnyLocalHook>,
-	setHeaders: Context['set']['headers'] = {}
-): (() => Response) | undefined => {
-	if (typeof handle === 'function') return
+function mapFallback(
+	response: unknown,
+	set?: Context['set'],
+	request?: Request,
+	owned = false
+): Response | undefined {
+	// recheck Response, Promise, Error because some library may extends Response
+	if (response instanceof Response)
+		return handleResponse(response, set, request, owned)
 
-	const response = mapResponse(handle, {
-		headers: setHeaders
-	})
+	if (response instanceof Error)
+		return errorToResponse(response as Error, set, request, owned)
+
+	if (response instanceof ElysiaStatus) {
+		// Spread, not withStatus: once >= 2 cookies turn set.headers into a
+		// Headers instance, withStatus drops the status headers, this drops
+		// set.headers instead (reached by subclasses and minified class names)
+		if (set && response.headers) {
+			set.status = response.status
+			set.headers = { ...set.headers, ...response.headers }
+			return mapResponse(response.response, set, request, owned)
+		}
+
+		return withStatus(response, set, request, owned)
+	}
+
+	if (response instanceof ElysiaFile)
+		return handleElysiaFile(response as ElysiaFile, set, request)
+
+	if (isElysiaForm(response))
+		return new Response(
+			formToFormData(response as Record<string, unknown>),
+			set as ResponseInit
+		)
 
 	if (
-		!hooks.parse?.length &&
-		!hooks.transform?.length &&
-		!hooks.beforeHandle?.length &&
-		!hooks.afterHandle?.length
+		// @ts-expect-error
+		typeof response?.next === 'function' ||
+		response instanceof ReadableStream
 	)
-		return () => response.clone() as Response
+		return handleStream(
+			response as any,
+			set,
+			request,
+			undefined,
+			owned
+		) as any
+
+	if (typeof (response as Promise<unknown>)?.then === 'function')
+		return (response as Promise<unknown>).then((x) =>
+			remap(x, set, request, owned)
+		) as any
+
+	// custom class with an array-like value
+	// eg. Bun.sql`` result
+	if (Array.isArray(response))
+		return Response.json(response, set as ResponseInit) as any
+
+	// @ts-expect-error
+	if (typeof response?.toResponse === 'function')
+		return remap((response as any).toResponse(), set, request, owned)
+
+	if (responseTag(response) === 'Cookie' && Cookie.isCookie(response))
+		return remap((response as any).value, set, request, owned)
+
+	return new Response(response as any, set as ResponseInit)
+}
+
+function remap(
+	response: unknown,
+	set: Context['set'] | undefined,
+	request?: Request,
+	owned?: boolean
+) {
+	return set
+		? mapResponse(response, set, request, owned)
+		: mapCompactResponse(response, request, owned)
 }
 
 const handleResponse = createResponseHandler({
