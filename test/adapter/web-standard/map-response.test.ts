@@ -3,7 +3,16 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { Elysia, ElysiaFile, file, form, redirect, status } from '../../../src'
+import {
+	Elysia,
+	ElysiaFile,
+	file,
+	form,
+	redirect,
+	status,
+	t
+} from '../../../src'
+import { WebStandardAdapter } from '../../../src/adapter/web-standard'
 
 import { mapResponse } from '../../../src/adapter/web-standard/handler'
 import { Passthrough } from './utils'
@@ -131,6 +140,39 @@ describe('supported subclass response metadata', () => {
 			expect(responses).toEqual(
 				['cold', 'warm'].map((phase) => ({ phase, ...expected }))
 			)
+		}
+	)
+
+	// A static value on a route that exposes it to afterHandle/mapResponse is
+	// isolated per request with structuredClone. That drops the class, so a
+	// file (or a subclass) was served as JSON `{"path": …}`, leaking the
+	// server path. A response schema keeps the value unprepared on every
+	// runtime; non-Bun runtimes never prepare a file (see the Node smoke test)
+	it.each(
+		(['ordinary', 'subclass'] as const).flatMap((kind) =>
+			(['afterHandle', 'mapResponse'] as const).map((hook) => ({
+				kind,
+				hook
+			}))
+		)
+	)(
+		'serves a static $kind file with $hook as the file',
+		async ({ kind, hook }) => {
+			const value =
+				kind === 'ordinary'
+					? new ElysiaFile(fixture)
+					: new OtherFile(fixture)
+			const app = new Elysia({ adapter: WebStandardAdapter })
+				[hook]('global', () => {})
+				.get('/', { response: t.Any() }, value)
+
+			for (let i = 0; i < 2; i++) {
+				const response = await app.handle(
+					new Request('http://localhost/')
+				)
+				expect(response.headers.get('content-type')).toBe('text/plain')
+				await expect(response.text()).resolves.toBe(content)
+			}
 		}
 	)
 })

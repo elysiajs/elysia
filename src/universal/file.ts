@@ -115,6 +115,14 @@ export class ElysiaFile {
 		}
 	}
 
+	/**
+	 * Brand check on the private field: true for subclasses, and unlike
+	 * `instanceof` it never walks the prototype chain, so no user trap runs
+	 */
+	static isElysiaFile(value: unknown): value is ElysiaFile {
+		return typeof value === 'object' && value !== null && #value in value
+	}
+
 	get stats() {
 		if (isBun || !stat) return
 

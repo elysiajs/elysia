@@ -176,4 +176,100 @@ describe('resources outlive a returned ReadableStream', () => {
 			new Uint8Array([1, 2])
 		)
 	})
+
+	// A stream the route itself will never send (an abort exit after the
+	// handler returned it) must be stopped: the observer cleanup waits on
+	// otherwise parks at tee's cap forever, so derive dispose / defer /
+	// afterResponse and the source's own cancel never run.
+	//
+	// Known gap, deliberately NOT stopped: a stream a throwing afterHandle /
+	// mapResponse leaves behind. The error hook may still serve the saved
+	// `responseValue` (pinned below), and nothing can tell that from a discard
+	// before the error pipeline has chosen its response
+	const endless = (log: string[]) =>
+		new ReadableStream({
+			pull(controller) {
+				controller.enqueue('x')
+			},
+			cancel() {
+				log.push('cancel')
+			}
+		})
+
+	const disposable = (log: string[]) => ({
+		db: {
+			[Symbol.dispose]() {
+				log.push('dispose')
+			}
+		}
+	})
+
+	it('releases an endless stream when the request aborts before it is sent', async () => {
+		const log: string[] = []
+		const controller = new AbortController()
+		const app = new Elysia()
+			.derive(() => disposable(log))
+			.get('/csv', async () => {
+				controller.abort()
+				await Bun.sleep(1)
+
+				return endless(log)
+			})
+
+		await app.handle(
+			new Request('http://localhost/csv', { signal: controller.signal })
+		)
+		await Bun.sleep(10)
+		expect(log).toEqual(['cancel', 'dispose'])
+	})
+
+	it('keeps a stream an error hook recovers from responseValue', async () => {
+		const log: string[] = []
+		let saved: unknown
+		const app = new Elysia()
+			.error(({ status }) => status(200, saved as any))
+			.afterResponse(() => {
+				log.push('afterResponse')
+			})
+			.afterHandle(({ responseValue }) => {
+				saved = responseValue
+			})
+			.afterHandle(() => {
+				throw new Error('recover')
+			})
+			.get('/', async function* () {
+				try {
+					yield 'kept'
+				} finally {
+					log.push('finally')
+				}
+			})
+
+		const res = await app.handle(new Request('http://localhost/'))
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('kept')
+		await Bun.sleep(10)
+		expect(log).toEqual(['finally', 'afterResponse'])
+	})
+
+	// Replacement is not a discard: a hook may still consume responseValue
+	it('keeps a long stream a mapResponse hook wraps', async () => {
+		const log: string[] = []
+		const app = new Elysia()
+			.afterResponse(() => {
+				log.push('afterResponse')
+			})
+			.mapResponse(
+				({ responseValue }) =>
+					new Response((ReadableStream as any).from(responseValue))
+			)
+			.get('/gen', function* () {
+				for (let i = 0; i < 200; i++) yield 'x'
+			})
+
+		const res = await app.handle(new Request('http://localhost/gen'))
+		expect((await res.text()).length).toBe(200)
+		await Bun.sleep(10)
+		expect(log).toEqual(['afterResponse'])
+	})
 })

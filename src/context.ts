@@ -168,6 +168,10 @@ interface ContextBase<
 		 * Use `Context.cookie` instead
 		 */
 		cookie?: Record<string, BaseCookie>
+		/**
+		 * @deprecated Removed in 2.0, return `redirect(url)` instead
+		 */
+		redirect?: never
 	}
 
 	status: {} extends Route['response']
@@ -316,6 +320,10 @@ export type PreContext<
 		set: {
 			headers: HTTPHeaders
 			status?: number
+			/**
+			 * @deprecated Removed in 2.0, return `redirect(url)` instead
+			 */
+			redirect?: never
 		}
 
 		status: typeof status

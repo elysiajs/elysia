@@ -4,6 +4,7 @@ import type { ElysiaAdapter } from '../../adapter'
 import { defaultAdapter } from '../../adapter/constants'
 import { mapResponse } from '../../adapter/web-standard/handler'
 import { ElysiaFile } from '../../universal/file'
+import { ElysiaStatus } from '../../error'
 import { isBun } from '../../universal/constants'
 
 import { Capture, Compiled } from '../aot'
@@ -353,10 +354,14 @@ function mapStaticValue(
 
 	if (!(mapped instanceof Response)) return
 
+	// Bun infers a string body's MIME only on the wire, and a per-request merge
+	// re-wraps the body as a stream (octet-stream), so state it, also inside
+	// a `status()` wrapper
+	const body = value instanceof ElysiaStatus ? value.response : value
 	if (
-		(typeof value === 'string' ||
-			typeof value === 'number' ||
-			typeof value === 'boolean') &&
+		(typeof body === 'string' ||
+			typeof body === 'number' ||
+			typeof body === 'boolean') &&
 		!mapped.headers.has('content-type')
 	)
 		mapped.headers.set('content-type', 'text/plain;charset=utf-8')

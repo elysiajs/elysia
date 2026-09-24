@@ -1261,27 +1261,6 @@ export const markSingletons = (
 	}
 }
 
-const disposedDecorators = new WeakSet<object>()
-
-export const disposeDecorators = async (app: {
-	'~ext'?: { disposable?: unknown[] }
-}) => {
-	const values = app['~ext']?.disposable
-	if (!values?.length) return
-
-	const stack = new AsyncDisposableStack()
-
-	for (let i = 0; i < values.length; i++) {
-		const value = values[i] as object
-		if (disposedDecorators.has(value)) continue
-		disposedDecorators.add(value)
-
-		if (isDisposable(value)) stack.use(value as Disposable)
-	}
-
-	await stack.disposeAsync()
-}
-
 export const isSocketQuiet = (socket: {
 	readyState: number
 	data: { inflight?: number; opening?: unknown; settling?: number }

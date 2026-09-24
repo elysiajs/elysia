@@ -266,7 +266,10 @@ describe('Modules', () => {
 		}
 	)
 
-	it('restores an already-compiled captured route when the final async rebuild fails', async () => {
+	// Nothing is built while a plugin is pending, so a captured early fetch
+	// cannot keep serving a stale compiled slot: when the final rebuild fails
+	// it fails loud, the same way a fresh app.handle() does
+	it('fails a captured early fetch loud when the final async rebuild fails', async () => {
 		let resolvePlugin!: (plugin: (app: Elysia) => Elysia) => void
 		const plugin = new Promise<(app: Elysia) => Elysia>((resolve) => {
 			resolvePlugin = resolve
@@ -279,12 +282,10 @@ describe('Modules', () => {
 			)
 			.use(plugin)
 
-		// Successful drain clears compiled slots to refresh response modes. If the
-		// rebuild fails, an already-compiled slot must remain usable through the
-		// older captured dispatch thunk.
 		const captured = app.fetch
-		const before = await captured(new Request('http://e.ly/stable/1'))
-		await expect(before.text()).resolves.toBe('1')
+		const early = Promise.resolve(
+			captured(new Request('http://e.ly/stable/1'))
+		)
 
 		resolvePlugin((app) =>
 			app.macro({
@@ -294,9 +295,15 @@ describe('Modules', () => {
 		const [modules] = await Promise.allSettled([app.modules])
 		expect(modules.status).toBe('rejected')
 
-		const after = await captured(new Request('http://e.ly/stable/2'))
-		expect(after.status).toBe(200)
-		await expect(after.text()).resolves.toBe('2')
+		await expect(early).rejects.toThrow('MissingLateModel')
+		await expect(
+			Promise.resolve().then(() =>
+				captured(new Request('http://e.ly/stable/2'))
+			)
+		).rejects.toThrow('MissingLateModel')
+		await expect(app.handle('/stable/3')).rejects.toThrow(
+			'MissingLateModel'
+		)
 	})
 
 	it('do not duplicate functional async plugin lifecycle', async () => {
@@ -425,5 +432,155 @@ describe('Modules', () => {
 		await app.handle('/lazy-instance')
 
 		expect(called).toBe(true)
+	})
+})
+
+// Workers, Vercel and `export default { fetch: app.fetch }` never call
+// listen(), so app.fetch itself must not serve the app half-registered
+describe('fetch while async plugins are pending', () => {
+	const pendingPlugin = () => {
+		const gate = Promise.withResolvers<void>()
+		const plugin = gate.promise.then(() =>
+			new Elysia()
+				.decorate('decorated', 'decorated-value')
+				.get('/lazy', ({ decorated }) => decorated)
+		)
+
+		return { gate, plugin }
+	}
+
+	it('holds a request on the exported fetch until the plugin lands', async () => {
+		const { gate, plugin } = pendingPlugin()
+		const app = new Elysia().use(plugin).get('/sync', () => 'sync')
+		const exported = { fetch: app.fetch }
+
+		let settled = false
+		const early = Promise.resolve(
+			exported.fetch(new Request('http://e.ly/lazy'))
+		).then((response) => {
+			settled = true
+			return response
+		})
+
+		await sleep(0)
+		expect(settled).toBe(false)
+
+		gate.resolve()
+		const response = await early
+		expect(response.status).toBe(200)
+		expect(await response.text()).toBe('decorated-value')
+	})
+
+	it('serves plugin context through a fetch captured before settle', async () => {
+		const { gate, plugin } = pendingPlugin()
+		const app = new Elysia()
+			.use(plugin)
+			.get('/sync', (context: any) => context.decorated ?? null)
+		const captured = app.fetch
+
+		gate.resolve()
+		await app.modules
+
+		const response = await captured(new Request('http://e.ly/sync'))
+		expect(await response.text()).toBe('decorated-value')
+	})
+
+	it('waits for nested async plugins', async () => {
+		const app = new Elysia().use(async (app) => {
+			await sleep(1)
+
+			return app.use(
+				sleep(1).then(() => new Elysia().get('/deep', () => 'deep'))
+			)
+		})
+
+		const response = await app.fetch(new Request('http://e.ly/deep'))
+		expect(await response.text()).toBe('deep')
+	})
+
+	// the plugin already reported its rejection, synchronous routes stay
+	// served, the same contract app.handle keeps
+	it('serves registered routes once a pending plugin rejects', async () => {
+		const errors: unknown[] = []
+		const orig = console.error
+		console.error = (error: unknown) => errors.push(error)
+
+		try {
+			const app = new Elysia()
+				.get('/sync', () => 'sync')
+				.use(sleep(1).then(() => Promise.reject(new Error('boom'))))
+
+			const response = await app.fetch(new Request('http://e.ly/sync'))
+			expect(await response.text()).toBe('sync')
+			expect(errors.length).toBeGreaterThan(0)
+		} finally {
+			console.error = orig
+		}
+	})
+
+	// handle() builds a partial handler while pending; it must not become the
+	// cached fetch a deployment exports
+	it('keeps an early handle from leaking a partial fetch', async () => {
+		const { gate, plugin } = pendingPlugin()
+		const app = new Elysia().use(plugin).get('/sync', () => 'sync')
+
+		expect((await app.handle('/lazy')).status).toBe(404)
+
+		const early = Promise.resolve(app.fetch(new Request('http://e.ly/lazy')))
+		gate.resolve()
+
+		expect((await early).status).toBe(200)
+	})
+
+	it('returns the built handler once settled', async () => {
+		const { gate, plugin } = pendingPlugin()
+		const app = new Elysia().use(plugin)
+
+		gate.resolve()
+		await app.modules
+
+		expect(app.fetch).toBe(app.fetch)
+	})
+
+	// app.handle keeps partial dispatch: a plugin dispatching to its own app
+	// during setup would otherwise wait on app.modules, which waits on it
+	it('lets a plugin dispatch through handle after its first await', async () => {
+		const app = new Elysia().get('/sync', () => 'sync')
+		let seen: string | undefined
+
+		app.use(async (app) => {
+			await Promise.resolve()
+			seen = await app.handle('/sync').then((r) => r.text())
+
+			return app.get('/late', () => 'late')
+		})
+
+		await app.modules
+		expect(seen).toBe('sync')
+		expect(await app.handle('/late').then((r) => r.text())).toBe('late')
+	})
+
+	// Dispatching before the first await seals the app (as in 1.x and every
+	// earlier 2.0 build), so the plugin's later registration fails loud
+	// instead of hanging
+	it('fails loud when a plugin dispatches through handle before its first await', async () => {
+		const orig = console.error
+		console.error = () => {}
+
+		try {
+			const app = new Elysia().get('/sync', () => 'sync')
+			let seen: string | undefined
+
+			app.use(async (app) => {
+				seen = await app.handle('/sync').then((r) => r.text())
+
+				return app.get('/late', () => 'late')
+			})
+
+			await expect(app.modules).rejects.toThrow('sealed')
+			expect(seen).toBe('sync')
+		} finally {
+			console.error = orig
+		}
 	})
 })

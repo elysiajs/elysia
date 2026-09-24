@@ -444,6 +444,7 @@ import { Prettify } from '../../../src/types'
 		410: 'Gone'
 		422: {
 			type: 'validation'
+			code: 'validation'
 			title: 'Validation Error'
 			status: 422
 			detail?: string
@@ -526,6 +527,7 @@ import { Prettify } from '../../../src/types'
 		410: 'Gone'
 		422: {
 			type: 'validation'
+			code: 'validation'
 			title: 'Validation Error'
 			status: 422
 			detail?: string
@@ -1694,6 +1696,7 @@ import { Prettify } from '../../../src/types'
 			}
 			422: {
 				type: 'validation'
+				code: 'validation'
 				title: 'Validation Error'
 				status: 422
 				detail?: string
@@ -1760,6 +1763,7 @@ import { Prettify } from '../../../src/types'
 			418: 'Teapot'
 			422: {
 				type: 'validation'
+				code: 'validation'
 				title: 'Validation Error'
 				status: 422
 				detail?: string
@@ -1944,6 +1948,7 @@ import { Prettify } from '../../../src/types'
 		401: 'Unauthorized'
 		422: {
 			type: 'validation'
+			code: 'validation'
 			title: 'Validation Error'
 			status: 422
 			detail?: string
@@ -2008,6 +2013,7 @@ import { Prettify } from '../../../src/types'
 		401: 'Unauthorized'
 		422: {
 			type: 'validation'
+			code: 'validation'
 			title: 'Validation Error'
 			status: 422
 			detail?: string

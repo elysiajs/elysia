@@ -2003,6 +2003,126 @@ describe('Bun transactional startup', () => {
 			expect(server.stopCalls).toBe(1)
 		}))
 
+	// A SIGTERM handler awaiting stop(true) is SIGKILLed if a setup never
+	// settles: a caller's force gives up on setups the way it gives up on
+	// pending modules (a failure rollback still waits, see the next test)
+	const settlesWithin = (promise: unknown, ms = 500) =>
+		Promise.race([
+			Promise.resolve(promise).then(() => 'settled'),
+			Bun.sleep(ms).then(() => 'hung')
+		])
+
+	it('abandons a never-settling setup when forced to stop', () =>
+		withServer(async () => {
+			const app = new Elysia()
+				.setup(() => new Promise<void>(() => {}))
+				.get('/', 'ready')
+				.listen(0)
+
+			await Bun.sleep(0)
+			expect(await settlesWithin(app.stop(true))).toBe('settled')
+		}))
+
+	it('abandons a never-settling setup when a later stop forces', () =>
+		withServer(async () => {
+			const app = new Elysia()
+				.setup(() => new Promise<void>(() => {}))
+				.get('/', 'ready')
+				.listen(0)
+
+			await Bun.sleep(0)
+			const stopping = app.stop()
+			expect(await settlesWithin(stopping, 50)).toBe('hung')
+
+			expect(app.stop(true)).toBe(stopping)
+			expect(await settlesWithin(stopping)).toBe('settled')
+		}))
+
+	// The abandoned epoch stays installed until its setup settles, so a late
+	// .cleanup() cannot slip into the next listen epoch and relisten fails
+	// loud meanwhile
+	it('keeps an abandoned setup out of the next listen epoch', () =>
+		withServer(async () => {
+			const reported = spyOn(console, 'error').mockImplementation(
+				() => {}
+			)
+			const gates = [
+				Promise.withResolvers<void>(),
+				Promise.withResolvers<void>()
+			]
+			const started = [
+				Promise.withResolvers<void>(),
+				Promise.withResolvers<void>()
+			]
+			const ran: string[] = []
+			let epoch = 0
+
+			try {
+				const app = new Elysia().setup(async (instance) => {
+					const id = epoch++
+					started[id].resolve()
+					await gates[id].promise
+					instance.cleanup(() => ran.push(`cleanup-${id}`))
+				})
+
+				app.listen(0)
+				await started[0].promise
+				expect(await settlesWithin(app.stop(true))).toBe('settled')
+
+				expect(() => app.listen(0)).toThrow(
+					'while a server or teardown is active'
+				)
+
+				gates[0].resolve()
+				await Bun.sleep(0)
+				expect(String(reported.mock.calls[0]?.[0])).toContain(
+					'setup abandoned by stop(true) failed'
+				)
+				expect(
+					(reported.mock.calls[0]?.[1] as Error)?.message
+				).toContain('.cleanup() called after its setup epoch settled')
+
+				app.listen(0)
+				await started[1].promise
+				gates[1].resolve()
+				await Bun.sleep(0)
+				await app.stop(true)
+
+				expect(ran).toEqual(['cleanup-1'])
+			} finally {
+				reported.mockRestore()
+			}
+		}))
+
+	it('reports an abandoned setup that fails after stop(true)', () =>
+		withServer(async () => {
+			const reported = spyOn(console, 'error').mockImplementation(
+				() => {}
+			)
+			const failure = new Error('late setup failure')
+			const gate = Promise.withResolvers<void>()
+
+			try {
+				const app = new Elysia()
+					.setup(() => gate.promise)
+					.get('/', 'ready')
+					.listen(0)
+
+				await Bun.sleep(0)
+				expect(await settlesWithin(app.stop(true))).toBe('settled')
+
+				gate.reject(failure)
+				await Bun.sleep(0)
+
+				expect(reported).toHaveBeenCalledWith(
+					'[Elysia] setup abandoned by stop(true) failed:',
+					failure
+				)
+			} finally {
+				reported.mockRestore()
+			}
+		}))
+
 	it('returns unavailable but waits for every started setup before cleanup', () =>
 		withServer(async (getOptions, server) => {
 			const order: string[] = []

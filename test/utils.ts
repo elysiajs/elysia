@@ -107,8 +107,8 @@ export function parseCount(validator: any, value: unknown) {
 }
 
 /**
- * Emitted source of a route: the body, also for a sync-first generator route,
- * whose compiled handler is a small driver around the generator
+ * Emitted source of a route: the route with its hoisted helpers, which for a
+ * sync-first route include the async tail `_t`
  */
 export const emittedSource = (app: any, index = 0) => {
 	let code = ''
@@ -125,7 +125,9 @@ export const emittedSource = (app: any, index = 0) => {
 
 /**
  * The route suspends on thenables (never treats a pending value as settled):
- * an `async` route, or a sync-first generator route driven by `resumeRoute`
+ * an `async` route, or a sync-first route that hands a thenable to its async
+ * tail `_t`
  */
 export const suspendsOnThenables = (fn: Function) =>
-	fn.constructor.name === 'AsyncFunction' || fn.toString().includes('rs(_i,')
+	fn.constructor.name === 'AsyncFunction' ||
+	fn.toString().includes('return _t(')

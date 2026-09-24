@@ -1,4 +1,4 @@
-import { Elysia, file, status, t } from 'elysia'
+import { Elysia, ElysiaFile, file, status, t } from 'elysia'
 import * as adapterUtils from 'elysia/adapter/utils'
 import * as compiled from 'elysia/compiled'
 import { trace } from 'elysia/trace'
@@ -110,10 +110,11 @@ if (!disposed.includes('derive'))
 // `listen()` needs an adapter on Node, so drive the generic stop lane directly
 disposeApp.server = { stop() {} }
 await disposeApp.stop()
-if (!disposed.includes('decorator'))
-	throw new Error('❌ ESM Node.js decorator was not disposed on stop')
+// the app does not own a value it was handed: `.cleanup()` releases it
+if (disposed.includes('decorator'))
+	throw new Error('❌ ESM Node.js decorator was disposed on stop')
 
-console.log('✅ ESM Node.js disposes derive and decorate values')
+console.log('✅ ESM Node.js disposes derive but not decorate values')
 
 // named model resolution must not depend on Bun-only built-ins
 const modelApp = new Elysia()
@@ -257,6 +258,18 @@ try {
 		(await changed.text()) !== 'abcdefghij'
 	)
 		throw new Error('❌ ESM Node.js file metadata stayed stale')
+
+	// structuredClone isolation served a static file as JSON `{ "path": … }`
+	class OtherFile extends ElysiaFile {}
+	for (const value of [file(mutablePath), new OtherFile(mutablePath)])
+		for (const hook of ['afterHandle', 'mapResponse']) {
+			const hooked = await new Elysia()
+				[hook]('global', () => {})
+				.get('/file', value)
+				.handle(new Request('http://localhost/file'))
+			if ((await hooked.text()) !== 'abcdefghij')
+				throw new Error(`❌ ESM Node.js static file with ${hook} lost its body`)
+		}
 
 	process.on('unhandledRejection', onUnhandled)
 	const missingPath = join(temp, 'missing.txt')

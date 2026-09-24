@@ -63,12 +63,13 @@ export function forwardError<T>(value: T): T {
 export function finalizeRouteError(
 	app: AnyElysia,
 	context: Partial<Context>,
-	error: unknown
+	error: unknown,
+	sign?: (set: Context['set']) => unknown
 ) {
 	const finalize = app['~finalizeError']
 	if (!finalize) throw error
 
-	return finalize(context as Context, error as Error)
+	return finalize(context as Context, error as Error, sign)
 }
 
 export function registerDeriveDisposable(

@@ -34,8 +34,7 @@ import {
 	getQueryParseChannels,
 	hasRequestBody,
 	replaceDeriveContext,
-	armEntryAbort,
-	resumeRoute
+	armEntryAbort
 } from './utils'
 import { staticCloneResolver } from './static-clone-resolver'
 
@@ -93,7 +92,6 @@ const handlerParams = (): Record<string, Resolver | undefined> =>
 	verr: () => ValidationError,
 	tee: () => tee,
 	obs: () => observeStream,
-	rs: () => resumeRoute,
 	msh: () => materializeSetHeaders,
 	cr: () => cloneResponse,
 	scl: staticCloneResolver,

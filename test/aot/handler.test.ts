@@ -257,9 +257,10 @@ describe('sync/async compilation gating', () => {
 		path: string
 	) => handlers.find((h) => h.method === method && h.path === path)?.code
 
-	// suspends on thenables: `async`, or a sync-first generator route
+	// suspends on thenables: `async`, or a sync-first route handing thenables
+	// to its async tail
 	const isAsyncRoute = (code: string | undefined) =>
-		!!code && /async\s+function route\(|function\* route\(/.test(code)
+		!!code && /async\s+function route\(|return _t\(/.test(code)
 
 	it('keeps a plain sync route synchronous', () => {
 		const handlers = capture(

@@ -427,6 +427,7 @@ function scopeIssues(errors: any[]) {
 export class ValidationError extends ElysiaError {
 	/** Response validation is a server error; other validation is a client error. */
 	status: 422 | 500 = 422
+	readonly code = 'validation'
 
 	schema?: unknown
 	declare message: string
@@ -667,6 +668,7 @@ export class ValidationError extends ElysiaError {
 
 			return {
 				type: 'validation',
+				code: 'validation',
 				title: 'Validation Error',
 				status: 422,
 				on: this.type,
@@ -738,6 +740,7 @@ export class ValidationError extends ElysiaError {
 				? internalServerErrorProblem()
 				: {
 						type: 'validation',
+						code: 'validation',
 						title: 'Validation Error',
 						status: 422 as const
 					}),
@@ -890,6 +893,7 @@ type ProblemStatus<P> = P extends {
 /** Request validation problem. Diagnostic fields are development-only. */
 export type ValidationErrorResponse = {
 	type: 'validation'
+	code: 'validation'
 	title: 'Validation Error'
 	status: 422
 	detail?: string

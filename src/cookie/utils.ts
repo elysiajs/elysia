@@ -8,6 +8,7 @@ import type { Context } from '../context'
 import type { BaseCookie } from './types'
 import type { CompiledCookieConfig } from './config'
 import { isCookieSigned, resolveSignSecrets } from './config'
+import { InvalidCookie } from './error'
 
 import {
 	hasSyncHmac,
@@ -81,12 +82,27 @@ export function parseCookieRawLazy(
 	return out
 }
 
+/**
+ * Raw-record value of a signed cookie that failed verification on a lane that
+ * can't verify on access (asynchronous HMAC, AOT); the jar rejects its first
+ * read. A string key, not a module identity, so a second Elysia copy agrees.
+ * Null-prototype, which `JSON.parse` never yields, so no cookie value a client
+ * sends (unsigned, or accepted by a `null` rotation secret) can take its shape
+ */
+const invalidSignature = () => {
+	const marker = nullObject()
+	marker['~invalid'] = 1
+
+	return marker
+}
+
 export async function parseCookieRaw(
 	cookieString: string | null | undefined,
-	config: CompiledCookieConfig
+	config: CompiledCookieConfig,
+	lazy?: 1
 ): Promise<Record<string, unknown>> {
 	if (!config.hasSign) return parseCookieRawSync(cookieString, config)
-	if (hasSyncHmac) return parseCookieRawSigned(cookieString, config)
+	if (hasSyncHmac) return parseCookieRawSigned(cookieString, config, lazy)
 
 	if (!cookieString) return nullObject()
 
@@ -101,12 +117,20 @@ export async function parseCookieRaw(
 		const signCheck = resolveSignSecrets(name, config)
 
 		if (signCheck !== undefined)
-			value = await unsignWithSecrets(
-				name,
-				value,
-				signCheck,
-				config.legacySignature
-			)
+			try {
+				value = await unsignWithSecrets(
+					name,
+					value,
+					signCheck,
+					config.legacySignature
+				)
+			} catch (error) {
+				// only a bad signature defers, a crypto failure stays loud
+				if (!lazy || !(error instanceof InvalidCookie)) throw error
+
+				out[name] = invalidSignature()
+				continue
+			}
 
 		out[name] = maybeJsonDecode(value)
 	}
@@ -116,7 +140,8 @@ export async function parseCookieRaw(
 
 export function parseCookieRawSigned(
 	cookieString: string | null | undefined,
-	config: CompiledCookieConfig
+	config: CompiledCookieConfig,
+	lazy?: 1
 ): Record<string, unknown> {
 	if (!config.hasSign) return parseCookieRawSync(cookieString, config)
 
@@ -135,12 +160,20 @@ export function parseCookieRawSigned(
 		const signCheck = resolveSignSecrets(name, config)
 
 		if (signCheck !== undefined)
-			value = unsignWithSecretsSync(
-				name,
-				value,
-				signCheck,
-				config.legacySignature
-			)
+			try {
+				value = unsignWithSecretsSync(
+					name,
+					value,
+					signCheck,
+					config.legacySignature
+				)
+			} catch (error) {
+				// only a bad signature defers, a crypto failure stays loud
+				if (!lazy || !(error instanceof InvalidCookie)) throw error
+
+				out[name] = invalidSignature()
+				continue
+			}
 
 		out[name] = maybeJsonDecode(value)
 	}
@@ -184,7 +217,13 @@ export function buildCookieJar(
 		if (entry.expires instanceof Date)
 			entry.expires = new Date(entry.expires.getTime())
 
-		if (lazySign && typeof entry.value === 'string') {
+		if (
+			(rawValue as any)?.['~invalid'] === 1 &&
+			Object.getPrototypeOf(rawValue) === null
+		)
+			// never a string, so every read rejects the signature
+			(entry as any)['~unsign'] = 1
+		else if (lazySign && typeof entry.value === 'string') {
 			const secrets = resolveSignSecrets(name, config)
 			if (secrets !== undefined) {
 				;(entry as any)['~unsign'] = secrets
@@ -295,26 +334,47 @@ function collectSignPending(
 	return pending
 }
 
+function dropSigned(
+	cookies: NonNullable<Context['set']['cookie']>,
+	config: CompiledCookieConfig
+) {
+	for (const name in cookies)
+		if (
+			config.fields[name]?.sign ||
+			config.globalSign === true ||
+			config.globalSignSet?.has(name)
+		)
+			delete cookies[name]
+}
+
 export function signCookieValues(
 	cookies: Context['set']['cookie'] | undefined,
 	config: CompiledCookieConfig
 ) {
-	const pending = collectSignPending(cookies, config)
-	if (!pending) return
+	let pending: ReturnType<typeof collectSignPending>
 
-	if (hasSyncHmac) {
-		for (let i = 0; i < pending.length; i++) {
-			const [property, value, key] = pending[i]!
-			;(property as any)['~signed'] = property.value = signCookieSyncImpl(
-				value,
-				key
-			)
+	try {
+		pending = collectSignPending(cookies, config)
+		if (!pending) return
+
+		if (hasSyncHmac) {
+			for (let i = 0; i < pending.length; i++) {
+				const [property, value, key] = pending[i]!
+				;(property as any)['~signed'] = property.value =
+					signCookieSyncImpl(value, key)
+			}
+
+			return
 		}
-
-		return
+	} catch (error) {
+		dropSigned(cookies!, config)
+		throw error
 	}
 
-	return signPending(pending)
+	return signPending(pending).catch((error) => {
+		dropSigned(cookies!, config)
+		throw error
+	})
 }
 
 async function signPending(

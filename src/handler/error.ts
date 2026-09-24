@@ -323,17 +323,23 @@ function fallbackErrorResponse(
 		)
 	}
 
+	// the error's own body failed to build (a throwing custom `error`
+	// callback): response validation stays a masked 500, reading nothing
+	// more from the error
 	if (error instanceof ValidationError)
 		return mapResponse(
-			new ElysiaStatus(
-				422,
-				problemBody({
-					type: 'validation',
-					title: 'Validation Error',
-					status: 422
-				}),
-				{ 'content-type': PROBLEM_JSON }
-			),
+			error.type === 'response'
+				? internalServerErrorResponse(undefined)
+				: new ElysiaStatus(
+						422,
+						problemBody({
+							type: 'validation',
+							code: 'validation',
+							title: 'Validation Error',
+							status: 422
+						}),
+						{ 'content-type': PROBLEM_JSON }
+					),
 			context.set,
 			context
 		)
@@ -375,28 +381,45 @@ export function createErrorHandler(
 		parseQuery(context)
 	}
 
+	// A signed route's cookie signer rides along to the final map
+	type Sign = ((set: Context['set']) => unknown) | undefined
+	const mapWith = (sign: Sign): typeof mapResponse =>
+		sign
+			? (response, set, context) =>
+					mapResponse(response, set, context, sign)
+			: mapResponse
+
 	if (!onErrors)
-		return (context: Context, error: Error) => {
+		return (context: Context, error: Error, sign?: Sign) => {
 			enter(context, error)
-			return fallbackResponse(context, error, mapResponse)
+			return fallbackResponse(context, error, mapWith(sign))
 		}
 
-	const respond = (context: Context, error: Error, result: unknown) => {
+	const respond = (
+		context: Context,
+		error: Error,
+		result: unknown,
+		sign: Sign
+	) => {
 		if (result instanceof ElysiaStatus || result instanceof Response)
 			context.set.status = result.status
 		else if (context.set.status === undefined || context.set.status === 200)
 			context.set.status = 500
 
-		return mapResponse(adoptErrorType(result, error), context.set, context)
+		return mapWith(sign)(
+			adoptErrorType(result, error),
+			context.set,
+			context
+		)
 	}
 
-	const settle = (context: Context, error: Error) =>
+	const settle = (context: Context, error: Error, sign: Sign) =>
 		isPristineNotFound(context, error)
 			? getNotFound()
-			: fallbackResponse(context, error, mapResponse)
+			: fallbackResponse(context, error, mapWith(sign))
 
 	if (hasAsync(onErrors))
-		return async (context: Context, error: Error) => {
+		return async (context: Context, error: Error, sign?: Sign) => {
 			materializeSetHeaders(context.set)
 			enter(context, error)
 
@@ -405,21 +428,23 @@ export function createErrorHandler(
 				if (typeof (result as any)?.then === 'function')
 					result = await result
 
-				if (result !== undefined) return respond(context, error, result)
+				if (result !== undefined)
+					return respond(context, error, result, sign)
 			}
 
-			return settle(context, error)
+			return settle(context, error, sign)
 		}
 
-	return (context: Context, error: Error) => {
+	return (context: Context, error: Error, sign?: Sign) => {
 		materializeSetHeaders(context.set)
 		enter(context, error)
 
 		for (let i = 0; i < onErrors.length; i++) {
 			const result = onErrors[i](context as any)
-			if (result !== undefined) return respond(context, error, result)
+			if (result !== undefined)
+				return respond(context, error, result, sign)
 		}
 
-		return settle(context, error)
+		return settle(context, error, sign)
 	}
 }

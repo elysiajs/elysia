@@ -47,14 +47,12 @@ import {
 	clearFlattenChainMemo,
 	coalesceSchemas,
 	createErrorEventHandler,
-	disposeDecorators,
 	eventProperties,
 	fnOrigin,
 	fnv1a,
 	getLoosePath,
 	guardNonPlainLeaves,
 	hookToGuard,
-	isDisposable,
 	isEmpty,
 	isHTMLBundle,
 	isNotEmpty,
@@ -199,30 +197,6 @@ const mergeExtCallbacks = <T>(target: T[] | undefined, incoming: T[]) => {
 	index.indexedLength = target.length
 
 	return target
-}
-
-const recordDisposable = (
-	ext: { disposable?: unknown[] },
-	value: unknown
-) => {
-	if (!isDisposable(value)) return
-
-	const disposable = (ext.disposable ??= [])
-	if (!disposable.includes(value)) disposable.push(value)
-}
-
-const recordDisposables = (
-	ext: { disposable?: unknown[]; decorator?: object },
-	source: object
-) => {
-	const stored = ext.decorator as Record<string, unknown> | undefined
-
-	for (const key in source) {
-		const value = stored?.[key]
-		recordDisposable(ext, value)
-
-		if (!isDisposable(value)) recordDisposable(ext, (source as any)[key])
-	}
 }
 
 const markStoredSingletons = (table: object | undefined, source: object) => {
@@ -395,14 +369,6 @@ export class Elysia<
 		hoc?: WrapFn<any>[]
 		setup?: GracefulHandler<any>[]
 		cleanup?: GracefulHandler<any>[]
-		/**
-		 * Accepted `.decorate()` values implementing an explicit disposer, in
-		 * registration order.
-		 *
-		 * Recorded at registration so the original reference survives a
-		 * `.use()` clone, a same-name merge and a later override
-		 */
-		disposable?: unknown[]
 		cleanupEpoch?: (
 			handler: GracefulHandler<any> | GracefulHandler<any>[]
 		) => boolean
@@ -533,7 +499,8 @@ export class Elysia<
 	declare '~hasTrace'?: boolean
 	declare '~finalizeError'?: (
 		context: Context,
-		error: Error
+		error: Error,
+		sign?: (set: Context['set']) => unknown
 	) => MaybePromise<Response>
 	get ['~programId'](): ProgramId {
 		return this as unknown as ProgramId
@@ -910,17 +877,6 @@ export class Elysia<
 						)
 					else target[name] = value
 
-					// the value the table kept, mirroring the object form: a
-					// non-override merge keeps the existing object, and
-					// disposing a value the app never adopted is wrong
-					if (field === 'decorator') {
-						const stored = target[name]
-						recordDisposable(ext, stored)
-
-						if (!isDisposable(stored))
-							recordDisposable(ext, value)
-					}
-
 					markSingletons(target[name])
 
 					return this
@@ -935,7 +891,6 @@ export class Elysia<
 						as === 'override'
 					)
 
-				if (field === 'decorator') recordDisposables(ext, value)
 				markStoredSingletons(ext[field], value)
 
 				return this
@@ -945,16 +900,10 @@ export class Elysia<
 					if (as === 'override' || !(name in target)) {
 						target[name] = value
 
-						if (field === 'decorator')
-							recordDisposable(ext, value)
-
 						markSingletons(value)
 					}
 				} else {
 					ext[field] = (value as Function)(target)
-
-					if (field === 'decorator')
-						recordDisposables(ext, ext[field] as object)
 
 					markStoredSingletons(ext[field], ext[field] as object)
 				}
@@ -4554,7 +4503,6 @@ export class Elysia<
 			hoc,
 			setup,
 			cleanup,
-			disposable,
 			capability
 		} = app['~ext']!
 
@@ -4625,8 +4573,6 @@ export class Elysia<
 		if (hoc) ext.hoc = mergeExtCallbacks(ext.hoc, hoc)
 		if (setup) ext.setup = mergeExtCallbacks(ext.setup, setup)
 		if (cleanup) ext.cleanup = mergeExtCallbacks(ext.cleanup, cleanup)
-		if (disposable)
-			ext.disposable = mergeExtCallbacks(ext.disposable, disposable)
 
 		if (capability) {
 			const target = (ext.capability ??= nullObject())
@@ -7610,10 +7556,28 @@ export class Elysia<
 	}
 
 	private fetchFn?: (request: Request) => MaybePromise<Response>
-	get fetch() {
+	get fetch(): (request: Request) => MaybePromise<Response> {
 		if (this.fetchFn) return this.fetchFn
 
+		if (this.ready)
+			return (request: Request, ...rest: any[]) => {
+				const run = () =>
+					(this.fetch as ReturnType<typeof applyHoc>)(
+						request,
+						...rest
+					)
+
+				return this.ready ? this.modules.then(run, run) : run()
+			}
+
+		return this.#dispatch()
+	}
+
+	#dispatch() {
 		this.#buildRouter(!this._pending)
+
+		if (this.ready) return applyHoc(this, createFetchHandler(this))
+
 		return (this.fetchFn ??= applyHoc(this, createFetchHandler(this)))
 	}
 
@@ -7630,7 +7594,7 @@ export class Elysia<
 			requestOrUrl: Request | string,
 			options?: RequestInit
 		) =>
-			this.fetch(
+			(this.fetchFn ?? this.#dispatch())(
 				typeof requestOrUrl === 'string'
 					? new Request(
 							requestOrUrl.charCodeAt(0) === 47
@@ -7752,11 +7716,7 @@ export class Elysia<
 		}
 
 		const handlers = this['~ext']?.cleanup
-		if (
-			!errors.length &&
-			!handlers?.length &&
-			!this['~ext']?.disposable?.length
-		)
+		if (!errors.length && !handlers?.length)
 			return result &&
 				typeof (result as Promise<void>).then === 'function'
 				? (result as Promise<void>)
@@ -7776,14 +7736,6 @@ export class Elysia<
 					} catch (error) {
 						errors.push(error)
 					}
-
-			// after every cleanup handler: user cleanup may still use a
-			// decorated singleton
-			try {
-				await disposeDecorators(this)
-			} catch (error) {
-				errors.push(error)
-			}
 
 			throwLifecycleErrors(errors)
 		})()

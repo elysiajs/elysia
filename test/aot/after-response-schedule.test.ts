@@ -48,8 +48,9 @@ describe('AOT capture: afterResponse schedule position', () => {
 		const validators = endValidatorCapture()
 
 		expect(handlers).toHaveLength(1)
-		// The schedule must run after mapping produces `_m`.
-		expect(handlers[0]!.code).toContain('_sc()\nreturn _m\n')
+		// The schedule must run after mapping produces `_m` (a sync-first
+		// route shares a hoisted `_sc(c,_stl)` with its async tail)
+		expect(handlers[0]!.code).toMatch(/_sc\((c,_stl)?\)\nreturn _m\n/)
 
 		registerManifest({
 			validators: materialise(validators),

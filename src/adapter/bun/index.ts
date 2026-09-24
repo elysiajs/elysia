@@ -4,7 +4,6 @@ import { WebStandardAdapter } from '../web-standard'
 import { buildNativeStaticResponse } from '../../compile/handler'
 import { routeRow, RouteFlag } from '../../route-table'
 import {
-	disposeDecorators,
 	flattenChain,
 	getLoosePath,
 	isHTMLBundle,
@@ -458,6 +457,9 @@ export const BunAdapter = createAdapter({
 		let modulesReady: Promise<void> | undefined
 
 		let pendingSetups: Promise<unknown>[] | undefined
+		let setupsSettled:
+			| Promise<PromiseSettledResult<unknown>[]>
+			| undefined
 
 		const build = () => {
 			const fetch = app.fetch
@@ -522,6 +524,9 @@ export const BunAdapter = createAdapter({
 		let startupFailure: { error: unknown } | undefined
 		let forceRequested = false
 		const force = Promise.withResolvers<void>()
+		// only a caller's stop(true) gives up on setups, a failure rollback
+		// still waits for every started setup
+		const abandon = Promise.withResolvers<void>()
 		let forceDone = false
 		let nativeStopped = false
 		let abandoned = false
@@ -710,10 +715,12 @@ export const BunAdapter = createAdapter({
 				}
 			}
 
-			if (pendingSetups)
+			if (pendingSetups) {
+				setupsSettled = Promise.allSettled(pendingSetups)
 				return Promise.all(pendingSetups).then(
 					() => (epoch.setup = false)
 				)
+			}
 
 			epoch.setup = false
 		}
@@ -727,6 +734,7 @@ export const BunAdapter = createAdapter({
 			if (failure) startupFailure ??= failure
 			if (closeActiveConnections === true) {
 				force.resolve()
+				if (!failure) abandon.resolve()
 				if (!forceDone) forceRequested = true
 			}
 
@@ -750,6 +758,7 @@ export const BunAdapter = createAdapter({
 
 				const quiescence = quiesce(forceRequested || !published)
 				let releasable = false
+				let abandonedSetups: typeof setupsSettled
 
 				;(async () => {
 					try {
@@ -764,11 +773,14 @@ export const BunAdapter = createAdapter({
 								startupFailure ??= { error }
 							}
 
-						if (pendingSetups) {
-							const setupResults =
-								await Promise.allSettled(pendingSetups)
+						if (setupsSettled) {
+							const setupResults = await Promise.race([
+								setupsSettled,
+								abandon.promise
+							])
 
-							if (!startupFailure)
+							if (!setupResults) abandonedSetups = setupsSettled
+							else if (!startupFailure)
 								for (let i = 0; i < setupResults.length; i++) {
 									const result = setupResults[i]
 									if (result.status === 'rejected') {
@@ -819,12 +831,6 @@ export const BunAdapter = createAdapter({
 										;(cleanupFailures ??= []).push(error)
 									}
 								}
-
-								try {
-									await disposeDecorators(app)
-								} catch (error) {
-									;(cleanupFailures ??= []).push(error)
-								}
 							}
 
 							cleanupCompleted = true
@@ -833,7 +839,7 @@ export const BunAdapter = createAdapter({
 
 						if (cleanupFailures) errors.push(...cleanupFailures)
 
-						if (releasable)
+						const release = () =>
 							releaseLifecycle(
 								app,
 								ext,
@@ -841,6 +847,19 @@ export const BunAdapter = createAdapter({
 								stop,
 								registerCleanup
 							)
+
+						if (releasable && abandonedSetups)
+							void abandonedSetups.then((results) => {
+								for (const result of results)
+									if (result.status === 'rejected')
+										console.error(
+											'[Elysia] setup abandoned by stop(true) failed:',
+											result.reason
+										)
+
+								release()
+							})
+						else if (releasable) release()
 						throwLifecycleErrors(errors)
 					} finally {
 						epoch.setup = false

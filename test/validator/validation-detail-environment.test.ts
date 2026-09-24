@@ -35,6 +35,7 @@ describe('production validation detail', () => {
 		expect(prodPayload.found).toBeUndefined()
 		expect(prodPayload.property).toBe('/x')
 		expect(Object.keys(prodPayload).sort()).toEqual([
+			'code',
 			'on',
 			'property',
 			'status',

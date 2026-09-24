@@ -15,10 +15,14 @@ const compileRoute = (app: any, index = 0) => ({
 	source: emittedSource(app, index)
 })
 
-const compileDerive = (derive: Function) =>
-	compileRoute(
+// the route only: its async tail `_t`, hoisted before it, repeats the pipeline
+const compileDerive = (derive: Function) => {
+	const source = compileRoute(
 		new Elysia().derive(derive as any).get('/', () => 'hi')
 	).source
+
+	return source.slice(source.indexOf('function route(c){'))
+}
 
 describe('derive key codegen', () => {
 	const analyzable: [Function, string[], string][] = [

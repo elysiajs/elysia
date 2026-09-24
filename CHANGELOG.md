@@ -82,14 +82,15 @@ Behavior Change:
 
 - the 1.x `(path, handler, hook)` argument order now throws at registration instead of serving the hook object as the response, including a hook that only enables macros (`{ auth: true }`)
 - `.macro(name, definition)` and `.macro(fn)` now throw at registration instead of silently registering nothing
-- writing `set.redirect` now throws in development — production is unchanged, so a 1.x auth-redirect guard still serves the body it was protecting
+- writing `set.redirect` now throws in development — production is unchanged, so a 1.x auth-redirect guard still serves the body it was protecting; `set.redirect` is typed as a `@deprecated` `never`, so assigning a URL is a type error that points at `redirect(url)`
 - a non-schema value in a `body` / `query` / `params` / `headers` / `cookie` / `response` slot now throws at registration instead of failing per request
 - a response schema violation now answers `500` `internal-server-error` in both development and production — v1 answered `422`, blaming the client for a server-side mistake
 - `app.routes` is frozen, and a sealed app no longer re-caches it under `NODE_ENV=production` (two reads return equal but distinct arrays)
-- `HTTPError.typeBase` now applies to the router-miss `404` and the generic `500`, and every problem document except validation (`422`) carries `code`; on a `ValidationError`, `type` is the validated slot (`body`, `query`, …) and `code` is `undefined`
+- `HTTPError.typeBase` now applies to the router-miss `404` and the generic `500`, and every problem document carries `code`, validation included (`code: 'validation'`, also on the `ValidationError` instance); on a `ValidationError`, `type` is still the validated slot (`body`, `query`, …). A custom schema `error` replaces the whole body, so it carries no `code`
 - `afterResponse` now fires exactly once, and after `error`, when a generator throws before its first yield
 - a throwing `afterResponse` / `defer` on the JIT lane and a rejected async `trace` callback are now reported with `console.error` instead of being swallowed
 - `stop(true)` no longer waits on an async plugin that never settles
+- `app.fetch` now holds a request until pending async plugins settle, so fetch-only deployments (Workers, Vercel, `export default { fetch: app.fetch }`) no longer 404 a plugin's routes on a cold start (1.x did); a function captured before settling forwards to the settled handler. `app.handle` still dispatches to the partial app while a plugin is pending, so a plugin can call it on its own app during setup
 - `context.route` is set only for dynamic routes; on a static route it is `undefined`, use `context.path` (1.x always set it)
 - an unknown hook or guard scope (1.x `{ as: 'scoped' }`, `'scoped'`, …) now throws at registration instead of silently registering the hook as `local`
 - a `.guard()` / `.group()` `schema` other than `'merge'` / `'override'` now throws at registration: a 1.x `schema: 'standalone'` silently fell back to `override`, dropping the guard's own validation on routes with a schema
@@ -127,6 +128,7 @@ Behavior Change:
 - `file()` responses resolve their `content-type` from case-insensitively file extension
 - synchronous Standard Schema validators no longer force async route emission
 - Bun native static-route `Response` objects are no longer retained on the base Elysia instance during router build
+- `.decorate()` values are not disposed on `stop()`, the app does not own values it was handed; release them with `.cleanup()`
 
 Improvement:
 - `t.File({ type })` / `t.Files({ type })` content-detection failures now report the offending property path (`property: '/avatar'`, `/files/0`) instead of an empty path — the validated value is identity-walked only when a detection fails
@@ -136,7 +138,7 @@ Improvement:
 - shared schema reference
 - Cookie schema field
 - plain `t.File()` / `t.Files()` (no `type` option) no longer force the async validation path
-- a route that is async only because a callback *may* return a Promise (a response schema over `() => ({...})`, an expression-bodied `derive`, a `beforeHandle` with a `return`) is compiled as a sync-first generator: it answers synchronously and suspends only on a real thenable, instead of paying a Promise and a microtask per request (in-process: hook routes −28%, response-schema routes −19%)
+- a route that is async only because a callback *may* return a Promise (a response schema over `() => ({...})`, an expression-bodied `derive`, a `beforeHandle` with a `return`) is compiled sync-first on Bun: it answers synchronously and hands off to an async continuation only on a real thenable, instead of paying a Promise and a microtask per request (in-process vs the async lane: sync −39%, a real promise −12%, a rejection −2%). Other runtimes keep the plain async lane, which V8 runs faster; an AOT build follows its `target`
 - generator / SSE streams enqueue synchronously, with a Promise only for a `Blob` chunk (−25% allocation, −6.5% server CPU per 10-event SSE request)
 - `listen()` loads the TypeBox graph asynchronously, overlapping async plugins, once the app has used `t` (time to first response −31% for a 100-schema-route app); apps that never touch `t` still do not load TypeBox
 - signed-cookie HMAC on Bun copies a keyed hasher per secret instead of re-keying per sign/verify (signed-cookie route −5%)
@@ -144,6 +146,7 @@ Improvement:
 - an `.error()` hook no longer disqualifies static-literal `GET` routes from Bun native static promotion: those routes are now promoted even when a global or route-local `.error()` hook exists, because no user code runs on a promoted route and the hook can therefore never fire for it. `afterResponse`, `mapResponse`, `parse`, `transform`, schemas, `trace` and every other hook still keep the route on the JS lane. Since Bun's native static table now serves more routes, be aware that a promoted route answers `HEAD` (200) and conditional `GET` (`If-None-Match` matching Bun's `etag` -> 304) natively, without reaching the JS lane or your `.error()` hook (see Known issue)
 
 Bug fix:
+- a response schema violation whose custom `error` callback throws answered `422` in development; it now answers the masked `500` like every other response violation
 - return 415 when unsure about content-type
 - `context.server` now receives the active Bun server for socket requests and is `null` for direct `app.handle()`
 - non-Bun (Node / web-standard) adapters, a plain-string response now sets `content-type: text/plain`
@@ -167,6 +170,10 @@ Bug fix:
 - error-path `mapResponse` codegen assigned an undeclared `tmp`, leaking the mapped response onto `globalThis`
 - schema-less body routes now treat `Transfer-Encoding` as body-present before touching `request.body`, preserving the fast framing-header path for chunked/proxy-framed requests without `Content-Length`
 - signed cookies were sent unsigned from a route with an `afterResponse` hook, a `defer()` call or a context passed to a helper, and from error responses of routes without an `.error()` hook, so the next request rejected them with `400`; every response now signs them exactly once
+- a signed cookie written by an app-level `.error()` hook registered after the route, or by a root `mapResponse` on the error response of a route without its own `.error()` hook (e.g. a sliding-session refresh), was sent unsigned and rejected on the next request; it is now signed after every hook ran, and those hooks read the plain value instead of the signed one
+- when signing a cookie failed (e.g. a rejected WebCrypto `sign()`), the cookie was sent unsigned on every lane, including the success path; a cookie meant to be signed is now dropped from that response instead
+- `verify: 'lazy'` (the default) now holds on AOT builds and WebCrypto runtimes (and WebSocket upgrades there): they rejected an invalid signed cookie with `400` at request entry even when nothing read it, where the Bun JIT only rejects on first read
+- a returned stream or generator is now stopped when the request aborts before it is sent: its own `cancel` / `finally` runs, and the request's `derive` values are disposed instead of waiting forever
 - `derive` values were disposed, and `defer()` / `afterResponse` ran, before a returned `ReadableStream` was read, truncating it to an empty body; they now wait for the stream (a `bytes()` stream keeps its exact-stream contract and is not waited on)
 - `sse({ data })` dropped a number or boolean `data` (`data: 0` sent an empty event)
 - a generator yielding `null` / `undefined` left the response hanging forever
@@ -175,6 +182,9 @@ Bug fix:
 - under `bun --hot`, the validator cache idle timer kept every previous reload's module graph alive for 60 s (~1.7 MB per reload)
 - the `afterResponse` trace on a router miss (`404`) reported ~0 ms instead of the hooks' duration
 - [Type] returning `status('Not Found', …)` against a response map declaring `404` was rejected
+- `stop(true)` hung on a `setup()` that never settles; it now abandons it like a pending async plugin (a failed startup still waits for every started setup before cleanup). Until the abandoned setup settles, `listen()` on the same app throws, a late `.cleanup()` from it throws, and its late failure is reported with `console.error`
+- a static `file()` value (or an `ElysiaFile` subclass) was served as JSON `{"path":"…"}`, disclosing its absolute server path, when the route had an `afterHandle` / `mapResponse` hook and the file was not prepared at startup (any non-Bun runtime, or a route with a `response` schema); it is now served as the file
+- a static `status(code, value)` route with a string, number or boolean `value` was served as `application/octet-stream` on Bun whenever a hook wrote `set.headers` or a cookie; it now gets `text/plain;charset=utf-8` like the same value returned from a function
 
 Chore:
 - declare the minimum supported Node.js version (`engines.node`) and test it in CI
@@ -184,8 +194,9 @@ Chore:
 Known issue:
 - `t.ObjectString` with an optional or coercing inner field drops those fields on the default `normalize`, use `normalize: 'typebox'` until the next `exact-mirror` release
 - a returned `new Response(stream)` is not observed like a bare `ReadableStream`, so `derive` dispose / `defer()` / `afterResponse` still run before its body is read; return the stream itself
-- an infinite stream or generator that a later hook replaces (or whose mapping throws) is never drained, so `afterResponse` / dispose for that request do not run
+- a stream or generator that reaches 64 chunks or 4 MiB and that a later hook replaces, or that a throwing `afterHandle` / `mapResponse` leaves behind, is never drained, so `afterResponse` / dispose for that request do not run; the hook can `return()` / `cancel()` the `responseValue` it drops
 - routes served by Bun native static promotion (static-literal `GET` handlers with no hooks other than `error`) answer `HEAD` natively (200) and honour `If-None-Match` against Bun's own `etag` (304), while non-promoted routes answer `HEAD` only when `autoHead` is enabled (404 otherwise) and never send an `etag`. Accepted for 2.0; both divergences are pinned in `test/adapter/bun/native-head-policy.test.ts`
+- a static-value route (`.get(path, value)`) keeps the `.headers()` app defaults over a hook: a `request`, `transform`, `derive`, `beforeHandle`, `afterHandle`, `mapResponse` or `trace` hook that overrides or deletes such a header in `set.headers` (e.g. `cache-control: no-store` on a per-user response) is ignored on that route, because the defaults are prepared into its response at startup and a prepared response's own headers outrank `set`. A hook `content-type` likewise loses to the MIME generated for a static string, number, object or array, with or without `.headers()`. Headers that `.headers()` does not declare, and every header on a function route, apply normally. Use a function handler (`.get(path, () => value)`) when a hook must change these headers
 
 # 1.4.28 - 17 Mar 2025
 

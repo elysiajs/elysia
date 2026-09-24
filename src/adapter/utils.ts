@@ -815,7 +815,9 @@ interface Pending<T> {
  */
 export function observeStream(
 	source: ReadableStream
-): [ReadableStream, AsyncIterable<unknown>] | undefined {
+):
+	| [ReadableStream, AsyncIterable<unknown>, AsyncIterableIterator<unknown>]
+	| undefined {
 	if (source.locked || isByteStream(source)) return
 
 	const reader = source.getReader()
@@ -849,7 +851,8 @@ export function observeStream(
 
 	if ((source as any).sse === true) (body as any).sse = true
 
-	return [body, observer]
+	// the value branch, stopped by an exit that never sends `body`
+	return [body, observer, value]
 }
 
 /**

@@ -30,13 +30,14 @@ import {
 	finalizeRouteError,
 	forwardError
 } from '../../handler/utils'
-import { hasHeaderShorthand } from '../../universal/constants'
+import { hasHeaderShorthand, isBun } from '../../universal/constants'
 
 import { parseQueryFromURL } from '../../parse-query'
 
 import {
 	armEntryAbort,
 	awaitGuard,
+	awaitSite,
 	cloneResponse,
 	cloneStaticValue,
 	getQueryParseChannels,
@@ -46,10 +47,13 @@ import {
 	mapChainHook,
 	mapError,
 	mapTransform,
-	resumeRoute,
 	runBeforeHandlePrefix,
 	runBeforeHandlePrefixAsync,
+	asyncTail,
+	tailPlain,
+	tailStage,
 	type AsyncMode,
+	type TailMode,
 	type TraceReporter
 } from './utils'
 import {
@@ -81,12 +85,22 @@ const awaitValue = (value: string, arm = '') =>
 let captureHeaderShorthand: boolean | undefined
 /**
  * @internal test hook: receives each route's emitted source. A sync-first
- * generator route is returned behind a small driver, so `toString()` of the
- * compiled handler no longer shows the body
+ * route's async tail is a helper beside it, so `toString()` of the compiled
+ * handler does not show the whole pipeline
  */
 let onEmit: ((code: string) => void) | undefined
 export const setOnEmit = (fn: typeof onEmit) => {
 	onEmit = fn
+}
+
+/**
+ * @internal test hook: `false` compiles sync-first routes on the `async`
+ * lane instead, the reference the async tail is differentially tested
+ * against. `undefined` restores the default (see `tail` below)
+ */
+let asyncTailOn: boolean | undefined
+export const setAsyncTail = (on: boolean | undefined) => {
+	asyncTailOn = on
 }
 
 export const setCaptureHeaderShorthand = (value: boolean | undefined) => {
@@ -341,19 +355,24 @@ export interface CompileHandlerJitOptions {
 	state: RouteCompileState
 }
 
-export function compileHandlerJit({
-	method,
-	path,
-	handler,
-	root,
-	errorRoot,
-	hook,
-	adapter,
-	isHandleFunction,
-	isStaticResponse,
-	isPromiseHandler,
-	state
-}: CompileHandlerJitOptions): CompiledHandler {
+export function compileHandlerJit(
+	options: CompileHandlerJitOptions,
+	// set only when rendering a route's async tail (see `TailMode`)
+	tailPass?: TailMode
+): CompiledHandler {
+	const {
+		method,
+		path,
+		handler,
+		root,
+		errorRoot,
+		hook,
+		adapter,
+		isHandleFunction,
+		isStaticResponse,
+		isPromiseHandler,
+		state
+	} = options
 	const {
 		vali,
 		inference,
@@ -365,7 +384,7 @@ export function compileHandlerJit({
 		traceHandleOn,
 		descriptor: {
 			async: isAsync,
-			generator,
+			tail: tailRoute,
 			responseMode,
 			hasBody,
 			bodyValiIsAsync,
@@ -392,8 +411,6 @@ export function compileHandlerJit({
 		}
 	} = state
 
-	// `yield` where the route suspends when compiled as a sync-first generator
-	const asyncMode: AsyncMode = generator ? 'yield' : isAsync
 	const hasStaticAfterResponse = !!hook?.afterResponse?.length
 
 	const hasDeriveDispose = !!(hook as { '~deriveEntries'?: unknown[] })?.[
@@ -402,6 +419,24 @@ export function compileHandlerJit({
 
 	const hasDynamicAfterResponse =
 		!!inference.afterResponse || hasDeriveDispose
+
+	const hasStl =
+		(hasAfterResponse || hasTrace || hasDeriveDispose) && !syncAfterResponse
+
+	// JSC only: V8 runs these routes faster on the plain `async` lane. An AOT
+	// capture follows its declared target, like the header shorthand
+	const tail = tailRoute && (asyncTailOn ?? captureHeaderShorthand ?? isBun)
+	const asyncMode: AsyncMode = tail
+		? // route-scope locals the sync route hands to its async tail
+			(tailPass ?? {
+				async: false,
+				n: 0,
+				live: hasStl ? ',_stl,_sv' : '',
+				sites: []
+			})
+		: isAsync
+	// code between await points (see `tailPlain`)
+	const plain = (code: string) => tailPlain(asyncMode, code)
 
 	const seenKeys = new Set<string>(['rt', 'fre'])
 	const paramValues: unknown[] = [errorRoot, finalizeRouteError]
@@ -420,11 +455,17 @@ export function compileHandlerJit({
 	const arm = abortOn ? "_as??=(c['~sig']??=c.request.signal)" : ''
 
 	let abortSchedule = ''
+	// Set once the handler's stream is observed: an abort exit never sends it,
+	// so it stops it, or the observer afterResponse / dispose wait on parks at
+	// tee's cap. A catch can't: an error hook may still serve `responseValue`
+	let discard = ''
 	const abortCheck = () =>
 		abortOn
-			? abortSchedule
-				? `if(${abortPeek}){${abortSchedule}return emp.clone()}\n`
-				: `if(${abortPeek})return emp.clone()\n`
+			? plain(
+					abortSchedule || discard
+						? `if(${abortPeek}){${discard}${abortSchedule}return emp.clone()}\n`
+						: `if(${abortPeek})return emp.clone()\n`
+				)
 			: ''
 
 	const abortChainGuard = () => (abortOn ? abortPeek : undefined)
@@ -511,18 +552,28 @@ export function compileHandlerJit({
 
 	if (needsStaticClone) link(cloneStaticValue, 'scl')
 
-	const callHandler = isHandleFunction
-		? `_r=h(c)\n${awaitGuard(handler as Function, asyncMode, '_r', arm)}`
-		: isStaticResponse
-			? `_r=cr(h)\n`
-			: isPromiseHandler
-				? `_r=h.then(cr)\n`
-				: needsStaticClone
-					? `_r=scl(h)\n`
-					: `_r=h\n`
+	// a function: in a sync-first route it numbers its await point on use
+	const callHandler = () =>
+		isHandleFunction
+			? awaitSite('h(c)', handler as Function, asyncMode, '_r', arm)
+			: isStaticResponse
+				? `_r=cr(h)\n`
+				: isPromiseHandler
+					? `_r=h.then(cr)\n`
+					: needsStaticClone
+						? `_r=scl(h)\n`
+						: `_r=h\n`
+
+	// an await point that is a stage of its own in the async tail
+	const stageSite = (call: string, target: string, fn?: Function, at = '') =>
+		asyncTail(asyncMode)
+			? tailStage(asyncTail(asyncMode)!) +
+				awaitSite(call, fn!, asyncMode, target, at) +
+				'}\n'
+			: awaitSite(call, fn!, asyncMode, target, at)
 
 	// va,rm,rc,re,pa,pf,pj,pt,pu,er,ar
-	let code = `${generator ? 'function* ' : isAsync ? 'async function ' : 'function '}route(c){\n`
+	let code = `${isAsync && !tail ? 'async ' : ''}function route(c){\n`
 
 	if (abortOn) {
 		link(emptyResponse, 'emp')
@@ -530,11 +581,7 @@ export function compileHandlerJit({
 		code += `if(ea(c))return emp.clone()\n`
 	}
 
-	if (
-		(hasAfterResponse || hasTrace || hasDeriveDispose) &&
-		!syncAfterResponse
-	)
-		code += 'let _stl\n'
+	if (hasStl) code += 'let _stl,_sv\n'
 
 	if (asyncCookieSign) code += 'let _sg\n'
 
@@ -579,7 +626,7 @@ export function compileHandlerJit({
 		(inference.set || hasTrace)
 	) {
 		link(materializeSetHeaders, 'msh')
-		code += `msh(c.set)\n`
+		code += plain(`msh(c.set)\n`)
 	}
 
 	const hasHeaders = inference.headers || !!vali?.headers
@@ -598,16 +645,20 @@ export function compileHandlerJit({
 			parseArgs += `${channels.array ? '' : ',undefined'},qo`
 		}
 
-		code += `c.query=pq(c.request.url,c.qi${parseArgs})\n`
+		code += plain(`c.query=pq(c.request.url,c.qi${parseArgs})\n`)
 		link(parseQueryFromURL, 'pq')
 	}
 
 	if (hasHeaders) {
 		if (captureHeaderShorthand === undefined && Capture.isCapturing())
-			code += `c.headers=c.request.headers.toJSON?.()??Object.fromEntries(c.request.headers)\n`
+			code += plain(
+				`c.headers=c.request.headers.toJSON?.()??Object.fromEntries(c.request.headers)\n`
+			)
 		else {
 			const headerShorthand = captureHeaderShorthand ?? hasHeaderShorthand
-			code += `c.headers=${headerShorthand ? 'c.request.headers.toJSON()' : 'Object.fromEntries(c.request.headers)'}\n`
+			code += plain(
+				`c.headers=${headerShorthand ? 'c.request.headers.toJSON()' : 'Object.fromEntries(c.request.headers)'}\n`
+			)
 		}
 		inlineUnsafe = true
 	}
@@ -645,7 +696,8 @@ export function compileHandlerJit({
 			code += mapTransform(
 				hook!.transform!,
 				[asyncMode, buildReport('transform'), arm],
-				abortChainGuard()
+				abortChainGuard(),
+				asyncTail(asyncMode)
 			)
 		}
 		code += endTrace('transform')
@@ -661,12 +713,21 @@ export function compileHandlerJit({
 		if (vali?.[slot]) {
 			link(vali, 'va')
 			const value = `va.${slot}.From(c.${slot},${fromArgs(slot, slotIsAsync)})`
-			code += `c.${slot}=${slotIsAsync ? awaitValue(value, arm) : value}\n`
+			code += plain(
+				`c.${slot}=${slotIsAsync ? awaitValue(value, arm) : value}\n`
+			)
 		}
 
 	if (cookieConfig) {
+		// `_ck` is local to this section: it runs as one unit between await points
+		const cookieStart = code.length
 		link(buildCookieJar, 'bcj')
 		link(cookieConfig, 'cc')
+
+		// A lane that can't verify on access still honours `verify: 'lazy'`:
+		// it verifies up front and throws on the first read of a bad cookie
+		const asyncLazyVerify =
+			asyncCookieSign && cookieConfig.verify === 'lazy' && !vali?.cookie
 
 		const cookieHeaderExpr =
 			hasHeaders && !vali?.headers
@@ -695,7 +756,7 @@ export function compileHandlerJit({
 				code += `let _ck=pcrsg(${cookieHeaderExpr},cc)\n`
 			} else {
 				link(parseCookieRaw, 'pcr')
-				code += `let _ck=${awaitValue(`pcr(${cookieHeaderExpr},cc)`, arm)}\n`
+				code += `let _ck=${awaitValue(`pcr(${cookieHeaderExpr},cc${asyncLazyVerify ? ',1' : ''})`, arm)}\n`
 			}
 
 			if (vali?.cookie) {
@@ -711,6 +772,8 @@ export function compileHandlerJit({
 
 			code += `c.cookie=bcj(c.set,_ck,cc${deferDecode ? ',undefined,1' : ''})\n`
 		}
+
+		code = code.slice(0, cookieStart) + plain(code.slice(cookieStart))
 	}
 
 	const compactEligible = responseMode === 'compact'
@@ -791,11 +854,16 @@ export function compileHandlerJit({
 	const dedupSchedule =
 		!!scheduleAfterResponse && !syncAfterResponse && !syncErrorHook
 
+	// A sync-first route and its async tail share one hoisted `_sc`, each
+	// passing its own `_stl`: the tail may observe a stream the route never saw
+	const scheduleArgs = tail ? 'c,_stl' : ''
 	const scheduleDecl = dedupSchedule
-		? `function _sc(){\n${scheduleAfterResponse}}\n`
+		? `function _sc(${scheduleArgs}){\n${scheduleAfterResponse}}\n`
 		: ''
 
-	const schedule = dedupSchedule ? `_sc()\n` : scheduleAfterResponse
+	const schedule = dedupSchedule
+		? `_sc(${scheduleArgs})\n`
+		: scheduleAfterResponse
 
 	const syncScheduleDecl =
 		syncAfterResponse && scheduleAfterResponse
@@ -803,7 +871,7 @@ export function compileHandlerJit({
 			: ''
 
 	const catchSchedule = dedupSchedule
-		? `_sc()\n`
+		? `_sc(${scheduleArgs})\n`
 		: syncScheduleDecl
 			? `_scf(c)\n`
 			: ''
@@ -833,6 +901,8 @@ export function compileHandlerJit({
 	if (syncCookieSign || asyncCookieSign) link(signCookieValues, 'scv')
 
 	let factoryHelpers = ''
+	// first await point inside the error hooks, `-1` without error hooks
+	let tailCatch = -1
 
 	if (
 		hasBeforeHandle ||
@@ -844,7 +914,8 @@ export function compileHandlerJit({
 		hasTrace
 	) {
 		// `_v` holds a derive value between its registration and its assignment
-		code += `let _r,tmp${hasDeriveDispose ? ',_v' : ''}\n`
+		code += `let _r${asyncTail(asyncMode) ? '=_lr' : ''},tmp${hasDeriveDispose ? ',_v' : ''}\n`
+		if (typeof asyncMode === 'object') asyncMode.r = true
 
 		if (hasBeforeHandle || hasTrace) {
 			const bfLen =
@@ -902,9 +973,9 @@ export function compileHandlerJit({
 			!syncAfterResponse
 				? `if(${disposeGuard}_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
 					`const _s=tee(_r,2)\n` +
-					`_r=_s[0]\n` +
+					`_sv=_r=_s[0]\n` +
 					(traceHandleOn ? `_trs=_s[1]\n` : `_stl=_s[1]\n`) +
-					`}else if(${disposeGuard}_r instanceof ReadableStream){const _o=obs(_r)\nif(_o){_r=_o[0];_stl=_o[1]}}\n`
+					`}else if(${disposeGuard}_r instanceof ReadableStream){const _o=obs(_r)\nif(_o){_r=_o[0];_stl=_o[1];_sv=_o[2]}}\n`
 				: ''
 
 		if (traceHandleOn) {
@@ -918,8 +989,8 @@ export function compileHandlerJit({
 			const handleChild = buildReport('handle')!.resolveChild(handleName)
 			code += handleChild.begin
 			if (hasBeforeHandle)
-				code += `if(_r===undefined){\n${callHandler}${teeBlock}}\n`
-			else code += callHandler + teeBlock
+				code += `if(_r===undefined){\n${callHandler()}${teeBlock}}\n`
+			else code += callHandler() + teeBlock
 
 			code += handleChild.end('_r')
 
@@ -928,10 +999,21 @@ export function compileHandlerJit({
 			code += `}else{\n`
 			code += endTrace('handle')
 			code += `}\n`
-		} else if (hasBeforeHandle)
-			code += `if(_r===undefined){\n${callHandler}${teeBlock}}\n`
-		else code += callHandler + teeBlock
+		} else if (isHandleFunction && asyncTail(asyncMode))
+			// the handler's await point, a stage of its own in the async tail
+			code +=
+				tailStage(
+					asyncTail(asyncMode)!,
+					hasBeforeHandle ? '_r===undefined' : undefined
+				) +
+				callHandler() +
+				teeBlock +
+				'}\n'
+		else if (hasBeforeHandle)
+			code += plain(`if(_r===undefined){\n${callHandler()}${teeBlock}}\n`)
+		else code += plain(callHandler() + teeBlock)
 
+		if (teeBlock) discard = '_sv?.return()\n'
 		code += abortCheck()
 
 		if (syncAfterResponse) {
@@ -962,7 +1044,7 @@ export function compileHandlerJit({
 				`if(typeof _r?.then==='function')return Promise.resolve(_r).then(fe).then((_v)=>_fin(c,_v)).catch((_e)=>fre(rt,c,_e))\n` +
 				`return _fin(c,_r)\n`
 		} else {
-			code += `if(_r instanceof Error)throw _r\n`
+			code += plain(`if(_r instanceof Error)throw _r\n`)
 			if (!isAsync) {
 				link(forwardError, 'fe')
 				code += `else if(typeof _r?.then==='function')_r=Promise.resolve(_r).then(fe)\n`
@@ -974,7 +1056,7 @@ export function compileHandlerJit({
 				hasAfterResponse ||
 				hasTrace
 			)
-				code += `c.responseValue=_r\n`
+				code += plain(`c.responseValue=_r\n`)
 
 			if (hasAfterHandle || hasTrace) {
 				const afLen = hook?.afterHandle?.length ?? 0
@@ -1023,16 +1105,17 @@ export function compileHandlerJit({
 					? `(_vr.mayReturnPromise?_vr.From(_r,'response',true):_vr.EncodeFrom(_r,'response'))`
 					: `_vr.EncodeFrom(_r,'response')`
 
-				code +=
+				code += plain(
 					`if(_r instanceof es){\n` +
-					`const _vr=va.response[_r.status]\n` +
-					`if(_vr)_r.response=${responseValiAsync ? awaitValue(encodeStatus, arm) : encodeStatus}\n` +
-					`}else if(!(_r instanceof Response)` +
-					`&&!(_r instanceof ReadableStream)` +
-					`&&typeof _r?.next!=='function'){\n` +
-					`const _vr=va.response[c.set.status??200]\n` +
-					`if(_vr)_r=${responseValiAsync ? awaitValue(encodeBody, arm) : encodeBody}\n` +
-					`}\n`
+						`const _vr=va.response[_r.status]\n` +
+						`if(_vr)_r.response=${responseValiAsync ? awaitValue(encodeStatus, arm) : encodeStatus}\n` +
+						`}else if(!(_r instanceof Response)` +
+						`&&!(_r instanceof ReadableStream)` +
+						`&&typeof _r?.next!=='function'){\n` +
+						`const _vr=va.response[c.set.status??200]\n` +
+						`if(_vr)_r=${responseValiAsync ? awaitValue(encodeBody, arm) : encodeBody}\n` +
+						`}\n`
+				)
 				code += abortCheck()
 			}
 
@@ -1040,7 +1123,7 @@ export function compileHandlerJit({
 			// rejected paths schedule after the error response sets the final status.
 			const deferSchedule = !!schedule
 
-			code += signPrefix
+			code += plain(signPrefix)
 			const finalMap = mapValue('_r')
 			const onMapReject = syncErrorHook
 				? `(_e)=>_ce(_e,c)`
@@ -1048,10 +1131,10 @@ export function compileHandlerJit({
 					? `(_e)=>{${freThenSchedule('_e')}}`
 					: `(_e)=>fre(rt,c,_e)`
 
-			if (generator)
+			if (tail)
 				// suspends only on a thenable map, still inside the route's try
 				code +=
-					`let _m=${finalMap}\nif(typeof _m?.then==='function')_m=(yield _m)\n` +
+					`let _m\n${stageSite(finalMap, '_m')}` +
 					(deferSchedule ? schedule : '') +
 					`return _m\n`
 			else if (isAsync)
@@ -1070,20 +1153,26 @@ export function compileHandlerJit({
 	} else if (isHandleFunction) {
 		if (!isAsync) link(forwardError, 'fe')
 		const finalMap = mapValue('_r')
-		code += `let ${callHandler}`
+		if (typeof asyncMode === 'object') {
+			// declared at the route's top level: the final map reads it
+			code += `let _r${asyncTail(asyncMode) ? '=_lr' : ''}\n`
+			asyncMode.r = true
+			code += stageSite('h(c)', '_r', handler as Function, arm)
+		} else code += `let ${callHandler()}`
 
 		code +=
 			abortCheck() +
-			`if(_r instanceof Error)throw _r\n` +
-			(generator
-				? `let _m=${finalMap}\nif(typeof _m?.then==='function')_m=(yield _m)\nreturn _m\n`
+			plain(`if(_r instanceof Error)throw _r\n`) +
+			(tail
+				? `let _m\n${stageSite(finalMap, '_m')}return _m\n`
 				: isAsync
 					? `return await ${finalMap}\n`
 					: `if(typeof _r?.then==='function')_r=Promise.resolve(_r).then(fe)\nconst _m=${finalMap}\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>${syncErrorHook ? '_ce(_e,c)' : 'fre(rt,c,_e)'}):_m\n`)
 	} else {
-		code +=
+		code += plain(
 			`const _m=${mapValue(isStaticResponse ? 'cr(h)' : isPromiseHandler ? 'h.then(cr)' : 'h')}\n` +
-			`return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n`
+				`return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n`
+		)
 	}
 
 	if (hasErrorHook || hasTrace) {
@@ -1117,13 +1206,23 @@ export function compileHandlerJit({
 				`return _em(c,fbr(c,e,_fbm))\n` +
 				`}\n`
 
-			body +=
+			const errorHead = plain(
 				`c.error=e\n` +
-				(allowUnsafeDetail
-					? `if(e instanceof verr)e.allowUnsafeValidationDetails=true\n`
-					: ``) +
-				`if(e?.status)c.set.status=e.status\n` +
-				`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
+					(allowUnsafeDetail
+						? `if(e instanceof verr)e.allowUnsafeValidationDetails=true\n`
+						: ``) +
+					`if(e?.status)c.set.status=e.status\n` +
+					`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n`
+			)
+			if (typeof asyncMode === 'object') {
+				// `e` is live; the catch's own `_r` is only ever an await target
+				tailCatch = asyncMode.n
+				asyncMode.r = false
+				asyncMode.e = true
+			}
+
+			body +=
+				errorHead +
 				`let _r${hasMapResponse ? ',tmp' : ''}\n` +
 				mapError(
 					hook!.error!,
@@ -1150,7 +1249,8 @@ export function compileHandlerJit({
 						asyncMode,
 						arm
 					],
-					abortChainGuard()
+					abortChainGuard(),
+					asyncTail(asyncMode)
 				) +
 				endTrace('error') +
 				(hasDeriveDispose
@@ -1171,27 +1271,51 @@ export function compileHandlerJit({
 			? `}catch(e){${freThenSchedule('e')}}\n`
 			: `}catch(e){return fre(rt,c,e)}\n`
 
+	// the async tail's pipeline: `_t` wraps it (see below)
+	if (tailPass) return code as unknown as CompiledHandler
+
 	code += '}'
 
 	code =
 		head +
 		(abortOn && code.includes('_as') ? 'let _as\n' : '') +
 		(code.includes('_av') ? 'let _av\n' : '') +
-		scheduleDecl +
+		(tail ? '' : scheduleDecl) +
 		code
+
+	if (tail) {
+		const { n, live, sites } = asyncMode as TailMode
+		const pass: TailMode = { async: true, n: 0, live, sites: [] }
+		const pipeline = compileHandlerJit(options, pass) as unknown as string
+		// both renderings number the same await points in the same order
+		if (
+			pass.sites.join('\n') !== sites.join('\n') ||
+			!pipeline.startsWith('try{\n')
+		)
+			throw new Error(
+				'[elysia] internal: async tail out of step with its route'
+			)
+
+		factoryHelpers +=
+			scheduleDecl +
+			`async function _t(c,_rk,_y,_lr,_le${live}){\n` +
+			(abortOn && pipeline.includes('_as') ? 'let _as\n' : '') +
+			'try{\n' +
+			// resuming inside the error hooks: enter the catch with the error
+			(tailCatch !== -1 && tailCatch < n
+				? `if(_rk>=${tailCatch})throw _le\n`
+				: '') +
+			pipeline.slice(5) +
+			'}\n'
+	}
 
 	if (syncCookieSign || asyncCookieSign) {
 		code = code.replaceAll('fre(rt,c,', '_sfre(rt,c,')
 		factoryHelpers =
 			factoryHelpers.replaceAll('fre(rt,c,', '_sfre(rt,c,') +
-			(syncCookieSign
-				? `function _sfre(rt,c,e){try{scv(c.set.cookie,cc)}catch{}return fre(rt,c,e)}\n`
-				: `function _sfre(rt,c,e){let _p\ntry{_p=scv(c.set.cookie,cc)}catch{}\nreturn _p?_p.then(()=>fre(rt,c,e),()=>fre(rt,c,e)):fre(rt,c,e)}\n`)
-	}
-
-	if (generator) {
-		link(resumeRoute, 'rs')
-		code = `(function(_g){return function route(c){const _i=_g(c),_n=_i.next()\nreturn _n.done?_n.value:rs(_i,_n.value)}})(${code})`
+			// The app-level error lane signs right before its final map, after
+			// every error / mapResponse hook this route didn't compile in
+			`function _sgn(s){return scv(s.cookie,cc)}\nfunction _sfre(rt,c,e){return fre(rt,c,e,_sgn)}\n`
 	}
 
 	if (factoryHelpers)

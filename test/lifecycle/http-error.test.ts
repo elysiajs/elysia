@@ -1354,8 +1354,9 @@ describe('HTTPError', () => {
 
 				expect(error.type).toBe('body')
 				expect(Object.hasOwn(error, 'type')).toBe(true)
-				// the scope field is not a problem code
-				expect(error.code).toBeUndefined()
+				// `type` stays the validated slot, `code` carries the problem
+				// slug like every other built-in error
+				expect(error.code).toBe('validation')
 			})
 
 			// A subclass that renames its `code` must retag with it, in both
@@ -1669,10 +1670,47 @@ describe('error fallback lanes', () => {
 		expect(text).not.toInclude('hunter2')
 		expect(JSON.parse(text)).toEqual({
 			type: 'validation',
+			code: 'validation',
 			title: 'Validation Error',
 			status: 422
 		})
 	})
+
+	// A response violation is a server bug: when its body cannot be built,
+	// the fallback still masks it as the generic 500 instead of blaming the
+	// client with a 422
+	for (const production of [false, true])
+		for (const withHook of [false, true])
+			it(`mask a response violation whose custom error throws (${production ? 'production' : 'development'}${withHook ? ', error hook' : ''})`, async () => {
+				if (production) process.env.NODE_ENV = 'production'
+
+				let app = new Elysia()
+				if (withHook) app = app.error(() => {}) as any
+
+				app.get(
+					'/',
+					{
+						response: t.Object({
+							name: t.String({
+								error: () => {
+									throw new Error('custom formatter failed')
+								}
+							})
+						})
+					},
+					() => ({ name: 1 as any })
+				)
+
+				const response = await app.handle('/')
+
+				expect(response.status).toBe(500)
+				expect(await response.json()).toEqual({
+					type: 'internal-server-error',
+					code: 'internal-server-error',
+					title: 'Internal Server Error',
+					status: 500
+				})
+			})
 
 	it('keep set-cookie and headers when a bodyless error falls through', async () => {
 		const app = new Elysia()
@@ -1869,4 +1907,39 @@ describe('typeBase on the built-in 404 and 500 bodies', () => {
 			status: 500
 		})
 	})
+})
+
+// Every problem document carries `code`, validation included: clients switch
+// on it without parsing `type`, which `HTTPError.typeBase` may widen
+describe('validation problem code', () => {
+	afterEach(() => {
+		delete process.env.NODE_ENV
+	})
+
+	for (const production of [false, true])
+		it(`tag body and query problems (${production ? 'production' : 'development'})`, async () => {
+			if (production) process.env.NODE_ENV = 'production'
+
+			const app = new Elysia()
+				.post('/', { body: t.Object({ x: t.Number() }) }, () => 'ok')
+				.get('/', { query: t.Object({ x: t.Number() }) }, () => 'ok')
+
+			const body = await app.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: '{"x":"no"}'
+				})
+			)
+			const query = await app.handle('/?x=no')
+
+			for (const response of [body, query]) {
+				expect(response.status).toBe(422)
+				expect(await response.json()).toMatchObject({
+					type: 'validation',
+					code: 'validation',
+					status: 422
+				})
+			}
+		})
 })

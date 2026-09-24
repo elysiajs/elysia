@@ -134,6 +134,7 @@ describe('WebSocket production validation errors without error hooks', () => {
 
 		expect(parsed).toMatchObject({
 			type: 'validation',
+			code: 'validation',
 			title: 'Validation Error',
 			status: 422,
 			on: 'body'
@@ -167,6 +168,7 @@ describe('WebSocket production validation errors without error hooks', () => {
 
 		expect(parsed).toMatchObject({
 			type: 'validation',
+			code: 'validation',
 			title: 'Validation Error',
 			status: 422,
 			on: 'body'

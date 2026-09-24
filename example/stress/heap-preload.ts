@@ -1,4 +1,4 @@
-// ponytail: preload for profiling runs only — dumps heap snapshot + mimalloc
+// ponytailpreload for profiling runs only — dumps heap snapshot + mimalloc
 // stats at exit so stress scripts stay untouched.
 // Usage: bun --cpu-prof --preload ./example/stress/heap-preload.ts example/stress/<case>.ts
 import { heapStats } from 'bun:jsc'

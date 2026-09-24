@@ -10,6 +10,7 @@ import {
 import { skipClone } from '../../adapter/skip-clone'
 import { origin } from '../../adapter/origin'
 import { ElysiaStatus } from '../../error'
+import { ElysiaFile } from '../../universal/file'
 import { adoptErrorType } from '../../handler/error'
 import { ELYSIA_TYPES } from '../../type/constants'
 import { scanTokens } from '../lexer'
@@ -40,6 +41,9 @@ export function cloneResponse(r: unknown) {
 }
 
 export function cloneStaticValue(value: unknown) {
+	// structuredClone drops the class and would serve the path as JSON
+	if (ElysiaFile.isElysiaFile(value)) return value
+
 	try {
 		const cloned = structuredClone(value)
 		if (Object.getPrototypeOf(value) === ElysiaStatus.prototype)
@@ -89,7 +93,7 @@ export const mapTransform = /*#__PURE__*/ map<
 >((i, fn, [isAsync, report, arm]) => {
 	const t = trace(report, fn)
 	const call = isAsync
-		? `_tf=tf${at(i)}(c)\n${awaitGuard(fn, isAsync, '_tf', arm)}`
+		? awaitSite(`tf${at(i)}(c)`, fn, isAsync, '_tf', arm)
 		: `tf${at(i)}(c)\n`
 
 	return t.begin + call + t.end()
@@ -305,6 +309,7 @@ export function mapBeforeHandle(
 ) {
 	const hooks = toArray(_hooks)
 	const modes = deriveModes(hooks, derive)
+	const tail = asyncTail(isAsync)
 
 	let code = ''
 	let depth = 0
@@ -312,15 +317,20 @@ export function mapBeforeHandle(
 
 	for (let i = 0; i < hooks.length; i++) {
 		const fn = hooks[i]
-		if (i > 0) {
-			code += `if(${abortGuard ? `!${abortGuard}&&` : ''}_r===undefined){\n`
+		const guard =
+			i > 0
+				? `${abortGuard ? `!${abortGuard}&&` : ''}_r===undefined`
+				: undefined
+
+		if (tail) code += tailStage(tail, guard)
+		else if (guard) {
+			code += `if(${guard}){\n`
 			depth++
 		}
 
 		const t = trace(report, fn)
 		code += t.begin
-		code += `tmp=bf${at(i)}(c)\n`
-		code += awaitGuard(fn, isAsync, 'tmp', arm)
+		code += awaitSite(`bf${at(i)}(c)`, fn, isAsync, 'tmp', arm)
 		if (modes?.[i] !== undefined) {
 			needsEs = true
 			link(registerDeriveDisposable, 'dsp')
@@ -352,6 +362,7 @@ export function mapBeforeHandle(
 		} else code += 'if(tmp!==undefined)_r=tmp\n'
 
 		code += t.end('tmp')
+		if (tail) code += '}\n'
 	}
 
 	code += '}'.repeat(depth)
@@ -423,25 +434,32 @@ export function mapChainHook(
 	arm?: string
 ) {
 	const hooks = toArray(_hooks)
+	const tail = asyncTail(isAsync)
 	let code = ''
 	let depth = 0
 
 	for (let i = 0; i < hooks.length; i++) {
 		const fn = hooks[i]
-		if (i > 0) {
-			code += `if(${abortGuard ? `!${abortGuard}&&` : ''}tmp===undefined){\n`
+		const guard =
+			i > 0
+				? `${abortGuard ? `!${abortGuard}&&` : ''}tmp===undefined`
+				: undefined
+
+		if (tail) code += tailStage(tail, guard)
+		else if (guard) {
+			code += `if(${guard}){\n`
 			depth++
 		}
 
 		const t = trace(report, fn)
 		code += t.begin
-		code += `tmp=${prefix}${at(i)}(c)\n`
-		code += awaitGuard(fn, isAsync, 'tmp', arm)
+		code += awaitSite(`${prefix}${at(i)}(c)`, fn, isAsync, 'tmp', arm)
 		code += t.end('tmp')
+		if (tail) code += '}\n'
 	}
 
 	code += '}'.repeat(depth)
-	code += `if(tmp!==undefined)_r=c.responseValue=tmp\n`
+	code += tailPlain(isAsync, `if(tmp!==undefined)_r=c.responseValue=tmp\n`)
 	return code
 }
 
@@ -472,8 +490,7 @@ export const mapError = /*#__PURE__*/ map<
 	link(mapResponse, 'rm')
 	link(adoptErrorType, 'aet')
 	return (
-		`_r=er${at(i)}(c)\n` +
-		awaitGuard(fn, isAsync, '_r', arm) +
+		awaitSite(`er${at(i)}(c)`, fn, isAsync, '_r', arm) +
 		`if(_r!==undefined){\n` +
 		`if(_r instanceof Response)c.set.status=_r.status\n` +
 		`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
@@ -492,23 +509,30 @@ function map<Event extends AppEvent, T extends unknown[] = []>(
 	return function (
 		event: MaybeArray<AppHook[Event][0]>,
 		rest?: T,
-		abortGuard?: string
+		abortGuard?: string,
+		// the async tail flattens the chain into one resumable stage per hook
+		tail?: TailMode
 	) {
 		if (Array.isArray(event)) {
 			let code = ''
 			let depth = 0
 
 			for (let i = 0; i < event.length; i++) {
-				if (i > 0 && abortGuard) {
-					code += `if(!${abortGuard}){\n`
+				const guard = i > 0 && abortGuard ? `!${abortGuard}` : undefined
+				if (tail) code += tailStage(tail, guard)
+				else if (guard) {
+					code += `if(${guard}){\n`
 					depth++
 				}
 				code += map(i, event[i], rest as T)
+				if (tail) code += '}\n'
 			}
 
 			code += '}'.repeat(depth)
 			return code
-		} else return map(undefined, event, rest as T)
+		} else if (tail)
+			return tailStage(tail) + map(undefined, event, rest as T) + '}\n'
+		else return map(undefined, event, rest as T)
 	}
 }
 
@@ -615,41 +639,56 @@ export function getQueryParseChannels(
 	return result ?? undefined
 }
 
-/**
- * How a compiled route suspends on a value that may be a thenable:
- * `await` in an `async` route, `yield` in a sync-first generator route
- * (driven by {@link resumeRoute}), nothing in a sync route
- */
-export type AsyncMode = boolean | 'yield'
+export type AsyncMode = boolean | TailMode
 
-/**
- * Continues a sync-first route after its first real thenable
- *
- * A route whose callbacks only *might* return a promise is compiled as a
- * generator that yields exactly the values that are thenables. It runs to
- * completion synchronously until one is, and only then pays for async.
- */
-export async function resumeRoute(
-	route: Generator<unknown, unknown, unknown>,
-	pending: unknown
-) {
-	while(true) {
-		let value: unknown
-		let failed = false
-
-		try {
-			value = await pending
-		} catch (error) {
-			value = error
-			failed = true
-		}
-
-		const next = failed ? route.throw(value) : route.next(value)
-		if (next.done) return next.value
-
-		pending = next.value
-	}
+export interface TailMode {
+	// should render async tail? fast on bun, slow on node
+	async: boolean
+	// next await point index
+	n: number
+	// `_r`, state across await points
+	r?: boolean
+	// error
+	e?: boolean
+	// route-scope locals carry into tail, each prefixed by `,`
+	live: string
+	// emit await point as `e:`
+	sites: string[]
 }
+
+export const asyncTail = (mode: AsyncMode) =>
+	typeof mode === 'object' && mode.async ? mode : undefined
+
+// `target=call`, then suspend if the result is a thenable
+export function awaitSite(
+	call: string,
+	fn: Function,
+	isAsync: AsyncMode,
+	target: string,
+	arm = ''
+) {
+	if (typeof isAsync !== 'object')
+		return `${target}=${call}\n${awaitGuard(fn, isAsync, target, arm)}`
+
+	const k = isAsync.n++
+	isAsync.sites.push(`${isAsync.e ? 'e:' : ''}${target}=${call}`)
+
+	return isAsync.async
+		? `${target}=_rk===${k}?_y:${call}\n` +
+				`if(_rk===${k}||typeof ${target}?.then==='function'){${arm ? `;${arm}\n` : ''}${target}=await ${target}}\n`
+		: `${target}=${call}\n` +
+				`if(typeof ${target}?.then==='function')return _t(c,${k},${target},${isAsync.r ? '_r' : 'undefined'},${isAsync.e ? 'e' : 'undefined'}${isAsync.live})\n`
+}
+
+export const tailStage = (mode: TailMode, guard?: string) =>
+	`if(_rk<=${mode.n}${guard ? `&&(_rk===${mode.n}||${guard})` : ''}){\n`
+
+export const tailPlain = (mode: AsyncMode, code: string) =>
+	!code || !asyncTail(mode)
+		? code
+		: (mode as TailMode).n
+			? `if(_rk<${(mode as TailMode).n}){\n${code}}\n`
+			: ''
 
 export function awaitGuard(
 	fn: Function,
@@ -658,7 +697,8 @@ export function awaitGuard(
 	arm = ''
 ) {
 	if (!isAsync) return ''
-	const code = `${arm ? `;${arm}\n` : ''}${target}=${isAsync === 'yield' ? `(yield ${target})` : `await ${target}`}\n`
+
+	const code = `${arm ? `;${arm}\n` : ''}${target}=await ${target}\n`
 	return isAsyncFunction(fn)
 		? code
 		: `if(typeof ${target}?.then==='function'){${code}}\n`

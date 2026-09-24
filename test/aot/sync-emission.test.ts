@@ -29,8 +29,8 @@ const compileRoute = (app: any, index = 0) => {
 	}
 }
 
-// Suspends on thenables: an `async` route, or a sync-first generator route
-// for work that only *may* return a Promise
+// Suspends on thenables: an `async` route, or a sync-first route with an
+// async tail for work that only *may* return a Promise
 const isAsync = (app: any, index = 0) =>
 	suspendsOnThenables(compileRoute(app, index).fn)
 
@@ -622,11 +622,11 @@ describe('Promise-returning synchronous functions', () => {
 	})
 })
 
-// A route that is async only because a callback *may* return a Promise is a
-// sync-first generator: it answers synchronously while nothing is a thenable
-// (an async route paid a Promise + microtask per request) and still waits for
-// a real Promise at exactly the point it appears
-describe('sync-first generator routes', () => {
+// A route that is async only because a callback *may* return a Promise is
+// sync-first: it answers synchronously while nothing is a thenable (an async
+// route paid a Promise + microtask per request) and hands the first real
+// Promise to its async tail, which waits for it at exactly the point it appears
+describe('sync-first routes', () => {
 	const dispatch = (app: any, headers: Record<string, string> = {}) =>
 		compileRoute(app).fn({
 			request: new Request('http://localhost/', { headers }),

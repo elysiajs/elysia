@@ -81,13 +81,18 @@ function warnPathMutation(app: AnyElysia) {
 
 function finalizeError(
 	context: Context,
-	handleError: (context: Context, error: Error) => unknown,
+	handleError: (
+		context: Context,
+		error: Error,
+		sign?: (set: Context['set']) => unknown
+	) => unknown,
 	afterResponse: ((context: Context, status?: number) => void) | undefined,
-	error: Error
+	error: Error,
+	sign?: (set: Context['set']) => unknown
 ) {
 	let resp: Response | Promise<Response>
 	try {
-		resp = handleError(context, error) as Response | Promise<Response>
+		resp = handleError(context, error, sign) as Response | Promise<Response>
 	} catch (errorPipelineThrow) {
 		if (!isProduction()) console.error(errorPipelineThrow)
 		resp = internalServerErrorResponse(error)
@@ -288,11 +293,37 @@ export function createFetchHandler(
 		owned?: boolean
 	) => unknown
 
+	function finalMap(
+		response: unknown,
+		set: Context['set'],
+		request: Request | undefined,
+		sign: ((set: Context['set']) => unknown) | undefined
+	) {
+		if (!sign) return baseMapResponse(response, set, request, true)
+
+		let pending: any
+		try {
+			pending = sign(set)
+		} catch {}
+
+		return pending
+			? pending.then(
+					() => baseMapResponse(response, set, request, true),
+					() => baseMapResponse(response, set, request, true)
+				)
+			: baseMapResponse(response, set, request, true)
+	}
+
 	const mapResponseHooks = hook?.mapResponse as
 		| ((context: Context) => unknown)[]
 		| undefined
 	const mapResponse = mapResponseHooks?.length
-		? (response: unknown, set: Context['set'], context?: Context) => {
+		? (
+				response: unknown,
+				set: Context['set'],
+				context?: Context,
+				sign?: (set: Context['set']) => unknown
+			) => {
 				if (!context)
 					return baseMapResponse(response, set, undefined, true)
 				;(context as { responseValue?: unknown }).responseValue =
@@ -308,31 +339,36 @@ export function createFetchHandler(
 							// eslint-disable-next-line sonarjs/function-inside-loop -- promise continuation for the hook at index i
 							return Promise.resolve(result).then((resolved) => {
 								if (resolved !== undefined)
-									return baseMapResponse(
+									return finalMap(
 										resolved,
 										set,
 										request,
-										true
+										sign
 									)
 
 								return run(i + 1)
 							})
 
 						if (result !== undefined)
-							return baseMapResponse(result, set, request, true)
+							return finalMap(result, set, request, sign)
 					}
 
-					return baseMapResponse(response, set, request, true)
+					return finalMap(response, set, request, sign)
 				}
 
 				return run(0)
 			}
-		: (response: unknown, set: Context['set'], context?: Context) =>
-				baseMapResponse(
+		: (
+				response: unknown,
+				set: Context['set'],
+				context?: Context,
+				sign?: (set: Context['set']) => unknown
+			) =>
+				finalMap(
 					response,
 					set,
 					(context as { request?: Request } | undefined)?.request,
-					true
+					sign
 				)
 
 	const handleError = createErrorHandler(
@@ -450,8 +486,11 @@ export function createFetchHandler(
 		})
 	}
 
-	const fail = (context: Context, error: Error) =>
-		finalizeError(context, handleError, afterResponse, error)
+	const fail = (
+		context: Context,
+		error: Error,
+		sign?: (set: Context['set']) => unknown
+	) => finalizeError(context, handleError, afterResponse, error, sign)
 
 	app['~finalizeError'] = fail
 

@@ -177,4 +177,88 @@ describe('signed cookies on every compiled lane', () => {
 		expect(result.status).toBe(500)
 		expect(result.me).toBe(200)
 	})
+
+	// A root error or mapResponse hook the route did not compile in runs in the
+	// app-level error lane, after the route's own sign: it must still sign
+	// what it writes, and read the value the route wrote, not its wire form
+	it('signs a cookie written by an error hook registered after the route', async () => {
+		let seen: unknown
+		const app = withMe(
+			new Elysia(config).get('/login', ({ cookie: { session } }) => {
+				session.value = 'user-42'
+
+				throw new Error('boom')
+			})
+		).error(({ cookie }: any) => {
+			seen = cookie.session.value
+			cookie.session.value = 'from-error'
+
+			return 'handled'
+		})
+
+		const result = await roundTrip(app, '/login')
+		expect(seen).toBe('user-42')
+		expect(result.me).toBe(200)
+		expect(result.user).toBe('from-error')
+	})
+
+	it('signs a cookie written by a late error hook that declines the error', async () => {
+		const app = withMe(
+			new Elysia(config).get('/login', ({ cookie: { session } }) => {
+				session.value = 'user-42'
+
+				throw new Error('boom')
+			})
+		).error(({ cookie }: any) => {
+			if (cookie?.session) cookie.session.value = 'from-error'
+		})
+
+		const result = await roundTrip(app, '/login')
+		expect(result.status).toBe(500)
+		expect(result.user).toBe('from-error')
+	})
+
+	it('signs a cookie written by a root mapResponse hook on the error lane', async () => {
+		const app = withMe(
+			new Elysia(config)
+				.mapResponse(({ cookie }: any) => {
+					if (cookie) cookie.session.value = 'from-map'
+				})
+				.get('/login', ({ cookie: { session } }) => {
+					session.value = 'user-42'
+
+					throw new Error('boom')
+				})
+		)
+
+		const res = await app.handle(new Request('http://localhost/login'))
+		const pair = res.headers.get('set-cookie')!.split(';')[0]!
+		expect(pair.split('.').length).toBe(2)
+	})
+})
+
+// The same late-hook cases, plus secret rotation and an async mapResponse, on
+// the lanes that sign asynchronously (WebCrypto, frozen AOT). Each lane runs in
+// its own process: WebCrypto must be selected before the HMAC singleton loads
+describe('late app-level hooks sign on every lane', () => {
+	for (const lane of ['jit', 'subtle', 'aot'] as const)
+		it(lane, async () => {
+			const child = Bun.spawn(
+				[process.execPath, import.meta.dir + '/sign-lanes.fixture.ts', lane],
+				{ stdout: 'pipe', stderr: 'pipe' }
+			)
+			const timeout = setTimeout(() => child.kill(), 10_000)
+			try {
+				const [exit, stdout, stderr] = await Promise.all([
+					child.exited,
+					new Response(child.stdout).text(),
+					new Response(child.stderr).text()
+				])
+				expect(stderr).toBe('')
+				expect(exit).toBe(0)
+				expect(stdout.trim()).toBe(`29 ${lane} signing cases passed`)
+			} finally {
+				clearTimeout(timeout)
+			}
+		})
 })

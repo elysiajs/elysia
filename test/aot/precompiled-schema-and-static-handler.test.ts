@@ -1,6 +1,6 @@
 import '../../src/compile/aot-capture'
 import { describe, it, expect, afterEach } from 'bun:test'
-import { Elysia, t } from '../../src'
+import { Elysia, status, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
 import {
@@ -147,6 +147,51 @@ describe('static-resource handlers are captured and replayed', () => {
 
 		const res = await frozenApp.handle('/')
 		expect(res.status).toBe(200)
+		await expect(res.text()).resolves.toBe('thing')
+	})
+
+	// the replayed factory binds the live prepared value, so a static
+	// `status(code, primitive)` must state its MIME there too
+	it('keeps the MIME of a static status() primitive on a frozen handler', async () => {
+		process.env.ELYSIA_AOT_BUILD = '1'
+		endValidatorCapture()
+		endHandlerCapture()
+
+		const build = () =>
+			new Elysia()
+				.beforeHandle('global', ({ set }) => {
+					set.headers['x-hook'] = '1'
+				})
+				.get('/', status(201, 'thing'))
+
+		;(build() as any).compile()
+		const handlers = endHandlerCapture()
+		const validators = endValidatorCapture()
+		expect(handlers.length).toBe(1)
+
+		// count replays so the assertion cannot pass on a live JIT fallback
+		const manifest = materialiseHandlers(handlers)
+		const factory = manifest.GET['/'].f
+		let replays = 0
+		manifest.GET['/'].f = function (...args: unknown[]) {
+			replays++
+			return Reflect.apply(factory, this, args)
+		}
+
+		Validator.clear()
+		registerManifest({
+			validators: materialise(validators),
+			handlers: manifest
+		})
+
+		delete process.env.ELYSIA_AOT_BUILD
+		const frozenApp = build()
+		;(frozenApp as any).compile()
+		expect(replays).toBe(1)
+
+		const res = await frozenApp.handle('/')
+		expect(res.status).toBe(201)
+		expect(res.headers.get('content-type')).toBe('text/plain;charset=utf-8')
 		await expect(res.text()).resolves.toBe('thing')
 	})
 })

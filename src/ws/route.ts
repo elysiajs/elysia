@@ -830,7 +830,11 @@ export function buildWSRoute(
 				} else {
 					;(context as any).cookie = buildCookieJar(
 						(context as any).set,
-						await parseCookieRaw(cookieHeader, cookieConfig),
+						await parseCookieRaw(
+							cookieHeader,
+							cookieConfig,
+							cookieConfig.verify === 'lazy' ? 1 : undefined
+						),
 						cookieConfig
 					)
 				}
@@ -1050,8 +1054,6 @@ export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 	) {
 		let result
 		try {
-			// ponytail: ALS costs ~12ns/frame here. Async message -> default stop
-			// keeps its baseline self-wait; add request provenance only by contract.
 			result = ws.data.message!(getElysia(ws), message)
 		} catch (error) {
 			// Sync throw from dispatch: send a last-resort frame and bail.

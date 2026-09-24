@@ -26,8 +26,11 @@ import type { AnyLocalHook, MaybeArray } from '../../types'
 export interface RouteDescriptor {
 	handlerKind: 'function' | 'response' | 'promise' | 'static-value'
 	async: boolean
-	/** `async` only on a maybe-promise: compiled as a sync-first generator */
-	generator: boolean
+	/**
+	 * `async` only on a maybe-promise: compiled as a sync route that hands
+	 * off to an async tail at the first thenable
+	 */
+	tail: boolean
 	responseMode:
 		| 'compact'
 		| 'default-headers'
@@ -351,8 +354,10 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 	const callHandlerSyncOnAsync =
 		isAsync && isHandleFunction && !handlerIsAsync
 
-	const generator =
+	// the tail cannot resume inside an error hook's mapResponse chain
+	const tail =
 		isAsync &&
+		!(hasErrorHook && hasMapResponse) &&
 		!hasBody &&
 		!handlerIsAsync &&
 		!asyncCookieSign &&
@@ -407,7 +412,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 	const descriptor: RouteDescriptor = {
 		handlerKind,
 		async: !!isAsync,
-		generator: generator as boolean,
+		tail: tail as boolean,
 		responseMode,
 
 		hasBeforeHandle,

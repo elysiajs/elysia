@@ -674,6 +674,7 @@ app.use(plugin).group(
 			200: number
 			422: {
 				type: 'validation'
+				code: 'validation'
 				title: 'Validation Error'
 				status: 422
 				detail?: string
@@ -755,6 +756,7 @@ app.use(plugin).group(
 		response: {
 			422: {
 				type: 'validation'
+				code: 'validation'
 				title: 'Validation Error'
 				status: 422
 				detail?: string
