@@ -52,6 +52,28 @@ describe('Edge Case', () => {
 		expect(res).toBe('h')
 	})
 
+	it('awaits a Promise returned by a multiline arrow with a response schema', async () => {
+		const payload = () => Promise.resolve({ ok: true })
+		const schema = { response: t.Object({ ok: t.Boolean() }) }
+		// Keep the line breaks in toString(): Bun removes them when transpiling source.
+		const wrapped = eval('() =>\n payload()') as () => Promise<{
+			ok: boolean
+		}>
+		const paren = eval('() => (\n payload()\n)') as () => Promise<{
+			ok: boolean
+		}>
+		const app = new Elysia()
+			.get('/inline', () => payload(), schema)
+			.get('/wrapped', wrapped, schema)
+			.get('/paren', paren, schema)
+
+		for (const path of ['/inline', '/wrapped', '/paren']) {
+			const response = await app.handle(req(path))
+			expect(response.status).toBe(200)
+			expect(await response.json()).toEqual({ ok: true })
+		}
+	})
+
 	it('handle dynamic all method', async () => {
 		const app = new Elysia().all('/all/*', () => 'ALL')
 
