@@ -328,4 +328,73 @@ describe('sucrose', () => {
 			route: true
 		})
 	})
+
+	/**
+	 * Vite's SSR transform (and other bundlers) rewrite calls to imported functions
+	 * as `(0, module.fn)(context)`, where no word character precedes the call
+	 */
+	it('infer all inferences if context is passed to a parenthesized callee', () => {
+		const module = { log: console.log }
+
+		expect(
+			sucrose({
+				handler: (context) => {
+					;(0, module.log)(context)
+				}
+			})
+		).toEqual({
+			query: true,
+			headers: true,
+			body: true,
+			cookie: true,
+			set: true,
+			server: true,
+			path: true,
+			url: true,
+			route: true
+		})
+	})
+
+	/**
+	 * An optional call, `fn?.(context)`, is preceded by `.` rather than a word character
+	 */
+	it('infer all inferences if context is passed to an optional call', () => {
+		const log: typeof console.log | undefined = console.log
+
+		expect(
+			sucrose({
+				handler: (context) => {
+					log?.(context)
+				}
+			})
+		).toEqual({
+			query: true,
+			headers: true,
+			body: true,
+			cookie: true,
+			set: true,
+			server: true,
+			path: true,
+			url: true,
+			route: true
+		})
+	})
+
+	it('parse headers when context is passed to a parenthesized callee', async () => {
+		const module = {
+			language: (context: {
+				headers: Record<string, string | undefined>
+			}) => context.headers['accept-language']
+		}
+
+		const app = new Elysia().get('/', (context) =>
+			(0, module.language)(context)
+		)
+
+		const response = await app
+			.handle(req('/', { headers: { 'accept-language': 'it' } }))
+			.then((x) => x.text())
+
+		expect(response).toBe('it')
+	})
 })
