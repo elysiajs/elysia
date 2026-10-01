@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 
 import { Elysia } from '../../src'
+import { composeRouteHook } from '../../src/compile/handler'
 import {
 	runBeforeHandlePrefix,
 	runBeforeHandlePrefixAsync
@@ -100,8 +101,20 @@ describe('eager propagated-hook prefixes', () => {
 			({ path }) => path === '/second'
 		)
 
+		// only the HTTP JIT opts in to the compact prefix, `app.routes` is flat
+		const route = (app as any)['~routes'][routeIndex]
 		expect(
-			(app.routes[routeIndex]!.hooks as any)['~beforeHandlePrefix'].length
+			(
+				composeRouteHook(
+					route[3],
+					route[4],
+					route[5],
+					route[6],
+					app,
+					route[7],
+					true
+				) as any
+			)['~beforeHandlePrefix'].length
 		).toBe(1)
 		expect((app as any).handler(routeIndex, true).toString()).toContain(
 			'rbp'

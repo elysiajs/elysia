@@ -242,8 +242,7 @@ export function inferFunction<K extends string>(
 						tokens[i - 1]?.value === ',')
 				) {
 					const renamed =
-						tokens[i + 1]?.value === ':' &&
-						tokens[i + 2]?.k === 'i'
+						tokens[i + 1]?.value === ':' && tokens[i + 2]?.k === 'i'
 							? tokens[i + 2].value
 							: token.value
 					aliases.add(renamed)
@@ -381,6 +380,7 @@ export function sucrose(
 	lifeCycle: Sucrose.LifeCycle | undefined
 ): Sucrose.Inference {
 	let inference: Sucrose.Inference | undefined
+	let merged = false
 
 	const events: Handler[] = []
 	if (handler && typeof handler === 'function') events.push(handler)
@@ -404,15 +404,10 @@ export function sucrose(
 
 		let inferred = functionCaches.get(event as Function)
 		if (!inferred) {
-			if (
-				typeof event === 'function' &&
-				Object.hasOwn(event, 'toString')
-			) {
-				// An own `toString` is a forged source: the real behavior
-				// cannot be trusted from it, so widen every channel and memo
-				// by identity only, never by content
+			if (typeof event === 'function' && Object.hasOwn(event, 'toString'))
+				// An own `toString` is a forged source
 				inferred = allAccessed
-			} else {
+			else {
 				const content = event.toString()
 				const key = fnv1a(content)
 				const cached = caches.get(key)
@@ -441,10 +436,16 @@ export function sucrose(
 			if (typeof event === 'function') functionCaches.set(event, inferred)
 		}
 
-		inference = inference ? mergeInference(inference, inferred) : inferred
+		if (inference) {
+			inference = mergeInference(inference, inferred)
+			merged = true
+		} else inference = inferred
 
 		if (isAllAccessed(inference)) break
 	}
 
-	return inference ? Object.freeze(inference) : emptyInference
+	if (!inference) return emptyInference
+
+	// Only a merge creates a new object
+	return merged ? Object.freeze(inference) : inference
 }

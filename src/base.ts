@@ -55,6 +55,7 @@ import {
 	hookToGuard,
 	isEmpty,
 	isHTMLBundle,
+	isLocalScope,
 	isNotEmpty,
 	isPlainObject,
 	isRecordNumber,
@@ -66,6 +67,7 @@ import {
 	mergeResponse,
 	nullObject,
 	pushField,
+	rootSnapshot,
 	schemaProperties,
 	type ChainNode,
 	invalidateMacroEpoch,
@@ -109,6 +111,7 @@ import type {
 	ErrorHandler,
 	ErrorDefinitionEntry,
 	ResolveRouteErrors,
+	ResolveUsedRouteErrors,
 	AfterHandler,
 	BodyHandler,
 	TransformHandler,
@@ -123,6 +126,7 @@ import type {
 	AnyWSLocalHook,
 	CreateEden,
 	UnionResponseStatus,
+	ParentResponse,
 	IntersectIfObjectSchema,
 	MergeScopedSchemas,
 	InlineHandlerNonMacro,
@@ -2305,10 +2309,12 @@ export class Elysia<
 				)
 
 			case 2:
+				// Any class is an error class, Error or not (zod v4 `ZodError`). A
+				// prototype-less function (arrow) fails as a scope here instead of
+				// throwing from `instanceof` on every later error dispatch
 				if (
 					typeof scopeOrFnOrError === 'function' &&
-					((scopeOrFnOrError as unknown) === Error ||
-						scopeOrFnOrError.prototype instanceof Error)
+					scopeOrFnOrError.prototype instanceof Object
 				)
 					// scopeOrFnOrError: Error
 					// fnOrError: EventFn<'error'>
@@ -4052,13 +4058,14 @@ export class Elysia<
 						...NewElysia['~Ephemeral']['error']
 					]
 				> &
-					ResolveRouteErrors<
+					ResolveUsedRouteErrors<
 						NewElysia['~Routes'],
 						[
 							...Definitions['error'],
 							...Ephemeral['error'],
 							...Volatile['error']
-						]
+						],
+						ParentResponse<Metadata, Ephemeral, Volatile>
 					>
 			: ResolveRouteErrors<
 					Routes,
@@ -4069,13 +4076,14 @@ export class Elysia<
 				> &
 					CreateEden<
 						BasePath,
-						ResolveRouteErrors<
+						ResolveUsedRouteErrors<
 							NewElysia['~Routes'],
 							[
 								...Definitions['error'],
 								...Ephemeral['error'],
 								...Volatile['error']
-							]
+							],
+							ParentResponse<Metadata, Ephemeral, Volatile>
 						>
 					>,
 		Ephemeral,
@@ -4187,13 +4195,14 @@ export class Elysia<
 						...NewElysia['~Ephemeral']['error']
 					]
 				> &
-					ResolveRouteErrors<
+					ResolveUsedRouteErrors<
 						NewElysia['~Routes'],
 						[
 							...Definitions['error'],
 							...Ephemeral['error'],
 							...Volatile['error']
-						]
+						],
+						ParentResponse<Metadata, Ephemeral, Volatile>
 					>
 			: ResolveRouteErrors<
 					Routes,
@@ -4204,13 +4213,14 @@ export class Elysia<
 				> &
 					CreateEden<
 						BasePath,
-						ResolveRouteErrors<
+						ResolveUsedRouteErrors<
 							NewElysia['~Routes'],
 							[
 								...Definitions['error'],
 								...Ephemeral['error'],
 								...Volatile['error']
-							]
+							],
+							ParentResponse<Metadata, Ephemeral, Volatile>
 						>
 					>,
 		Ephemeral,
@@ -4755,15 +4765,59 @@ export class Elysia<
 		const declared = app.declaredRoutes!
 		const limit = declared.length
 
+		const tail = app['~hookChain']
+		let recent: Set<ChainNode | undefined> | undefined
+		let hasLocal = false
+
 		let lastChildChain: ChainNode | undefined
 		let lastCombined: ChainNode | undefined
+		let lastTailChild: ChainNode | undefined | null = null
+		let lastTailCombined: ChainNode | undefined
 
 		for (let i = 0; i < limit; i++) {
 			const route = declared[i]
 
 			const childChain = route[6]
+			const absorbed = tail !== undefined && route[3] !== app
+
+			if (absorbed && recent === undefined) {
+				recent = new Set()
+
+				for (
+					let node: ChainNode | undefined = tail;
+					node && 'added' in node;
+					node = node.parent
+				) {
+					recent.add(node)
+					if (isLocalScope(node.scope)) {
+						hasLocal = true
+						break
+					}
+				}
+			}
+
 			let inheritedChain: ChainNode | undefined
-			if (childChain === undefined) inheritedChain = preChain
+			if (
+				absorbed &&
+				hasLocal &&
+				!recent!.has(rootSnapshot(childChain))
+			) {
+				if (childChain !== lastTailChild) {
+					lastTailChild = childChain
+					lastTailCombined = {
+						combine: childChain,
+						over: preChain,
+						tail,
+						refs: !!(
+							childChain?.refs ||
+							preChain?.refs ||
+							tail!.refs
+						)
+					}
+				}
+
+				inheritedChain = lastTailCombined
+			} else if (childChain === undefined) inheritedChain = preChain
 			else if (preChain === undefined) inheritedChain = childChain
 			else if (childChain === lastChildChain)
 				inheritedChain = lastCombined
@@ -7092,7 +7146,13 @@ export class Elysia<
 				node = node.parent
 			} else {
 				if (
-					Elysia.#chainHasTypeBox(node.combine, models, seen, resolve)
+					Elysia.#chainHasTypeBox(
+						node.combine,
+						models,
+						seen,
+						resolve
+					) ||
+					Elysia.#chainHasTypeBox(node.tail, models, seen, resolve)
 				)
 					return true
 

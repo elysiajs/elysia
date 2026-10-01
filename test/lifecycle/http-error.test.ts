@@ -11,7 +11,19 @@ import {
 } from '../../src'
 import { InvalidCookie } from '../../src/cookie/error'
 import { mapCompactResponse } from '../../src/adapter/web-standard/handler'
-import { afterEach, describe, expect, it } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+
+// A test may pin NODE_ENV (`production` masks what an error discloses), but
+// must hand back the value it found: deleting it would drop the runner's own
+// `test` for every later file in the process
+let originalNodeEnv: string | undefined
+beforeEach(() => {
+	originalNodeEnv = process.env.NODE_ENV
+})
+afterEach(() => {
+	if (originalNodeEnv === undefined) delete process.env.NODE_ENV
+	else process.env.NODE_ENV = originalNodeEnv
+})
 
 class OutOfCredit extends HTTPError<'OUT_OF_CREDIT'> {
 	type = 'OUT_OF_CREDIT' as const
@@ -184,11 +196,14 @@ describe('HTTPError', () => {
 	// A rejected body must not escape as an unhandled rejection, the sync
 	// error lane returns the promise without awaiting it
 	it('serve 500 when a promised body rejects', async () => {
+		let detailRan = false
+
 		class Broken extends HTTPError<'BROKEN'> {
 			type = 'BROKEN' as const
 			override readonly status = 409
 
 			async detail(): Promise<unknown> {
+				detailRan = true
 				throw new Error('body failed')
 			}
 		}
@@ -210,6 +225,12 @@ describe('HTTPError', () => {
 				title: 'Internal Server Error'
 			})
 
+			// Without this the check below passes even if the rejecting body
+			// was never produced, since nothing rejected means nothing leaked
+			expect(detailRan).toBe(true)
+
+			// Bounded wait for the negative observation only: let any leaked
+			// rejection reach the process listener
 			await Bun.sleep(10)
 			expect(unhandled).toEqual([])
 		} finally {
@@ -1632,10 +1653,6 @@ describe('HTTPError', () => {
 })
 
 describe('error fallback lanes', () => {
-	afterEach(() => {
-		delete process.env.NODE_ENV
-	})
-
 	it('never serve the request body when a custom schema error throws', async () => {
 		process.env.NODE_ENV = 'production'
 
@@ -1794,7 +1811,6 @@ describe('error fallback lanes', () => {
 describe('typeBase on the built-in 404 and 500 bodies', () => {
 	afterEach(() => {
 		HTTPError.typeBase = undefined
-		delete process.env.NODE_ENV
 	})
 
 	it('prefixes the router-miss 404 and returns to the bare slug', async () => {
@@ -1912,10 +1928,6 @@ describe('typeBase on the built-in 404 and 500 bodies', () => {
 // Every problem document carries `code`, validation included: clients switch
 // on it without parsing `type`, which `HTTPError.typeBase` may widen
 describe('validation problem code', () => {
-	afterEach(() => {
-		delete process.env.NODE_ENV
-	})
-
 	for (const production of [false, true])
 		it(`tag body and query problems (${production ? 'production' : 'development'})`, async () => {
 			if (production) process.env.NODE_ENV = 'production'

@@ -12,6 +12,7 @@ import { frozenRootOf } from '../../generation'
 import { resolveHandlerParams } from './params'
 import { compileHandlerJit, createInlineHandler } from './jit'
 export { setCaptureHeaderShorthand } from './jit'
+import { returnedErrorClasses } from '../../handler/utils'
 import { describeRoute, routeDescriptors } from './descriptor'
 import { Reconstrct } from './reconstruct'
 import type { Context } from '../../context'
@@ -32,6 +33,7 @@ import {
 	nullObject,
 	replaceUrlPath,
 	isHTMLBundle,
+	rootSnapshot,
 	type ChainNode
 } from '../../utils'
 
@@ -369,6 +371,30 @@ function mapStaticValue(
 	return mapped
 }
 
+function afterUseHooks(
+	node: ChainNode | undefined,
+	resolve: ((node: ChainNode) => Partial<AppHook> | undefined) | undefined
+) {
+	let after: Partial<AppHook> | undefined
+
+	while (node && 'combine' in node) {
+		if (node.tail) {
+			const own = flattenChain(
+				node.tail,
+				isLocalScope,
+				rootSnapshot(node.combine),
+				resolve
+			)
+
+			if (own) after = after ? mergeHook(own, after, false, true) : own
+		}
+
+		node = node.combine
+	}
+
+	return after
+}
+
 export function buildNativeStaticResponse(
 	route: InternalRoute,
 	root: AnyElysia
@@ -406,7 +432,7 @@ export function buildNativeStaticResponse(
 		const locals = flattenChain(
 			frozenRootOf(root)['~hookChain'],
 			isLocalScope,
-			inheritedChain as any,
+			rootSnapshot(inheritedChain),
 			resolve
 		)
 
@@ -417,10 +443,21 @@ export function buildNativeStaticResponse(
 		if (!inherited) rootHook = locals
 		else if (!locals) rootHook = inherited
 		else rootHook = mergeHook(inherited, locals as any)
+
+		const after = afterUseHooks(inheritedChain as any, resolve)
+		if (after) rootHook = rootHook ? mergeHook(after, rootHook) : after
 	}
 	const hook = applyHook(ownedHook, flatAppHook as any, rootHook)
 
 	if (hook && !isEmptyPipelineHook(hook as any)) return
+	// `isEmptyPipelineHook` skips `error`: a registered class instance must
+	// reach `compileHandler`, which throws it
+	if (
+		returnedErrorClasses(hook as any, root)?.some(
+			(C) => handler instanceof (C as any)
+		)
+	)
+		return
 
 	const rootHeaders = frozenRoot['~ext']?.headers
 	if (handler instanceof Response && !rootHeaders) return handler
@@ -447,7 +484,9 @@ export function composeRouteHook(
 	inheritedChain: ChainNode | undefined,
 	root: AnyElysia,
 	macroScope?: AnyElysia,
-	allowCompactPrefix = true
+	// Only the HTTP JIT runs `~beforeHandlePrefix`. Any other consumer would
+	// silently lose the inherited `beforeHandle` moved into it
+	allowCompactPrefix = false
 ): AnyLocalHook | undefined {
 	const resolve = chainResolver(root)
 	localHook = resolveLocalHook(
@@ -475,7 +514,7 @@ export function composeRouteHook(
 			? flattenChain(
 					frozenRootOf(root)['~hookChain'],
 					isLocalScope,
-					inheritedChain as any,
+					rootSnapshot(inheritedChain),
 					resolve
 				)
 			: undefined
@@ -526,8 +565,16 @@ export function composeRouteHook(
 				) as Partial<AppHook> | undefined)
 			: undefined
 
-	if ((inherited || locals) && (flatAppHook || localHook) && present?.size) {
+	let after =
+		instance !== root ? afterUseHooks(inheritedChain, resolve) : undefined
+
+	if (
+		(inherited || after || locals) &&
+		(flatAppHook || localHook) &&
+		present?.size
+	) {
 		if (inherited) inherited = dropHooksByOrigin(inherited, present)
+		if (after) after = dropHooksByOrigin(after, present)
 		if (locals) locals = dropHooksByOrigin(locals, present)
 	}
 
@@ -539,7 +586,9 @@ export function composeRouteHook(
 			: undefined
 	)
 
-	// Append after-use root hooks last, after the plugin's own hooks.
+	// After the plugin's own hooks: each intermediate instance's after-use
+	// hooks, innermost first, then the root's.
+	if (after) hook = hook ? mergeHook(hook, after, false, true) : after
 	if (locals) hook = hook ? mergeHook(hook, locals, false, true) : locals
 
 	if (instance !== root) {
@@ -682,7 +731,15 @@ export function compileHandler(
 			? Reconstrct.validator(hook as any, root, method, path, liveOnly)
 			: undefined
 
-	if (handler instanceof Error) {
+	const errorClasses = returnedErrorClasses(hook as any, root)
+
+	// A static instance of a registered class throws like a static Error. A
+	// handler function never counts, even for a class like `Function`
+	if (
+		handler instanceof Error ||
+		(typeof handler !== 'function' &&
+			errorClasses?.some((C) => handler instanceof (C as any)))
+	) {
 		const error = handler
 		handler = () => {
 			throw error
@@ -757,6 +814,8 @@ export function compileHandler(
 	// Bare-route fast path.
 	if (
 		hook === undefined &&
+		// a hook-less route still sees the app-level error classes
+		!errorClasses &&
 		isHandleFunction &&
 		!mountMeta &&
 		(method === 'GET' || method === 'HEAD') &&
@@ -815,6 +874,7 @@ export function compileHandler(
 		isHandleFunction,
 		isStaticResponse,
 		isPromiseHandler,
+		errorClasses,
 		state
 	})
 }

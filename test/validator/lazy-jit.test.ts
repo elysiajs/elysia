@@ -13,7 +13,7 @@
 //      deferrable TypeBox path.
 import { describe, it, expect } from 'bun:test'
 import { Type } from 'typebox'
-import { Compile } from 'typebox/schema'
+import { Build } from 'typebox/schema'
 
 import { Elysia, form, t, ValidationError } from '../../src'
 import {
@@ -30,8 +30,7 @@ import {
 const LAZY_JIT_THRESHOLD = 16
 
 function buildIsAsync(schema: any) {
-	const tb: any = Compile(schema)
-	return tb.buildResult.external.variables.some(isAsyncPredicate) ?? false
+	return Build(schema).External().variables.some(isAsyncPredicate)
 }
 
 const F = () => t.File({ type: 'image' })

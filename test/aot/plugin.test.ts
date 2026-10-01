@@ -1,4 +1,5 @@
 import { describe, it, expect, spyOn } from 'bun:test'
+import { Build } from 'typebox/schema'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
@@ -133,8 +134,16 @@ describe('AOT plugin', () => {
 				{ body: t.Object({ v: t.String({ format: 'email' }) }) },
 				() => 'ok'
 			)
+		// TypeBox 1.3.31+ passes a format check as an external, which is never
+		// frozen (`alignBuildExternals`), so there is nothing to import
+		const frozenFormat = !(
+			Build(t.String({ format: 'email' })) as any
+		).external.variables.some((v: unknown) => typeof v === 'function')
+
 		const format = await manifest(formatApp())
-		expect(format).toContain('import { Format } from "typebox/format"')
+		if (frozenFormat)
+			expect(format).toContain('import { Format } from "typebox/format"')
+		else expect(format).not.toContain('typebox/format')
 		expect(format).not.toContain('from "typebox/guard"')
 		expect(format).not.toContain('from "typebox/system"')
 
@@ -142,9 +151,10 @@ describe('AOT plugin', () => {
 			moduleCondition: 'cjs'
 		})
 		expect(cjsFormat).toContain('const { Compiled } = require("elysia")')
-		expect(cjsFormat).toContain(
-			'const { Format } = require("typebox/format")'
-		)
+		if (frozenFormat)
+			expect(cjsFormat).toContain(
+				'const { Format } = require("typebox/format")'
+			)
 
 		// multipleOf references Guard; uniqueItems references Hashing
 		const guard = await manifest(
@@ -240,6 +250,71 @@ describe('AOT plugin', () => {
 		expect(out).toContain('"/body"')
 		// A real validator factory (including a merged check/clean factory), not a stub.
 		expect(out).toContain('(External')
+	})
+
+	it('keeps TypeSystem.Locale in a full-AOT bundle', async () => {
+		const { aot } = await import('../../src/plugin/aot/bun')
+		const directory = await mkdtemp(join(tmpdir(), 'elysia-aot-locale-'))
+		const entry = resolve(import.meta.dir, 'fixtures/locale-app.ts')
+
+		try {
+			const result = await Bun.build({
+				entrypoints: [entry],
+				outdir: directory,
+				plugins: [aot(entry, { registerFrom: REGISTER_FROM })],
+				target: 'bun'
+			})
+
+			expect(result.success).toBe(true)
+			const run = Bun.spawnSync({
+				cmd: [
+					process.execPath,
+					'--no-install',
+					result.outputs[0]!.path
+				],
+				cwd: directory
+			})
+
+			expect(run.stderr.toString()).toBe('')
+			expect(Number(run.stdout.toString())).toBe(41)
+		} finally {
+			await rm(directory, { recursive: true, force: true })
+		}
+	})
+
+	it('leaves the real elysia/compiled import available without an entry', async () => {
+		const { aot } = await import('../../src/plugin/aot/bun')
+		const directory = await mkdtemp(
+			join(tmpdir(), 'elysia-compiled-import-')
+		)
+		const entry = resolve(
+			import.meta.dir,
+			'fixtures/compiled-import-app.ts'
+		)
+
+		try {
+			const result = await Bun.build({
+				entrypoints: [entry],
+				outdir: directory,
+				plugins: [aot()],
+				target: 'bun'
+			})
+
+			expect(result.success).toBe(true)
+			const run = Bun.spawnSync({
+				cmd: [
+					process.execPath,
+					'--no-install',
+					result.outputs[0]!.path
+				],
+				cwd: directory
+			})
+
+			expect(run.stderr.toString()).toBe('')
+			expect(run.stdout.toString()).toBe('ok\n')
+		} finally {
+			await rm(directory, { recursive: true, force: true })
+		}
 	})
 
 	it('esbuild (Wrangler toolchain) inlines the manifest + injects the autoload', async () => {

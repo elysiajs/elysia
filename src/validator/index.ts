@@ -26,7 +26,6 @@ import {
 } from '../type/bridge'
 import { assignOwn } from '../utils'
 import { isAsyncFunction } from '../compile/utils'
-import { isAsyncPredicate } from '../type/elysia/file-type'
 import { hasProperty } from '../type/utils'
 
 export interface ValidatorOptions {
@@ -119,7 +118,7 @@ export abstract class Validator {
 		if (
 			schema != null &&
 			typeof (schema as any).Check === 'function' &&
-			'buildResult' in schema &&
+			'evaluateResult' in schema &&
 			!('~standard' in schema)
 		)
 			throw new Error(
@@ -400,11 +399,7 @@ export class MultiValidator extends Validator {
 			codecs.push(HasCodec(coercedSchema))
 			hasDefaults.push(hd)
 
-			const isAsync =
-				(compiled as any).buildResult?.external?.variables?.some(
-					isAsyncPredicate
-				) ?? false
-			if (isAsync) {
+			if ((TypeBoxValidator as any).member(coercedSchema, compiled)) {
 				this.isAsync = true
 
 				asyncMembers.push(

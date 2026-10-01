@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'bun:test'
+import { afterAll, describe, expect, it } from 'bun:test'
+import { fileTypeFromBlob } from 'file-type'
+import z from 'zod'
 
-import { t } from '../../src'
+import { Elysia, setFileTypeDetector, t } from '../../src'
 import { coerceQuery } from '../../src/type/coerce'
 import { TypeBoxValidator } from '../../src/type/validator'
 
@@ -145,5 +147,133 @@ describe('refinement evaluation', () => {
 		} catch (error: any) {
 			expect(error.errors).toHaveLength(1)
 		}
+	})
+})
+
+// TypeBox calls a refinement synchronously, so an `async` check hands back a
+// Promise that is truthy and never awaited: every value passed, and the user's
+// validation was silently skipped. Fail closed instead
+describe('async refinement', () => {
+	const route = (config?: { precompile: true }) =>
+		new Elysia(config).get(
+			'/',
+			{
+				query: t.Object({
+					n: t.Refine(t.String(), (async () => false) as any)
+				})
+			},
+			({ query }) => query
+		)
+
+	it('never accepts a value an async refinement would reject', async () => {
+		expect((await route().handle('/?n=x')).status).not.toBe(200)
+		expect(
+			(await route({ precompile: true }).handle('/?n=x')).status
+		).not.toBe(200)
+	})
+
+	it("keeps Elysia's own queued file-type check", () => {
+		expect(() =>
+			new Elysia()
+				.post(
+					'/',
+					{ body: t.Object({ f: t.File({ type: 'image' }) }) },
+					() => 'ok'
+				)
+				.compile()
+		).not.toThrow()
+	})
+})
+
+// A check that is not `async` but returns a Promise is the same bypass with no
+// async marker to detect it by. It must fail closed wherever TypeBox calls it
+describe('refinement returning a Promise', () => {
+	afterAll(() => setFileTypeDetector(fileTypeFromBlob))
+
+	const pending = (() => Promise.resolve(false)) as any
+
+	it('never accepts on a deferred validator', async () => {
+		const app = new Elysia().get(
+			'/',
+			{ query: t.Object({ n: t.Refine(t.String(), pending) }) },
+			() => 'ok'
+		)
+
+		expect((await app.handle('/?n=x')).status).not.toBe(200)
+	})
+
+	it('never accepts on a precompiled validator', async () => {
+		const app = new Elysia({ precompile: true }).get(
+			'/',
+			{ query: t.Object({ n: t.Refine(t.String(), pending) }) },
+			() => 'ok'
+		)
+
+		expect((await app.handle('/?n=x')).status).not.toBe(200)
+	})
+
+	it('never accepts on an async (file-type) validator', async () => {
+		setFileTypeDetector(() => 'image/png')
+
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					f: t.File({ type: 'image' }),
+					n: t.Refine(t.String(), pending)
+				})
+			},
+			() => 'ok'
+		)
+
+		const body = new FormData()
+		body.append('f', new File(['x'], 'x.png', { type: 'image/png' }))
+		body.append('n', 'x')
+
+		expect(
+			(
+				await app.handle(
+					new Request('http://localhost/', { method: 'POST', body })
+				)
+			).status
+		).not.toBe(200)
+	})
+
+	it('never accepts on a merged TypeBox member', async () => {
+		const app = new Elysia()
+			.guard({
+				schema: 'merge',
+				body: z.object({ b: z.string() })
+			} as any)
+			.post(
+				'/',
+				{
+					body: t.Union([
+						t.Object({ a: t.Refine(t.String(), pending) })
+					])
+				},
+				() => 'ok'
+			)
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ a: 'x', b: 'y' })
+			})
+		)
+
+		expect(response.status).not.toBe(200)
+	})
+
+	it('leaves a synchronous refinement alone', async () => {
+		const app = new Elysia().get(
+			'/',
+			{ query: t.Object({ n: t.Refine(t.String(), (v) => v === 'x') }) },
+			() => 'ok'
+		)
+
+		expect((await app.handle('/?n=x')).status).toBe(200)
+		expect((await app.handle('/?n=y')).status).toBe(422)
 	})
 })

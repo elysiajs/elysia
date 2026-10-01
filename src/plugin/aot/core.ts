@@ -408,6 +408,9 @@ export const IS_PRODUCTION_FILTER =
 export const TYPEBOX_TYPE_FILTER =
 	/[\\/]elysia[\\/](dist|src)[\\/]type[\\/]typebox-type\.(m?js|ts)$/
 
+export const TYPEBOX_SYSTEM_LITE_FILTER =
+	/[\\/]elysia[\\/](dist|src)[\\/]type[\\/]typebox-system-lite\.(m?js|ts)$/
+
 export const TYPEBOX_REQUIRE_FILTER =
 	/[\\/]elysia[\\/](dist|src)[\\/]type[\\/]typebox-value-require\.(m?js|ts)$/
 
@@ -590,6 +593,21 @@ export const alignStubExtensions = (
 ): string => {
 	const ext = targetPath.slice(targetPath.lastIndexOf('.'))
 	if (ext !== '.mjs' && ext !== '.js' && ext !== '.cjs') return stubSource
+
+	// CJS output copies re-exported bindings by value, so a require cycle
+	// (validator -> error -> bridge -> bridge-live -> validator) freezes
+	// `TypeBoxValidator` as undefined. Defer loading the target to first use.
+	// Freezing copies the target's keys first, so the proxy invariants hold
+	if (ext !== '.mjs') {
+		const reexport = /^export \* from '(\.[^']+)'\n$/.exec(stubSource)
+		if (reexport)
+			return (
+				`let m;const t=()=>m??=require('${reexport[1]}${ext}'),d=(o,k)=>Reflect.getOwnPropertyDescriptor(o,k)\n` +
+				`module.exports=new Proxy({},{get:(_,k)=>t()[k],has:(_,k)=>k in t(),ownKeys:()=>Reflect.ownKeys(t()),` +
+				`getOwnPropertyDescriptor:(o,k)=>{let x=d(o,k);if(x)return x;x=d(t(),k);if(x)x.configurable=true;return x},` +
+				`preventExtensions:o=>{for(const k of Reflect.ownKeys(t()))Object.defineProperty(o,k,d(t(),k));return Reflect.preventExtensions(o)}})\n`
+			)
+	}
 
 	return stubSource.replace(
 		/(from ')(\.[^']+)(')/g,

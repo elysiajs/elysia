@@ -123,10 +123,12 @@ afterAll(() => {
 describe('AOT CommonJS package identity', () => {
 	it('bundles only the CommonJS Elysia runtime graph', () => {
 		expect(graphInputs.some((path) => path.endsWith('.js'))).toBe(true)
-		expect(graphInputs.filter((path) => path.endsWith('.mjs'))).toEqual([])
-		expect(retainedInputs.filter((path) => path.endsWith('.mjs'))).toEqual(
-			[]
-		)
+		// The build keeps this lazy shim as ESM in both formats; full AOT rewrites
+		// its contents to typebox/system without adding another Elysia runtime.
+		for (const inputs of [graphInputs, retainedInputs])
+			expect(inputs.filter((path) => path.endsWith('.mjs'))).toEqual([
+				expect.stringMatching(/\/type\/typebox-system-lite\.mjs$/)
+			])
 		// TypeBox publishes one ESM-only condition (`import` and `default` both
 		// point at `.mjs`); prove generated imports do not create a second copy.
 		expect(typeboxGraphInputs.some((path) => path.endsWith('.mjs'))).toBe(

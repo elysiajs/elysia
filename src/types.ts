@@ -571,7 +571,15 @@ export interface RouteSchema {
 	params?: unknown
 	cookie?: unknown
 	response?: unknown
+	// What a client sends (schema input), read by `~Routes`; the fields
+	// above are what the handler receives (schema output)
+	'~input'?: { body?: unknown; headers?: unknown; query?: unknown }
 }
+
+// A schema without the input channel (macro, hand-built) falls back to output
+export type RouteInput<S extends RouteSchema> = '~input' extends keyof S
+	? NonNullable<S['~input']>
+	: S
 
 export type OptionalHandler<
 	in out Route extends RouteSchema = {},
@@ -869,6 +877,11 @@ export type MergeSchema<
 						? A['response']
 						: A['response'] &
 								Omit<B['response'], keyof A['response']>
+				'~input'?: {
+					[K in 'body' | 'headers' | 'query']: undefined extends A[K]
+						? RouteInput<B>[K]
+						: RouteInput<A>[K]
+				}
 			}
 
 export type AnyWSLocalHook = any
@@ -1200,22 +1213,32 @@ type IsOptionalRoot<
 				: false
 		: false
 
+type SchemaSide = 'input' | 'output'
+
 type StaticCyclic<
 	T extends TypeBoxSchema,
-	Definitions extends Record<string, AnySchema>
-> = {} extends Definitions ? StaticDecode<T> : StaticDecode<T, Definitions>
+	Definitions extends Record<string, AnySchema>,
+	Side extends SchemaSide = 'output'
+> = Side extends 'input'
+	? {} extends Definitions
+		? StaticEncode<T>
+		: StaticEncode<T, Definitions>
+	: {} extends Definitions
+		? StaticDecode<T>
+		: StaticDecode<T, Definitions>
 
 export type UnwrapSchema<
 	Schema extends AnySchema | string | undefined,
-	Definitions extends DefinitionBase['typebox'] = {}
+	Definitions extends DefinitionBase['typebox'] = {},
+	Side extends SchemaSide = 'output'
 > = Schema extends undefined
 	? unknown
 	: Schema extends TypeBoxSchema
 		? true extends IsOptionalRoot<Schema, Definitions>
-			? Partial<StaticCyclic<Schema, Definitions>>
-			: StaticCyclic<Schema, Definitions>
+			? Partial<StaticCyclic<Schema, Definitions, Side>>
+			: StaticCyclic<Schema, Definitions, Side>
 		: Schema extends StandardSchemaV1Like
-			? NonNullable<Schema['~standard']['types']>['output']
+			? NonNullable<Schema['~standard']['types']>[Side]
 			: Schema extends string
 				? Schema extends keyof Definitions
 					? Definitions[Schema] extends TypeBoxSchema
@@ -1226,29 +1249,38 @@ export type UnwrapSchema<
 							? Partial<
 									StaticCyclic<
 										Definitions[Schema],
-										Definitions
+										Definitions,
+										Side
 									>
 								>
-							: StaticCyclic<Definitions[Schema], Definitions>
+							: StaticCyclic<
+									Definitions[Schema],
+									Definitions,
+									Side
+								>
 						: Definitions[Schema] extends StandardSchemaV1Like
 							? NonNullable<
 									Definitions[Schema]['~standard']['types']
-								>['output']
+								>[Side]
 							: unknown
 					: unknown
 				: unknown
 
 export type UnwrapBodySchema<
 	Schema extends AnySchema | string | undefined,
-	Definitions extends DefinitionBase['typebox'] = {}
+	Definitions extends DefinitionBase['typebox'] = {},
+	Side extends SchemaSide = 'output'
 > = undefined extends Schema
 	? unknown
 	: Schema extends TypeBoxSchema
 		? true extends IsOptionalRoot<Schema, Definitions>
-			? Partial<StaticCyclic<Schema, Definitions>> | null | undefined
-			: StaticCyclic<Schema, Definitions>
+			?
+					| Partial<StaticCyclic<Schema, Definitions, Side>>
+					| null
+					| undefined
+			: StaticCyclic<Schema, Definitions, Side>
 		: Schema extends StandardSchemaV1Like
-			? NonNullable<Schema['~standard']['types']>['output']
+			? NonNullable<Schema['~standard']['types']>[Side]
 			: Schema extends string
 				? Schema extends keyof Definitions
 					? Definitions[Schema] extends TypeBoxSchema
@@ -1260,19 +1292,120 @@ export type UnwrapBodySchema<
 									| Partial<
 											StaticCyclic<
 												Definitions[Schema],
-												Definitions
+												Definitions,
+												Side
 											>
 									  >
 									| null
 									| undefined
-							: StaticCyclic<Definitions[Schema], Definitions>
+							: StaticCyclic<
+									Definitions[Schema],
+									Definitions,
+									Side
+								>
 						: Definitions[Schema] extends StandardSchemaV1Like
 							? NonNullable<
 									Definitions[Schema]['~standard']['types']
-								>['output']
+								>[Side]
 							: unknown
 					: unknown
 				: unknown
+
+// TypeBox reads the decode/encode direction only at a codec, so a schema
+// matching these has the same type on both sides. Other kinds (Ref, Cyclic,
+// Unsafe, ...) don't match and take the input path
+type CodecFreeKind =
+	| 'Any'
+	| 'BigInt'
+	| 'Boolean'
+	| 'Enum'
+	| 'Integer'
+	| 'Literal'
+	| 'Never'
+	| 'Null'
+	| 'Number'
+	| 'String'
+	| 'Symbol'
+	| 'TemplateLiteral'
+	| 'Undefined'
+	| 'Unknown'
+	| 'Void'
+
+interface CodecFreeBase {
+	'~codec'?: never
+}
+
+interface CodecFreeLeaf extends CodecFreeBase {
+	'~kind': CodecFreeKind
+}
+
+interface CodecFreeObject extends CodecFreeBase {
+	'~kind': 'Object'
+	properties: { [key: PropertyKey]: CodecFreeSchema }
+}
+
+interface CodecFreeRecord extends CodecFreeBase {
+	'~kind': 'Record'
+	patternProperties: { [key: PropertyKey]: CodecFreeSchema }
+}
+
+interface CodecFreeArray extends CodecFreeBase {
+	'~kind': 'Array'
+	items: CodecFreeSchema
+}
+
+interface CodecFreeTuple extends CodecFreeBase {
+	'~kind': 'Tuple'
+	items: CodecFreeSchema[]
+}
+
+interface CodecFreeUnion extends CodecFreeBase {
+	'~kind': 'Union'
+	anyOf: CodecFreeSchema[]
+}
+
+interface CodecFreeIntersect extends CodecFreeBase {
+	'~kind': 'Intersect'
+	allOf: CodecFreeSchema[]
+}
+
+type CodecFreeSchema =
+	| CodecFreeLeaf
+	| CodecFreeObject
+	| CodecFreeRecord
+	| CodecFreeArray
+	| CodecFreeTuple
+	| CodecFreeUnion
+	| CodecFreeIntersect
+
+// 'output' when the schema, or the model it names, has no codec
+type InputSide<Schema, Definitions> = [Schema] extends [CodecFreeSchema]
+	? 'output'
+	: [Schema] extends [keyof Definitions]
+		? [Definitions[Schema & keyof Definitions]] extends [CodecFreeSchema]
+			? 'output'
+			: 'input'
+		: 'input'
+
+// What a client sends. A codec-free schema reuses the handler's (output) type
+// instead of computing an identical one. Picked by key on purpose: returning
+// the alias from a conditional, or passing the side as its type argument,
+// recomputes the statics rather than hitting the handler's instantiation
+type UnwrapInputSchema<
+	Schema extends AnySchema | string | undefined,
+	Definitions extends DefinitionBase['typebox'] = {}
+> = {
+	output: UnwrapSchema<Schema, Definitions>
+	input: UnwrapSchema<Schema, Definitions, 'input'>
+}[InputSide<Schema, Definitions>]
+
+type UnwrapInputBodySchema<
+	Schema extends AnySchema | string | undefined,
+	Definitions extends DefinitionBase['typebox'] = {}
+> = {
+	output: UnwrapBodySchema<Schema, Definitions>
+	input: UnwrapBodySchema<Schema, Definitions, 'input'>
+}[InputSide<Schema, Definitions>]
 
 type FormInnerProperties<Schema> = Extract<
 	Schema extends TIntersect<infer Members> ? Members[number] : never,
@@ -1320,6 +1453,11 @@ export interface UnwrapRoute<
 			? ResolvePath<Path>
 			: UnwrapSchema<Schema['params'], Definitions>
 	cookie: UnwrapSchema<Schema['cookie'], Definitions>
+	'~input': {
+		body: UnwrapInputBodySchema<Schema['body'], Definitions>
+		headers: UnwrapInputSchema<Schema['headers'], Definitions>
+		query: UnwrapInputSchema<Schema['query'], Definitions>
+	}
 	response: Schema['response'] extends AnySchema | string
 		? {
 				200: UnwrapResponseSchema<
@@ -1394,6 +1532,14 @@ export interface IntersectIfObjectSchema<
 	query: IntersectIfObject<A['query'], B['query']>
 	params: IntersectIfObject<A['params'], B['params']>
 	cookie: IntersectIfObject<A['cookie'], B['cookie']>
+	'~input'?: {
+		body: IntersectIfObject<RouteInput<A>['body'], RouteInput<B>['body']>
+		headers: IntersectIfObject<
+			RouteInput<A>['headers'],
+			RouteInput<B>['headers']
+		>
+		query: IntersectIfObject<RouteInput<A>['query'], RouteInput<B>['query']>
+	}
 	// `response` merges the override side (A: route-local + override-channel
 	// schemas) with the merge channel (B: `schema: 'merge'` guards) PER
 	// STATUS CODE. Merge schemas INTERSECT, so a status code declared by both
@@ -1442,6 +1588,11 @@ export interface MergeScopedSchemas<
 	query: Global['query'] & Scoped['query'] & Local['query']
 	params: Global['params'] & Scoped['params'] & Local['params']
 	cookie: Global['cookie'] & Scoped['cookie'] & Local['cookie']
+	'~input'?: {
+		[K in 'body' | 'headers' | 'query']: RouteInput<Global>[K] &
+			RouteInput<Scoped>[K] &
+			RouteInput<Local>[K]
+	}
 	// Override is PER STATUS CODE, not whole-object: a nearer scope's entry for
 	// a given status replaces the inherited one, but statuses only declared by
 	// an outer scope survive (e.g. local `{ 401 }` over global `{ 401, 402 }`
@@ -1892,8 +2043,12 @@ type _CreateEden<
  *
  * Both knobs are canonically methods, so what they *return* is the
  * annotation. A value or getter reads as the value itself. An `unknown`
- * declaration claims nothing, and `undefined` is excluded — it falls through
- * to the next tier rather than being served
+ * declaration resolves to `unknown` — the runtime serves whatever a knob
+ * returns and can't see its declared type — and `undefined` is excluded, it
+ * falls through to the next tier rather than being served.
+ *
+ * The base declares both knobs optional, so a subclass that doesn't override
+ * them never reaches here
  */
 type ResolveAnnotation<V> = (
 	V extends (...args: any) => infer Returned ? Returned : V
@@ -1901,9 +2056,7 @@ type ResolveAnnotation<V> = (
 	? Exclude<Awaited<Value>, undefined> extends infer Resolved
 		? IsNever<Resolved> extends true
 			? never
-			: unknown extends Resolved
-				? never
-				: Resolved
+			: Resolved
 		: never
 	: never
 
@@ -2073,26 +2226,33 @@ export type CreateEdenResponse<
 	Err extends Error = never
 > = RouteSchema extends MacroContext
 	? {
-			body: Schema['body']
+			body: RouteInput<Schema>['body']
 			params: IsNever<keyof Schema['params']> extends true
 				? ResolvePath<Path>
 				: Schema['params']
-			query: Schema['query']
-			headers: Schema['headers']
+			query: RouteInput<Schema>['query']
+			headers: RouteInput<Schema>['headers']
 			response: Prettify<
 				UnionResponseStatus<Res, UnhandledErrorResponse<Err>>
 			>
 			error: Err
 		}
 	: {
-			body: Prettify<Schema['body'] & MacroContext['body']>
+			body: Prettify<
+				RouteInput<Schema>['body'] & RouteInput<MacroContext>['body']
+			>
 			params: IsNever<
 				keyof (Schema['params'] & MacroContext['params'])
 			> extends true
 				? ResolvePath<Path>
 				: Prettify<Schema['params'] & MacroContext['params']>
-			query: Prettify<Schema['query'] & MacroContext['query']>
-			headers: Prettify<Schema['headers'] & MacroContext['headers']>
+			query: Prettify<
+				RouteInput<Schema>['query'] & RouteInput<MacroContext>['query']
+			>
+			headers: Prettify<
+				RouteInput<Schema>['headers'] &
+					RouteInput<MacroContext>['headers']
+			>
 			response: Prettify<
 				UnionResponseStatus<Res, UnhandledErrorResponse<Err>>
 			>
@@ -2121,12 +2281,24 @@ type Extract200<T> = T extends AnyElysiaStatus
 			| Extract<T, ElysiaStatus<200, any, 200>>['response']
 	: T
 
+/**
+ * A returned value types as an error only if it declares `stack`, as `Error`
+ * and zod's `ZodError` do. `{ name, message }` data is structurally an `Error`
+ * too, but the runtime serves it as a 200
+ */
+type ErrorOf<T> = T extends Error
+	? 'stack' extends keyof T
+		? T
+		: never
+	: never
+type NonErrorOf<T> = T extends Error ? ('stack' extends keyof T ? never : T) : T
+
 export type ValueToResponseSchema<
 	Value,
 	Errors extends ErrorDefinition[] = []
-> = ExtractErrorFromHandle<Exclude<Value, Error>> &
+> = ExtractErrorFromHandle<NonErrorOf<Value>> &
 	ExtractReturnedError<Value, Errors> &
-	(Extract200<Exclude<Value, Error>> extends infer R200
+	(Extract200<NonErrorOf<Value>> extends infer R200
 		? undefined extends R200
 			? {}
 			: IsNever<R200> extends true
@@ -2192,6 +2364,16 @@ export type UnionResponseStatus<A, B> = {} extends A
 						? B[key]
 						: never
 			}
+
+// What the parent's own hooks respond with on a route it `.use`s
+export type ParentResponse<
+	M extends MetadataBase,
+	E extends EphemeralType,
+	V extends EphemeralType
+> = UnionResponseStatus<
+	M['response'],
+	UnionResponseStatus<E['response'], V['response']>
+>
 
 type HasInputValidator<Schema extends RouteSchema, Path extends string> =
 	EmptyInputSchema extends Pick<
@@ -2301,7 +2483,7 @@ export type UnhandledReturnedError<
 	Errors extends ErrorDefinition[]
 > = 0 extends 1 & Value
 	? never
-	: Extract<Value, Error> extends infer Es
+	: ErrorOf<Value> extends infer Es
 		? Es extends Error
 			? HasErrorMatch<Es, Errors> extends true
 				? never
@@ -2317,24 +2499,114 @@ export type UnhandledReturnedErrorOf<
 	: UnhandledReturnedError<T, Errors>
 
 /**
+ * Returned errors a `.error(Class, handler)` already consumed, each paired
+ * with the response that handler contributed. Carried on the route under
+ * `~handled` so a parent handler registered before `.use()`, which runs first
+ * at runtime, can take the error over
+ */
+type HandledReturnedError<Value, Errors extends ErrorDefinition[]> =
+	Errors extends []
+		? never
+		: 0 extends 1 & Value
+			? never
+			: ErrorOf<Value> extends infer Es
+				? Es extends Error
+					? HasErrorMatch<Es, Errors> extends true
+						? { error: Es; response: MatchRegisteredError<Es, Errors> }
+						: never
+					: never
+				: never
+
+export type HandledReturnedErrorOf<
+	T,
+	Errors extends ErrorDefinition[]
+> = Errors extends []
+	? never
+	: T extends (...a: any) => MaybePromise<infer R>
+		? HandledReturnedError<R, Errors>
+		: HandledReturnedError<T, Errors>
+
+export type WithHandledErrors<
+	Route,
+	Handle,
+	Errors extends ErrorDefinition[]
+> = Errors extends []
+	? Route
+	: Route & HandledErrorKey<HandledReturnedErrorOf<Handle, Errors>>
+
+export type HandledErrorKey<Handled> = [Handled] extends [never]
+	? {}
+	: { '~handled': Handled }
+
+type RouteHandled<Route> = Route extends { '~handled': infer H } ? H : never
+
+/**
+ * Strip what the handlers in `Taken` contributed from a route's response.
+ * Same caveat as `WithoutUnhandledErrorResponse`: a value the handler itself
+ * also returns at that status is indistinguishable and goes too
+ */
+type WithoutHandledResponse<Response, Contributed> = {
+	[K in keyof Response as K extends keyof Contributed
+		? IsNever<Exclude<Response[K], Contributed[K]>> extends true
+			? never
+			: K
+		: K]: K extends keyof Contributed
+		? Exclude<Response[K], Contributed[K]>
+		: Response[K]
+}
+
+type TakenOverError<H, Errors extends ErrorDefinition[]> = H extends {
+	error: infer V
+}
+	? HasErrorMatch<V, Errors> extends true
+		? H
+		: never
+	: never
+
+type HandledResponseOf<H> = H extends { response: infer R } ? R : never
+
+type RehandledError<Won, Errors extends ErrorDefinition[]> = Won extends {
+	error: infer V
+}
+	? { error: V; response: MatchRegisteredError<V, Errors> }
+	: never
+
+/**
  * Strip what `UnhandledErrorResponse` contributed for `Err` from a route's
  * response, so a now-handled error doesn't leave a stale status behind.
  *
  * A response that merely shares the same status survives, unless it's
  * indistinguishable from the error's own body
  */
-type WithoutUnhandledErrorResponse<Response, Err> =
-	UnhandledErrorResponse<Err> extends infer Contributed
-		? {
-				[K in keyof Response as K extends keyof Contributed
-					? IsNever<Exclude<Response[K], Contributed[K]>> extends true
-						? never
-						: K
-					: K]: K extends keyof Contributed
-					? Exclude<Response[K], Contributed[K]>
-					: Response[K]
-			}
-		: never
+type WithoutUnhandledErrorResponse<Response, Err> = WithoutHandledResponse<
+	Response,
+	UnhandledErrorResponse<Err>
+>
+
+type ResolveRouteLeafErrors<
+	Route extends { response: any; error: any },
+	Errors extends ErrorDefinition[]
+> = [Route['error']] extends [never]
+	? Route
+	: Omit<Route, 'response' | 'error' | '~handled'> & {
+			response: Prettify<
+				UnionResponseStatus<
+					WithoutUnhandledErrorResponse<
+						Route['response'],
+						Route['error']
+					>,
+					UnionResponseStatus<
+						ExtractReturnedError<Route['error'], Errors>,
+						UnhandledErrorResponse<
+							UnhandledReturnedError<Route['error'], Errors>
+						>
+					>
+				>
+			>
+			error: UnhandledReturnedError<Route['error'], Errors>
+		} & HandledErrorKey<
+			RouteHandled<Route> | HandledReturnedError<Route['error'], Errors>
+		>
 
 export type ResolveRouteErrors<
 	Routes,
@@ -2349,38 +2621,111 @@ export type ResolveRouteErrors<
 				response: any
 				error: any
 			}
-				? [Routes[K]['error']] extends [never]
-					? Routes[K]
-					: Omit<Routes[K], 'response' | 'error'> & {
-							response: Prettify<
-								UnionResponseStatus<
-									WithoutUnhandledErrorResponse<
-										Routes[K]['response'],
-										Routes[K]['error']
-									>,
-									UnionResponseStatus<
-										ExtractReturnedError<
-											Routes[K]['error'],
-											Errors
-										>,
-										UnhandledErrorResponse<
-											UnhandledReturnedError<
-												Routes[K]['error'],
-												Errors
-											>
-										>
-									>
-								>
-							>
-							error: UnhandledReturnedError<
-								Routes[K]['error'],
-								Errors
-							>
-						}
+				? ResolveRouteLeafErrors<Routes[K], Errors>
 				: Routes[K] extends Record<keyof any, any>
 					? ResolveRouteErrors<Routes[K], Errors>
 					: Routes[K]
 		}
+
+/**
+ * Take a parent's handlers registered before `.use()` in front of the
+ * plugin's own: at runtime they run first, so an error the plugin already
+ * handled goes to the parent's matching handler instead
+ */
+type PrependRouteLeafErrors<
+	Route extends { response: any; error: any },
+	Errors extends ErrorDefinition[]
+> =
+	TakenOverError<RouteHandled<Route>, Errors> extends infer Won
+		? [Won] extends [never]
+			? ResolveRouteLeafErrors<Route, Errors>
+			: ResolveRouteLeafErrors<
+					Omit<Route, 'response' | '~handled'> & {
+						response: Prettify<
+							UnionResponseStatus<
+								WithoutHandledResponse<
+									Route['response'],
+									MergeStatusUnion<HandledResponseOf<Won>>
+								>,
+								UnionResponseStatus<
+									MergeStatusUnion<
+										HandledResponseOf<
+											Exclude<RouteHandled<Route>, Won>
+										>
+									>,
+									MergeStatusUnion<
+										HandledResponseOf<RehandledError<Won, Errors>>
+									>
+								>
+							>
+						>
+						'~handled':
+							| Exclude<RouteHandled<Route>, Won>
+							| RehandledError<Won, Errors>
+					},
+					Errors
+				>
+		: never
+
+/**
+ * A parent's hooks registered before `.use()` run on the plugin's routes too,
+ * so what they can respond with joins each route's response, the same as on
+ * a route the parent declares itself
+ */
+type WithParentResponse<Route, Response> = {} extends Response
+	? Route
+	: {
+			[K in keyof Route]: K extends 'response'
+				? UnionParentResponse<Route[K], Response>
+				: Route[K]
+		}
+
+type UnionParentResponse<Own, Response> = {
+	[S in keyof Own | keyof Response]:
+		| Own[S & keyof Own]
+		| Response[S & keyof Response]
+}
+
+export type ResolveUsedRouteErrors<
+	Routes,
+	Errors extends ErrorDefinition[],
+	Response = {}
+> = Errors extends []
+	? {} extends Response
+		? Routes
+		: UsedRoutes<Routes, Errors, Response>
+	: UsedRoutes<Routes, Errors, Response>
+
+// A plugin typed as `AnyElysia` keeps its `any` routes
+type UsedRoutes<
+	Routes,
+	Errors extends ErrorDefinition[],
+	Response
+> = string extends keyof Routes
+	? Routes
+	: PrependUsedRoutes<Routes, Errors, Response>
+
+/**
+ * Found by its keys alone: matching a route structurally would resolve its
+ * `params`, `query`, `headers` and `error` too, which reading its `response`
+ * never does
+ */
+type RouteKey = 'params' | 'query' | 'headers' | 'response'
+
+type PrependUsedRoutes<Routes, Errors extends ErrorDefinition[], Response> = {
+	[K in keyof Routes]: RouteKey extends keyof Routes[K]
+		? WithParentResponse<
+				Errors extends []
+					? Routes[K]
+					: // A WebSocket route has no `error`
+						'error' extends keyof Routes[K]
+						? // @ts-ignore keyed as a route above
+							PrependRouteLeafErrors<Routes[K], Errors>
+						: Routes[K],
+				Response
+			>
+		: PrependUsedRoutes<Routes[K], Errors, Response>
+}
 
 type MergeStatusUnion<U> = {
 	[K in U extends unknown ? keyof U : never]: U extends unknown
@@ -2400,7 +2745,7 @@ export type ExtractReturnedError<
 	Errors extends ErrorDefinition[]
 > = 0 extends 1 & Value
 	? {}
-	: Extract<Value, Error> extends infer Es
+	: ErrorOf<Value> extends infer Es
 		? IsNever<Es> extends true
 			? {}
 			: MergeStatusUnion<
@@ -2456,23 +2801,25 @@ export type MergeElysiaInstances<
 				]
 			> &
 				(Prefix extends ``
-					? ResolveRouteErrors<
+					? ResolveUsedRouteErrors<
 							Current['~Routes'],
 							[
 								...Definitions['error'],
 								...Ephemeral['error'],
 								...Volatile['error']
-							]
+							],
+							ParentResponse<Metadata, Ephemeral, Volatile>
 						>
 					: CreateEden<
 							Prefix,
-							ResolveRouteErrors<
+							ResolveUsedRouteErrors<
 								Current['~Routes'],
 								[
 									...Definitions['error'],
 									...Ephemeral['error'],
 									...Volatile['error']
-								]
+								],
+								ParentResponse<Metadata, Ephemeral, Volatile>
 							>
 						>)
 		>
@@ -2524,7 +2871,8 @@ export type AddRoute<
 		CreateEden<
 			JoinPath<BasePath, Path>,
 			{
-				[method in Method]: CreateEdenResponse<
+				[method in Method]: WithHandledErrors<
+					CreateEdenResponse<
 					Path,
 					Schema,
 					MacroContext,
@@ -2561,6 +2909,13 @@ export type AddRoute<
 							...Volatile['error']
 						]
 					>
+				>,
+					Handle,
+					[
+						...Definitions['error'],
+						...Ephemeral['error'],
+						...Volatile['error']
+					]
 				>
 			}
 		>,

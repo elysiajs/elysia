@@ -1,20 +1,10 @@
-# 1.4.30 - 26 Aug 2026
-Chore:
-- update test case for Bun 1.4
-
-Advisory:
-- GHSA-gmm9-qwx3-2m3h
-- GHSA-2p5p-r4r9-f9jm
-- GHSA-3958-wq4x-729c
-- GHSA-46qc-v7pw-4j7j
-- GHSA-mx4m-hmpr-4w39
-
 # DayDream
 
 https://elysiajs.com/blog/elysia-20.html
  
 Feature:
 - tree-shake typebox
+- support static TypeBox wiring for Bun builds with `aot()`
 - support difference params prefix in dynamic path
 - validator pre-computes default snapshot at construction for safe schema
 - use RFC 9457 by default with `problem` function
@@ -197,6 +187,17 @@ Known issue:
 - a stream or generator that reaches 64 chunks or 4 MiB and that a later hook replaces, or that a throwing `afterHandle` / `mapResponse` leaves behind, is never drained, so `afterResponse` / dispose for that request do not run; the hook can `return()` / `cancel()` the `responseValue` it drops
 - routes served by Bun native static promotion (static-literal `GET` handlers with no hooks other than `error`) answer `HEAD` natively (200) and honour `If-None-Match` against Bun's own `etag` (304), while non-promoted routes answer `HEAD` only when `autoHead` is enabled (404 otherwise) and never send an `etag`. Accepted for 2.0; both divergences are pinned in `test/adapter/bun/native-head-policy.test.ts`
 - a static-value route (`.get(path, value)`) keeps the `.headers()` app defaults over a hook: a `request`, `transform`, `derive`, `beforeHandle`, `afterHandle`, `mapResponse` or `trace` hook that overrides or deletes such a header in `set.headers` (e.g. `cache-control: no-store` on a per-user response) is ignored on that route, because the defaults are prepared into its response at startup and a prepared response's own headers outrank `set`. A hook `content-type` likewise loses to the MIME generated for a static string, number, object or array, with or without `.headers()`. Headers that `.headers()` does not declare, and every header on a function route, apply normally. Use a function handler (`.get(path, () => value)`) when a hook must change these headers
+
+# 1.4.30 - 26 Aug 2026
+Chore:
+- update test case for Bun 1.4
+
+Advisory:
+- GHSA-gmm9-qwx3-2m3h
+- GHSA-2p5p-r4r9-f9jm
+- GHSA-3958-wq4x-729c
+- GHSA-46qc-v7pw-4j7j
+- GHSA-mx4m-hmpr-4w39
 
 # 1.4.28 - 17 Mar 2025
 

@@ -433,6 +433,8 @@ export function buildWSRoute(
 	const queryArray = queryChannels?.array
 	const queryObject = queryChannels?.object
 
+	// No compact prefix: only the HTTP JIT runs `~beforeHandlePrefix`, so here
+	// the inherited `beforeHandle` (auth) would silently never run
 	const flatAppHook =
 		(composeRouteHook(
 			instance,
@@ -440,7 +442,8 @@ export function buildWSRoute(
 			appHookChain,
 			inheritedChain,
 			app,
-			route[7] as AnyElysia | undefined
+			route[7] as AnyElysia | undefined,
+			false
 		) as Partial<AppHook> | undefined) ?? ({} as Partial<AppHook>)
 
 	const parseHooks = concatHooks(hook.parse as any) as any[]

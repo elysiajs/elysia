@@ -191,6 +191,211 @@ for (const [lane, config] of lanes)
 
 			expect(log.filter((v) => v === 'afterResponse')).toHaveLength(1)
 		})
+
+		// No error hook: a sync handler compiles to the sync afterResponse lane.
+		// However the route fails, sync or async, its own hook runs once
+		for (const [shape, handler] of [
+			[
+				'sync throw',
+				() => {
+					throw new Error('boom')
+				}
+			],
+			[
+				'async throw',
+				async () => {
+					throw new Error('boom')
+				}
+			],
+			['returned rejection', () => Promise.reject(new Error('boom'))],
+			['resolved Error', () => Promise.resolve(new Error('boom'))],
+			// mapping fails after the hook was scheduled: it must not run twice
+			[
+				'sync mapping throw',
+				() => ({
+					toJSON() {
+						throw new Error('boom')
+					}
+				})
+			],
+			[
+				'async mapping throw',
+				() =>
+					Promise.resolve({
+						toJSON() {
+							throw new Error('boom')
+						}
+					})
+			]
+		] as const)
+			it(`${shape} without an error hook fires afterResponse once`, async () => {
+				const log: string[] = []
+				const response = await build(
+					config,
+					handler,
+					log,
+					false
+				).handle('/')
+				expect(response.status).toBe(500)
+				await drain(response)
+				await settle()
+
+				expect(log).toEqual(['afterResponse'])
+			})
+
+		// The sync lane tees a returned stream before it signs cookies and maps
+		// it. A failure there never sends the tee's value branch, so it must be
+		// stopped: otherwise the source parks at tee's cap and its own cleanup
+		// (`finally`, `cancel`) never runs
+		for (const [source, stream] of [
+			[
+				'generator',
+				(log: string[]) =>
+					(function* () {
+						try {
+							while (true) yield 'x'
+						} finally {
+							log.push('stopped')
+						}
+					})()
+			],
+			[
+				'async iterable',
+				(log: string[]) =>
+					(async function* () {
+						try {
+							while (true) yield 'x'
+						} finally {
+							log.push('stopped')
+						}
+					})()
+			],
+			[
+				'ReadableStream',
+				(log: string[]) =>
+					new ReadableStream({
+						pull(controller) {
+							controller.enqueue('x')
+						},
+						cancel() {
+							log.push('stopped')
+						}
+					})
+			]
+		] as const)
+			for (const [failure, cookie, fail] of [
+				// throws synchronously, before mapping
+				[
+					'cookie signing',
+					{ secrets: 'secret', sign: 'session' },
+					({ cookie }: any) => {
+						cookie.session.value = {
+							toJSON() {
+								throw new Error('sign')
+							}
+						}
+					}
+				],
+				// rejects after mapping pulled the first chunk
+				[
+					'mapping',
+					undefined,
+					({ set }: any) => {
+						set.status = 1000
+					}
+				]
+			] as const)
+				it(`${failure} failing stops a returned ${source} and fires afterResponse once`, async () => {
+					const log: string[] = []
+					const response = await new Elysia({ ...config, cookie })
+						.get(
+							'/',
+							{
+								afterResponse() {
+									log.push('afterResponse')
+								}
+							},
+							(context) => {
+								fail(context)
+								return stream(log)
+							}
+						)
+						.handle('/')
+					expect(response.status).toBe(500)
+					await drain(response)
+					await settle()
+
+					expect(log.toSorted()).toEqual(['afterResponse', 'stopped'])
+				})
+
+		// However the route's error hook settles, the route's own afterResponse
+		// runs once. A throwing hook used to fall to the app-level error lane,
+		// which runs only the root chain (here: the global registered after
+		// the route), never the route's hook
+		for (const [handlerShape, handler] of [
+			[
+				'sync throw',
+				() => {
+					throw new Error('boom')
+				}
+			],
+			[
+				'async throw',
+				async () => {
+					throw new Error('boom')
+				}
+			],
+			// non-async rejections compile to the async tail (`_t`) on Bun
+			['returned rejection', () => Promise.reject(new Error('boom'))]
+		] as const)
+			for (const [hookShape, error] of [
+				[
+					'throwing',
+					() => {
+						throw new Error('hook')
+					}
+				],
+				[
+					'rejecting',
+					async () => {
+						throw new Error('hook')
+					}
+				],
+				['rejection-returning', () => Promise.reject(new Error('hook'))],
+				['returning', () => 'handled'],
+				// the hook already scheduled afterResponse, then mapping throws
+				[
+					'returning an unmappable value from',
+					() => ({
+						toJSON() {
+							throw new Error('hook')
+						}
+					})
+				]
+			] as const)
+				it(`${hookShape} error hook on ${handlerShape} fires the route afterResponse once`, async () => {
+					const log: string[] = []
+					const response = await new Elysia(config)
+						.get(
+							'/',
+							{
+								afterResponse() {
+									log.push('afterResponse')
+								},
+								error: error as any
+							},
+							handler as any
+						)
+						.afterResponse('global', () => {
+							log.push('global')
+						})
+						.handle('/')
+					expect(response.status).toBe(500)
+					await drain(response)
+					await settle()
+
+					expect(log).toEqual(['afterResponse'])
+				})
 	})
 
 describe('afterResponse count (dispatch lane)', () => {

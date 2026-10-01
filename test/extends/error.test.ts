@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Elysia, NotFound, ValidationError, t } from '../../src'
+import { Elysia, NotFound, ValidationError, status, t } from '../../src'
+import { setAsyncTail, setOnEmit } from '../../src/compile/handler/jit'
 
 import { describe, expect, it } from 'bun:test'
-import { post, json } from '../utils'
+import { post, json, req } from '../utils'
 
 import z from 'zod'
 import type { AnyElysia } from '../../src/base'
@@ -159,6 +160,33 @@ describe('Error extends', () => {
 		await expect(grandchild(global)).resolves.toBe('global')
 	})
 
+	// zod v4 `ZodError` is a factory whose prototype does not extend Error
+	// (only `ZodRealError`, thrown by `.parse()`, does) and matches through
+	// its own Symbol.hasInstance: the 2-arg form must register it like the
+	// 3-arg form does, not misread it as a hook scope and throw
+	it('registers an error class whose prototype does not extend Error', async () => {
+		const app = new Elysia()
+			.error(z.ZodError, ({ error }) => `zod ${error.issues.length}`)
+			.get('/', () => z.string().parse(1))
+
+		await expect(text(app, '/')).resolves.toBe('zod 1')
+
+		// no explicit scope: it comes from the instance config
+		const plugin = new Elysia({ as: 'global' }).error(
+			z.ZodError,
+			() => 'global zod'
+		)
+
+		await expect(
+			text(
+				new Elysia()
+					.use(new Elysia().use(plugin))
+					.get('/', () => z.string().parse(1)),
+				'/'
+			)
+		).resolves.toBe('global zod')
+	})
+
 	// 1.x `.error({ CODE: Class })` registered an error-code dictionary; 2.0
 	// dropped error codes (dispatch is by class), so the untyped object form
 	// registers no handler at all
@@ -240,5 +268,217 @@ describe('Error extends', () => {
 		const response = await app.handle('/', json({}))
 
 		expect(response.status).toBe(422)
+	})
+})
+
+// A handler or beforeHandle RETURNING an Error is rethrown into the error
+// lane. An instance of a class registered with `.error(Class, fn)` must be
+// too, even when it is not an Error (zod v4 `new ZodError()`): otherwise its
+// handler, and the status the route's type claims for it, are skipped and
+// the instance is served as a 200 value
+describe('returned error class instance', () => {
+	// `name` + `message` satisfy the `.error(Class)` type, yet instances are
+	// not Errors: only the registration makes them one
+	class Problem {
+		name = 'Problem'
+		message = 'problem'
+	}
+
+	const problemHandler = () => status(418, 'problem')
+
+	it('rethrows a returned zod ZodError to its global class handler', async () => {
+		const app = () =>
+			new Elysia()
+				.use(
+					new Elysia({ as: 'global' }).error(z.ZodError, () =>
+						status(418, 'quack')
+					)
+				)
+				.get('/', () => new z.ZodError([]))
+
+		// the sync-first async tail (Bun default) and the plain async lane
+		for (const tail of [undefined, false]) {
+			setAsyncTail(tail)
+
+			try {
+				const response = await app().handle('/')
+
+				expect({
+					tail,
+					status: response.status,
+					body: await response.text()
+				}).toEqual({ tail, status: 418, body: 'quack' })
+			} finally {
+				setAsyncTail(undefined)
+			}
+		}
+	})
+
+	// The reported repro: a hand-built ZodError used to be served as `200 []`
+	it('serves the reported 3-arg global zod handler repro as 418', async () => {
+		const errorHandler = new Elysia().error('global', z.ZodError, ({ error }) =>
+			status(418, `quack! ${error.message}`)
+		)
+
+		const app = new Elysia()
+			.use(errorHandler)
+			.get('/', () => new z.ZodError([]))
+
+		const response = await app.handle('/')
+
+		expect(response.status).toBe(418)
+		expect(await response.text()).toBe('quack! []')
+	})
+
+	// Registered after the routes, the class reaches them only through the
+	// app-level error lane, so they stay on the sync lanes that forward a
+	// returned Promise themselves
+	it('ends a returned root-only class instance like a thrown one', async () => {
+		type Route = (app: AnyElysia, handler: () => unknown) => AnyElysia
+
+		const lanes: [lane: string, route: Route, status: number][] = [
+			['bare GET', (app, h) => app.get('/', h), 418],
+			['bare POST', (app, h) => app.post('/', h), 418],
+			[
+				'beforeHandle',
+				(app, h) => app.get('/', { beforeHandle: () => {} }, h),
+				418
+			],
+			[
+				'sync afterResponse',
+				(app, h) => app.afterResponse(() => {}).get('/', h),
+				418
+			],
+			// Its own hooks never reach the app-level lane: a thrown instance
+			// falls back to a 500 there, so must a returned one. `() => {}`, not
+			// `() => undefined`, which may return a Promise and goes async
+			[
+				'own sync error hook',
+				(app, h) => app.error(() => {}).get('/', h),
+				500
+			]
+		]
+
+		const shapes: [
+			shape: string,
+			returns: () => unknown,
+			throws: () => unknown
+		][] = [
+			[
+				'instance',
+				() => new Problem(),
+				() => {
+					throw new Problem()
+				}
+			],
+			[
+				'Promise',
+				() => Promise.resolve(new Problem()),
+				() => Promise.reject(new Problem())
+			]
+		]
+
+		for (const [lane, route, expected] of lanes)
+			for (const [shape, returns, throws] of shapes) {
+				const respond = async (handler: () => unknown) => {
+					const response = await route(new Elysia(), handler)
+						.error(Problem, problemHandler)
+						.handle(lane === 'bare POST' ? post('/') : req('/'))
+
+					return {
+						lane,
+						shape,
+						status: response.status,
+						body: await response.text()
+					}
+				}
+
+				const returned = await respond(returns)
+
+				expect(returned).toEqual(await respond(throws))
+				expect(returned.status).toBe(expected)
+			}
+	})
+
+	it('rethrows an instance a beforeHandle returns', async () => {
+		const response = await new Elysia()
+			.error(Problem, problemHandler)
+			.get('/', { beforeHandle: () => new Problem() }, () => 'handler')
+			.handle('/')
+
+		expect(response.status).toBe(418)
+		expect(await response.text()).toBe('problem')
+	})
+
+	it('throws a registered class instance served as a static value', async () => {
+		const response = await new Elysia()
+			.error(Problem, problemHandler)
+			.get('/', new Problem() as any)
+			.handle('/')
+
+		expect(response.status).toBe(418)
+		expect(await response.text()).toBe('problem')
+	})
+
+	// Only in scope: like any non-Error, an instance no reachable handler
+	// claims is a plain value
+	it('leaves an instance no reachable handler claims as a value', async () => {
+		const app = new Elysia()
+			.use(
+				new Elysia()
+					.error(Problem, problemHandler)
+					.get('/inside', () => new Problem())
+			)
+			.get('/outside', () => new Problem())
+
+		const inside = await app.handle('/inside')
+		expect(inside.status).toBe(418)
+		expect(await inside.text()).toBe('problem')
+
+		expect((await app.handle('/outside')).status).toBe(200)
+	})
+
+	// `instanceof Error` already rethrows an Error subclass: only a route that
+	// can see a non-Error class pays for the class check
+	it('adds the class check only to routes that can see a non-Error class', async () => {
+		const emitted: string[] = []
+		setOnEmit((code) => {
+			emitted.push(code)
+		})
+
+		try {
+			await new Elysia()
+				.error(CustomError, () => 'custom')
+				.get('/', () => 'hi')
+				.handle('/')
+			await new Elysia()
+				.error(Error, () => 'error')
+				.get('/', () => 'hi')
+				.handle('/')
+
+			expect(emitted).toHaveLength(2)
+			for (const code of emitted) expect(code).not.toMatch(/\bie\(/)
+
+			emitted.length = 0
+			await new Elysia()
+				.error(z.ZodError, () => 'zod')
+				.get('/', () => 'hi')
+				.handle('/')
+
+			expect(emitted).toHaveLength(1)
+			expect(emitted[0]).toMatch(/\bie\(/)
+		} finally {
+			setOnEmit(undefined)
+		}
+	})
+
+	// An arrow has no prototype: as a class, `instanceof` would throw on
+	// every later error dispatch, so it must fail at registration
+	it('rejects a prototype-less function as an error class', () => {
+		expect(() => new Elysia().error((() => 1) as any, () => 'x')).toThrow(
+			/Invalid hook scope/
+		)
+
+		expect(() => new Elysia().error(z.ZodError, () => 'x')).not.toThrow()
 	})
 })

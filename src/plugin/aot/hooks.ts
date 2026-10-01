@@ -13,6 +13,7 @@ import {
 	ADAPTER_BUN_FILTER,
 	IS_PRODUCTION_FILTER,
 	TYPEBOX_TYPE_FILTER,
+	TYPEBOX_SYSTEM_LITE_FILTER,
 	TYPEBOX_REQUIRE_FILTER,
 	EXACT_MIRROR_REQUIRE_FILTER,
 	ELYSIA_MODULE_FILTER,
@@ -140,6 +141,10 @@ export const createAotPluginHooks = (
 					cleanId
 				)
 
+			// Full AOT keeps every Locale table so TypeSystem.Locale works.
+			if (TYPEBOX_SYSTEM_LITE_FILTER.test(cleanId))
+				return `export * from 'typebox/system'\n`
+
 			if (
 				stub.adapter !== false &&
 				ADAPTER_CONSTANTS_FILTER.test(cleanId)
@@ -196,6 +201,40 @@ export const createAotPluginHooks = (
 	}
 }
 
+export const createTypeboxWiringHooks = (): AotPluginHooks => {
+	return {
+		async buildStart() {},
+		buildEnd() {},
+		resolveId() {
+			return undefined
+		},
+		load() {
+			return undefined
+		},
+		transform(_code, id) {
+			const cleanId = id.split('?', 1)[0]
+
+			// CJS cannot tree-shake the live namespace requires; leave it unchanged.
+			if (cleanId.endsWith('.js')) return undefined
+
+			if (TYPEBOX_TYPE_FILTER.test(cleanId))
+				return alignStubExtensions(
+					`export * from './typebox-type-live'\n`,
+					cleanId
+				)
+
+			for (const { filter, source } of STUB_SOURCES.typeboxValue)
+				if (filter.test(cleanId))
+					return alignStubExtensions(source, cleanId)
+
+			return undefined
+		},
+		isTransformCandidate(id) {
+			return ELYSIA_MODULE_FILTER.test(id.split('?', 1)[0])
+		}
+	}
+}
+
 const resolveLoader = (path: string) => {
 	const ext = path.slice(path.lastIndexOf('.'))
 
@@ -226,10 +265,11 @@ export async function setupAotOnLoad(
 			...(resolveDir !== undefined ? { resolveDir } : {})
 		}) as { contents: string; loader: string; resolveDir?: string }
 
-	build.onResolve({ filter: /^elysia\/compiled$/ }, () => ({
-		path: 'manifest',
-		namespace: 'elysia-aot'
-	}))
+	build.onResolve({ filter: /^elysia\/compiled$/ }, () =>
+		hooks.resolveId('elysia/compiled') !== undefined
+			? { path: 'manifest', namespace: 'elysia-aot' }
+			: undefined
+	)
 
 	build.onLoad(
 		{ filter: /.*/, namespace: 'elysia-aot' },

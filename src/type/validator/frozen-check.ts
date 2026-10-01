@@ -1,6 +1,5 @@
 import type { CheckBuildResult } from '../../compile/aot'
-import { collectExternals } from '../../compile/aot-reconstruct'
-import { externalsMatch, reconstructCheck } from '../../compile/aot-emit'
+import { alignBuildExternals, reconstructCheck } from '../../compile/aot-emit'
 
 export function buildFrozenCheck(
 	build: CheckBuildResult | undefined,
@@ -14,15 +13,16 @@ export function buildFrozenCheck(
 	  }
 	| undefined {
 	if (!build?.functions?.length || !build.entry) return
-	const vars = build.external.variables
 
-	if (!externalsMatch(collectExternals(node), vars)) return
-	const cr = reconstructCheck(build)
+	// the live schema must reproduce this build's externals
+	const b = alignBuildExternals(build, node)
+	if (!b) return
+	const cr = reconstructCheck(b)
 
 	return {
-		identifier: build.external.identifier,
+		identifier: b.external.identifier,
 		checkDefs: cr.defs,
 		checkValue: cr.value,
-		external: vars.length > 0
+		external: b.external.variables.length > 0
 	}
 }

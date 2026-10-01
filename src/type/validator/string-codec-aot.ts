@@ -17,7 +17,15 @@ import {
 import type { ValidatorOptions } from '../../validator'
 import { getExactMirror } from './exact-mirror'
 
-// Build time: freeze one ObjectString/ArrayString inner schema into a check
+// TypeBox >= 1.3.24 dropped `Validator.buildResult` (sinclairzx81/typebox#1680),
+// which `captureMirrorUnions` reads off exact-mirror's compiled union branches
+export function compileWithBuild(schema: TSchema) {
+	const v: any = Compile(schema)
+	v.buildResult ??= Build(schema)
+
+	return v
+}
+
 function captureInnerCodec(
 	inner: any,
 	open: number,
@@ -41,7 +49,7 @@ function captureInnerCodec(
 	let decode: CapturedMirror
 	try {
 		const emitted = createMirror(inner, {
-			Compile,
+			Compile: compileWithBuild,
 			sanitize,
 			decode: true,
 			emit: true

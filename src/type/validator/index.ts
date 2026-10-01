@@ -17,7 +17,8 @@ import {
 	EncodeUnsafe,
 	Errors,
 	HasCodec,
-	SchemaCompile as Compile
+	SchemaCompile as Compile,
+	Build
 } from '../typebox-value'
 import type { TLocalizedValidationError } from 'typebox/error'
 
@@ -42,6 +43,7 @@ import {
 
 import { hasProperty } from '../utils'
 import {
+	ASYNC_REFINE,
 	collectFileTypeChecks,
 	isAsyncPredicate,
 	takeFileTypeChecks,
@@ -144,6 +146,34 @@ const freshRefineValidation = (
 	}
 }
 
+const UNAWAITED_REFINE = '[Elysia] t.Refine check must be synchronous'
+
+const guardedChecks = new WeakSet<Function>()
+
+// TypeBox never awaits a check and reads its result as truthy or not, so an
+// async check (or one returning a Promise) passed every value. Throw instead
+function guardRefinement(refinement: Refinement) {
+	const check = refinement.check as Function
+
+	if (
+		guardedChecks.has(check) ||
+		(check as any)[ASYNC_REFINE] === true ||
+		isPureRefinement(refinement)
+	)
+		return
+
+	const guarded = function (this: unknown, value: unknown) {
+		const result = check.call(this, value)
+		if (typeof result?.then === 'function')
+			throw new Error(UNAWAITED_REFINE)
+
+		return result
+	}
+
+	guardedChecks.add(guarded)
+	refinement.check = guarded
+}
+
 function collectRefinements(
 	schema: any,
 	out = new Set<RefinementGroup>(),
@@ -163,7 +193,9 @@ function collectRefinements(
 					typeof refinement.check === 'function'
 			)
 
-			if (members.length) {
+			for (const refinement of members) guardRefinement(refinement)
+
+			if (members.length && !isAsyncPredicate(members)) {
 				group = {
 					checks: members.map((refinement) => refinement.check),
 					pure: members.every(isPureRefinement)
@@ -217,6 +249,7 @@ function collectRefinements(
 
 							return slot.verdicts[slot.occurrences - 1][index]
 						}
+						guardedChecks.add(refinement.check)
 					}
 			}
 		}
@@ -414,29 +447,27 @@ let warnedMissingMirror = false
 interface DefaultFastPath {
 	/** `Default(schema, undefined)`; cloned when object-like. */
 	value: unknown
-
-	/** Legacy parity: this precomputed default also applies to explicit `null`. */
 	appliesToNull: boolean
 
 	/** `Default(schema, {})`, used to merge child defaults into partial objects. */
 	objectTemplate: Record<string, unknown> | undefined
 
-	/** Generated object/array cloner for `value` when available. */
 	clone?: () => unknown
-
-	/**
-	 * Generated default merger for present input. Schema-driven when available
-	 * (fills object keys and maps array element defaults); self-guards its input
-	 * shape so a non-matching value passes through unchanged.
-	 */
 	merge?: (value: any) => any
 }
 
 export class TypeBoxValidator<
 	const in out T extends TSchema = TAny
 > extends Validator {
-	// AOT / frozen validator state
-	// Undefined when the validator was reconstructed from the AOT manifest.
+	static member(schema: TSchema, compiled: any): boolean {
+		const isAsync = (
+			compiled.buildResult ?? Build(schema)
+		).external.variables.some(isAsyncPredicate)
+		collectRefinements(schema)
+
+		return isAsync
+	}
+
 	tb?: BaseTypeBoxValidator
 
 	// build time check, bound eagerly from the frozen manifest at construction
@@ -451,6 +482,7 @@ export class TypeBoxValidator<
 	#decodeMirror?: (value: unknown) => unknown
 	#encodeMirror?: (value: unknown) => unknown
 	#refinements?: Set<RefinementGroup>
+
 	// Pooled once per validator; #validate resets it via an epoch counter rather than re-allocating
 	// Safe because #validate is synchronous and nesting only ever interleaves different validator
 	#refineScratch?: RefineValidation
@@ -458,9 +490,7 @@ export class TypeBoxValidator<
 		value: unknown
 	) => { instancePath: string; error: unknown } | undefined
 
-	// Default fast path (AOT-baked when available, runtime-computed otherwise)
-	// `precomputeSafe` is the public/debug indicator; #defaultFastPath is the
-	// grouped runtime state used by FromSync/FromAsync.
+	// Default fast path (AOT-baked when available)
 	precomputeSafe = false
 	#defaultFastPath?: DefaultFastPath
 
@@ -613,11 +643,13 @@ export class TypeBoxValidator<
 							)
 						: Compile(this.schema as TSchema)
 
-				this.isAsync =
-					// @ts-expect-error private property
-					this.tb.buildResult.external.variables.some(
-						isAsyncPredicate
-					) ?? false
+				// TypeBox >= 1.3.24 no longer keeps `buildResult` on the
+				// Validator (sinclairzx81/typebox#1680): rebuild for externals
+				const build: any =
+					(this.tb as any).buildResult ??
+					Build(this.schema as TSchema)
+
+				this.isAsync = build.external.variables.some(isAsyncPredicate)
 
 				if (capturing && captureImpl && options?.aot && options.slot)
 					captureImpl.maybeCapture({
@@ -631,17 +663,15 @@ export class TypeBoxValidator<
 						coerces: options.coerces,
 						normalize: options.normalize,
 						sanitize: options.sanitize,
-						// @ts-expect-error private property
-						buildResult: this.tb!.buildResult
+						buildResult: build
 					})
 				else if (!capturing) dropCompiledSource(this.tb)
 			}
 		}
 
-		if (!this.isAsync) {
-			const refinements = collectRefinements(this.schema)
-			if (refinements.size) this.#refinements = refinements
-		}
+		// every validator guards its refinements, only a sync one replays them
+		const refinements = collectRefinements(this.schema)
+		if (!this.isAsync && refinements.size) this.#refinements = refinements
 
 		if (frozen?.ps === 1) {
 			const objectTemplate =

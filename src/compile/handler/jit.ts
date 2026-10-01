@@ -28,7 +28,8 @@ import {
 	drainDisposables,
 	emptyResponse,
 	finalizeRouteError,
-	forwardError
+	forwardError,
+	forwardErrorOf
 } from '../../handler/utils'
 import { hasHeaderShorthand, isBun } from '../../universal/constants'
 
@@ -349,6 +350,11 @@ export interface CompileHandlerJitOptions {
 	isStaticResponse: boolean
 	isPromiseHandler: boolean
 	/**
+	 * Non-Error classes a returned value is rethrown for, see
+	 * `returnedErrorClasses`
+	 */
+	errorClasses?: Function[]
+	/**
 	 * Per-route descriptor + compile artifacts, computed by `describeRoute`.
 	 * The JIT no longer re-derives these facts; it names its emissions off them.
 	 */
@@ -371,6 +377,7 @@ export function compileHandlerJit(
 		isHandleFunction,
 		isStaticResponse,
 		isPromiseHandler,
+		errorClasses,
 		state
 	} = options
 	const {
@@ -450,14 +457,17 @@ export function compileHandlerJit(
 		}
 	}
 
+	if (errorClasses) link(forwardErrorOf(errorClasses), 'ie')
+
+	const fwd = errorClasses ? 'ie' : 'fe'
+	const rethrow = (v: string) =>
+		errorClasses ? `ie(${v})\n` : `if(${v} instanceof Error)throw ${v}\n`
+
 	const abortOn = hasLifecycleHook && root['~config']?.abortSignal !== false
 	const abortPeek = "c['~sig']?.aborted"
 	const arm = abortOn ? "_as??=(c['~sig']??=c.request.signal)" : ''
 
 	let abortSchedule = ''
-	// Set once the handler's stream is observed: an abort exit never sends it,
-	// so it stops it, or the observer afterResponse / dispose wait on parks at
-	// tee's cap. A catch can't: an error hook may still serve `responseValue`
 	let discard = ''
 	const abortCheck = () =>
 		abortOn
@@ -892,6 +902,11 @@ export function compileHandlerJit(
 				`:(${catchSchedule.trim()},_fr)\n`
 			: `return fre(rt,c,${arg})\n`
 
+	const mapThenSchedule = (s: string, onReject: string) =>
+		`if(typeof _m?.then==='function')return Promise.resolve(_m).then((_v)=>{\n${s}return _v\n},${onReject})\n` +
+		s +
+		`return _m\n`
+
 	const signPrefix = syncCookieSign
 		? `scv(c.set.cookie,cc)\n`
 		: asyncCookieSign
@@ -1017,37 +1032,40 @@ export function compileHandlerJit(
 		code += abortCheck()
 
 		if (syncAfterResponse) {
-			link(forwardError, 'fe')
+			if (!errorClasses) link(forwardError, 'fe')
 
 			factoryHelpers +=
 				syncScheduleDecl +
 				`function _fin(c,_r){\n` +
-				`if(_r instanceof Error)throw _r\n` +
+				rethrow('_r') +
 				`if(_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
 				`const _s=tee(_r,2)\n` +
-				`return _fin2(c,_s[0],_s[1])\n` +
+				`return _fin2(c,_s[0],_s[1],_s[0])\n` +
 				`}\n` +
-				`if(_r instanceof ReadableStream){const _o=obs(_r)\nif(_o)return _fin2(c,_o[0],_o[1])}\n` +
-				`return _fin2(c,_r,undefined)\n` +
+				`if(_r instanceof ReadableStream){const _o=obs(_r)\nif(_o)return _fin2(c,_o[0],_o[1],_o[2])}\n` +
+				`return _fin2(c,_r)\n` +
 				`}\n` +
-				`function _fin2(c,_r,_stl){\n` +
+				`function _fin2(c,_r,_stl,_sv){try{\n` +
 				`c.responseValue=_r\n` +
-				// Only a sync signer reaches this lane: an async one forces
-				// `isAsync` (see descriptor), which excludes `syncAfterResponse`
 				signPrefix +
-				(syncScheduleDecl ? `_scf(c,_stl)\n` : scheduleAfterResponse) +
 				`const _m=${mapValue('_r')}\n` +
-				`return typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n` +
-				`}\n`
+				mapThenSchedule(
+					syncScheduleDecl ? `_scf(c,_stl)\n` : scheduleAfterResponse,
+					`(_e)=>{_sv?.return()\n${freThenSchedule('_e')}}`
+				) +
+				`}catch(_e){_sv?.return();throw _e}}\n`
 
+			// Reject promise runs afterResponse like normal throw
+			// `_arf` stops a second schedule when `_fin2` already queued it
 			code +=
-				`if(typeof _r?.then==='function')return Promise.resolve(_r).then(fe).then((_v)=>_fin(c,_v)).catch((_e)=>fre(rt,c,_e))\n` +
+				`if(typeof _r?.then==='function')return Promise.resolve(_r).then(${fwd}).then((_v)=>_fin(c,_v)).catch((_e)=>{${freThenSchedule('_e')}})\n` +
 				`return _fin(c,_r)\n`
 		} else {
-			code += plain(`if(_r instanceof Error)throw _r\n`)
+			code += plain(rethrow('_r'))
 			if (!isAsync) {
-				link(forwardError, 'fe')
-				code += `else if(typeof _r?.then==='function')_r=Promise.resolve(_r).then(fe)\n`
+				if (!errorClasses) link(forwardError, 'fe')
+				// `ie(_r)` is a statement, no `if` to chain an `else` to
+				code += `${errorClasses ? '' : 'else '}if(typeof _r?.then==='function')_r=Promise.resolve(_r).then(${fwd})\n`
 			}
 
 			if (
@@ -1119,8 +1137,6 @@ export function compileHandlerJit(
 				code += abortCheck()
 			}
 
-			// Mapping starts generators and can fail. Schedule only after mapping;
-			// rejected paths schedule after the error response sets the final status.
 			const deferSchedule = !!schedule
 
 			code += plain(signPrefix)
@@ -1144,14 +1160,12 @@ export function compileHandlerJit(
 			else {
 				code += `const _m=${finalMap}\n`
 				code += deferSchedule
-					? `if(typeof _m?.then==='function')return Promise.resolve(_m).then((_v)=>{\n${schedule}return _v\n},${onMapReject})\n` +
-						schedule +
-						`return _m\n`
+					? mapThenSchedule(schedule, onMapReject)
 					: `return typeof _m?.then==='function'?Promise.resolve(_m).catch(${onMapReject}):_m\n`
 			}
 		}
 	} else if (isHandleFunction) {
-		if (!isAsync) link(forwardError, 'fe')
+		if (!isAsync && !errorClasses) link(forwardError, 'fe')
 		const finalMap = mapValue('_r')
 		if (typeof asyncMode === 'object') {
 			// declared at the route's top level: the final map reads it
@@ -1162,12 +1176,12 @@ export function compileHandlerJit(
 
 		code +=
 			abortCheck() +
-			plain(`if(_r instanceof Error)throw _r\n`) +
+			plain(rethrow('_r')) +
 			(tail
 				? `let _m\n${stageSite(finalMap, '_m')}return _m\n`
 				: isAsync
 					? `return await ${finalMap}\n`
-					: `if(typeof _r?.then==='function')_r=Promise.resolve(_r).then(fe)\nconst _m=${finalMap}\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>${syncErrorHook ? '_ce(_e,c)' : 'fre(rt,c,_e)'}):_m\n`)
+					: `if(typeof _r?.then==='function')_r=Promise.resolve(_r).then(${fwd})\nconst _m=${finalMap}\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>${syncErrorHook ? '_ce(_e,c)' : 'fre(rt,c,_e)'}):_m\n`)
 	} else {
 		code += plain(
 			`const _m=${mapValue(isStaticResponse ? 'cr(h)' : isPromiseHandler ? 'h.then(cr)' : 'h')}\n` +
@@ -1259,13 +1273,14 @@ export function compileHandlerJit(
 				`return _efb(e,c)\n`
 		} else body += endTrace('error') + freThenSchedule('e')
 
+		const hookThrew = `catch(_ee){${freThenSchedule('_ee').trimEnd()}}}\n`
+
 		if (syncErrorHook) {
 			// `_ce` is hoisted out of `route`, so it cannot see `route`'s `_as`
 			// cache and declares its own
-			factoryHelpers += `function _ce(e,c){${abortOn ? 'let _as\n' : ''}try{\n${body}}catch(_ee){return fre(rt,c,_ee)}}\n`
+			factoryHelpers += `function _ce(e,c){${abortOn ? 'let _as\n' : ''}try{\n${body}}${hookThrew}`
 			code += `}catch(e){return _ce(e,c)}\n`
-		} else
-			code += `}catch(e){try{\n${body}}catch(_ee){return fre(rt,c,_ee)}}\n`
+		} else code += `}catch(e){try{\n${body}}${hookThrew}`
 	} else
 		code += catchSchedule
 			? `}catch(e){${freThenSchedule('e')}}\n`
@@ -1279,7 +1294,7 @@ export function compileHandlerJit(
 	code =
 		head +
 		(abortOn && code.includes('_as') ? 'let _as\n' : '') +
-		(code.includes('_av') ? 'let _av\n' : '') +
+		(abortOn && code.includes('_av') ? 'let _av\n' : '') +
 		(tail ? '' : scheduleDecl) +
 		code
 
@@ -1287,14 +1302,12 @@ export function compileHandlerJit(
 		const { n, live, sites } = asyncMode as TailMode
 		const pass: TailMode = { async: true, n: 0, live, sites: [] }
 		const pipeline = compileHandlerJit(options, pass) as unknown as string
-		// both renderings number the same await points in the same order
+
 		if (
 			pass.sites.join('\n') !== sites.join('\n') ||
 			!pipeline.startsWith('try{\n')
 		)
-			throw new Error(
-				'[elysia] internal: async tail out of step with its route'
-			)
+			throw new Error('[elysia] async tail out of step with its route')
 
 		factoryHelpers +=
 			scheduleDecl +
@@ -1313,8 +1326,6 @@ export function compileHandlerJit(
 		code = code.replaceAll('fre(rt,c,', '_sfre(rt,c,')
 		factoryHelpers =
 			factoryHelpers.replaceAll('fre(rt,c,', '_sfre(rt,c,') +
-			// The app-level error lane signs right before its final map, after
-			// every error / mapResponse hook this route didn't compile in
 			`function _sgn(s){return scv(s.cookie,cc)}\nfunction _sfre(rt,c,e){return fre(rt,c,e,_sgn)}\n`
 	}
 

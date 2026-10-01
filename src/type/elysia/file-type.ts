@@ -83,14 +83,11 @@ export interface FileTypeBudget {
 
 export const ASYNC_REFINE = '~elyAsyncRefine'
 
-export const isAsyncPredicate = (v: unknown) =>
+export const isAsyncPredicate = (v: any): boolean =>
 	Array.isArray(v)
-		? v.some((x: any) =>
-				typeof x.check === 'function'
-					? isAsyncFunction(x.check) || x.check[ASYNC_REFINE] === true
-					: false
-			)
-		: false
+		? v.some(isAsyncPredicate)
+		: typeof v?.check === 'function' &&
+			(isAsyncFunction(v.check) || v.check[ASYNC_REFINE] === true)
 
 export function collectFileTypeChecks() {
 	collecting = true

@@ -74,6 +74,50 @@ export function externalsMatch(a: unknown[], b: unknown[]) {
 	return true
 }
 
+/**
+ * Align a TypeBox build's externals with the layout the runtime rebuilds from
+ * the schema (`collectExternals`). Returns the build as is when they already
+ * match, a copy with a prepended remap when TypeBox >= 1.3.31 passed a lone
+ * refinement instead of its `~refine` array, or undefined (don't freeze) when
+ * a slot can't be proven equal, e.g. a 1.3.31+ format function
+ */
+export function alignBuildExternals(
+	build: CheckBuildResult,
+	schema: unknown
+): CheckBuildResult | undefined {
+	const variables = build.external.variables
+	const canonical = collectExternals(schema)
+	const id = build.external.identifier
+	// spliced into the emitted code as a reassignment, so only a bare
+	// identifier is safe. TypeBox 1.3.x always uses 'External'
+	if (!/^[A-Za-z_$][\w$]*$/.test(id)) return
+
+	const slots: string[] = []
+
+	let j = 0
+	let same = variables.length === canonical.length
+	for (let i = 0; i < variables.length; i++) {
+		const v = variables[i] as any
+		const c = canonical[j] as any
+
+		if (j < canonical.length && externalsMatch([c], [v]))
+			slots.push(`${id}[${j++}]`)
+		else if (Array.isArray(c) && c.length === 1 && c[0] === v) {
+			slots.push(`${id}[${j++}][0]`)
+			same = false
+		} else return
+	}
+
+	if (j !== canonical.length) return
+	if (same) return build
+
+	return {
+		...build,
+		functions: [`${id}=[${slots.join(',')}]`, ...build.functions],
+		external: { identifier: id, variables: canonical }
+	}
+}
+
 const mirrorFactorySource = (source: string, hasExternals: boolean) =>
 	hasExternals
 		? // union: a factory `(d) => (v) => cleaned`. `d` injects the branch checks
@@ -104,12 +148,6 @@ export const Source = {
 	bothFactory: bothFactorySource
 } as const
 
-/**
- * verify that mirror unions can be reconstructed in build time
- *
- * return undefined if not reconstructable
- * `truthUnions` is `mir.externals.unions` (compiled branches).
- */
 export function captureMirrorUnions(schema: unknown, truthUnions: any[][]) {
 	const branchSchemas = collectMirrorUnions(schema)
 	if (branchSchemas.length !== truthUnions.length) return
@@ -126,20 +164,15 @@ export function captureMirrorUnions(schema: unknown, truthUnions: any[][]) {
 		const branch: { identifier: string; code: string }[] = []
 
 		for (let i = 0; i < truthUnions[ui]!.length; i++) {
-			const build = truthUnions[ui]![i]?.buildResult as
+			const raw = truthUnions[ui]![i]?.buildResult as
 				| CheckBuildResult
 				| undefined
 
-			if (!build?.functions?.length || !build.entry) return
+			if (!raw?.functions?.length || !raw.entry) return
 
 			// the live branch schema must reproduce this branch's externals
-			if (
-				!externalsMatch(
-					collectExternals(branchSchemas[ui]![i]),
-					build.external.variables
-				)
-			)
-				return
+			const build = alignBuildExternals(raw, branchSchemas[ui]![i])
+			if (!build) return
 
 			branch.push({
 				identifier: build.external.identifier,

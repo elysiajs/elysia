@@ -50,6 +50,48 @@ describe('file-type queue refinements', () => {
 		expect(error.property).toBe('/avatar')
 	})
 
+	// `t.File({ type })` is shared per options. A synchronous validator whose
+	// schema holds the node where its build never looks (`$defs`) used to wrap
+	// the shared refinement in place and drop its async marker: every later
+	// route with the same options then skipped content detection
+	it('a synchronous neighbour does not disable detection on a shared t.File', async () => {
+		setFileTypeDetector(() => 'application/x-not-an-image')
+
+		const app = new Elysia()
+			.post(
+				'/defs',
+				{
+					body: Object.assign(t.Object({ a: t.String() }), {
+						$defs: {
+							Unused: t.Object({
+								avatar: t.File({ type: 'image' })
+							})
+						}
+					}) as any
+				},
+				() => 'ok'
+			)
+			.post(
+				'/upload',
+				{ body: t.Object({ avatar: t.File({ type: 'image' }) }) },
+				() => 'ok'
+			)
+
+		const json = await app.handle(
+			new Request('http://localhost/defs', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ a: 'x' })
+			})
+		)
+		expect(json.status).toBe(200)
+
+		const response = await app.handle(
+			upload('/upload', { avatar: 'fake.jpg' }).request
+		)
+		expect(response.status).toBe(422)
+	})
+
 	// Detection reads bytes off every file (`Blob.slice().arrayBuffer()`), and
 	// `maxItems` is a refine on the outer array — it only rejects *after* every
 	// item has been visited. An attacker therefore pays ~150 bytes of multipart

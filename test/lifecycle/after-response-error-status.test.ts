@@ -100,12 +100,6 @@ for (const lane of lanes)
 		for (const kind of ['sync', 'async'] as const)
 			for (const placement of placements)
 				for (const shape of shapes) {
-					// This fast lane intentionally schedules before mapping.
-					const syncFastLane =
-						kind === 'sync' &&
-						placement !== 'none' &&
-						shape === 'bare'
-
 					it(`${kind} generator, ${placement} hook, ${shape}`, async () => {
 						const log: Log = []
 						const { status } = await run(
@@ -138,11 +132,40 @@ for (const lane of lanes)
 						if (shape === 'error-hook')
 							expect(log[0]).toBe('error:boom')
 
-						expect(fired[0]).toBe(
-							syncFastLane
-								? 'afterResponse:undefined'
-								: 'afterResponse:500'
-						)
+						expect(fired[0]).toBe('afterResponse:500')
 					})
 				}
+	})
+
+// A sync handler returning a promise of an unserialisable value fails inside
+// mapping, after the handler already settled: afterResponse must still see the
+// 500 that error handling set, not the pre-mapping status.
+for (const lane of lanes)
+	describe(`sync handler resolving an unserialisable value — afterResponse contract (${lane.id})`, () => {
+		for (const placement of ['app', 'route'] as const)
+			for (const shape of shapes)
+				it(`${placement} hook, ${shape}`, async () => {
+					const log: Log = []
+					const { status } = await run(
+						lane,
+						define(
+							placement,
+							shape,
+							() => Promise.resolve({ a: 1n }),
+							log
+						),
+						log
+					)
+
+					expect(status).toBe(500)
+
+					const fired = log.filter((entry) =>
+						entry.startsWith('afterResponse')
+					)
+
+					expect(fired).toEqual(['afterResponse:500'])
+
+					if (shape === 'error-hook')
+						expect(log[0]).toStartWith('error:')
+				})
 	})

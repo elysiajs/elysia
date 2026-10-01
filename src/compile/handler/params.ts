@@ -20,6 +20,8 @@ import {
 	emptyResponse,
 	finalizeRouteError,
 	forwardError,
+	forwardErrorOf,
+	returnedErrorClasses,
 	registerDeriveDisposable
 } from '../../handler/utils'
 import type { AnyElysia } from '../../base'
@@ -108,6 +110,12 @@ const handlerParams = (): Record<string, Resolver | undefined> =>
 	va: (c) => c.vali,
 	// returned-error forwarder
 	fe: () => forwardError,
+	// `fe` that also rethrows a registered non-Error class. Not in
+	// `hookStateAliases`: own error hooks holding one also link `er`
+	ie: (c) => {
+		const classes = returnedErrorClasses(c.hook as any, c.root)
+		return classes ? forwardErrorOf(classes) : forwardError
+	},
 	// route-level error boundary
 	fre: () => finalizeRouteError,
 	// shared error fallback, reached once every error hook has declined

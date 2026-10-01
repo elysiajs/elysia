@@ -10,7 +10,7 @@ const requireLocale = (): typeof System.Locale => {
 	} catch {}
 
 	throw new Error(
-		"TypeSystem.Locale isn't bundled: it carries every locale table. Register it with setupTypebox({ typebox: { type, system } }) using `import * as system from 'typebox/system'`, or build with the AOT plugin."
+		"TypeSystem.Locale isn't bundled: it carries every locale table. Register it with setupTypebox({ typebox: { type, system } }) using `import * as system from 'typebox/system'`, or build with `aot(entry)`."
 	)
 }
 

@@ -100,6 +100,11 @@ export const isLocalScope = (s: EventScope | undefined) =>
  * without flattening - `over` is walked first (older / outer context),
  * then `combine` (newer / inner context)
  *
+ * `tail` is the child's own chain head at that `.use()`. Its local hooks
+ * registered after the child absorbed the route run after the route's own
+ * hooks, as they would with the child as the root (`afterUseHooks` in
+ * `compile/handler`)
+ *
  * Use with {@link flattenChain} to walk tail-first and reconstruct
  * flat `Partial<AppHook>` at compile time
  */
@@ -116,7 +121,20 @@ export type ChainNode =
 			// Instance this node was registered on
 			owner?: object
 	  }
-	| { combine: ChainNode; over: ChainNode | undefined; refs: boolean }
+	| {
+			combine: ChainNode | undefined
+			over: ChainNode | undefined
+			tail?: ChainNode
+			refs: boolean
+	  }
+
+/**
+ * The absorbing instance's chain as it stood at `.use()`: the `over` of a
+ * combine node, or the node itself. A combine node is never on an instance's
+ * own chain, so it can't serve as a `stopAt` directly
+ */
+export const rootSnapshot = (node: ChainNode | undefined) =>
+	node && 'combine' in node ? node.over : node
 
 export interface CompactBeforeHandleChunk {
 	parent?: CompactBeforeHandleChunk
@@ -308,8 +326,10 @@ export function flattenChain(
 
 		if (stopAt && node === stopAt) continue
 		if ('combine' in node) {
-			nodes.push(node.combine)
-			phases.push(0)
+			if (node.combine) {
+				nodes.push(node.combine)
+				phases.push(0)
+			}
 
 			if (node.over) {
 				nodes.push(node.over)
@@ -600,17 +620,18 @@ const _resolveConstantTimeEqual = (): ((a: string, b: string) => boolean) => {
 	if (isBun && typeof (crypto as any)?.timingSafeEqual === 'function')
 		native = (a: Uint8Array, b: Uint8Array) =>
 			(crypto as any).timingSafeEqual(a, b)
-	else try {
-		const _crypto = (globalThis.process as any)?.getBuiltinModule?.(
-			'node:crypto'
-		)
+	else
+		try {
+			const _crypto = (globalThis.process as any)?.getBuiltinModule?.(
+				'node:crypto'
+			)
 
-		if (typeof _crypto?.timingSafeEqual === 'function')
-			native = _crypto.timingSafeEqual as (
-				a: Uint8Array,
-				b: Uint8Array
-			) => boolean
-	} catch {}
+			if (typeof _crypto?.timingSafeEqual === 'function')
+				native = _crypto.timingSafeEqual as (
+					a: Uint8Array,
+					b: Uint8Array
+				) => boolean
+		} catch {}
 
 	if (!native)
 		return (a: string, b: string) => {
@@ -888,8 +909,8 @@ export function mergeHook(
 	return a
 }
 
-export const createErrorEventHandler =
-	(fn: EventFn<'error'>, error: Error) => (context: Context) => {
+export const createErrorEventHandler = (fn: EventFn<'error'>, error: Error) => {
+	const handler = (context: Context) => {
 		if (
 			// @ts-expect-error
 			context.error instanceof
@@ -898,6 +919,18 @@ export const createErrorEventHandler =
 		)
 			return fn!(context as any)
 	}
+
+	const p = (error as any)?.prototype
+	if (
+		typeof p === 'object' &&
+		p !== null &&
+		p !== Error.prototype &&
+		!(p instanceof Error)
+	)
+		(handler as any)['~errorClass'] = error
+
+	return handler
+}
 
 const isObject = (item: any): item is Object =>
 	item && typeof item === 'object' && !Array.isArray(item)
@@ -925,19 +958,6 @@ export function mergeDeep<
 	override: boolean = true,
 	mergeArray: boolean = false,
 	seen?: WeakSet<object>,
-	// Opt-in clone-on-adopt. When set, a plain-object value that is adopted
-	// wholesale (no counterpart on `target`) is deep-cloned instead of aliased,
-	// which lets `.use()` skip cloning the whole decorator tree up front
-	//
-	// every subtree that already exists on `target` is recursed into and its leaves
-	// copied by reference, so an eager clone of those is pure waste
-	//
-	// One holder threads through the entire call so a source object reached
-	// twice (repeated or circular reference) maps to a single clone, matching
-	// what the eager `clonePlainDecorators` pass produced
-	//
-	// The WeakMap itself is allocated only when an adoption actually happens,
-	// most merges adopt nothing, `undefined` (every other caller) keeps aliasing
 	cloneAdopt?: { map?: WeakMap<object, any> }
 ): A & B {
 	if (!isObject(target) || !isObject(source)) return target as A & B

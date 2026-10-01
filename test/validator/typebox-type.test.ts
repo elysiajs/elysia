@@ -109,7 +109,7 @@ describe('typebox-type', () => {
 
 		ops.injectTypeboxType({
 			type: await import('typebox/type'),
-			system: await import('typebox/system')
+			system: require('../../src/type/typebox-system-lite')
 		})
 
 		expect(Object.keys(live).sort()).toEqual(Object.keys(ops).sort())

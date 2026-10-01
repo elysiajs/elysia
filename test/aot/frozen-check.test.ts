@@ -1,5 +1,6 @@
 import '../../src/compile/aot-capture'
 import { describe, it, expect, afterEach } from 'bun:test'
+import { Build } from 'typebox/schema'
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { Compiled, type ValidatorManifest } from '../../src/compile/aot'
@@ -103,6 +104,11 @@ describe('frozen validator checks', () => {
 	})
 })
 
+const formatExternalized = () =>
+	(Build(t.String({ format: 'email' })) as any).external.variables.some(
+		(v: unknown) => typeof v === 'function'
+	)
+
 /** Supported schema families must remain eligible for frozen validation. */
 describe('frozen validator schema coverage', () => {
 	it('captures every supported schema family', () => {
@@ -168,6 +174,14 @@ describe('frozen validator schema coverage', () => {
 			['POST', '/optional', 'body']
 		] as const) {
 			const c = at(m, p, s)
+
+			// TypeBox 1.3.31+ passes a format check as an external, which is
+			// never frozen (`alignBuildExternals`): the slot validates on TypeBox
+			if (p === '/format' && formatExternalized()) {
+				expect(c?.checkValue).toBeUndefined()
+				continue
+			}
+
 			expect(
 				c,
 				`${m} ${p} ${s} should freeze (absent = JIT fallback)`

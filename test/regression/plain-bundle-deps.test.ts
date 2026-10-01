@@ -3,6 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 
+import { aot } from '../../src/plugin/aot/bun'
+
 // TypeBox is loaded lazily on first use. When that load went through an opaque
 // `import.meta.require`, a plain `bun build` (no AOT plugin) left TypeBox out of
 // the bundle: deployed without node_modules, every validated route answered 500
@@ -64,6 +66,37 @@ describe('plain bundle embeds TypeBox and exact-mirror', () => {
 				entrypoints: [entry],
 				outdir: join(dir, name),
 				target: 'bun'
+			})
+			expect(built.success).toBe(true)
+
+			const run = Bun.spawnSync({
+				cmd: [process.execPath, '--no-install', built.outputs[0]!.path],
+				cwd: dir
+			})
+
+			expect(run.stderr.toString()).toBe('')
+			expect(JSON.parse(run.stdout.toString())).toEqual([
+				200,
+				'{"name":"a"}',
+				422,
+				200,
+				'{"name":"a"}'
+			])
+		})
+
+	for (const [name, from] of [
+		['src', join(root, 'src', 'index.ts')],
+		['dist', join(root, 'dist', 'index.mjs')]
+	])
+		it(`wires TypeBox and exact-mirror without node_modules (${name})`, async () => {
+			const entry = join(dir, `wired-route-${name}.ts`)
+			writeFileSync(entry, app(from))
+
+			const built = await Bun.build({
+				entrypoints: [entry],
+				outdir: join(dir, `wired-route-${name}`),
+				target: 'bun',
+				plugins: [aot()]
 			})
 			expect(built.success).toBe(true)
 
@@ -156,7 +189,7 @@ describe('plain bundle tree-shakes TypeBox', () => {
 	// value/delta/diff: a TypeBox value function Elysia never calls
 	const unusedValue = 'Cannot create diffs for objects with symbols keys'
 	// de_DE locale table
-	const locale = 'darf keine zusätzlichen Eigenschaften haben'
+	const locale = 'darf keine unbewerteten Elemente haben'
 
 	const localeApp = (from: string) => `
 import { Elysia, t, TypeSystem, setupTypebox } from '${from}'
@@ -186,6 +219,16 @@ console.log(JSON.stringify([
 	Object.keys(TypeSystem).includes('Locale'),
 	locale
 ]))
+`
+	const typeboxType = Bun.resolveSync('typebox/type', root)
+	const typeboxSystem = Bun.resolveSync('typebox/system', root)
+	const localeOptInApp = (from: string) => `
+import { TypeSystem, setupTypebox } from '${from}'
+import * as type from '${typeboxType}'
+import * as system from '${typeboxSystem}'
+
+setupTypebox({ typebox: { type, system } })
+console.log(Object.keys(TypeSystem.Locale).length)
 `
 
 	for (const [name, from] of [
@@ -223,4 +266,96 @@ console.log(JSON.stringify([
 			// its runtime fallback still finds this repo's node_modules here
 			if (name !== 'dist-cjs') expect(message).toContain('setupTypebox')
 		})
+
+	for (const [name, from] of [
+		['src', join(root, 'src', 'index.ts')],
+		['dist', join(root, 'dist', 'index.mjs')]
+	])
+		it(`wires TypeBox statically without precompilation (${name})`, async () => {
+			const entry = join(dir, `wired-${name}.ts`)
+			writeFileSync(entry, localeApp(from))
+
+			const built = await Bun.build({
+				entrypoints: [entry],
+				outdir: join(dir, `wired-${name}`),
+				target: 'bun',
+				plugins: [aot()]
+			})
+			expect(built.success).toBe(true)
+
+			const code = await built.outputs[0]!.text()
+			expect(code).not.toContain(locale)
+			expect(code).not.toContain(unusedValue)
+			expect(code.match(/__esm\(/g) ?? []).toHaveLength(0)
+
+			const run = Bun.spawnSync({
+				cmd: [process.execPath, '--no-install', built.outputs[0]!.path],
+				cwd: dir
+			})
+			const [status, unionPrioritySort, listsLocale, message] =
+				JSON.parse(run.stdout.toString())
+
+			expect(status).toBe(200)
+			expect(unionPrioritySort).toBe(false)
+			expect(listsLocale).toBe(true)
+			expect(message).toContain('setupTypebox')
+		})
+
+	for (const [name, from] of [
+		['src', join(root, 'src', 'index.ts')],
+		['dist', join(root, 'dist', 'index.mjs')]
+	])
+		it(`keeps explicitly registered Locale in plain and wired bundles (${name})`, async () => {
+			const entry = join(dir, `locale-optin-${name}.ts`)
+			writeFileSync(entry, localeOptInApp(from))
+
+			for (const [mode, plugins] of [
+				['plain', []],
+				['wired', [aot()]]
+			] as const) {
+				const built = await Bun.build({
+					entrypoints: [entry],
+					outdir: join(dir, `locale-${name}-${mode}`),
+					target: 'bun',
+					plugins: [...plugins]
+				})
+				expect(built.success).toBe(true)
+				expect(await built.outputs[0]!.text()).toContain(locale)
+
+				const run = Bun.spawnSync({
+					cmd: [
+						process.execPath,
+						'--no-install',
+						built.outputs[0]!.path
+					],
+					cwd: dir
+				})
+
+				expect(run.stderr.toString()).toBe('')
+				expect(Number(run.stdout.toString())).toBe(41)
+			}
+		})
+
+	it('leaves the CommonJS dist bundle byte-identical', async () => {
+		const entry = join(dir, 'locale-dist-cjs.ts')
+		writeFileSync(entry, localeApp(join(root, 'dist', 'index.js')))
+
+		const plain = await Bun.build({
+			entrypoints: [entry],
+			outdir: join(dir, 'locale-dist-cjs-plain'),
+			target: 'bun'
+		})
+		const wired = await Bun.build({
+			entrypoints: [entry],
+			outdir: join(dir, 'locale-dist-cjs-wired'),
+			target: 'bun',
+			plugins: [aot()]
+		})
+
+		expect(plain.success).toBe(true)
+		expect(wired.success).toBe(true)
+		expect(await wired.outputs[0]!.text()).toBe(
+			await plain.outputs[0]!.text()
+		)
+	})
 })

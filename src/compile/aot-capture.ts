@@ -21,7 +21,10 @@ import {
 import { buildCoercedFromPlan, captureCoercePlan } from '../type/coerce'
 import { buildFrozenCheck } from '../type/validator/frozen-check'
 import { captureCustomErrors } from '../type/validator/custom-error'
-import { captureStringCodecEntries } from '../type/validator/string-codec-aot'
+import {
+	captureStringCodecEntries,
+	compileWithBuild
+} from '../type/validator/string-codec-aot'
 import {
 	applyPrecomputed,
 	buildDefaultClonerSource,
@@ -311,7 +314,7 @@ function captureMirror(
 
 	try {
 		const emitted = createMirror(schema, {
-			Compile,
+			Compile: compileWithBuild,
 			sanitize: sanitize as any,
 			emit: true
 		}) as { source?: string; externals?: any }
@@ -355,7 +358,7 @@ function captureCodecMirror(
 
 	try {
 		const emitted = createMirror(schema, {
-			Compile,
+			Compile: compileWithBuild,
 			sanitize: sanitize as any,
 			...dirOpt,
 			emit: true

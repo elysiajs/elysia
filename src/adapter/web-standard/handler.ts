@@ -66,6 +66,8 @@ function handleElysiaFile(
 }
 
 function responseTag(response: unknown) {
+	// typeof first: Object.getPrototypeOf on a string primitive is slow
+	if (typeof response === 'string') return 'String'
 	if (response == null) return
 
 	const constructor = Object.getPrototypeOf(response)?.constructor

@@ -199,24 +199,16 @@ function fallbackErrorResponse(
 	if (error instanceof ElysiaStatus)
 		return mapResponse(error, context.set, context)
 
-	// Self-describing error, `status` is already applied by applyErrorStatus.
-	// A foreign error that merely looks self-describing (undici, node-fetch)
-	// keeps the production mask below, only an owned HTTPError bypasses it.
-	// A malformed status (NaN, 0, negative) is not a claim of self-description.
-	// Thrown values can also be null or undefined.
+	if (error instanceof Response)
+		return mapResponse(error, context.set, context)
+
 	const self = (error ?? {}) as HTTPError & {
 		readonly value?: unknown
 		readonly detail?: unknown
 	}
 	const status = resolveStatus(self.status)
-	// An owned error opted into the whole contract, everything it serves is a
-	// problem document. A foreign duck error only claims one by carrying a value
 	const owned = error instanceof HTTPError
-	// Naming a problem `type` is the claim, which an `implements HTTPError`
-	// class can make without extending it
 	const claimsProblem = claimsProblemType(error)
-	// `status` is what the error annotated, `served` is what actually goes out
-	// once `applyErrorStatus` has had its say
 	const served = (
 		typeof status === 'number' ? status : resolveStatus(context.set.status)
 	) as number
@@ -232,9 +224,7 @@ function fallbackErrorResponse(
 		)
 	}
 
-	// Headers are merged only once a body is known good, a rejecting or empty
-	// annotation must not leak them onto the fallback response
-	const mergeHeaders = () => {
+	function mergeHeaders() {
 		if (self.headers)
 			Object.assign(materializeSetHeaders(context.set), self.headers)
 	}

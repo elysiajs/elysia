@@ -2,6 +2,7 @@
 import { Elysia, NotFound, status, problem } from '../../src'
 
 import { expectTypeOf } from 'expect-type'
+import { ZodError } from 'zod'
 
 // Returned errors resolve through the closest registered class handler.
 
@@ -119,6 +120,133 @@ class OtherError extends Error {
 	expectTypeOf<
 		(typeof app)['~Routes']['get']['error']
 	>().toEqualTypeOf<OtherError>()
+}
+
+// Data with a string `name` and `message` is a 200 value, not an error.
+{
+	const app = new Elysia().get('/', () => ({
+		id: 1,
+		name: 'Alice',
+		message: 'hi'
+	}))
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: { id: number; name: string; message: string }
+	}>()
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['error']
+	>().toEqualTypeOf<never>()
+}
+
+// Classified per union member: the data stays 200, the real Error goes 500.
+{
+	const app = new Elysia().get('/', () =>
+		Math.random() > 0.5
+			? { id: 1, name: 'Alice', message: 'hi' }
+			: new OtherError('x')
+	)
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: { id: number; name: string; message: string }
+		500: OtherError
+	}>()
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['error']
+	>().toEqualTypeOf<OtherError>()
+}
+
+// A registered class handler must not capture data shaped like an `Error`.
+{
+	const app = new Elysia()
+		.error(MyError, ({ error }) => status(404, { message: error.message }))
+		.get('/', () => ({ id: 1, name: 'Alice', message: 'hi' }))
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: { id: number; name: string; message: string }
+	}>()
+
+	// even a handler for a class the data structurally satisfies
+	class BareError extends Error {}
+
+	const bare = new Elysia()
+		.error(BareError, () => status(400, 'bare'))
+		.get('/', () => ({ id: 1, name: 'Alice', message: 'hi' }))
+
+	expectTypeOf<(typeof bare)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: { id: number; name: string; message: string }
+	}>()
+}
+
+// `ZodError` declares `stack`, so it still routes to its registered handler.
+{
+	const app = new Elysia()
+		.error(ZodError, () => status(418, 'quack'))
+		.get('/', () => new ZodError([]))
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		418: 'quack'
+	}>()
+}
+
+// The reported repro, verbatim: the route's type always claimed 418, the
+// runtime now agrees (it used to serve the ZodError as `200 []`)
+{
+	const errorHandler = new Elysia().error('global', ZodError, ({ error }) =>
+		status(418, `quack! ${error.message}`)
+	)
+
+	const app = new Elysia().use(errorHandler).get('/', () => new ZodError([]))
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		418: `quack! ${string}`
+	}>()
+}
+
+// Same claim through the 2-arg class registration on an `as: 'global'` plugin
+{
+	const errorHandler = new Elysia({ as: 'global' }).error(
+		ZodError,
+		({ error }) => status(418, `quack! ${error.message}`)
+	)
+
+	const app = new Elysia().use(errorHandler).get('/', () => new ZodError([]))
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		418: `quack! ${string}`
+	}>()
+}
+
+// A class that is no `Error` still routes as one by declaring `stack`.
+{
+	class Problem {
+		name = 'Problem'
+		message = 'problem'
+		stack?: string
+	}
+
+	const app = new Elysia()
+		.error(Problem, () => status(418, 'problem'))
+		.get('/', () => new Problem())
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		418: 'problem'
+	}>()
+}
+
+// Accepted trade-off: a class without `stack` is indistinguishable from data.
+{
+	class Bare {
+		name = 'Bare'
+		message = 'bare'
+	}
+
+	const app = new Elysia()
+		.error(Bare, () => status(418, 'bare'))
+		.get('/', () => new Bare())
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: Bare
+	}>()
 }
 
 // Plain handler returns use the error's status, or 500 by default.
@@ -268,19 +396,164 @@ class OtherError extends Error {
 	}>()
 }
 
-// A plugin's own handler takes precedence over its parent's.
+// A parent handler registered before `.use()` runs before the plugin's own at
+// runtime (app-wide observers must see plugin-handled errors), so it takes
+// over an error the plugin already handled. Registered after `.use()`, the
+// plugin's own handler runs first and keeps it.
+// Mirrored at runtime by test/lifecycle/nested-hook-order.test.ts
 {
 	const routes = new Elysia()
 		.error(MyError, () => status(403, 'plugin' as const))
 		.get('/', () => new MyError('x'))
+
+	const before = new Elysia()
+		.error(MyError, () => status(418, 'parent' as const))
+		.use(routes)
+
+	expectTypeOf<
+		(typeof before)['~Routes']['get']['response']
+	>().toEqualTypeOf<{
+		418: 'parent'
+	}>()
+	expectTypeOf<
+		(typeof before)['~Routes']['get']['error']
+	>().toEqualTypeOf<never>()
+
+	const after = new Elysia()
+		.use(routes)
+		.error(MyError, () => status(418, 'parent' as const))
+
+	expectTypeOf<(typeof after)['~Routes']['get']['response']>().toEqualTypeOf<{
+		403: 'plugin'
+	}>()
+
+	// A parent handler for another class leaves the plugin's handler alone
+	const other = new Elysia()
+		.error(OtherError, () => status(418, 'parent' as const))
+		.use(routes)
+
+	expectTypeOf<(typeof other)['~Routes']['get']['response']>().toEqualTypeOf<{
+		403: 'plugin'
+	}>()
+
+	// A child-class parent handler doesn't match the base-class error
+	const child = new Elysia()
+		.error(ChildError, () => status(418, 'parent' as const))
+		.use(routes)
+
+	expectTypeOf<(typeof child)['~Routes']['get']['response']>().toEqualTypeOf<{
+		403: 'plugin'
+	}>()
+
+	// A base-class parent handler does
+	const base = new Elysia()
+		.error(Error, () => status(418, 'parent' as const))
+		.use(routes)
+
+	expectTypeOf<(typeof base)['~Routes']['get']['response']>().toEqualTypeOf<{
+		418: 'parent'
+	}>()
+
+	// A catch-all `.error(fn)` runs first too, but may return nothing for an
+	// error and fall through to the plugin's handler, so both can respond
+	const catchAll = new Elysia()
+		.error(() => status(418, 'catch-all' as const))
+		.use(routes)
+
+	expectTypeOf<
+		(typeof catchAll)['~Routes']['get']['response']
+	>().toEqualTypeOf<{
+		403: 'plugin'
+		418: 'catch-all'
+	}>()
+
+	// Plugin handler registered after its route
+	const late = new Elysia()
+		.error(MyError, () => status(418, 'parent' as const))
+		.use(
+			new Elysia()
+				.get('/', () => new MyError('x'))
+				.error(MyError, () => status(403, 'plugin' as const))
+		)
+
+	expectTypeOf<(typeof late)['~Routes']['get']['response']>().toEqualTypeOf<{
+		418: 'parent'
+	}>()
+
+	// Global and plugin-scoped parent handlers take over too
+	const global = new Elysia()
+		.error('global', MyError, () => status(418, 'parent' as const))
+		.use(routes)
+
+	expectTypeOf<
+		(typeof global)['~Routes']['get']['response']
+	>().toEqualTypeOf<{
+		418: 'parent'
+	}>()
+
+	const scoped = new Elysia()
+		.error('plugin', MyError, () => status(418, 'parent' as const))
+		.use(routes)
+
+	expectTypeOf<
+		(typeof scoped)['~Routes']['get']['response']
+	>().toEqualTypeOf<{
+		418: 'parent'
+	}>()
+
+	// Inside a group
+	const grouped = new Elysia()
+		.error(MyError, () => status(418, 'parent' as const))
+		.group('/g', (app) => app.use(routes))
+
+	expectTypeOf<
+		(typeof grouped)['~Routes']['g']['get']['response']
+	>().toEqualTypeOf<{
+		418: 'parent'
+	}>()
+}
+
+// Only the taken-over error moves; the plugin keeps the rest
+{
+	const routes = new Elysia()
+		.error(MyError, () => status(403, 'same' as const))
+		.error(OtherError, () => status(403, 'same' as const))
+		.get('/', () =>
+			Math.random() > 0.5 ? new MyError('x') : new OtherError('y')
+		)
 
 	const app = new Elysia()
 		.error(MyError, () => status(418, 'parent' as const))
 		.use(routes)
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
-		403: 'plugin'
+		403: 'same'
+		418: 'parent'
 	}>()
+
+	const mixed = new Elysia()
+		.error(MyError, () => status(403, 'plugin' as const))
+		.get('/', () =>
+			Math.random() > 0.5
+				? new MyError('x')
+				: Math.random() > 0.5
+					? new OtherError('y')
+					: ('ok' as const)
+		)
+
+	const app2 = new Elysia()
+		.error(MyError, () => status(418, 'parent' as const))
+		.error(OtherError, () => status(409, 'other' as const))
+		.use(mixed)
+
+	expectTypeOf<(typeof app2)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'ok'
+		409: 'other'
+		418: 'parent'
+	}>()
+	expectTypeOf<
+		(typeof app2)['~Routes']['get']['error']
+	>().toEqualTypeOf<never>()
 }
 
 // Composition preserves returned errors until a matching handler is registered.

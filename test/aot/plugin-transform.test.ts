@@ -3,8 +3,12 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 import { rewriteTypeImport } from '../../src/plugin/aot/treeshake'
+import { aot as bunAot } from '../../src/plugin/aot/bun'
 import { aot as viteAot } from '../../src/plugin/aot/vite'
-import { createAotPluginHooks } from '../../src/plugin/aot/hooks'
+import {
+	createAotPluginHooks,
+	createTypeboxWiringHooks
+} from '../../src/plugin/aot/hooks'
 import { resolveElysiaRoot } from '../../src/plugin/aot/core'
 import { Compiled } from '../../src/compile/aot'
 import { Validator } from '../../src/validator'
@@ -20,6 +24,20 @@ describe('AOT plugin source transforms', () => {
 		for (const leaf of ['src/type/typebox-type.ts', 'dist/type/typebox-type.mjs'])
 			expect(hooks.transform('', resolve(packageRoot, leaf))).toContain(
 				`export * from './typebox-type-live`
+			)
+	})
+
+	it('always re-routes typebox-system-lite to the full system', () => {
+		const packageRoot = resolve(import.meta.dir, '../..')
+		const hooks = createAotPluginHooks(resolve(packageRoot, 'src/index.ts'))
+
+		for (const file of [
+			'src/type/typebox-system-lite.ts',
+			'dist/type/typebox-system-lite.mjs',
+			'dist/type/typebox-system-lite.js'
+		])
+			expect(hooks.transform('', resolve(packageRoot, file))).toBe(
+				`export * from 'typebox/system'\n`
 			)
 	})
 
@@ -45,6 +63,96 @@ describe('AOT plugin source transforms', () => {
 				`dist/${leaf}.js`
 			])
 				expect(hooks.transform('', resolve(packageRoot, file))).toBe(stub)
+	})
+
+	it('wires only the static TypeBox leaves without an entry', () => {
+		const packageRoot = resolve(import.meta.dir, '../..')
+		const hooks = createTypeboxWiringHooks()
+		const cases = [
+			[
+				'type/typebox-type',
+				(extension: string) =>
+					`export * from './typebox-type-live${extension}'\n`
+			],
+			[
+				'type/typebox-value',
+				(extension: string) =>
+					`export * from './typebox-value-live${extension}'\n`
+			]
+		] as const
+
+		for (const [directory, fileExtension, importExtension] of [
+			['src', '.ts', ''],
+			['dist', '.mjs', '.mjs']
+		] as const)
+			for (const [leaf, source] of cases)
+				expect(
+					hooks.transform(
+						'original',
+						resolve(
+							packageRoot,
+							`${directory}/${leaf}${fileExtension}`
+						)
+					)
+				).toBe(source(importExtension))
+
+		for (const leaf of [
+			...cases.map(([leaf]) => leaf),
+			'type/typebox-value-require',
+			'type/validator/exact-mirror',
+			'type/validator/exact-mirror-require'
+		])
+			expect(
+				hooks.transform(
+					'original',
+					resolve(packageRoot, `dist/${leaf}.js`)
+				)
+			).toBeUndefined()
+
+		for (const [directory, extension] of [
+			['src', '.ts'],
+			['dist', '.mjs']
+		] as const)
+			for (const leaf of [
+				'type/typebox-value-require',
+				'type/validator/exact-mirror',
+				'type/validator/exact-mirror-require'
+			])
+				expect(
+					hooks.transform(
+						'original',
+						resolve(packageRoot, `${directory}/${leaf}${extension}`)
+					)
+				).toBeUndefined()
+
+		for (const leaf of [
+			'src/type/index.ts',
+			'src/type/bridge.ts',
+			'src/type/compat.ts',
+			'src/universal/is-production.ts'
+		])
+			expect(
+				hooks.transform('original', resolve(packageRoot, leaf))
+			).toBeUndefined()
+
+		const nested = resolve(
+			packageRoot,
+			'node_modules/nested/node_modules/elysia/src/type/typebox-type.ts'
+		)
+		expect(hooks.transform('original', nested)).toBe(
+			`export * from './typebox-type-live'\n`
+		)
+		expect(hooks.isTransformCandidate(nested)).toBe(true)
+
+		const unrelated = '/tmp/app/src/type/typebox-type.ts'
+		expect(hooks.transform('original', unrelated)).toBeUndefined()
+		expect(hooks.isTransformCandidate(unrelated)).toBe(false)
+	})
+
+	it('rejects AOT options without an entry', () => {
+		expect(() => bunAot(undefined, { production: true })).toThrow(
+			'[elysia-aot] options require an entry'
+		)
 	})
 
 	it('refreshes static clone omission without touching a nested package', async () => {

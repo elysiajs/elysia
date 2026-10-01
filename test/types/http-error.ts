@@ -352,6 +352,13 @@ class Deferred extends HTTPError<'DEFERRED'> {
 
 	type Response = (typeof app)['~Routes']['get']['response']
 
+	// `not.toHaveProperty` alone also compiles for `string` or `unknown`, so pin
+	// that the route resolves to a problem document that simply lacks `code`
+	expectTypeOf<keyof Response>().toEqualTypeOf<402>()
+	expectTypeOf<Response[402]['type']>().toEqualTypeOf<'MANUAL'>()
+	expectTypeOf<
+		'code' extends keyof Response[402] ? true : false
+	>().toEqualTypeOf<false>()
 	expectTypeOf<Response[402]>().not.toHaveProperty('code')
 }
 
@@ -559,8 +566,10 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	}
 }
 
-// Either knob declared to return `unknown` annotates nothing — the message
-// fallback is served instead.
+// Either knob declared to return `unknown` resolves to `unknown`, not to the
+// message fallback: the runtime serves whatever the knob returns (an object
+// is served verbatim) and can't see a declared type, so the type can't
+// promise the message either.
 {
 	class OpaqueValue extends HTTPError.id('OPAQUE_VALUE', 409) {
 		value(): unknown {
@@ -578,12 +587,14 @@ class Deferred extends HTTPError<'DEFERRED'> {
 		.get('/value', () => new OpaqueValue())
 		.get('/detail', () => new OpaqueDetail())
 
+	// `value` is served raw, so the whole body is `unknown`
 	expectTypeOf<
-		(typeof app)['~Routes']['value']['get']['response'][409]['detail']
-	>().toEqualTypeOf<string>()
+		(typeof app)['~Routes']['value']['get']['response'][409]
+	>().toEqualTypeOf<unknown>()
+	// `detail` is carried verbatim into the problem document
 	expectTypeOf<
 		(typeof app)['~Routes']['detail']['get']['response'][409]['detail']
-	>().toEqualTypeOf<string>()
+	>().toEqualTypeOf<unknown>()
 }
 
 // `value()` may hand back a `status()` or `problem()`, which is served at the
@@ -837,11 +848,18 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	class Denied extends HTTPError.id('DENIED', 402) {}
 
 	expectTypeOf(new Denied()).toMatchTypeOf<Error>()
-	expectTypeOf(new Denied('no funds')).toMatchTypeOf<Error>()
+
+	// Every constructor form yields the same instance, carrying the literal
+	// `type`, `code` and `status` the class was tagged with — a message or
+	// cause never widens them.
+	expectTypeOf(new Denied()).toEqualTypeOf<Denied>()
+	expectTypeOf(new Denied('no funds')).toEqualTypeOf<Denied>()
 	expectTypeOf(
 		new Denied('no funds', { cause: new Error('upstream') })
-	).toMatchTypeOf<Error>()
-	expectTypeOf(new Denied().type).toEqualTypeOf<'DENIED'>()
+	).toEqualTypeOf<Denied>()
+	expectTypeOf(new Denied('no funds').type).toEqualTypeOf<'DENIED'>()
+	expectTypeOf(new Denied('no funds').code).toEqualTypeOf<'DENIED'>()
+	expectTypeOf(new Denied('no funds').status).toEqualTypeOf<402>()
 }
 
 // `TaggedHTTPError` names that class, so one can be held in an annotated
@@ -850,6 +868,8 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	const Denied: TaggedHTTPError<'DENIED'> = HTTPError.id('DENIED')
 
 	expectTypeOf(new Denied().type).toEqualTypeOf<'DENIED'>()
+	expectTypeOf(new Denied('no funds').type).toEqualTypeOf<'DENIED'>()
+	expectTypeOf(new Denied('no funds').code).toEqualTypeOf<'DENIED'>()
 	expectTypeOf(new Denied('no funds')).toMatchTypeOf<Error>()
 }
 

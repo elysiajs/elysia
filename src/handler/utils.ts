@@ -1,5 +1,5 @@
 import { isAsyncFunction, mayReturnPromise } from '../compile/utils'
-import { isDisposable, isSingleton } from '../utils'
+import { isDisposable, isSingleton, flattenChain } from '../utils'
 import { isCloudflareWorker, isFastly } from '../universal/constants'
 import { HTTPError, PROBLEM_JSON, problemTypeOf } from '../error'
 import { env } from '../universal'
@@ -60,6 +60,48 @@ export function forwardError<T>(value: T): T {
 	return value
 }
 
+const chainErrorClasses = new WeakMap<object, Function[] | null>()
+
+function collectErrorClasses(error: unknown, into: Function[] | undefined) {
+	if (!error) return into
+
+	const list = Array.isArray(error) ? error : [error]
+	for (let i = 0; i < list.length; i++) {
+		const C = (list[i] as any)?.['~errorClass']
+		if (C && !into?.includes(C)) (into ??= []).push(C)
+	}
+
+	return into
+}
+
+export function returnedErrorClasses(
+	hook: { error?: unknown } | undefined,
+	root: AnyElysia
+): Function[] | undefined {
+	const head = root['~hookChain']
+	let rootClasses = head && chainErrorClasses.get(head)
+	if (head && rootClasses === undefined)
+		chainErrorClasses.set(
+			head,
+			(rootClasses =
+				collectErrorClasses(flattenChain(head)?.error, undefined) ??
+				null)
+		)
+
+	return collectErrorClasses(hook?.error, rootClasses?.slice())
+}
+
+// `forwardError` of a route that can see a non-Error class
+export const forwardErrorOf =
+	(classes: Function[]) =>
+	<T>(value: T): T => {
+		if (value instanceof Error) throw value
+		for (let i = 0; i < classes.length; i++)
+			if (value instanceof (classes[i] as any)) throw value
+
+		return value
+	}
+
 export function finalizeRouteError(
 	app: AnyElysia,
 	context: Partial<Context>,
@@ -96,7 +138,8 @@ export async function drainDisposables(context: any) {
 	if (!stack) return
 
 	try {
-		if (!Array.isArray(stack)) throw new TypeError('Invalid disposable stack')
+		if (!Array.isArray(stack))
+			throw new TypeError('Invalid disposable stack')
 		const errors: unknown[] = []
 		while (stack.length) {
 			try {

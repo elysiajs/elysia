@@ -1175,3 +1175,148 @@ corpus.push({
 		}
 	]
 })
+
+// A RETURNED instance of a registered non-Error error class is rethrown like
+// an Error on every lane. `/early` sees `Quack` only through the root chain,
+// `/local` sees the distinct `LocalQuack` only through its own hook, so the
+// AOT resolver must read both. Outside the plugin a LocalQuack is a value
+class Quack {
+	name = 'Quack'
+	message = 'quack'
+}
+
+class LocalQuack {
+	name = 'LocalQuack'
+	message = 'local quack'
+}
+
+corpus.push({
+	id: 'returned-error-class',
+	tags: ['safe-for-socket', 'error'],
+	define: (app) =>
+		(app as any)
+			.get('/early', () => new Quack())
+			.use(
+				new Elysia()
+					.error(LocalQuack, () => status(418, 'local quack'))
+					.get('/local', () => new LocalQuack())
+			)
+			.get('/value', () => new LocalQuack())
+			.error(Quack, () => status(418, 'quack'))
+			.get('/sync', () => new Quack())
+			.get('/promise', () => Promise.resolve(new Quack()))
+			.get(
+				'/before',
+				{ beforeHandle: () => new Quack() },
+				() => 'unreached'
+			)
+			.get('/static', new Quack() as any),
+	requests: [
+		{ id: 'early', make: get('/early') },
+		{ id: 'local', make: get('/local') },
+		{ id: 'value', make: get('/value') },
+		{ id: 'sync', make: get('/sync') },
+		{ id: 'promise', make: get('/promise') },
+		{ id: 'before', make: get('/before') },
+		{ id: 'static', make: get('/static') }
+	]
+})
+
+// A sync handler's returned rejection runs the route's own afterResponse, like
+// a sync throw. Only the hook records: an empty observation fails the matrix
+{
+	const recorder = makeRecorder()
+	corpus.push({
+		id: 'rejected-after-response',
+		tags: ['safe-for-socket', 'observe', 'lifecycle', 'error'],
+		recorder,
+		define: (app) =>
+			app.get(
+				'/rejected-ar',
+				{
+					afterResponse() {
+						recorder.events.push('afterResponse')
+					}
+				},
+				() => Promise.reject(new Error('rejected'))
+			),
+		requests: [{ id: 'runs-hook', make: get('/rejected-ar') }]
+	})
+}
+
+// A throwing error hook still runs the route's own afterResponse. Only the
+// hook records: an empty observation fails the matrix
+{
+	const recorder = makeRecorder()
+	corpus.push({
+		id: 'throwing-error-hook-after-response',
+		tags: ['safe-for-socket', 'observe', 'lifecycle', 'error'],
+		recorder,
+		define: (app) =>
+			app.get(
+				'/throwing-eh-ar',
+				{
+					afterResponse() {
+						recorder.events.push('afterResponse')
+					},
+					error() {
+						throw new Error('hook')
+					}
+				},
+				() => {
+					throw new Error('boom')
+				}
+			),
+		requests: [{ id: 'runs-hook', make: get('/throwing-eh-ar') }]
+	})
+}
+
+// A stream the sync afterResponse lane tee'd is stopped when mapping fails,
+// so the source's own cleanup runs. Only the source records: an empty
+// observation fails the matrix
+{
+	const recorder = makeRecorder()
+	corpus.push({
+		id: 'teed-stream-mapping-failure',
+		tags: ['safe-for-socket', 'observe', 'lifecycle', 'error'],
+		recorder,
+		define: (app) =>
+			app.get('/teed-map', { afterResponse() {} }, ({ set }) => {
+				set.status = 1000
+				return (function* () {
+					try {
+						while (true) yield 'x'
+					} finally {
+						recorder.events.push('stopped')
+					}
+				})()
+			}),
+		requests: [{ id: 'stops-source', make: get('/teed-map') }]
+	})
+}
+
+// A thrown Response is served verbatim, body and headers, like a returned one.
+// Async throws reach the fallback through the rejection lane instead
+corpus.push({
+	id: 'thrown-response',
+	tags: ['safe-for-socket', 'error'],
+	define: (app) =>
+		(app as any)
+			.get('/sync', () => {
+				throw new Response('Not Found :(', { status: 404 })
+			})
+			.get('/async', async () => {
+				throw new Response('Gone :(', { status: 410 })
+			})
+			.get('/header', () => {
+				throw new Response('Teapot', {
+					status: 418,
+					headers: { 'x-a': '1' }
+				})
+			}),
+	requests: [
+		{ id: 'sync', make: get('/sync') },
+		{ id: 'async', make: get('/async') },
+		{ id: 'header', make: get('/header') }
+	]
+})

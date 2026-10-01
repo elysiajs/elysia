@@ -139,7 +139,7 @@ describe('Handle Error', () => {
 		expect(response.status).toEqual(418)
 	})
 
-	it('handle thrown error function', async () => {
+	it('handle thrown status()', async () => {
 		const app = new Elysia().get('/', ({ status }) => {
 			throw status(404, 'Not Found :(')
 		})
@@ -151,14 +151,34 @@ describe('Handle Error', () => {
 	})
 
 	it('handle thrown Response', async () => {
-		const app = new Elysia().get('/', ({ status }) => {
-			throw status(404, 'Not Found :(')
+		const app = new Elysia().get('/', () => {
+			throw new Response('Not Found :(', {
+				status: 404,
+				headers: { 'x-a': '1' }
+			})
 		})
 
 		const response = await app.handle('/')
 
 		await expect(response.text()).resolves.toEqual('Not Found :(')
 		expect(response.status).toEqual(404)
+		expect(response.headers.get('x-a')).toEqual('1')
+	})
+
+	it('error hook returning a value overrides a thrown Response', async () => {
+		const app = new Elysia()
+			.error(() => 'handled')
+			.get('/', () => {
+				throw new Response('Not Found :(', {
+					status: 404,
+					headers: { 'x-a': '1' }
+				})
+			})
+
+		const response = await app.handle('/')
+
+		// the fallback only serves the Response once every hook declined it
+		await expect(response.text()).resolves.toEqual('handled')
 	})
 
 	it('handle error code in request', async () => {

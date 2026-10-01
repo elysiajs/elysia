@@ -1,5 +1,9 @@
 import type { BunPlugin } from 'bun'
-import { createAotPluginHooks, setupAotOnLoad } from './hooks'
+import {
+	createAotPluginHooks,
+	createTypeboxWiringHooks,
+	setupAotOnLoad
+} from './hooks'
 import type { ElysiaAotOptions } from './core'
 
 /**
@@ -20,15 +24,29 @@ import type { ElysiaAotOptions } from './core'
  *
  * process.exit(0)
  * ```
+ *
+ * Skip precompilation and only wire TypeBox statically for a faster plain bundle.
+ * `TypeSystem.Locale` stays opt-in, as in a plain bundle.
+ *
+ * ```ts
+ * plugins: [aot()]
+ * ```
  */
-export const aot = (entry: string, options?: ElysiaAotOptions): BunPlugin => ({
-	name: 'elysia-aot',
-	async setup(build) {
-		// Bun resolves relative to the project root by default (no resolveDir)
-		await setupAotOnLoad(
-			build,
-			createAotPluginHooks(entry, options),
-			(path) => Bun.file(path).text()
-		)
+export const aot = (entry?: string, options?: ElysiaAotOptions): BunPlugin => {
+	if (entry === undefined && options !== undefined)
+		throw new Error('[elysia-aot] options require an entry')
+
+	return {
+		name: 'elysia-aot',
+		async setup(build) {
+			// Bun resolves relative to the project root by default (no resolveDir)
+			await setupAotOnLoad(
+				build,
+				entry === undefined
+					? createTypeboxWiringHooks()
+					: createAotPluginHooks(entry, options),
+				(path) => Bun.file(path).text()
+			)
+		}
 	}
-})
+}

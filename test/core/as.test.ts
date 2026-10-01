@@ -139,7 +139,9 @@ describe('as', () => {
 			app.handle('/').then((x) => x.status)
 		])
 
-		expect(called).toBe(4)
+		// /inner 2 (inner's, then plugin's registered after `.use(inner)`),
+		// /plugin 2, / 1
+		expect(called).toBe(5)
 		expect(response).toEqual([500, 200, 500])
 	})
 
