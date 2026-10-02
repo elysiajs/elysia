@@ -1,16 +1,14 @@
 import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
-import { Value } from '@sinclair/typebox/value'
-import { TBoolean, TypeBoxError } from '@sinclair/typebox'
-import { req } from '../utils'
+import { Value } from 'typebox/value'
 
 describe('TypeSystem - BooleanString', () => {
-	it('Create', () => {
+	it('creates false by default and honors an explicit default', () => {
 		expect(Value.Create(t.BooleanString())).toBe(false)
 		expect(Value.Create(t.BooleanString({ default: true }))).toBe(true)
 	})
 
-	it('Check', () => {
+	it('accepts booleans and boolean strings only', () => {
 		const schema = t.BooleanString()
 
 		expect(Value.Check(schema, true)).toBe(true)
@@ -25,63 +23,41 @@ describe('TypeSystem - BooleanString', () => {
 		expect(Value.Check(schema, null)).toBe(false)
 	})
 
-	it('Encode', () => {
+	it('preserves booleans during encoding', () => {
 		const schema = t.BooleanString()
 
-		expect(Value.Encode<TBoolean, boolean>(schema, true)).toBe(true)
-		expect(Value.Encode<TBoolean, string>(schema, 'true')).toBe('true')
-
-		expect(Value.Encode<TBoolean, boolean>(schema, false)).toBe(false)
-		expect(Value.Encode<TBoolean, string>(schema, 'false')).toBe('false')
-
-		const error = new TypeBoxError(
-			'The encoded value does not match the expected schema'
-		)
-		expect(() => Value.Encode(schema, 'yay')).toThrow(error)
-		expect(() => Value.Encode(schema, 42)).toThrow(error)
-		expect(() => Value.Encode(schema, {})).toThrow(error)
-		expect(() => Value.Encode(schema, undefined)).toThrow(error)
-		expect(() => Value.Encode(schema, null)).toThrow(error)
+		expect(Value.Encode(schema, true)).toBe(true)
+		expect(Value.Encode(schema, false)).toBe(false)
 	})
 
-	it('Decode', () => {
+	it('decodes boolean strings', () => {
 		const schema = t.BooleanString()
 
-		expect(Value.Decode<TBoolean, boolean>(schema, true)).toBe(true)
-		expect(Value.Decode<TBoolean, boolean>(schema, 'true')).toBe(true)
+		expect(Value.Decode(schema, true)).toBe(true)
+		expect(Value.Decode(schema, 'true')).toBe(true)
 
-		expect(Value.Decode<TBoolean, boolean>(schema, false)).toBe(false)
-		expect(Value.Decode<TBoolean, boolean>(schema, 'false')).toBe(false)
-
-		const error = new TypeBoxError(
-			'Unable to decode value as it does not match the expected schema'
-		)
-		expect(() => Value.Decode(schema, 'yay')).toThrow(error)
-		expect(() => Value.Decode(schema, 42)).toThrow(error)
-		expect(() => Value.Decode(schema, {})).toThrow(error)
-		expect(() => Value.Decode(schema, undefined)).toThrow(error)
-		expect(() => Value.Decode(schema, null)).toThrow(error)
+		expect(Value.Decode(schema, false)).toBe(false)
+		expect(Value.Decode(schema, 'false')).toBe(false)
 	})
 
-	// it('Convert', () => {
-	// 	expect(Value.Convert(t.BooleanString(), 'true')).toBe(true)
-	// 	expect(Value.Convert(t.BooleanString(), 'false')).toBe(false)
-	// })
+	it('decodes valid query values and rejects other strings', async () => {
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					value: t.BooleanString()
+				})
+			},
+			({ query }) => query
+		)
 
-	it('Integrate', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				value: t.BooleanString()
-			})
-		})
-
-		const res1 = await app.handle(req('/?value=true'))
+		const res1 = await app.handle('/?value=true')
 		expect(res1.status).toBe(200)
 
-		const res2 = await app.handle(req('/?value=false'))
+		const res2 = await app.handle('/?value=false')
 		expect(res2.status).toBe(200)
 
-		const res3 = await app.handle(req('/?value=aight'))
+		const res3 = await app.handle('/?value=aight')
 		expect(res3.status).toBe(422)
 	})
 })

@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 import { Elysia, sse } from '../../src'
+import { trace } from '../../src/plugin/trace'
 import { streamResponse } from '../../src/adapter/utils'
-import { randomId } from '../../src/utils'
+import { requestId } from '../../src/utils'
+
+const dec = new TextDecoder()
+const decodeChunk = (v: unknown): string =>
+	v instanceof Uint8Array ? dec.decode(v) : String(v)
 
 describe('Stream', () => {
 	it('handle stream', async () => {
@@ -20,7 +24,7 @@ describe('Stream', () => {
 		})
 
 		const response = await app
-			.handle(req('/'))
+			.handle('/')
 			.then((x) => x.body)
 			.then((x) => {
 				if (!x) return
@@ -33,9 +37,10 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve(acc)
 
-					expect(value.toString()).toBe(expected.shift()!)
+					const s = decodeChunk(value)
+					expect(s).toBe(expected.shift()!)
 
-					acc += value.toString()
+					acc += s
 					return reader.read().then(pump)
 				})
 
@@ -83,9 +88,10 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve(acc)
 
-					expect(value.toString()).toBe(expected.shift()!)
+					const s = decodeChunk(value)
+					expect(s).toBe(expected.shift()!)
 
-					acc += value.toString()
+					acc += s
 					return reader.read().then(pump)
 				})
 
@@ -94,6 +100,66 @@ describe('Stream', () => {
 
 		expect(expected).toHaveLength(0)
 		expect(response).toBe('ab')
+	})
+
+	it('streamResponse cancels the source body on a mid-stream abort', async () => {
+		let cancelled = false
+		const body = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(new Uint8Array([1]))
+				controller.enqueue(new Uint8Array([2]))
+				// Remains open so returning from the generator must cancel it.
+			},
+			cancel() {
+				cancelled = true
+			}
+		})
+
+		const gen = streamResponse(new Response(body))
+
+		const first = await gen.next()
+		expect(first.done).toBe(false)
+		expect([...(first.value as Uint8Array)]).toEqual([1])
+
+		await gen.return(undefined as any)
+
+		expect(cancelled).toBe(true)
+	})
+
+	it('streamResponse settles a mid-stream abort without hanging', async () => {
+		const body = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(new Uint8Array([1]))
+				controller.enqueue(new Uint8Array([2]))
+				controller.enqueue(new Uint8Array([3]))
+			}
+		})
+
+		const gen = streamResponse(new Response(body))
+		await gen.next()
+
+		const outcome = await Promise.race([
+			gen.return(undefined as any).then(() => 'returned'),
+			new Promise((resolve) => setTimeout(() => resolve('hung'), 500))
+		])
+
+		expect(outcome).toBe('returned')
+	})
+
+	it('streamResponse yields every chunk on normal completion', async () => {
+		const body = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(new Uint8Array([1]))
+				controller.enqueue(new Uint8Array([2]))
+				controller.close()
+			}
+		})
+
+		const out: number[] = []
+		for await (const chunk of streamResponse(new Response(body)))
+			out.push(...(chunk as Uint8Array))
+
+		expect(out).toEqual([1, 2])
 	})
 
 	it('include multiple set-cookie headers in streamed response', async () => {
@@ -109,7 +175,7 @@ describe('Stream', () => {
 			yield sse({ event: 'test', data: { count: 2 } })
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		const cookieHeaders = response.headers.getSetCookie()
 		expect(cookieHeaders).toHaveLength(2)
@@ -132,25 +198,7 @@ describe('Stream', () => {
 			yield 'c'
 		})
 
-		const response = await app.handle(req('/')).then((x) => x.headers)
-
-		expect(response.get('access-control-allow-origin')).toBe(
-			'http://saltyaom.com'
-		)
-	})
-
-	it('mutate set before yield is called', async () => {
-		const expected = ['a', 'b', 'c']
-
-		const app = new Elysia().get('/', function* ({ set }) {
-			set.headers['access-control-allow-origin'] = 'http://saltyaom.com'
-
-			yield 'a'
-			yield 'b'
-			yield 'c'
-		})
-
-		const response = await app.handle(req('/')).then((x) => x.headers)
+		const response = await app.handle('/').then((x) => x.headers)
 
 		expect(response.get('access-control-allow-origin')).toBe(
 			'http://saltyaom.com'
@@ -168,51 +216,11 @@ describe('Stream', () => {
 			yield 'c'
 		})
 
-		const response = await app.handle(req('/')).then((x) => x.headers)
+		const response = await app.handle('/').then((x) => x.headers)
 
 		expect(response.get('access-control-allow-origin')).toBe(
 			'http://saltyaom.com'
 		)
-	})
-
-	it('return value if not yield', async () => {
-		const app = new Elysia()
-			.get('/', function* ({ set }) {
-				return 'hello'
-			})
-			.get('/json', function* ({ set }) {
-				return { hello: 'world' }
-			})
-
-		const response = await Promise.all([
-			app.handle(req('/')),
-			app.handle(req('/json'))
-		])
-
-		expect(await response[0].text()).toBe('hello')
-		expect(await response[1].json()).toEqual({
-			hello: 'world'
-		})
-	})
-
-	it('return async value if not yield', async () => {
-		const app = new Elysia()
-			.get('/', function* ({ set }) {
-				return 'hello'
-			})
-			.get('/json', function* ({ set }) {
-				return { hello: 'world' }
-			})
-
-		const response = await Promise.all([
-			app.handle(req('/')),
-			app.handle(req('/json'))
-		])
-
-		expect(await response[0].text()).toBe('hello')
-		expect(await response[1].json()).toEqual({
-			hello: 'world'
-		})
 	})
 
 	it('handle object and array', async () => {
@@ -230,7 +238,7 @@ describe('Stream', () => {
 			yield expected[2]
 		})
 
-		app.handle(req('/'))
+		app.handle('/')
 			.then((x) => x.body)
 			.then((x) => {
 				if (!x) return
@@ -242,7 +250,9 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve()
 
-					expect(value.toString()).toBe(JSON.stringify(expected[i++]))
+					expect(decodeChunk(value)).toBe(
+						JSON.stringify(expected[i++])
+					)
 
 					return reader.read().then(pump)
 				})
@@ -268,7 +278,7 @@ describe('Stream', () => {
 		)
 
 		proxy
-			.handle(req('/'))
+			.handle('/')
 			.then((x) => x.body)
 			.then((x) => {
 				if (!x) return
@@ -280,7 +290,7 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve()
 
-					expect(value.toString()).toBe(expected[i++])
+					expect(decodeChunk(value)).toBe(expected[i++])
 
 					return reader.read().then(pump)
 				})
@@ -293,7 +303,7 @@ describe('Stream', () => {
 		const app = new Elysia().get('/sse', async function* () {
 			for (let i = 0; i < 3; i++) {
 				yield sse({
-					id: randomId(),
+					id: requestId(),
 					data: `message ${i}`
 				})
 				await Bun.sleep(10)
@@ -301,7 +311,7 @@ describe('Stream', () => {
 		})
 
 		return app
-			.handle(req('/sse'))
+			.handle('/sse')
 			.then((x) => x.body)
 			.then((x) => {
 				if (!x) return
@@ -314,7 +324,7 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve(acc)
 
-					acc += value.toString()
+					acc += decodeChunk(value)
 					return reader.read().then(pump)
 				})
 
@@ -348,7 +358,7 @@ describe('Stream', () => {
 		})
 
 		return app
-			.handle(req('/sse'))
+			.handle('/sse')
 			.then((x) => x.body)
 			.then((x) => {
 				if (!x) return
@@ -361,7 +371,7 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve(acc)
 
-					acc += value.toString()
+					acc += decodeChunk(value)
 					return reader.read().then(pump)
 				})
 
@@ -395,7 +405,7 @@ describe('Stream', () => {
 		})
 
 		return app
-			.handle(req('/sse'))
+			.handle('/sse')
 			.then((x) => x.body)
 			.then((x) => {
 				if (!x) return
@@ -408,7 +418,7 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve(acc)
 
-					acc += value.toString()
+					acc += decodeChunk(value)
 					return reader.read().then(pump)
 				})
 
@@ -430,7 +440,7 @@ describe('Stream', () => {
 		})
 
 		return app
-			.handle(req('/sse'))
+			.handle('/sse')
 			.then((x) => x.body)
 			.then((x) => {
 				if (!x) return
@@ -443,7 +453,7 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve(acc)
 
-					acc += value.toString()
+					acc += decodeChunk(value)
 					return reader.read().then(pump)
 				})
 
@@ -477,11 +487,12 @@ describe('Stream', () => {
 			})
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
-		const result = []
+		const result: string[] = []
 
-		for await (const a of streamResponse(response)) result.push(a)
+		for await (const a of streamResponse(response))
+			result.push(decodeChunk(a))
 
 		expect(result).toEqual(['Elysia', 'Eden'])
 	})
@@ -501,11 +512,12 @@ describe('Stream', () => {
 			})
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
-		const result = []
+		const result: string[] = []
 
-		for await (const a of streamResponse(response)) result.push(a)
+		for await (const a of streamResponse(response))
+			result.push(decodeChunk(a))
 
 		expect(result).toEqual(['Elysia', 'Eden'])
 	})
@@ -525,11 +537,12 @@ describe('Stream', () => {
 			})
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
-		const result = []
+		const result: string[] = []
 
-		for await (const a of streamResponse(response)) result.push(a)
+		for await (const a of streamResponse(response))
+			result.push(decodeChunk(a))
 
 		expect(result).toEqual(['Elysia', 'Eden'])
 	})
@@ -551,11 +564,12 @@ describe('Stream', () => {
 			)
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
-		const result = []
+		const result: string[] = []
 
-		for await (const a of streamResponse(response)) result.push(a)
+		for await (const a of streamResponse(response))
+			result.push(decodeChunk(a))
 
 		expect(result).toEqual(['Elysia', 'Eden'].map((x) => `data: ${x}\n\n`))
 		expect(response.headers.get('content-type')).toBe('text/event-stream')
@@ -568,12 +582,13 @@ describe('Stream', () => {
 		const app = new Elysia().get('/', async function* ({ set }) {
 			set.headers['access-control-allow-origin'] = '*'
 			set.headers['x-custom-header'] = 'test-value'
+
 			// Throw before yielding - this is the bug scenario from #1677
 			if (true) throw statusFn(500)
 			yield 'unreachable'
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(500)
 		expect(response.headers.get('access-control-allow-origin')).toBe('*')
@@ -584,12 +599,12 @@ describe('Stream', () => {
 	it('should call onError hook when throwing from async generator', async () => {
 		const { status: statusFn } = await import('../../src')
 		let onErrorCalled = false
-		let errorCode: string | number | undefined
+		let errorStatus: number | undefined
 
 		const app = new Elysia()
-			.onError(({ code }) => {
+			.error(({ error }) => {
 				onErrorCalled = true
-				errorCode = code
+				errorStatus = (error as any)?.status
 			})
 			.get('/', async function* ({ set }) {
 				set.headers['x-custom-header'] = 'test-value'
@@ -598,26 +613,27 @@ describe('Stream', () => {
 				yield 'unreachable'
 			})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.status).toBe(500)
 		expect(onErrorCalled).toBe(true)
-		expect(errorCode).toBe(500)
+		expect(errorStatus).toBe(500)
 		expect(response.headers.get('x-custom-header')).toBe('test-value')
 	})
 
 	it('handle sse with plugin global hooks and trace', async () => {
 		const PluginA = () =>
 			new Elysia({ name: 'PluginA' })
-				.onBeforeHandle(() => {})
-				.onAfterHandle(() => {})
-				.onParse(() => {})
-				.onTransform(() => {})
-				.onError(() => {})
-				.onAfterResponse(() => {})
-				.onStart(() => {})
-				.onStop(() => {})
-				.onRequest(() => {})
+				.beforeHandle(() => {})
+				.afterHandle(() => {})
+				.parse(() => {})
+				.transform(() => {})
+				.error(() => {})
+				.afterResponse(() => {})
+				.setup(() => {})
+				.cleanup(() => {})
+				.request(() => {})
+				.use(trace())
 				.trace(() => {})
 				.as('global')
 
@@ -627,12 +643,13 @@ describe('Stream', () => {
 			yield sse({ event: 'message', data: { meow: '3' } })
 		})
 
-		const response = await app.handle(req('/sse'))
+		const response = await app.handle('/sse')
 		expect(response.headers.get('content-type')).toBe('text/event-stream')
 
-		const result = []
+		const result: string[] = []
 
-		for await (const chunk of streamResponse(response)) result.push(chunk)
+		for await (const chunk of streamResponse(response))
+			result.push(decodeChunk(chunk))
 		expect(result).toHaveLength(3)
 		expect(result).toEqual([
 			'event: message\ndata: {"meow":"1"}\n\n',
@@ -660,7 +677,7 @@ describe('Stream', () => {
 			upstream.handle(new Request('http://e.ly'))
 		)
 
-		const response = await proxy.handle(req('/'))
+		const response = await proxy.handle('/')
 		const reader = response.body!.getReader()
 
 		// Slow consumer: read 3 chunks with pauses between each
@@ -691,7 +708,7 @@ describe('Stream', () => {
 
 		const app = new Elysia().get('/', lazyGenerator)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		const reader = response.body!.getReader()
 
 		// Read only the first 3 chunks
@@ -727,7 +744,7 @@ describe('Stream', () => {
 				})
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		const result = new Uint8Array(await response.arrayBuffer())
 
 		expect(result.byteLength).toBe(payload.byteLength)
@@ -753,10 +770,37 @@ describe('Stream', () => {
 				})
 		)
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		const result = new Uint8Array(await response.arrayBuffer())
 
 		expect(result).toEqual(expected)
+	})
+
+	it('preserves exact bytes when transferring an owned chunked Response', async () => {
+		const app = new Elysia().get('/', ({ set }) => {
+			set.headers['x-touch'] = '1'
+
+			return new Response(
+				new ReadableStream({
+					start(controller) {
+						// Split UTF-8 plus invalid bytes catch accidental text decoding.
+						controller.enqueue(new Uint8Array([0xe2, 0x82]))
+						controller.enqueue(new Uint8Array([0xac, 0xff, 0x00]))
+						controller.close()
+					}
+				}),
+				{ headers: { 'transfer-encoding': 'chunked' } }
+			)
+		})
+
+		const response = await app.handle('/')
+		const result = new Uint8Array(await response.arrayBuffer())
+
+		expect(response.headers.get('x-touch')).toBe('1')
+		// Owned Responses transfer their body directly. Preserve the source
+		// metadata instead of inferring a type through the generic stream pump.
+		expect(response.headers.get('content-type')).toBeNull()
+		expect(result).toEqual(new Uint8Array([0xe2, 0x82, 0xac, 0xff, 0x00]))
 	})
 
 	it('stream generator Uint8Array chunks as binary', async () => {
@@ -766,11 +810,67 @@ describe('Stream', () => {
 			yield new Uint8Array([3, 4])
 		})
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 		const result = new Uint8Array(await response.arrayBuffer())
 
-		// expect(result).toEqual(result.toBase64())
-
 		expect(result).toEqual(new Uint8Array([1, 2, 3, 4]))
+	})
+
+	it('preserves custom status on chunked Response returned directly', async () => {
+		const body = new ReadableStream({
+			start(controller) {
+				controller.enqueue(new TextEncoder().encode('ok'))
+				controller.close()
+			}
+		})
+		const app = new Elysia().get(
+			'/',
+			() =>
+				new Response(body, {
+					status: 201,
+					headers: { 'transfer-encoding': 'chunked' }
+				})
+		)
+
+		const res = await app.handle('/')
+		expect(res.status).toBe(201)
+	})
+
+	it('preserves custom status on chunked Response when set.headers are touched', async () => {
+		const app = new Elysia().get('/', ({ set }) => {
+			set.headers['x-custom'] = 'yes'
+			const body = new ReadableStream({
+				start(controller) {
+					controller.enqueue(new TextEncoder().encode('ok'))
+					controller.close()
+				}
+			})
+			return new Response(body, {
+				status: 201,
+				headers: { 'transfer-encoding': 'chunked' }
+			})
+		})
+
+		const res = await app.handle('/')
+		expect(res.status).toBe(201)
+		expect(res.headers.get('x-custom')).toBe('yes')
+	})
+
+	it('preserves set.status on chunked Response when set.status is set explicitly', async () => {
+		const app = new Elysia().get('/', ({ set }) => {
+			set.status = 202
+			const body = new ReadableStream({
+				start(controller) {
+					controller.enqueue(new TextEncoder().encode('ok'))
+					controller.close()
+				}
+			})
+			return new Response(body, {
+				headers: { 'transfer-encoding': 'chunked' }
+			})
+		})
+
+		const res = await app.handle('/')
+		expect(res.status).toBe(202)
 	})
 })

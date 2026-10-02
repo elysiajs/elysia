@@ -1,34 +1,21 @@
-import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+import { Elysia, HTTPError, status } from '../src'
 
-const app = new Elysia()
-	.get('/', async () => {
-		const file = Bun.file('test/kyuukurarin.mp4')
+class CustomError<T extends string> extends HTTPError.id('CUSTOM_ERROR') {
+	constructor(public message: T) {
+		super(message)
+	}
 
-		// Wrap the stream in another ReadableStream
-		// perhaps we are concatenating streams or whatever
-		const body = new ReadableStream({
-			async start(controller) {
-				const reader = file.stream().getReader()
-				try {
-					while (true) {
-						const { done, value } = await reader.read()
-						if (done) break
-						controller.enqueue(value)
-					}
-					controller.close()
-				} catch (err) {
-					controller.error(err)
-				} finally {
-					reader.releaseLock()
-				}
-			}
-		})
+	value() {
+		return status(418, `quack! ${this.message}`)
+	}
+}
 
-		// Returning the stream uses 100% for several minutes
-		return body
+const app = new Elysia().get('/', () =>
+	Math.random() > 0.5 ? new CustomError('q') : 'ok'
+)
 
-		// Returning the same stream wrapped in a Response servers the stream in a fraction of a second
-		// return new Response(body);
-	})
-	.listen(3000)
+app.handle('/')
+	.then((res) => res.status)
+	.then(console.log)
+
+type a = (typeof app)['~Routes']['get']['response']

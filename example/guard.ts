@@ -2,11 +2,15 @@ import { Elysia, t } from '../src'
 
 new Elysia()
 	.state('name', 'salt')
-	.get('/', ({ store: { name } }) => `Hi ${name}`, {
-		query: t.Object({
-			name: t.String()
-		})
-	})
+	.get(
+		'/',
+		{
+			query: t.Object({
+				name: t.String()
+			})
+		},
+		({ store: { name } }) => `Hi ${name}`
+	)
 	// If query 'name' is not preset, skip the whole handler
 	.guard(
 		{
@@ -19,16 +23,20 @@ new Elysia()
 				// Query type is inherited from guard
 				.get('/profile', ({ query }) => `Hi`)
 				// Store is inherited
-				.post('/name', ({ store: { name }, body, query }) => name, {
-					body: t.Object({
-						id: t.Number({
-							minimum: 5
-						}),
-						username: t.String(),
-						profile: t.Object({
-							name: t.String()
+				.post(
+					'/name',
+					{
+						body: t.Object({
+							id: t.Number({
+								minimum: 5
+							}),
+							username: t.String(),
+							profile: t.Object({
+								name: t.String()
+							})
 						})
-					})
-				})
+					},
+					({ store: { name }, body, query }) => name
+				)
 	)
 	.listen(3000)

@@ -1,66 +1,60 @@
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { delay, req } from '../utils'
+import { delay } from '../utils'
 
-describe('Before Handle', () => {
-	it('globally skip main handler', async () => {
+describe('beforeHandle', () => {
+	it('an app hook can short-circuit the route handler', async () => {
 		const app = new Elysia()
-			.onBeforeHandle<{
-				params: {
-					name?: string
-				}
-			}>(({ params: { name } }) => {
+			.beforeHandle(({ params }) => {
+				const { name } = params as { name?: string }
 				if (name === 'Fubuki') return 'Cat'
 			})
 			.get('/name/:name', ({ params: { name } }) => name)
 
-		const res = await app.handle(req('/name/Fubuki'))
+		const res = await app.handle('/name/Fubuki')
 
-		expect(await res.text()).toBe('Cat')
+		await expect(res.text()).resolves.toBe('Cat')
 	})
 
-	it('locally skip main handler', async () => {
+	it('a route-local hook can short-circuit the route handler', async () => {
 		const app = new Elysia().get(
 			'/name/:name',
-			({ params: { name } }) => name,
 			{
 				beforeHandle: ({ params: { name } }) => {
 					if (name === 'Fubuki') return 'Cat'
 				}
-			}
+			},
+			({ params: { name } }) => name
 		)
 
-		const res = await app.handle(req('/name/Fubuki'))
+		const res = await app.handle('/name/Fubuki')
 
-		expect(await res.text()).toBe('Cat')
+		await expect(res.text()).resolves.toBe('Cat')
 	})
 
-	it('group before handler', async () => {
+	it('a group hook applies only inside the group', async () => {
 		const app = new Elysia()
 			.group('/type', (app) =>
 				app
-					.onBeforeHandle<{
-						params: {
-							name?: string
-						}
-					}>(({ params: { name } }) => {
+					.beforeHandle(({ params }) => {
+						const { name } = params as { name?: string }
 						if (name === 'fubuki') return 'cat'
 					})
 					.get('/name/:name', ({ params: { name } }) => name)
 			)
 			.get('/name/:name', ({ params: { name } }) => name)
 
-		const base = await app.handle(req('/name/fubuki'))
-		const scoped = await app.handle(req('/type/name/fubuki'))
+		const base = await app.handle('/name/fubuki')
+		const scoped = await app.handle('/type/name/fubuki')
 
-		expect(await base.text()).toBe('fubuki')
-		expect(await scoped.text()).toBe('cat')
+		await expect(base.text()).resolves.toBe('fubuki')
+		await expect(scoped.text()).resolves.toBe('cat')
 	})
 
-	it('inherits from plugin', async () => {
-		const transformId = new Elysia().onBeforeHandle(
-			{ as: 'global' },
+	it('propagates global hooks out of plugins', async () => {
+		const transformId = new Elysia().beforeHandle(
+			'global',
 			({ params: { name } }) => {
 				if (name === 'Fubuki') return 'Cat'
 			}
@@ -70,13 +64,13 @@ describe('Before Handle', () => {
 			.use(transformId)
 			.get('/name/:name', ({ params: { name } }) => name)
 
-		const res = await app.handle(req('/name/Fubuki'))
+		const res = await app.handle('/name/Fubuki')
 
-		expect(await res.text()).toBe('Cat')
+		await expect(res.text()).resolves.toBe('Cat')
 	})
 
-	it('not inherits plugin on local', async () => {
-		const beforeHandle = new Elysia().onBeforeHandle(
+	it('keeps local hooks inside plugins', async () => {
+		const beforeHandle = new Elysia().beforeHandle(
 			({ params: { name } }) => {
 				if (name === 'Fubuki') return 'Cat'
 			}
@@ -86,196 +80,143 @@ describe('Before Handle', () => {
 			.use(beforeHandle)
 			.get('/name/:name', ({ params: { name } }) => name)
 
-		const res = await app.handle(req('/name/Fubuki'))
+		const res = await app.handle('/name/Fubuki')
 
-		expect(await res.text()).toBe('Fubuki')
+		await expect(res.text()).resolves.toBe('Fubuki')
 	})
 
-	it('before handle in order', async () => {
+	it('runs hooks in registration order', async () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.onBeforeHandle(() => {
+			.beforeHandle(() => {
 				order.push('A')
 			})
-			.onBeforeHandle(() => {
+			.beforeHandle(() => {
 				order.push('B')
 			})
 			.get('/', () => '')
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(order).toEqual(['A', 'B'])
 	})
 
-	it('globally and locally before handle', async () => {
+	it('runs app hooks before route-local hooks', async () => {
 		const app = new Elysia()
-			.onBeforeHandle<{
-				params: {
-					name?: string
-				}
-			}>(({ params: { name } }) => {
+			.beforeHandle(({ params }) => {
+				const { name } = params as { name?: string }
 				if (name === 'fubuki') return 'cat'
 			})
-			.get('/name/:name', ({ params: { name } }) => name, {
-				beforeHandle: ({ params: { name } }) => {
-					if (name === 'korone') return 'dog'
-				}
-			})
+			.get(
+				'/name/:name',
+				{
+					beforeHandle: ({ params: { name } }) => {
+						if (name === 'korone') return 'dog'
+					}
+				},
+				({ params: { name } }) => name
+			)
 
-		const fubuki = await app.handle(req('/name/fubuki'))
-		const korone = await app.handle(req('/name/korone'))
+		const fubuki = await app.handle('/name/fubuki')
+		const korone = await app.handle('/name/korone')
 
-		expect(await fubuki.text()).toBe('cat')
-		expect(await korone.text()).toBe('dog')
+		await expect(fubuki.text()).resolves.toBe('cat')
+		await expect(korone.text()).resolves.toBe('dog')
 	})
 
-	it('accept multiple before handler', async () => {
+	it('accepts multiple app hooks', async () => {
 		const app = new Elysia()
-			.onBeforeHandle<{
-				params: {
-					name?: string
-				}
-			}>(({ params: { name } }) => {
+			.beforeHandle(({ params }) => {
+				const { name } = params as { name?: string }
 				if (name === 'fubuki') return 'cat'
 			})
-			.onBeforeHandle<{
-				params: {
-					name?: string
-				}
-			}>(({ params: { name } }) => {
+			.beforeHandle(({ params }) => {
+				const { name } = params as { name?: string }
 				if (name === 'korone') return 'dog'
 			})
 			.get('/name/:name', ({ params: { name } }) => name)
 
-		const fubuki = await app.handle(req('/name/fubuki'))
-		const korone = await app.handle(req('/name/korone'))
+		const fubuki = await app.handle('/name/fubuki')
+		const korone = await app.handle('/name/korone')
 
-		expect(await fubuki.text()).toBe('cat')
-		expect(await korone.text()).toBe('dog')
+		await expect(fubuki.text()).resolves.toBe('cat')
+		await expect(korone.text()).resolves.toBe('dog')
 	})
 
-	it('handle async', async () => {
+	it('awaits an async route-local hook', async () => {
 		const app = new Elysia().get(
 			'/name/:name',
-			({ params: { name } }) => name,
 			{
 				beforeHandle: async ({ params: { name } }) => {
 					await delay(5)
 
 					if (name === 'Watame') return 'Warukunai yo ne'
 				}
-			}
+			},
+			({ params: { name } }) => name
 		)
 
-		const res = await app.handle(req('/name/Watame'))
+		const res = await app.handle('/name/Watame')
 
-		expect(await res.text()).toBe('Warukunai yo ne')
+		await expect(res.text()).resolves.toBe('Warukunai yo ne')
 	})
 
-	it("handle on('beforeHandle')", async () => {
+	it('runs afterHandle after a beforeHandle short-circuit', async () => {
 		const app = new Elysia()
-			.on('beforeHandle', async ({ params: { name } }) => {
-				await new Promise<void>((resolve) =>
-					setTimeout(() => {
-						resolve()
-					}, 1)
-				)
-
-				if (name === 'Watame') return 'Warukunai yo ne'
-			})
-			.get('/name/:name', ({ params: { name } }) => name)
-
-		const res = await app.handle(req('/name/Watame'))
-
-		expect(await res.text()).toBe('Warukunai yo ne')
-	})
-
-	it('execute afterHandle', async () => {
-		const app = new Elysia()
-			.onBeforeHandle<{
-				params: {
-					name?: string
-				}
-			}>(({ params: { name } }) => {
+			.beforeHandle(({ params }) => {
+				const { name } = params as { name?: string }
 				if (name === 'Fubuki') return 'Cat'
 			})
-			.onAfterHandle((context) => {
-				if (context.response === 'Cat') return 'Not cat'
+			.afterHandle((context) => {
+				// @ts-ignore
+				if (context.responseValue === 'Cat') return 'Not cat'
 			})
 			.get('/name/:name', ({ params: { name } }) => name)
 
-		const res = await app.handle(req('/name/Fubuki'))
+		const res = await app.handle('/name/Fubuki')
 
-		expect(await res.text()).toBe('Not cat')
+		await expect(res.text()).resolves.toBe('Not cat')
 	})
 
-	it('as global', async () => {
+	it('runs a global plugin hook on plugin and parent routes', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onBeforeHandle({ as: 'global' }, ({ path }) => {
+			.beforeHandle('global', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
 
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
-		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
+		await Promise.all([app.handle('/inner'), app.handle('/outer')])
 
 		expect(called).toEqual(['/inner', '/outer'])
 	})
 
-	it('as local', async () => {
+	it('runs a local plugin hook only on plugin routes', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onBeforeHandle({ as: 'local' }, ({ path }) => {
+			.beforeHandle('local', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
 
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
-		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
+		await Promise.all([app.handle('/inner'), app.handle('/outer')])
 
 		expect(called).toEqual(['/inner'])
 	})
 
-	it('support array', async () => {
-		let total = 0
-
-		const app = new Elysia()
-			.onAfterHandle([
-				() => {
-					total++
-				},
-				() => {
-					total++
-				}
-			])
-			.get('/', () => 'NOOP')
-
-		const res = await app.handle(req('/'))
-
-		expect(total).toEqual(2)
-	})
-
-	it('add responseValue to afterHandle, and afterResponse when beforeHandle returns a value', async () => {
+	it('passes a short-circuit value to afterHandle and afterResponse', async () => {
 		let hasAfterHandleResponse = false
 		let hasAfterResponseResponse = false
 
 		const app = new Elysia().get(
 			'/handler',
-			({ status }) => {
-				return status(401, 'unauthorized handler')
-			},
 			{
 				afterHandle: ({ responseValue }) => {
 					hasAfterHandleResponse = !!responseValue
@@ -285,10 +226,13 @@ describe('Before Handle', () => {
 				afterResponse: ({ responseValue }) => {
 					hasAfterResponseResponse = !!responseValue
 				}
+			},
+			({ status }) => {
+				return status(401, 'unauthorized handler')
 			}
 		)
 
-		await app.handle(req('/handler'))
+		await app.handle('/handler')
 		await delay(10)
 
 		expect(hasAfterHandleResponse).toBe(true)

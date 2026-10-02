@@ -1,16 +1,8 @@
 import { Context, Elysia } from '../../src'
+import { trace } from '../../src/plugin/trace'
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('Trace AoT', async () => {
-	// it('inject request report', async () => {
-	// 	const app = new Elysia().trace(async () => {}).get('/', () => '')
-
-	// 	expect(app.compile().fetch.toString()).toInclude(
-	// 		`reporter.emit('event',{id,event:'request'`
-	// 	)
-	// })
-
 	it('try-catch edge case', async () => {
 		class Controller {
 			static async handle(ctx: Context) {
@@ -34,22 +26,14 @@ describe('Trace AoT', async () => {
 			})
 		)
 
-		expect(await response.text()).toEqual('yay')
+		await expect(response.text()).resolves.toEqual('yay')
 	})
-
-	// ! Fix me: uncomment when 1.0.0 is released
-	// it('inject response report', async () => {
-	// 	const app = new Elysia().trace(async () => {}).get('/', () => '')
-
-	// 	expect(app.router.history[0].composed?.toString()).toInclude(
-	// 		`reporter.emit('event',{id,event:'response'`
-	// 	)
-	// })
 
 	it('handle scope', async () => {
 		let called = 0
 
 		const plugin = new Elysia()
+			.use(trace())
 			.trace(({ onHandle }) => {
 				onHandle(() => {
 					called++
@@ -59,10 +43,7 @@ describe('Trace AoT', async () => {
 
 		const app = new Elysia().use(plugin).get('/main', () => 'ok')
 
-		await Promise.all([
-			app.handle(req('/plugin')),
-			app.handle(req('/main'))
-		])
+		await Promise.all([app.handle('/plugin'), app.handle('/main')])
 
 		expect(called).toBe(1)
 	})

@@ -24,11 +24,11 @@ describe('Bun adapter', () => {
 		expect(query2).toEqual('Works without')
 	})
 
-	it('handle standalone query guard', async () => {
+	it('handle merge query guard', async () => {
 		const app = new Elysia()
 			.guard({
 				query: t.Object({ a: t.String() }),
-				schema: 'standalone'
+				schema: 'merge'
 			})
 			.get('/works-with', ({ query }) => 'Works' + query.a)
 			.get('/works-without', () => 'Works without')
@@ -47,19 +47,19 @@ describe('Bun adapter', () => {
 		expect(query2).toEqual('Works without')
 	})
 
-	it('handle static response with onRequest and onError', async () => {
-		let caughtError: Error
-		let onErrorCalled = false
-		let onRequestCalled = false
+	it('runs an always-global request hook through Bun.serve and app.handle', async () => {
+		let caughtError: Error | undefined
 
 		const app = new Elysia()
-			.onError(({ error }) => {
+			.headers({
+				'x-header': 'test'
+			})
+			.error(({ error }) => {
 				caughtError = error as Error
 
 				return 'handled'
 			})
-			.onRequest(({ set }) => {
-				set.headers['x-header'] = 'test'
+			.request(({ set }) => {
 				set.status = 400
 
 				throw new Error('A')
@@ -74,7 +74,11 @@ describe('Bun adapter', () => {
 		expect(text).toBe('handled')
 		expect(response.status).toBe(400)
 		expect(response.headers.get('x-header')).toBe('test')
-		expect(caughtError!.message).toBe('A')
+		expect(caughtError?.message).toBe('A')
+
+		const handled = await app.handle(new Request('http://localhost/'))
+		await expect(handled.text()).resolves.toBe('handled')
+		expect(handled.status).toBe(400)
 	})
 
 	it('handle non-ASCII path', async () => {

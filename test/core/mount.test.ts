@@ -8,11 +8,11 @@ describe('Mount', () => {
 
 		const app = new Elysia().mount('/mount', plugin.handle)
 
-		expect(
-			await app
+		await expect(
+			app
 				.handle(new Request('http://elysiajs.com/mount/'))
 				.then((x) => x.text())
-		).toBe('http://elysiajs.com/')
+		).resolves.toBe('http://elysiajs.com/')
 	})
 
 	it('preserve request URL with query', async () => {
@@ -20,11 +20,11 @@ describe('Mount', () => {
 
 		const app = new Elysia().mount('/mount', plugin.handle)
 
-		expect(
-			await app
+		await expect(
+			app
 				.handle(new Request('http://elysiajs.com/mount/?a=1'))
 				.then((x) => x.text())
-		).toBe('http://elysiajs.com/?a=1')
+		).resolves.toBe('http://elysiajs.com/?a=1')
 	})
 
 	it('preserve body', async () => {
@@ -171,8 +171,8 @@ describe('Mount', () => {
 		expect(response.path).toBe('/problems')
 	})
 
-	it('handle body in aot: false', async () => {
-		const app = new Elysia({ aot: false }).mount('/api', async (request) =>
+	it('handle body', async () => {
+		const app = new Elysia().mount('/api', async (request) =>
 			Response.json(await request.json())
 		)
 
@@ -209,7 +209,7 @@ describe('Mount', () => {
 
 		const app = new Elysia()
 			.use((app) =>
-				app.onBeforeHandle(({ set }) => {
+				app.beforeHandle(({ set }) => {
 					set.headers['access-control-allow-origin'] = '*'
 				})
 			)
@@ -227,5 +227,77 @@ describe('Mount', () => {
 		expect(cookies).toContain('token=xyz789; Path=/; Secure')
 		expect(response.status).toBe(302)
 		expect(response.headers.get('location')).toBe('/redirect')
+	})
+
+	const forwarded = (request: Request) =>
+		Response.json({ path: new URL(request.url).pathname })
+
+	it('strips the final path when the mounting instance is later prefixed', async () => {
+		const plugin = new Elysia().mount('/m', forwarded)
+		const app = new Elysia({ prefix: '/parent' }).use(plugin)
+
+		const path = await app
+			.handle(new Request('http://localhost/parent/m/foo'))
+			.then((x) => x.json() as Promise<{ path: string }>)
+			.then((x) => x.path)
+
+		expect(path).toBe('/foo')
+	})
+
+	it('strips a mount path that lacks a leading slash', async () => {
+		const app = new Elysia().mount('m', forwarded)
+
+		const path = await app
+			.handle(new Request('http://localhost/m/foo'))
+			.then((x) => x.json() as Promise<{ path: string }>)
+			.then((x) => x.path)
+
+		expect(path).toBe('/foo')
+	})
+
+	it('strips a non-ASCII mount path by its encoded length', async () => {
+		const app = new Elysia().mount('/café', forwarded)
+
+		const path = await app
+			.handle(new Request('http://localhost/caf%C3%A9/x'))
+			.then((x) => x.json() as Promise<{ path: string }>)
+			.then((x) => x.path)
+
+		expect(path).toBe('/x')
+	})
+
+	it('keeps a non-ASCII mount root encoded-length-correct under a later prefix', async () => {
+		const plugin = new Elysia().mount('/café', forwarded)
+		const app = new Elysia({ prefix: '/parent' }).use(plugin)
+
+		const path = await app
+			.handle(new Request('http://localhost/parent/caf%C3%A9/x'))
+			.then((x) => x.json() as Promise<{ path: string }>)
+			.then((x) => x.path)
+
+		expect(path).toBe('/x')
+	})
+
+	it('forwards the sub-path with its original encoding preserved', async () => {
+		const app = new Elysia().mount('/m', forwarded)
+
+		const path = await app
+			.handle(new Request('http://localhost/m/a%2Fb'))
+			.then((x) => x.json() as Promise<{ path: string }>)
+			.then((x) => x.path)
+
+		expect(path).toBe('/a%2Fb')
+	})
+
+	it('strips the prefix from a root mount used under a prefixed parent', async () => {
+		const plugin = new Elysia().mount('/', forwarded)
+		const app = new Elysia({ prefix: '/api' }).use(plugin)
+
+		const path = await app
+			.handle(new Request('http://localhost/api/foo'))
+			.then((x) => x.json() as Promise<{ path: string }>)
+			.then((x) => x.path)
+
+		expect(path).toBe('/foo')
 	})
 })

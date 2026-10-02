@@ -1,0 +1,1097 @@
+import type { AnyElysia } from '../../base'
+import type { ElysiaAdapter } from '../../adapter'
+
+import { defaultAdapter } from '../../adapter/constants'
+import { mapResponse } from '../../adapter/web-standard/handler'
+import { ElysiaFile } from '../../universal/file'
+import { ElysiaStatus } from '../../error'
+import { isBun } from '../../universal/constants'
+
+import { Capture, Compiled, aotDrift, warnAotDrift } from '../aot'
+import { frozenRootOf } from '../../generation'
+import { resolveHandlerParams } from './params'
+import { compileHandlerJit, createInlineHandler } from './jit'
+export { setCaptureHeaderShorthand } from './jit'
+import { returnedErrorClasses } from '../../handler/utils'
+import { deriveModes } from './utils'
+import { isAsyncFunction } from '../utils'
+import { describeRoute, routeDescriptors } from './descriptor'
+import { Reconstrct } from './reconstruct'
+import { isResponseMap } from './frozen-validator'
+import type { Context } from '../../context'
+import {
+	cloneHook,
+	compactBeforeHandleConflicts,
+	compactBeforeHandlePrefix,
+	compositionKeys,
+	eventProperties,
+	flattenChain,
+	flattenChainMemo,
+	flattenChainMemoReadonly,
+	fnOrigin,
+	fnv1a,
+	isCompactBeforeHandleOnly,
+	isLocalScope,
+	isNotEmpty,
+	macroEpoch,
+	mergeHook,
+	nullObject,
+	refTargets,
+	replaceUrlPath,
+	isHTMLBundle,
+	rootSnapshot,
+	type ChainNode
+} from '../../utils'
+
+import type {
+	CompiledHandler,
+	InternalRoute,
+	AnyLocalHook,
+	AppHook
+} from '../../types'
+
+function applyHook(
+	localHook: Partial<AnyLocalHook> | undefined,
+	// from `flattenChainMemo`: already a clone, safe to mutate
+	appHook: Partial<AnyLocalHook> | undefined,
+	rootHook: Partial<AppHook> | undefined
+): AnyLocalHook | undefined {
+	let hook: any
+
+	if (localHook && appHook)
+		hook = mergeHook(cloneHook(localHook) as any, appHook as any, true)
+	else {
+		const base = localHook ? cloneHook(localHook as any) : appHook
+		if (!rootHook) return base as any
+
+		hook = base ?? nullObject()
+	}
+
+	if (rootHook) mergeHook(hook, rootHook as any, true, true)
+
+	return hook
+}
+
+function collectHookOrigins(
+	hook: Partial<AnyLocalHook> | undefined,
+	into: Set<number> | undefined
+): Set<number> | undefined {
+	if (!hook) return into
+
+	for (const key in hook) {
+		if (!eventProperties.has(key)) continue
+
+		const v = (hook as any)[key]
+		if (!v) continue
+
+		if (Array.isArray(v))
+			for (const fn of v) {
+				const origin = fnOrigin.get(fn as Function)
+				if (origin !== undefined) (into ??= new Set()).add(origin)
+			}
+		else {
+			const origin = fnOrigin.get(v as Function)
+			if (origin !== undefined) (into ??= new Set()).add(origin)
+		}
+	}
+
+	return into
+}
+
+function dropHooksByOrigin(
+	hook: Partial<AppHook>,
+	skip: Set<number>
+): Partial<AppHook> {
+	let out = hook
+
+	for (const key in hook) {
+		if (!eventProperties.has(key)) continue
+
+		const v = (hook as any)[key]
+		if (!v) continue
+
+		if (Array.isArray(v)) {
+			let kept: Function[] | undefined
+
+			for (let i = 0; i < v.length; i++) {
+				const fn = v[i] as Function
+				const origin = fnOrigin.get(fn)
+				const keep = origin === undefined || !skip.has(origin)
+
+				if (kept) {
+					if (keep) kept.push(fn)
+				} else if (!keep) {
+					kept = v.slice(0, i) as Function[]
+				}
+			}
+
+			if (kept) {
+				if (out === hook) out = { ...hook }
+				;(out as any)[key] = kept
+			}
+		} else {
+			const origin = fnOrigin.get(v as Function)
+			if (origin !== undefined && skip.has(origin)) {
+				if (out === hook) out = { ...hook }
+				;(out as any)[key] = []
+			}
+		}
+	}
+
+	return out
+}
+
+function promoteDerive(hook: any) {
+	const derive = hook.derive
+	if (derive === undefined) return
+
+	const arr = Array.isArray(derive) ? derive : [derive]
+
+	if (arr.length) {
+		const existing = hook.beforeHandle
+
+		hook.beforeHandle = existing
+			? Array.isArray(existing)
+				? [...arr, ...existing]
+				: [...arr, existing]
+			: arr
+
+		const entries = (hook['~deriveEntries'] ??= [])
+		for (let i = 0; i < arr.length; i++) entries.push(arr[i])
+	}
+
+	hook.derive = undefined
+}
+
+type ResolutionMemo = WeakMap<
+	object,
+	{ e: number; per: WeakMap<object, WeakMap<object, any>> }
+>
+
+function memoScope(
+	memos: ResolutionMemo,
+	root: object,
+	scope: object
+): WeakMap<object, any> {
+	let bucket = memos.get(root)
+	if (!bucket || bucket.e !== macroEpoch()) {
+		bucket = { e: macroEpoch(), per: new WeakMap() }
+
+		memos.set(root, bucket)
+	}
+
+	let perScope = bucket.per.get(scope)
+	if (!perScope) {
+		perScope = new WeakMap()
+		bucket.per.set(scope, perScope)
+	}
+
+	return perScope
+}
+
+function hasMacroKey(
+	hook: object,
+	scopeMacro: object | undefined,
+	rootMacro: object | undefined
+) {
+	if (scopeMacro || rootMacro)
+		for (const key in hook)
+			if (
+				(scopeMacro && key in scopeMacro) ||
+				(rootMacro && key in rootMacro)
+			)
+				return true
+
+	return false
+}
+
+function applyMacros(
+	hook: any,
+	scope: AnyElysia,
+	frozenRoot: ReturnType<typeof frozenRootOf>,
+	scopeMacro: object | undefined,
+	rootMacro: object | undefined
+) {
+	if (scopeMacro) {
+		frozenRootOf(scope)['~applyMacro'](hook)
+
+		if (rootMacro) for (const k in hook) if (k in scopeMacro) delete hook[k]
+	}
+
+	if (rootMacro) frozenRoot['~applyMacro'](hook)
+}
+
+// Memo of resolved localHooks (route[4])
+const localHookMemos: ResolutionMemo = new WeakMap()
+
+export function resolveLocalHook(
+	scope: AnyElysia,
+	hook: Partial<AnyLocalHook> | undefined,
+	root: AnyElysia = scope
+): Partial<AnyLocalHook> | undefined {
+	if (!hook) return hook
+
+	const frozenRoot = frozenRootOf(root)
+	const scopeMacro = frozenRootOf(scope)['~ext']?.macro
+	const rootMacro = root === scope ? undefined : frozenRoot['~ext']?.macro
+	if (!hasMacroKey(hook, scopeMacro, rootMacro)) return hook
+
+	const perScope = memoScope(localHookMemos, root, scope)
+
+	let resolved = perScope.get(hook)
+	if (resolved === undefined) {
+		resolved = cloneHook(hook)
+		applyMacros(resolved, scope, frozenRoot, scopeMacro, rootMacro)
+		perScope.set(hook, resolved)
+	}
+
+	return resolved
+}
+
+export function resolveWSLocalHook(
+	scope: AnyElysia,
+	hook: Partial<AnyLocalHook> | undefined,
+	root: AnyElysia = scope
+): Partial<AnyLocalHook> | undefined {
+	const resolved = resolveLocalHook(scope, hook, root)
+	if (!resolved || (resolved as { derive?: unknown }).derive === undefined)
+		return resolved
+
+	const owned = cloneHook(resolved)
+	promoteDerive(owned)
+
+	return owned
+}
+
+// Memo of resolved chain-node `added`
+//
+// Chain node (a `.guard`/`.group`/`.on` entry, possibly carrying a macro key)
+// is shared by reference across every app that reuses the plugin it lives in
+const chainNodeMemos: ResolutionMemo = new WeakMap()
+
+/**
+ * Drop this root's resolved-hook memos.
+ * (JIT or rebuild) compile repopulates them anyway, just uncached
+ */
+export function clearHandlerAnalysisCaches(root: AnyElysia) {
+	localHookMemos.delete(root)
+	chainNodeMemos.delete(root)
+}
+
+function resolveChainNode(
+	root: AnyElysia,
+	node: ChainNode
+): Partial<AppHook> | undefined {
+	const added = (node as { added?: Partial<AppHook> }).added
+	if (!added) return added
+
+	const scope = localMacroRoot(
+		((node as { owner?: object }).owner as AnyElysia) ?? root,
+		root
+	)
+
+	const frozenRoot = frozenRootOf(root)
+	const scopeMacro = frozenRootOf(scope)['~ext']?.macro
+	const rootMacro = root === scope ? undefined : frozenRoot['~ext']?.macro
+	const needsMacro = hasMacroKey(added, scopeMacro, rootMacro)
+
+	if (!needsMacro && (added as { derive?: unknown }).derive === undefined)
+		return added
+
+	const perScope = memoScope(chainNodeMemos, root, scope)
+
+	let resolved = perScope.get(added)
+	if (resolved === undefined) {
+		resolved = cloneHook(added)
+		if (needsMacro)
+			applyMacros(resolved, scope, frozenRoot, scopeMacro, rootMacro)
+
+		promoteDerive(resolved)
+		perScope.set(added, resolved)
+	}
+
+	return resolved
+}
+
+export function chainResolver(root: AnyElysia) {
+	const frozenRoot = frozenRootOf(root)
+	return frozenRoot['~ext']?.macro || frozenRoot['~scopeChildren']
+		? (node: ChainNode) => resolveChainNode(root, node)
+		: undefined
+}
+
+export const localMacroRoot = (
+	instance: AnyElysia,
+	root: AnyElysia
+): AnyElysia =>
+	instance !== root &&
+	(instance as { '~scopeChild'?: boolean })['~scopeChild'] === true &&
+	frozenRootOf(instance)['~ext']?.macro
+		? instance
+		: root
+
+/** Whether a hook can be skipped by a native static response. */
+function isEmptyPipelineHook(hook: AnyLocalHook | undefined) {
+	if (!hook) return true
+
+	for (const key in hook) {
+		if (key === 'detail' || key === 'tags' || key === 'error') continue
+
+		const value = (hook as any)[key]
+		if (
+			value !== undefined &&
+			value !== false &&
+			(!Array.isArray(value) || value.length)
+		)
+			return false
+	}
+
+	return true
+}
+
+function mapStaticValue(
+	response: ElysiaAdapter['response'],
+	map: ElysiaAdapter['response']['map'],
+	set: { headers: Record<string, string> },
+	value: unknown
+) {
+	const mapped =
+		map === mapResponse
+			? mapResponse(value, set, null!)
+			: Reflect.apply(map, response, [value, set])
+
+	if (!(mapped instanceof Response)) return
+
+	// Bun infers a string body's MIME only on the wire, and a per-request merge
+	// re-wraps the body as a stream (octet-stream), so state it, also inside
+	// a `status()` wrapper
+	const body = value instanceof ElysiaStatus ? value.response : value
+	if (
+		(typeof body === 'string' ||
+			typeof body === 'number' ||
+			typeof body === 'boolean') &&
+		!mapped.headers.has('content-type')
+	)
+		mapped.headers.set('content-type', 'text/plain;charset=utf-8')
+
+	return mapped
+}
+
+function afterUseHooks(
+	node: ChainNode | undefined,
+	resolve: ((node: ChainNode) => Partial<AppHook> | undefined) | undefined
+) {
+	let after: Partial<AppHook> | undefined
+
+	while (node && 'combine' in node) {
+		if (node.tail) {
+			const own = flattenChain(
+				node.tail,
+				isLocalScope,
+				rootSnapshot(node.combine),
+				resolve
+			)
+
+			if (own) after = after ? mergeHook(own, after, false, true) : own
+		}
+
+		node = node.combine
+	}
+
+	return after
+}
+
+export function buildNativeStaticResponse(
+	route: InternalRoute,
+	root: AnyElysia
+) {
+	const [
+		,
+		,
+		handler,
+		instance,
+		localHook,
+		appHook,
+		inheritedChain,
+		macroScope
+	] = route
+
+	if (
+		typeof handler === 'function' ||
+		handler instanceof Error ||
+		handler instanceof Promise
+	)
+		return
+
+	const frozenRoot = frozenRootOf(root)
+	const adapter = frozenRoot['~config']?.adapter ?? defaultAdapter
+	const ownedHook = resolveLocalHook(
+		localMacroRoot(macroScope ?? instance, root),
+		localHook,
+		root
+	)
+
+	const resolve = chainResolver(root)
+	const flatAppHook = flattenChainMemo(root, appHook as ChainNode, resolve)
+	let rootHook: Partial<AppHook> | undefined
+	if (instance !== root) {
+		const locals = flattenChain(
+			frozenRootOf(root)['~hookChain'],
+			isLocalScope,
+			rootSnapshot(inheritedChain),
+			resolve
+		)
+
+		const inherited = locals
+			? flattenChainMemo(root, inheritedChain as any, resolve)
+			: flattenChainMemoReadonly(root, inheritedChain as any, resolve)
+
+		if (!inherited) rootHook = locals
+		else if (!locals) rootHook = inherited
+		else rootHook = mergeHook(inherited, locals as any)
+
+		const after = afterUseHooks(inheritedChain as any, resolve)
+		if (after) rootHook = rootHook ? mergeHook(after, rootHook) : after
+	}
+	const hook = applyHook(ownedHook, flatAppHook as any, rootHook)
+
+	if (hook && !isEmptyPipelineHook(hook as any)) return
+	// `isEmptyPipelineHook` skips `error`: a registered class instance must
+	// reach `compileHandler`, which throws it
+	if (
+		returnedErrorClasses(hook as any, root)?.some(
+			(C) => handler instanceof (C as any)
+		)
+	)
+		return
+
+	const rootHeaders = frozenRoot['~ext']?.headers
+	if (handler instanceof Response && !rootHeaders) return handler
+
+	const response = adapter.response
+	const map = response.map
+	const set = {
+		headers: rootHeaders
+			? Object.assign(nullObject(), rootHeaders)
+			: nullObject()
+	}
+
+	return mapStaticValue(response, map, set, handler)
+}
+
+function toArray(name: string, hook: any) {
+	if (typeof hook[name] === 'function') hook[name] = [hook[name]]
+}
+
+export function composeRouteHook(
+	instance: AnyElysia,
+	localHook: Partial<AnyLocalHook> | undefined,
+	appHook: ChainNode | undefined,
+	inheritedChain: ChainNode | undefined,
+	root: AnyElysia,
+	macroScope?: AnyElysia,
+	// Only the HTTP JIT runs `~beforeHandlePrefix`. Any other consumer would
+	// silently lose the inherited `beforeHandle` moved into it
+	allowCompactPrefix = false
+): AnyLocalHook | undefined {
+	const resolve = chainResolver(root)
+	localHook = resolveLocalHook(
+		localMacroRoot(macroScope ?? instance, root),
+		localHook,
+		root
+	)
+
+	// Fold the route-local (macro-applied) `derive` into its OWN beforeHandle
+	// BEFORE merging with inherited chain hooks. Promoting only after the
+	// merge (compileHandler) hoists it in front of the chain's already-folded
+	// `.derive()` entries, so a macro's derive could not see plugin-derived
+	// values (elysiajs/elysia#1958). Clone first: `resolveLocalHook` memoizes
+	if (localHook && (localHook as any).derive !== undefined) {
+		localHook = cloneHook(localHook)
+		promoteDerive(localHook)
+	}
+
+	const flatAppHook = appHook
+		? flattenChainMemo(root, appHook as ChainNode, resolve)
+		: undefined
+
+	let locals =
+		instance !== root
+			? flattenChain(
+					frozenRootOf(root)['~hookChain'],
+					isLocalScope,
+					rootSnapshot(inheritedChain),
+					resolve
+				)
+			: undefined
+	const instanceLocal =
+		instance !== root
+			? flattenChain((instance as AnyElysia)['~hookChain'], isLocalScope)
+			: undefined
+
+	const compactPrefix =
+		allowCompactPrefix &&
+		instance !== root &&
+		!Capture.isCapturing() &&
+		!Capture.isAotBuildEnv() &&
+		resolve === undefined &&
+		isCompactBeforeHandleOnly(localHook as any) &&
+		isCompactBeforeHandleOnly(flatAppHook as any) &&
+		isCompactBeforeHandleOnly(locals as any) &&
+		!instanceLocal?.error
+			? compactBeforeHandlePrefix(inheritedChain)
+			: undefined
+
+	let present = collectHookOrigins(localHook, undefined)
+	present = collectHookOrigins(flatAppHook as any, present)
+
+	if (
+		compactPrefix &&
+		!present?.size &&
+		!compactBeforeHandleConflicts(localHook as any) &&
+		!compactBeforeHandleConflicts(flatAppHook as any) &&
+		!compactBeforeHandleConflicts(locals as any)
+	) {
+		let hook = applyHook(localHook, flatAppHook as any, undefined)
+		if (locals)
+			hook = hook ? mergeHook(hook, locals, false, true) : (locals as any)
+
+		hook ??= nullObject() as any
+		;(hook as any)['~beforeHandlePrefix'] = compactPrefix
+		return hook
+	}
+
+	// `inherited` is readonly
+	let inherited =
+		instance !== root
+			? (flattenChainMemoReadonly(
+					root,
+					inheritedChain as any,
+					resolve
+				) as Partial<AppHook> | undefined)
+			: undefined
+
+	let after =
+		instance !== root ? afterUseHooks(inheritedChain, resolve) : undefined
+
+	if (
+		(inherited || after || locals) &&
+		(flatAppHook || localHook) &&
+		present?.size
+	) {
+		if (inherited) inherited = dropHooksByOrigin(inherited, present)
+		if (after) after = dropHooksByOrigin(after, present)
+		if (locals) locals = dropHooksByOrigin(locals, present)
+	}
+
+	let hook = applyHook(
+		localHook,
+		flatAppHook as any,
+		inherited
+			? (cloneHook(inherited as any) as Partial<AppHook>)
+			: undefined
+	)
+
+	// After the plugin's own hooks: each intermediate instance's after-use
+	// hooks, innermost first, then the root's.
+	if (after) hook = hook ? mergeHook(hook, after, false, true) : after
+	if (locals) hook = hook ? mergeHook(hook, locals, false, true) : locals
+
+	if (instance !== root) {
+		const errors = instanceLocal?.error
+		if (errors) {
+			hook ??= nullObject() as any
+			let existing = (hook as any).error
+
+			if (existing) {
+				if (!Array.isArray(existing))
+					existing = (hook as any).error = [existing]
+
+				if (Array.isArray(errors)) {
+					for (const fn of errors)
+						if (!existing.includes(fn)) existing.push(fn)
+				} else if (!existing.includes(errors)) existing.push(errors)
+			} else
+				(hook as any).error = Array.isArray(errors)
+					? errors.slice()
+					: [errors]
+		}
+	}
+
+	return hook
+}
+
+const shapeEvents = [
+	'parse',
+	'transform',
+	'beforeHandle',
+	'afterHandle',
+	'mapResponse',
+	'afterResponse',
+	'error',
+	'trace'
+] as const
+
+const shapeSlots = ['body', 'headers', 'params', 'query', 'cookie', 'response']
+
+const isCookieAt = (at: string) => at === 'cookie' || at === 'field'
+
+// mirror `gather` in cookie/config
+// trailing `*` marks a container that hold all value
+// `^` = deferred action's `parameters`
+function childAt(at: string, k: string, value: unknown, deferred: boolean) {
+	if (at.endsWith('*')) return at.slice(0, -1)
+	if (at.endsWith('^'))
+		return k === '0'
+			? at.slice(0, -1) + (Array.isArray(value) ? '*' : '')
+			: ''
+
+	if (!isCookieAt(at)) return ''
+
+	switch (k) {
+		case '$ref':
+			return at
+
+		case 'properties':
+			return at === 'cookie' ? 'field*' : ''
+
+		case 'parameters':
+			return deferred ? at + '^' : ''
+	}
+
+	return k === '$defs' || compositionKeys.includes(k) ? at + '*' : ''
+}
+
+// checksum of route compilation
+export function routeShape(
+	hook: AnyLocalHook | undefined,
+	handler: unknown,
+	root: AnyElysia
+): number | undefined {
+	const frozenRoot = frozenRootOf(root)
+	const config = frozenRoot['~config']
+	const models = frozenRoot['~ext']?.models as Record<string, unknown>
+
+	// reference models
+	const refs = new Map<string, string>()
+	const addRef = (name: string, at = '') => {
+		if (!isCookieAt(at)) at = ''
+		if (at === 'cookie' || !refs.get(name)) refs.set(name, at)
+	}
+
+	const ids = new Map<Function, number>()
+	const visiting = new Set<object>()
+	let unsupported = false
+
+	// polluted Object / Array prototype
+	for (const _ in []) return
+
+	const shape = (v: any, at = '') => {
+		switch (typeof v) {
+			case 'string':
+				return JSON.stringify(v)
+
+			case 'number':
+				return 'n' + (Object.is(v, -0) ? '-0' : v)
+
+			case 'bigint':
+				return 'b' + v
+
+			case 'boolean':
+				return v ? 'T' : 'F'
+
+			case 'undefined':
+				return 'U'
+
+			case 'function':
+				if (ids.has(v)) return '#' + ids.get(v)
+				ids.set(v, ids.size)
+				return isAsyncFunction(v) ? 'fa' : 'fs'
+
+			case 'symbol':
+				unsupported = true
+				return ''
+		}
+
+		if (v === null) return 'N'
+		if ('~standard' in v) return 'S'
+
+		if (visiting.has(v)) {
+			unsupported = true
+			return ''
+		}
+
+		// Elysia builders keep `~kind` on a shared prototype
+		let tag = ''
+		const list = Array.isArray(v)
+		const proto = Object.getPrototypeOf(v)
+		if (
+			list
+				? proto !== Array.prototype
+				: proto !== null && proto !== Object.prototype
+		) {
+			const kind =
+				proto && Object.getOwnPropertyDescriptor(proto, '~kind')
+
+			if (
+				!kind ||
+				!('value' in kind) ||
+				Reflect.ownKeys(proto).length !== 1 ||
+				Object.getPrototypeOf(proto) !== Object.prototype
+			) {
+				unsupported = true
+				return ''
+			}
+
+			tag = shape(kind.value)
+		}
+
+		visiting.add(v)
+
+		const map = at === 'response' && isResponseMap(v)
+		const deferred = v['~kind'] === 'Deferred'
+
+		let s = (list ? '[' : '{') + tag
+		for (const k of Reflect.ownKeys(v)) {
+			const d = Object.getOwnPropertyDescriptor(v, k)!
+			if (typeof k === 'symbol' || !('value' in d)) {
+				unsupported = true
+				break
+			}
+
+			const value = d.value
+			if (k === '$ref' && typeof value === 'string') addRef(value, at)
+			s += ',' + (d.enumerable ? '' : '!') + JSON.stringify(k) + ':'
+
+			if (map) s += named(value)
+			else if (k === 'config' && isCookieAt(at))
+				s += shape([value?.sign, !!value?.secrets])
+			// secret never enters shape
+			else if (
+				k === 'secrets' &&
+				(typeof value === 'string' || Array.isArray(value))
+			)
+				s += shape(!!value)
+			else s += shape(value, childAt(at, k as string, value, deferred))
+		}
+
+		visiting.delete(v)
+
+		return s + (list ? ']' : '}')
+	}
+
+	// a string is a model name
+	const named = (v: unknown, at?: string) => {
+		if (typeof v === 'string') addRef(v, at)
+		return shape(v, at)
+	}
+
+	let s =
+		typeof handler === 'function' || handler == null
+			? shape(handler)
+			: handler instanceof Response
+				? 'R'
+				: handler instanceof Promise
+					? 'P'
+					: typeof handler === 'object'
+						? 'O'
+						: 'V'
+
+	for (const event of shapeEvents) {
+		s += '|'
+
+		const fns = (hook as any)?.[event]
+		if (fns)
+			for (const fn of Array.isArray(fns) ? fns : [fns]) s += shape(fn)
+	}
+
+	const bf = hook?.beforeHandle as Function | Function[] | undefined
+	s +=
+		'|' +
+		JSON.stringify(
+			bf &&
+				deriveModes(
+					Array.isArray(bf) ? bf : [bf],
+					(hook as any)['~deriveEntries']
+				)
+		)
+
+	for (const from of [hook, ...((hook as any)?.schemas || [])])
+		for (const slot of shapeSlots) s += '|' + named(from?.[slot], slot)
+
+	// reference models, a cookie counts every schema a name may resolve to
+	let targets: ReturnType<typeof refTargets> | undefined
+	for (const [ref, at] of refs)
+		for (const target of at
+			? (targets ??= refTargets([], models))(ref)
+			: [models?.[ref]])
+			s += '|' + JSON.stringify(ref) + shape(target, at)
+
+	s +=
+		'|' +
+		JSON.stringify([
+			config?.cookie?.sign,
+			config?.cookie?.verify,
+			config?.normalize,
+			!!config?.allowUnsafeValidationDetails,
+			config?.abortSignal !== false,
+			isNotEmpty(frozenRoot['~ext']?.headers),
+			// not `compact`: captured code works either way
+			!!(config?.adapter ?? defaultAdapter).response
+				.supportsDefaultHeaderSink,
+			!!returnedErrorClasses(hook as any, root)
+		]) +
+		shape(config?.sanitize)
+
+	return unsupported ? undefined : fnv1a(s)
+}
+
+const isBareArrow = /^(?:async\s*)?\(\s*\)\s*=>/
+const isSucroseOpaque = /arguments|eval|\[native code\]/
+
+export function compileHandler(
+	route: InternalRoute,
+	root: AnyElysia,
+	liveOnly: boolean = false
+): CompiledHandler {
+	let [
+		_method,
+		path,
+		handler,
+		instance,
+		localHook,
+		appHook,
+		inheritedChain,
+		macroScope
+	] = route
+
+	const frozenRoot = frozenRootOf(root)
+	const adapter = frozenRoot['~config']?.adapter ?? defaultAdapter
+	const method = _method
+
+	const mountMeta =
+		typeof handler === 'function' ? (handler as any)['~mount'] : undefined
+	if (mountMeta) {
+		const { handle, suffixLen } = mountMeta
+
+		const rawRoot = suffixLen
+			? path.slice(0, path.length - suffixLen)
+			: path
+		const encRoot = encodeURI(rawRoot)
+		const rawLen = rawRoot.length
+		const encLen = encRoot.length
+
+		handler = (c: Context) =>
+			handle(
+				new Request(
+					replaceUrlPath(
+						c.request.url,
+						c.path.slice(
+							c.path.startsWith(encRoot) ? encLen : rawLen
+						) || '/'
+					),
+					c.request
+				)
+			)
+	}
+
+	const reconstructed = liveOnly
+		? undefined
+		: Compiled.getHandler(frozenRoot['~programId'], method, path)
+	// not captured: use none of the build's artifacts
+	if (!reconstructed)
+		liveOnly ||= Compiled.hasProgram(frozenRoot['~programId'])
+
+	const hook = composeRouteHook(
+		instance,
+		localHook,
+		appHook as any,
+		inheritedChain as any,
+		root,
+		macroScope,
+		!reconstructed
+	)
+
+	if (hook) {
+		promoteDerive(hook)
+
+		toArray('parse', hook)
+		toArray('transform', hook)
+		toArray('beforeHandle', hook)
+		toArray('afterHandle', hook)
+		toArray('mapResponse', hook)
+		toArray('afterResponse', hook)
+		toArray('error', hook)
+	}
+
+	const buildValidator = () =>
+		hook
+			? Reconstrct.validator(hook as any, root, method, path, liveOnly)
+			: undefined
+
+	const errorClasses = returnedErrorClasses(hook as any, root)
+
+	// A static instance of a registered class throws like a static Error. A
+	// handler function never counts, even for a class like `Function`
+	if (
+		handler instanceof Error ||
+		(typeof handler !== 'function' &&
+			errorClasses?.some((C) => handler instanceof (C as any)))
+	) {
+		const error = handler
+		handler = () => {
+			throw error
+		}
+	} else if (isHTMLBundle(handler))
+		handler = () => {
+			throw new Error(
+				`[Elysia] ${method} ${path} is an HTML bundle, only Bun's native router serves it`
+			)
+		}
+
+	const declaresResponse =
+		!!hook &&
+		(hook.response != null ||
+			!!(hook.schemas as { response?: unknown }[] | undefined)?.some(
+				(schema) => schema?.response
+			))
+
+	const isHandleFunction = typeof handler === 'function'
+	if (
+		!isHandleFunction &&
+		!(handler instanceof Promise) &&
+		!(!isBun && handler instanceof ElysiaFile) &&
+		!declaresResponse
+	) {
+		const rootHeaders = frozenRoot['~ext']?.headers
+
+		const set = {
+			headers: rootHeaders
+				? Object.assign(nullObject(), rootHeaders)
+				: nullObject()
+		}
+
+		const response = adapter.response
+		const mapped = mapStaticValue(response, response.map, set, handler)
+		if (mapped) handler = mapped
+	}
+
+	const isStaticResponse = !isHandleFunction && handler instanceof Response
+	const isPromiseHandler = !isHandleFunction && handler instanceof Promise
+
+	const namedParsers = frozenRoot['~ext']?.parser
+	if (namedParsers && hook?.parse) {
+		const resolve = (p: any) =>
+			typeof p === 'string' && p in namedParsers ? namedParsers[p] : p
+
+		hook.parse = Array.isArray(hook.parse)
+			? (hook.parse as any[]).map(resolve)
+			: (resolve(hook.parse) as any)
+	}
+
+	let shape: number | undefined
+	if (reconstructed || Capture.isCapturing()) {
+		shape = routeShape(hook, handler, root)
+
+		// drifted or unprovable: compile live
+		if (reconstructed && (!shape || reconstructed.k !== shape)) {
+			let live: CompiledHandler
+			try {
+				live = compileHandler(route, root, true)
+			} catch (cause) {
+				throw new Error(aotDrift(method, path), { cause })
+			}
+
+			warnAotDrift(method, path)
+			return live
+		}
+	}
+
+	if (reconstructed)
+		return reconstructed.f!(
+			handler,
+			...resolveHandlerParams(reconstructed.a!, {
+				root,
+				parse: adapter.parse as any,
+				res: adapter.response as any,
+				hook: (hook ?? nullObject()) as any,
+				vali: reconstructed.a!.includes('va')
+					? buildValidator()
+					: undefined,
+				cookieConfig: reconstructed.a!.includes('cc')
+					? Reconstrct.cookie(hook, root)
+					: undefined,
+				tracers: reconstructed.a!.includes('tr')
+					? Reconstrct.trace(hook, root)
+					: undefined
+			})
+		) as CompiledHandler
+
+	// Bare-route fast path.
+	if (
+		hook === undefined &&
+		// a hook-less route still sees the app-level error classes
+		!errorClasses &&
+		isHandleFunction &&
+		!mountMeta &&
+		(method === 'GET' || method === 'HEAD') &&
+		!root['~hasTrace'] &&
+		root['~introspect'] !== true &&
+		root['~config']?.introspect !== true &&
+		!isNotEmpty(frozenRoot['~ext']?.headers) &&
+		!Capture.isAotBuildEnv() &&
+		!Capture.isCapturing()
+	) {
+		// A forged own `toString` makes sucrose widen every channel
+		let isContextFree = false
+		if (!Object.hasOwn(handler as Function, 'toString')) {
+			const source = Function.prototype.toString.call(handler)
+			isContextFree =
+				isBareArrow.test(source) && !isSucroseOpaque.test(source)
+		}
+
+		if (isContextFree) {
+			const compact = adapter.response.compact
+			if (compact)
+				return createInlineHandler(compact as any, handler as any)
+		}
+	}
+
+	const state = describeRoute({
+		method,
+		handler,
+		root,
+		adapter,
+		hook,
+		buildValidator,
+		isHandleFunction,
+		isStaticResponse,
+		isPromiseHandler
+	})
+
+	if (root['~introspect'] === true || root['~config']?.introspect === true) {
+		let descriptors = routeDescriptors.get(root)
+		if (!descriptors) {
+			descriptors = new Map()
+			routeDescriptors.set(root, descriptors)
+		}
+
+		descriptors.set(`${method} ${path}`, state.descriptor)
+	}
+
+	return compileHandlerJit({
+		method,
+		path,
+		handler,
+		root: frozenRoot as AnyElysia,
+		errorRoot: root,
+		hook,
+		adapter,
+		isHandleFunction,
+		isStaticResponse,
+		isPromiseHandler,
+		errorClasses,
+		state,
+		shape
+	})
+}
