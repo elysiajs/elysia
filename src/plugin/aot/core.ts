@@ -21,6 +21,11 @@ import {
 } from '../../compile/handler/frozen-validator'
 import type { CapturedValidator, ValidatorSlot } from '../../compile/aot'
 
+/**
+ * A route that differs from the build compiles live with a warning, or fails
+ * when the JIT is stripped. A conditional hook must change the hook list
+ * (`isProd ? [auth] : []`), not swap functions. Keep `async` native
+ */
 export interface ElysiaAotOptions {
 	/**
 	 * Specifier the generated module imports `Compiled` from
@@ -626,14 +631,18 @@ export const OVERRIDE_MAP: Record<string, { leaf: string; export: string }> = {
 	ArrayString: { leaf: 'array-string', export: 'ArrayString' },
 	Boolean: { leaf: 'boolean', export: 'BooleanType' },
 	BooleanString: { leaf: 'boolean-string', export: 'BooleanString' },
+	Composite: { leaf: 'keep-config', export: 'CompositeType' },
 	Cookie: { leaf: 'cookie', export: 'Cookie' },
 	Date: { leaf: 'date', export: 'DateType' },
+	Evaluate: { leaf: 'keep-config', export: 'EvaluateType' },
 	File: { leaf: 'file', export: 'File' },
 	Files: { leaf: 'files', export: 'Files' },
 	Form: { leaf: 'form', export: 'Form' },
 	Integer: { leaf: 'integer', export: 'Integer' },
 	IntegerString: { leaf: 'integer-string', export: 'IntegerString' },
+	Interface: { leaf: 'keep-config', export: 'InterfaceType' },
 	Intersect: { leaf: 'intersect', export: 'Intersect' },
+	Mapped: { leaf: 'keep-config', export: 'MappedType' },
 	MaybeEmpty: { leaf: 'maybe-empty', export: 'MaybeEmpty' },
 	NoValidate: { leaf: 'no-validate', export: 'NoValidate' },
 	Nullable: { leaf: 'nullable', export: 'Nullable' },
@@ -642,8 +651,13 @@ export const OVERRIDE_MAP: Record<string, { leaf: string; export: string }> = {
 	NumericEnum: { leaf: 'numeric-enum', export: 'NumericEnum' },
 	Object: { leaf: 'object', export: 'ObjectType' },
 	ObjectString: { leaf: 'object-string', export: 'ObjectString' },
+	Omit: { leaf: 'keep-config', export: 'OmitType' },
 	Optional: { leaf: 'optional', export: 'Optional' },
+	Partial: { leaf: 'keep-config', export: 'PartialType' },
+	Pick: { leaf: 'keep-config', export: 'PickType' },
 	Problem: { leaf: 'problem', export: 'Problem' },
+	ReadonlyObject: { leaf: 'keep-config', export: 'ReadonlyObjectType' },
+	Required: { leaf: 'keep-config', export: 'RequiredType' },
 	String: { leaf: 'string', export: 'StringType' },
 	Uint8Array: { leaf: 'uint8-array', export: 'Uint8ArrayType' },
 	Union: { leaf: 'union', export: 'Union' },
@@ -1068,7 +1082,7 @@ export async function generateCompiledArtifacts(
 		)
 
 		const allBridgeFree =
-			(artifacts.handlers.length > 0 ||
+			(artifacts.handlers.some((h) => h.code) ||
 				artifacts.validators.length > 0) &&
 			!routesForbidSeal &&
 			validatorSlotsMatch &&
@@ -1081,7 +1095,7 @@ export async function generateCompiledArtifacts(
 			mayTrace,
 			aliases,
 			allBridgeFree,
-			artifacts.handlers.length === 0 &&
+			!artifacts.handlers.some((h) => h.code) &&
 				artifacts.validators.length === 0,
 			adapterStub,
 			productionStub,

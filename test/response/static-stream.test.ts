@@ -7,6 +7,7 @@ import {
 	compileHandler
 } from '../../src/compile/handler'
 import { AOT_MANIFEST_FORMAT, Compiled } from '../../src/compile/aot'
+import { captureArtifacts } from '../../src/plugin/aot/source'
 import { materialiseHandlers, registerManifest } from '../aot/_manifest'
 
 function source(kind: string) {
@@ -283,16 +284,20 @@ describe('static stream preparation', () => {
 		})
 
 	it('binds a factory captured before the repair to the unchanged raw owner and runtime mapper', async () => {
-		// Captured from the old runtime, ABI 4. Keep its code and alias order literal.
-		// ABI 5 dropped the manifest `bf` field and changed the emitted trace child
-		// reader (`rp.resolveChild?.shift?.()` -> `rp.shift?.()`); the handler
-		// factory binding contract this pins is unchanged, so re-check it whenever
-		// the ABI moves.
+		// captured from the old runtime (ABI 4), code and alias order kept literal;
+		// later ABIs changed the manifest (`bf` dropped, route shape `k`) but the
+		// binding contract pinned here is unchanged: re-check it when the ABI moves
+		const app = (value: unknown) =>
+			new Elysia({ nativeStaticResponse: false })
+				.headers({ 'x-default': 'base' })
+				.get('/old-stream', value)
+		const { handlers } = await captureArtifacts(app(source('sync').value))
 		const old = {
 			method: 'GET',
 			path: '/old-stream',
 			alias: 'rt,fre,rm',
-			code: "function route(c){\ntry{\nconst _m=rm(h,c.set,c.request,true)\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n}catch(e){return fre(rt,c,e)}\n}"
+			code: "function route(c){\ntry{\nconst _m=rm(h,c.set,c.request,true)\nreturn typeof _m?.then==='function'?Promise.resolve(_m).catch((_e)=>fre(rt,c,_e)):_m\n}catch(e){return fre(rt,c,e)}\n}",
+			k: handlers[0]!.k
 		}
 		const input = source('sync')
 		const manifest = materialiseHandlers([old])
@@ -306,14 +311,12 @@ describe('static stream preparation', () => {
 			return Reflect.apply(factory, this, [handler, ...bindings])
 		}
 		try {
-			expect(AOT_MANIFEST_FORMAT).toBe(5)
+			expect(AOT_MANIFEST_FORMAT).toBe(6)
 			registerManifest({ handlers: manifest })
-			const app = new Elysia({ nativeStaticResponse: false })
-				.headers({ 'x-default': 'base' })
-				.get('/old-stream', input.value)
-			app.compile()
+			const replayed = app(input.value)
+			replayed.compile()
 			const ready = input.state()
-			const response = await app.handle(
+			const response = await replayed.handle(
 				new Request('http://localhost/old-stream')
 			)
 			expect(await response.text()).toBe('ab')

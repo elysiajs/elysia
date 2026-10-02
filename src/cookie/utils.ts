@@ -7,7 +7,7 @@ import { nullObject } from '../utils'
 import type { Context } from '../context'
 import type { BaseCookie } from './types'
 import type { CompiledCookieConfig } from './config'
-import { isCookieSigned, resolveSignSecrets } from './config'
+import { isCookieSigned, legacySignatureOf, resolveSignSecrets } from './config'
 import { InvalidCookie } from './error'
 
 import {
@@ -122,7 +122,7 @@ export async function parseCookieRaw(
 					name,
 					value,
 					signCheck,
-					config.legacySignature
+					legacySignatureOf(name, config)
 				)
 			} catch (error) {
 				// only a bad signature defers, a crypto failure stays loud
@@ -165,7 +165,7 @@ export function parseCookieRawSigned(
 					name,
 					value,
 					signCheck,
-					config.legacySignature
+					legacySignatureOf(name, config)
 				)
 			} catch (error) {
 				// only a bad signature defers, a crypto failure stays loud
@@ -227,7 +227,8 @@ export function buildCookieJar(
 			const secrets = resolveSignSecrets(name, config)
 			if (secrets !== undefined) {
 				;(entry as any)['~unsign'] = secrets
-				if (!config.legacySignature) (entry as any)['~strict'] = 1
+				if (!legacySignatureOf(name, config))
+					(entry as any)['~strict'] = 1
 			}
 		} else {
 			const value = entry.value

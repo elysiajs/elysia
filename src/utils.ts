@@ -64,6 +64,41 @@ export function fnv1a(str: string): number {
 	return hash >>> 0
 }
 
+// keys whose members all apply; frozen so a plugin can't unsign cookies
+export const compositionKeys: readonly string[] = Object.freeze([
+	'allOf',
+	'anyOf',
+	'oneOf',
+	'~cookieFrom'
+])
+
+// every schema a `$ref` name may resolve to: TypeBox picks the last `$id`
+// match, so a cookie reader takes them all
+export function refTargets(
+	roots: unknown[],
+	models: Record<string, unknown> = {}
+): (name: string) => Iterable<unknown> {
+	const targets: Record<string, Set<unknown>> = nullObject()
+	const add = (name: string, schema: unknown) =>
+		(targets[name] ??= new Set()).add(schema)
+
+	const seen = new Set()
+	const index = (node: any) => {
+		if (!node || typeof node !== 'object' || seen.has(node)) return
+		seen.add(node)
+
+		if (typeof node.$id === 'string')
+			add(node.$id.slice(node.$id.lastIndexOf('/') + 1), node)
+		for (const key in node) index(node[key])
+		index(node['~cookieFrom'])
+	}
+
+	for (const name in models) add(name, models[name])
+	roots.concat(Object.values(models)).forEach(index)
+
+	return (name) => targets[name] ?? []
+}
+
 /**
  * Maps each lifecycle/derive function to the hash of the named plugin it was
  * first registered on. Used by `.use()` to dedup absorbed hooks: if a fn's

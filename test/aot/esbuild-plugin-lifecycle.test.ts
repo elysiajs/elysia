@@ -70,9 +70,23 @@ it('fails before a later scl factory only when its resolver was omitted', async 
 	const { resolveElysiaRoot } = await import(
 		resolve(packageRoot, 'dist/plugin/aot/core.mjs')
 	)
-	const { Compiled, Validator } = await import(
+	const { Compiled, Validator, Elysia, t } = await import(
 		resolve(packageRoot, 'dist/index.mjs')
 	)
+	const { captureArtifacts } = await import(
+		resolve(packageRoot, 'dist/plugin/aot/source.mjs')
+	)
+	// the shape a build of the same `/manual` route records
+	const manual = () =>
+		new Elysia({ precompile: true }).get(
+			'/manual',
+			{ response: t.Any(), afterHandle() {} },
+			{ value: 'manual' }
+		)
+	const { handlers } = await captureArtifacts(manual())
+	Compiled.clear()
+	Validator.clear()
+	const shape = handlers.find((h: any) => h.path === '/manual').k
 	const directory = await mkdtemp(resolve(import.meta.dir, '_clone-manual-'))
 	const entry = resolve(directory, 'app.ts')
 	const previousBuild = process.env.ELYSIA_AOT_BUILD
@@ -87,7 +101,7 @@ it('fails before a later scl factory only when its resolver was omitted', async 
 				`export async function exerciseUnexpected() {
 	let factoryCalls = 0
 	const result = { factoryCalls: 0, error: null, response: null, unrelated: resolveHandlerParams(['rm', 'rc'], { res: { map: 'map', compact: 'compact' } }) }
-	Compiled.register({ fingerprint: createAotFingerprint(), handlers: { GET: { '/manual': { a: ['scl', 'rm'], f: (h, scl, rm) => { factoryCalls++; return (c) => rm(scl(h), c.set, c.request, true) } } } } })
+	Compiled.register({ fingerprint: createAotFingerprint(), handlers: { GET: { '/manual': { a: ['scl', 'rm'], k: ${JSON.stringify(shape)}, f: (h, scl, rm) => { factoryCalls++; return (c) => rm(scl(h), c.set, c.request, true) } } } } })
 	try {
 		const next = new Elysia({ precompile: true }).get('/manual', { response: t.Any(), afterHandle() {} }, { value: 'manual' })
 		next.compile()

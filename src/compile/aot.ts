@@ -3,7 +3,7 @@ import { nullObject } from '../utils'
 import packageJson from '../../package.json'
 import type { CoerceNode } from '../type/coerce'
 
-export const AOT_MANIFEST_FORMAT = 5
+export const AOT_MANIFEST_FORMAT = 6
 const AOT_ABI = `${packageJson.version}:${AOT_MANIFEST_FORMAT}`
 
 export interface AotFingerprint {
@@ -166,9 +166,11 @@ export interface ValidatorManifest {
 // @see `src/compile/handler/index.ts`
 export interface FrozenHandler {
 	// positional parameter eg. pf,pj
-	a: string[]
+	a?: string[]
 	// Handler factory: `(h, ...params) => composedHandler`
-	f: (...deps: unknown[]) => unknown
+	f?: (...deps: unknown[]) => unknown
+	// `routeShape` at capture: replay only on match (WS records hold only this)
+	k?: number
 }
 
 export interface HandlerManifest {
@@ -244,13 +246,23 @@ export function reconstruct() {
 	return reconstructImpl
 }
 
+let drifted: Set<string>
+
+export const aotDrift = (method: string, path: string) =>
+	`[elysia-aot] ${method} ${path} differs from the AOT build`
+
+export function warnAotDrift(method: string, path: string) {
+	const key = method + ' ' + path
+	if (drifted?.has(key)) return
+
+	drifted ??= new Set()
+	drifted.add(key)
+	console.warn(aotDrift(method, path) + ', compiled at runtime')
+}
+
 // build registry
 let registered: CompiledProgramRegistration | undefined
-/**
- * App that consumed this process's manifest, held weakly: it only has to
- * recognise a re-claim by the *same* app, and `assertUncontested` always
- * compares against a live id, so a cleared ref answers as a strong one would
- */
+// prevent a 2nd Elysia app from claiming the same process (AOT build is one per process)
 let claimed: WeakRef<ProgramId> | undefined
 let programs = new WeakMap<ProgramId, CompiledProgram>()
 
@@ -269,9 +281,7 @@ export abstract class Compiled {
 		const expected = manifest.fingerprint
 
 		if (expected.abi !== fingerprint.abi)
-			throw new Error(
-				`[elysia-aot] Registered manifest fingerprint mismatch: abi (manifest ${expected.abi}, app ${fingerprint.abi}).`
-			)
+			throw new Error(`[elysia-aot] Mismatch fingerprint`)
 
 		claimed = new WeakRef(id)
 		registered = undefined
@@ -324,8 +334,8 @@ export abstract class Compiled {
 		if (g !== undefined && !program.builtGroups.has(g)) {
 			program.builtGroups.add(g)
 			const slice = program.lazyGroups![g]!()
-			// drop the consumed thunk: `builtGroups` guards re-entry, so the
-			// materialized copy below is the only owner from here on
+			// drop the lazy group after the first build to free memory
+			// the manifest is now fully merged into `program.validators`
 			program.lazyGroups![g] = undefined as any
 
 			programValidators ??= program.validators =
@@ -361,10 +371,6 @@ export abstract class Compiled {
 		return programFor(id)?.planRebuilder
 	}
 
-	/**
-	 * Drop a fully consumed program registration after an eager production
-	 * build publishes. Safe only when every route compiled before publish
-	 */
 	static release(id: ProgramId) {
 		programs.delete(id)
 	}
@@ -374,6 +380,7 @@ export abstract class Compiled {
 		registered = undefined
 		claimed = undefined
 		programs = new WeakMap()
+		drifted?.clear()
 	}
 }
 
@@ -482,7 +489,9 @@ export interface CapturedHandler {
 	method: string
 	path: string
 	alias: string
+	// empty on a WS route
 	code: string
+	k: number | undefined
 }
 
 function captureHandler(v: CapturedHandler) {

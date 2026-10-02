@@ -7,30 +7,36 @@ import { ElysiaFile } from '../../universal/file'
 import { ElysiaStatus } from '../../error'
 import { isBun } from '../../universal/constants'
 
-import { Capture, Compiled } from '../aot'
+import { Capture, Compiled, aotDrift, warnAotDrift } from '../aot'
 import { frozenRootOf } from '../../generation'
 import { resolveHandlerParams } from './params'
 import { compileHandlerJit, createInlineHandler } from './jit'
 export { setCaptureHeaderShorthand } from './jit'
 import { returnedErrorClasses } from '../../handler/utils'
+import { deriveModes } from './utils'
+import { isAsyncFunction } from '../utils'
 import { describeRoute, routeDescriptors } from './descriptor'
 import { Reconstrct } from './reconstruct'
+import { isResponseMap } from './frozen-validator'
 import type { Context } from '../../context'
 import {
 	cloneHook,
 	compactBeforeHandleConflicts,
 	compactBeforeHandlePrefix,
+	compositionKeys,
 	eventProperties,
 	flattenChain,
 	flattenChainMemo,
 	flattenChainMemoReadonly,
 	fnOrigin,
+	fnv1a,
 	isCompactBeforeHandleOnly,
 	isLocalScope,
 	isNotEmpty,
 	macroEpoch,
 	mergeHook,
 	nullObject,
+	refTargets,
 	replaceUrlPath,
 	isHTMLBundle,
 	rootSnapshot,
@@ -615,19 +621,230 @@ export function composeRouteHook(
 	return hook
 }
 
-// frozen handler params that read the composed hook / validator / cookie / trace
-const hookStateAliases = [
-	'ho',
-	'tf',
-	'bf',
-	'af',
-	'mr',
-	'er',
-	'ar',
-	'va',
-	'cc',
-	'tr'
-]
+const shapeEvents = [
+	'parse',
+	'transform',
+	'beforeHandle',
+	'afterHandle',
+	'mapResponse',
+	'afterResponse',
+	'error',
+	'trace'
+] as const
+
+const shapeSlots = ['body', 'headers', 'params', 'query', 'cookie', 'response']
+
+const isCookieAt = (at: string) => at === 'cookie' || at === 'field'
+
+// mirror `gather` in cookie/config
+// trailing `*` marks a container that hold all value
+// `^` = deferred action's `parameters`
+function childAt(at: string, k: string, value: unknown, deferred: boolean) {
+	if (at.endsWith('*')) return at.slice(0, -1)
+	if (at.endsWith('^'))
+		return k === '0'
+			? at.slice(0, -1) + (Array.isArray(value) ? '*' : '')
+			: ''
+
+	if (!isCookieAt(at)) return ''
+
+	switch (k) {
+		case '$ref':
+			return at
+
+		case 'properties':
+			return at === 'cookie' ? 'field*' : ''
+
+		case 'parameters':
+			return deferred ? at + '^' : ''
+	}
+
+	return k === '$defs' || compositionKeys.includes(k) ? at + '*' : ''
+}
+
+// checksum of route compilation
+export function routeShape(
+	hook: AnyLocalHook | undefined,
+	handler: unknown,
+	root: AnyElysia
+): number | undefined {
+	const frozenRoot = frozenRootOf(root)
+	const config = frozenRoot['~config']
+	const models = frozenRoot['~ext']?.models as Record<string, unknown>
+
+	// reference models
+	const refs = new Map<string, string>()
+	const addRef = (name: string, at = '') => {
+		if (!isCookieAt(at)) at = ''
+		if (at === 'cookie' || !refs.get(name)) refs.set(name, at)
+	}
+
+	const ids = new Map<Function, number>()
+	const visiting = new Set<object>()
+	let unsupported = false
+
+	// polluted Object / Array prototype
+	for (const _ in []) return
+
+	const shape = (v: any, at = '') => {
+		switch (typeof v) {
+			case 'string':
+				return JSON.stringify(v)
+
+			case 'number':
+				return 'n' + (Object.is(v, -0) ? '-0' : v)
+
+			case 'bigint':
+				return 'b' + v
+
+			case 'boolean':
+				return v ? 'T' : 'F'
+
+			case 'undefined':
+				return 'U'
+
+			case 'function':
+				if (ids.has(v)) return '#' + ids.get(v)
+				ids.set(v, ids.size)
+				return isAsyncFunction(v) ? 'fa' : 'fs'
+
+			case 'symbol':
+				unsupported = true
+				return ''
+		}
+
+		if (v === null) return 'N'
+		if ('~standard' in v) return 'S'
+
+		if (visiting.has(v)) {
+			unsupported = true
+			return ''
+		}
+
+		// Elysia builders keep `~kind` on a shared prototype
+		let tag = ''
+		const list = Array.isArray(v)
+		const proto = Object.getPrototypeOf(v)
+		if (
+			list
+				? proto !== Array.prototype
+				: proto !== null && proto !== Object.prototype
+		) {
+			const kind =
+				proto && Object.getOwnPropertyDescriptor(proto, '~kind')
+
+			if (
+				!kind ||
+				!('value' in kind) ||
+				Reflect.ownKeys(proto).length !== 1 ||
+				Object.getPrototypeOf(proto) !== Object.prototype
+			) {
+				unsupported = true
+				return ''
+			}
+
+			tag = shape(kind.value)
+		}
+
+		visiting.add(v)
+
+		const map = at === 'response' && isResponseMap(v)
+		const deferred = v['~kind'] === 'Deferred'
+
+		let s = (list ? '[' : '{') + tag
+		for (const k of Reflect.ownKeys(v)) {
+			const d = Object.getOwnPropertyDescriptor(v, k)!
+			if (typeof k === 'symbol' || !('value' in d)) {
+				unsupported = true
+				break
+			}
+
+			const value = d.value
+			if (k === '$ref' && typeof value === 'string') addRef(value, at)
+			s += ',' + (d.enumerable ? '' : '!') + JSON.stringify(k) + ':'
+
+			if (map) s += named(value)
+			else if (k === 'config' && isCookieAt(at))
+				s += shape([value?.sign, !!value?.secrets])
+			// secret never enters shape
+			else if (
+				k === 'secrets' &&
+				(typeof value === 'string' || Array.isArray(value))
+			)
+				s += shape(!!value)
+			else s += shape(value, childAt(at, k as string, value, deferred))
+		}
+
+		visiting.delete(v)
+
+		return s + (list ? ']' : '}')
+	}
+
+	// a string is a model name
+	const named = (v: unknown, at?: string) => {
+		if (typeof v === 'string') addRef(v, at)
+		return shape(v, at)
+	}
+
+	let s =
+		typeof handler === 'function' || handler == null
+			? shape(handler)
+			: handler instanceof Response
+				? 'R'
+				: handler instanceof Promise
+					? 'P'
+					: typeof handler === 'object'
+						? 'O'
+						: 'V'
+
+	for (const event of shapeEvents) {
+		s += '|'
+
+		const fns = (hook as any)?.[event]
+		if (fns)
+			for (const fn of Array.isArray(fns) ? fns : [fns]) s += shape(fn)
+	}
+
+	const bf = hook?.beforeHandle as Function | Function[] | undefined
+	s +=
+		'|' +
+		JSON.stringify(
+			bf &&
+				deriveModes(
+					Array.isArray(bf) ? bf : [bf],
+					(hook as any)['~deriveEntries']
+				)
+		)
+
+	for (const from of [hook, ...((hook as any)?.schemas || [])])
+		for (const slot of shapeSlots) s += '|' + named(from?.[slot], slot)
+
+	// reference models, a cookie counts every schema a name may resolve to
+	let targets: ReturnType<typeof refTargets> | undefined
+	for (const [ref, at] of refs)
+		for (const target of at
+			? (targets ??= refTargets([], models))(ref)
+			: [models?.[ref]])
+			s += '|' + JSON.stringify(ref) + shape(target, at)
+
+	s +=
+		'|' +
+		JSON.stringify([
+			config?.cookie?.sign,
+			config?.cookie?.verify,
+			config?.normalize,
+			!!config?.allowUnsafeValidationDetails,
+			config?.abortSignal !== false,
+			isNotEmpty(frozenRoot['~ext']?.headers),
+			// not `compact`: captured code works either way
+			!!(config?.adapter ?? defaultAdapter).response
+				.supportsDefaultHeaderSink,
+			!!returnedErrorClasses(hook as any, root)
+		]) +
+		shape(config?.sanitize)
+
+	return unsupported ? undefined : fnv1a(s)
+}
 
 const isBareArrow = /^(?:async\s*)?\(\s*\)\s*=>/
 const isSucroseOpaque = /arguments|eval|\[native code\]/
@@ -681,28 +898,9 @@ export function compileHandler(
 	const reconstructed = liveOnly
 		? undefined
 		: Compiled.getHandler(frozenRoot['~programId'], method, path)
-
-	if (
-		reconstructed &&
-		typeof handler === 'function' &&
-		!frozenRoot['~ext']?.macro &&
-		!frozenRootOf(localMacroRoot(macroScope ?? instance, root))['~ext']
-			?.macro
-	) {
-		if (!reconstructed.a.some((name) => hookStateAliases.includes(name)))
-			return reconstructed.f(
-				handler,
-				...resolveHandlerParams(reconstructed.a, {
-					root,
-					parse: adapter.parse as any,
-					res: adapter.response as any,
-					hook: nullObject() as any,
-					vali: undefined,
-					cookieConfig: undefined,
-					tracers: undefined
-				})
-			) as CompiledHandler
-	}
+	// not captured: use none of the build's artifacts
+	if (!reconstructed)
+		liveOnly ||= Compiled.hasProgram(frozenRoot['~programId'])
 
 	const hook = composeRouteHook(
 		instance,
@@ -791,21 +989,39 @@ export function compileHandler(
 			: (resolve(hook.parse) as any)
 	}
 
+	let shape: number | undefined
+	if (reconstructed || Capture.isCapturing()) {
+		shape = routeShape(hook, handler, root)
+
+		// drifted or unprovable: compile live
+		if (reconstructed && (!shape || reconstructed.k !== shape)) {
+			let live: CompiledHandler
+			try {
+				live = compileHandler(route, root, true)
+			} catch (cause) {
+				throw new Error(aotDrift(method, path), { cause })
+			}
+
+			warnAotDrift(method, path)
+			return live
+		}
+	}
+
 	if (reconstructed)
-		return reconstructed.f(
+		return reconstructed.f!(
 			handler,
-			...resolveHandlerParams(reconstructed.a, {
+			...resolveHandlerParams(reconstructed.a!, {
 				root,
 				parse: adapter.parse as any,
 				res: adapter.response as any,
 				hook: (hook ?? nullObject()) as any,
-				vali: reconstructed.a.includes('va')
+				vali: reconstructed.a!.includes('va')
 					? buildValidator()
 					: undefined,
-				cookieConfig: reconstructed.a.includes('cc')
+				cookieConfig: reconstructed.a!.includes('cc')
 					? Reconstrct.cookie(hook, root)
 					: undefined,
-				tracers: reconstructed.a.includes('tr')
+				tracers: reconstructed.a!.includes('tr')
 					? Reconstrct.trace(hook, root)
 					: undefined
 			})
@@ -875,6 +1091,7 @@ export function compileHandler(
 		isStaticResponse,
 		isPromiseHandler,
 		errorClasses,
-		state
+		state,
+		shape
 	})
 }

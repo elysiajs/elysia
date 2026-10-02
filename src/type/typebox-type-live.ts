@@ -2,13 +2,21 @@ import * as type from 'typebox/type'
 import * as system from './typebox-system-lite'
 import {
 	Codec,
+	Composite,
 	Decode,
 	Evaluate,
+	Interface,
 	Intersect,
+	Mapped,
 	Module,
 	Null,
+	Omit,
+	Partial,
+	Pick,
+	ReadonlyObject,
 	Ref,
 	Refine,
+	Required,
 	Undefined,
 	Unsafe
 } from 'typebox/type'
@@ -32,13 +40,21 @@ export const isTypeNamespaceLoaded = () => true
 
 export {
 	Codec,
+	Composite,
 	Decode,
 	Evaluate,
+	Interface,
 	Intersect,
+	Mapped,
 	Module,
 	Null,
+	Omit,
+	Partial,
+	Pick,
+	ReadonlyObject,
 	Ref,
 	Refine,
+	Required,
 	Undefined,
 	Unsafe
 }

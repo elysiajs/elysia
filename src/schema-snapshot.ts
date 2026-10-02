@@ -108,10 +108,13 @@ function deepCloneSchema(
 		const property = value[key]
 
 		// non-enumerable markers (`~kind`, `~optional`, ...) are copied by
-		// reference, matching `copyNonEnumerable`
+		// reference, matching `copyNonEnumerable`, but `~cookieFrom` is cloned
 		if (!allEnumerable && !isEnumerable.call(value, key)) {
 			Object.defineProperty(out, key, {
-				value: property,
+				value:
+					key === '~cookieFrom'
+						? deepCloneSchema(property, freeze, seen)
+						: property,
 				enumerable: false,
 				writable: true,
 				configurable: true
@@ -187,7 +190,8 @@ function fingerprint(
 				return 's' + value.length + ':' + value
 
 			case 'number':
-				return 'n' + value + ';'
+				// keep `-0` apart from `0`
+				return 'n' + (Object.is(value, -0) ? '-0' : value) + ';'
 
 			case 'boolean':
 				return value ? 'T;' : 'F;'
@@ -248,11 +252,13 @@ function fingerprint(
 
 		out += 'k' + key.length + ':' + key
 
-		// non-enumerable markers clone by reference, so they key by identity
+		const hidden = !allEnumerable && !isEnumerable.call(value, key)
+
+		// non-enumerable markers key by identity, `~cookieFrom` by structure
 		out +=
-			!allEnumerable && !isEnumerable.call(value, key)
+			hidden && key !== '~cookieFrom'
 				? '!' + byRefKey(property, state)
-				: '=' + fingerprint(property, seen, state)
+				: (hidden ? '~' : '=') + fingerprint(property, seen, state)
 	}
 
 	if (Object.getOwnPropertySymbols(value).length) state.bail = true

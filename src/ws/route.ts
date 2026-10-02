@@ -21,7 +21,8 @@ import {
 	hasSyncHmac,
 	parseCookieRaw,
 	parseCookieRawDeferred,
-	parseCookieRawLazy
+	parseCookieRawLazy,
+	signCookieValues
 } from '../cookie/utils'
 import {
 	deriveModes,
@@ -31,8 +32,10 @@ import {
 import {
 	composeRouteHook,
 	localMacroRoot,
-	resolveWSLocalHook
+	resolveWSLocalHook,
+	routeShape
 } from '../compile/handler'
+import { Capture, Compiled, aotDrift, warnAotDrift } from '../compile/aot'
 
 import {
 	ElysiaWS,
@@ -59,6 +62,7 @@ import {
 	resolveStatus,
 	statusFallbackBody
 } from '../handler/error'
+import { finalizeRouteError } from '../handler/utils'
 
 import { isBun } from '../universal/constants'
 import { mapResponse } from '../adapter/web-standard/handler'
@@ -377,16 +381,31 @@ export function buildWSRoute(
 
 	let validators: RouteValidator<any>
 
-	// fall through to RouteValidator when no frozen validator exists
-	// so the error surfaces as today
-	const frozenEager = isBridgeLive()
-		? undefined
-		: buildFrozenRouteValidator(
-				composed as any,
-				app,
-				'WS',
-				route[1] as string
-			)
+	const programId = frozenRootOf(app)['~programId']
+	const captured = Compiled.getHandler(programId, 'WS', route[1])
+	let live = false
+	if (Capture.isCapturing())
+		Capture.handler({
+			method: 'WS',
+			path: route[1],
+			alias: '',
+			code: '',
+			k: routeShape(composed, undefined, app)
+		})
+	else if (Compiled.hasProgram(programId)) {
+		const shape = routeShape(composed, undefined, app)
+		live = shape === undefined || captured?.k !== shape
+	}
+
+	const frozenEager =
+		isBridgeLive() || live
+			? undefined
+			: buildFrozenRouteValidator(
+					composed as any,
+					app,
+					'WS',
+					route[1] as string
+				)
 
 	if (frozenEager) validators = frozenEager as any
 	else
@@ -394,16 +413,17 @@ export function buildWSRoute(
 			validators = new RouteValidator(composed as any, {
 				models: frozenRootOf(app)['~ext']?.models,
 				app,
-				// same app-level resolution HTTP uses: both are enforcement
-				// controls, and binding on one transport only is a gap
+				// `normalize` and `sanitize` are not used in the WS validator, but they are included here for consistency with the HTTP validator
 				normalize: frozenRootOf(app)['~config']?.normalize,
 				sanitize: frozenRootOf(app)['~config']?.sanitize,
 				schemas: (composed as { schemas?: any }).schemas,
-				aot: { method: 'WS', path: route[1] },
+				aot: live ? undefined : { method: 'WS', path: route[1] },
 				eager: frozenRootOf(app)['~config']?.precompile
 			})
 		} catch (error) {
 			if (!isBridgeNotInitialized(error)) throw error
+			if (live)
+				throw new Error(aotDrift('WS', route[1]), { cause: error })
 
 			const frozen = buildFrozenRouteValidator(
 				composed as any,
@@ -415,6 +435,8 @@ export function buildWSRoute(
 
 			validators = frozen as any
 		}
+
+	if (live && captured) warnAotDrift('WS', route[1])
 
 	const responseValidator = validators.response as
 		| { [status: number]: WSValidatorLike }
@@ -433,8 +455,8 @@ export function buildWSRoute(
 	const queryArray = queryChannels?.array
 	const queryObject = queryChannels?.object
 
-	// No compact prefix: only the HTTP JIT runs `~beforeHandlePrefix`, so here
-	// the inherited `beforeHandle` (auth) would silently never run
+	// No compact prefix: only the HTTP JIT runs `~beforeHandlePrefix`
+	// so `beforeHandle` (auth) would silently never run
 	const flatAppHook =
 		(composeRouteHook(
 			instance,
@@ -520,20 +542,34 @@ export function buildWSRoute(
 		validators.cookie || inference.cookie
 			? compileCookieConfig(
 					composed.cookie as any,
-					frozenRootOf(app)['~config']?.cookie as any
+					frozenRootOf(app)['~config']?.cookie as any,
+					frozenRootOf(app)['~ext']?.models,
+					(composed as { schemas?: any }).schemas
 				)
 			: undefined
+
+	// sign like an HTTP route when a hook or error answers with HTTP
+	const signCookies = cookieConfig?.hasSign
+		? (set: Context['set']) => signCookieValues(set.cookie, cookieConfig)
+		: undefined
 
 	const parseMessage = createMessageParser(parseHooks as any)
 
 	const handleUpgradeError = createErrorHandler(
 		errorHandlers.length ? (errorHandlers as any) : undefined,
-		((response: unknown, set: Context['set'], context?: Context) =>
-			mapResponse(
-				response,
-				set,
-				(context as { request?: Request } | undefined)?.request
-			)) as any,
+		((response: unknown, set: Context['set'], context?: Context) => {
+			const map = () =>
+				mapResponse(
+					response,
+					set,
+					(context as { request?: Request } | undefined)?.request
+				)
+
+			// a failed sign drops signed cookies and throws to the fallback
+			const pending = signCookies?.(set)
+
+			return pending ? pending.then(map) : map()
+		}) as any,
 		frozenRootOf(app)['~config']?.allowUnsafeValidationDetails
 	)
 
@@ -864,6 +900,9 @@ export function buildWSRoute(
 				} else if (r !== undefined) {
 					if (r instanceof Response) return r
 
+					// a failed sign throws: a 500
+					if (signCookies) await signCookies((context as any).set)
+
 					return mapResponse(
 						r,
 						(context as any).set,
@@ -913,9 +952,17 @@ export function buildWSRoute(
 					status: 400
 				})
 		} catch (error) {
-			return handleUpgradeError(context, error as Error) as
-				| Response
-				| Promise<Response>
+			try {
+				return (await handleUpgradeError(
+					context,
+					error as Error
+				)) as Response
+			} catch (thrown) {
+				// a throwing error hook falls to the app-level fallback
+				return finalizeRouteError(app, context, thrown, signCookies) as
+					| Response
+					| Promise<Response>
+			}
 		}
 	}
 

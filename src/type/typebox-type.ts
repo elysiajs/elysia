@@ -1,12 +1,20 @@
 import type {
 	Codec as CodecType,
+	Composite as CompositeType,
 	Decode as DecodeType,
 	Evaluate as EvaluateType,
+	Interface as InterfaceType,
 	Intersect as IntersectType,
+	Mapped as MappedType,
 	Module as ModuleType,
 	Null as NullType,
+	Omit as OmitType,
+	Partial as PartialType,
+	Pick as PickType,
+	ReadonlyObject as ReadonlyObjectType,
 	Ref as RefType,
 	Refine as RefineType,
+	Required as RequiredType,
 	Undefined as UndefinedType,
 	Unsafe as UnsafeType
 } from 'typebox/type'
@@ -83,13 +91,23 @@ function stub<T>(get: () => T): T {
 }
 
 export let Codec: typeof CodecType = stub(() => Codec)
+export let Composite: typeof CompositeType = stub(() => Composite)
 export let Decode: typeof DecodeType = stub(() => Decode)
 export let Evaluate: typeof EvaluateType = stub(() => Evaluate)
+export let Interface: typeof InterfaceType = stub(() => Interface)
 export let Intersect: typeof IntersectType = stub(() => Intersect)
+export let Mapped: typeof MappedType = stub(() => Mapped)
 export let Module: typeof ModuleType = stub(() => Module)
 export let Null: typeof NullType = stub(() => Null)
+export let Omit: typeof OmitType = stub(() => Omit)
+export let Partial: typeof PartialType = stub(() => Partial)
+export let Pick: typeof PickType = stub(() => Pick)
+export let ReadonlyObject: typeof ReadonlyObjectType = stub(
+	() => ReadonlyObject
+)
 export let Ref: typeof RefType = stub(() => Ref)
 export let Refine: typeof RefineType = stub(() => Refine)
+export let Required: typeof RequiredType = stub(() => Required)
 export let Undefined: typeof UndefinedType = stub(() => Undefined)
 export let Unsafe: typeof UnsafeType = stub(() => Unsafe)
 
@@ -100,13 +118,21 @@ export function injectTypeboxType(typebox: TypeboxTypeNamespaces) {
 	namespaces = typebox
 
 	Codec = typebox.type.Codec
+	Composite = typebox.type.Composite
 	Decode = typebox.type.Decode
 	Evaluate = typebox.type.Evaluate
+	Interface = typebox.type.Interface
 	Intersect = typebox.type.Intersect
+	Mapped = typebox.type.Mapped
 	Module = typebox.type.Module
 	Null = typebox.type.Null
+	Omit = typebox.type.Omit
+	Partial = typebox.type.Partial
+	Pick = typebox.type.Pick
+	ReadonlyObject = typebox.type.ReadonlyObject
 	Ref = typebox.type.Ref
 	Refine = typebox.type.Refine
+	Required = typebox.type.Required
 	Undefined = typebox.type.Undefined
 	Unsafe = typebox.type.Unsafe
 

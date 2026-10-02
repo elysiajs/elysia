@@ -20,6 +20,17 @@ import { Form } from './elysia/form'
 import { Integer } from './elysia/integer'
 import { Intersect } from './elysia/intersect'
 import { IntegerString } from './elysia/integer-string'
+import {
+	CompositeType,
+	EvaluateType,
+	InterfaceType,
+	MappedType,
+	OmitType,
+	PartialType,
+	PickType,
+	ReadonlyObjectType,
+	RequiredType
+} from './elysia/keep-config'
 import { MaybeEmpty } from './elysia/maybe-empty'
 import { NoValidate } from './elysia/no-validate'
 import { Nullable } from './elysia/nullable'
@@ -99,14 +110,18 @@ export const t = lazyNamespace<TypeBuilder>(() => loadTypeNamespace().type, {
 	ArrayString,
 	Boolean: BooleanType,
 	BooleanString,
+	Composite: CompositeType,
 	Cookie,
 	Date: DateType,
+	Evaluate: EvaluateType,
 	File,
 	Files,
 	Form,
 	Integer,
+	Interface: InterfaceType,
 	Intersect,
 	IntegerString,
+	Mapped: MappedType,
 	MaybeEmpty,
 	NoValidate,
 	Nullable,
@@ -115,8 +130,13 @@ export const t = lazyNamespace<TypeBuilder>(() => loadTypeNamespace().type, {
 	NumericEnum,
 	Object: ObjectType,
 	ObjectString,
+	Omit: OmitType,
 	Optional,
+	Partial: PartialType,
+	Pick: PickType,
 	Problem,
+	ReadonlyObject: ReadonlyObjectType,
+	Required: RequiredType,
 	String: StringType,
 	Uint8Array: Uint8ArrayType,
 	Union,

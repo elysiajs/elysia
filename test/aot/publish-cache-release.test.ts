@@ -3,6 +3,7 @@ import { describe, it, expect, afterEach } from 'bun:test'
 import { createContext, Elysia, t } from '../../src'
 import { websocket } from '../../src/plugin/websocket'
 import { Compiled, createAotFingerprint } from '../../src/compile/aot'
+import { routeShape } from '../../src/compile/handler'
 import { abortCapture } from '../../src/compile/aot-capture'
 import { buildRouteTable, RouteFlag } from '../../src/route-table'
 
@@ -33,7 +34,9 @@ const registerDuplicateManifest = (path: string) => {
 				[PROBE_PATH]: { a: [], f: () => () => new Response() },
 				[path]: {
 					a: [],
-					f: () => () => new Response('manifest winner')
+					f: () => () => new Response('manifest winner'),
+					// built from the same bare sync route
+					k: routeShape(undefined, () => {}, new Elysia())
 				}
 			}
 		}
@@ -694,18 +697,18 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 		expect(result.live).toBe(false)
 		expect(result.programAlive).toBe(true)
 
-		expect(result.loser.message).toContain('Duplicate route')
+		expect(result.loser.message).toContain('requires live compilation')
 		expect(result.loser.message).toContain(
 			'TypeBox bridge is not initialized'
 		)
 		// the underlying bridge error is preserved, not swallowed
 		expect(result.loser.cause).toContain("Typebox module isn't initialized")
 
-		// the non-duplicate route keeps the existing (recoverable) behaviour
-		expect(result.winner.message).toContain(
+		// the winner has no record either: it may not borrow a frozen validator
+		expect(result.winner.message).toContain('requires live compilation')
+		expect(result.winner.cause).toContain(
 			"Typebox module isn't initialized"
 		)
-		expect(result.winner.message).not.toContain('duplicate route')
 	})
 
 	it('keeps the program alive outside production (dev hot-reload rebuilds need caches)', async () => {

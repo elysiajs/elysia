@@ -54,7 +54,7 @@ Breaking Change:
 - AOT plugin `transform` hook and the rspack loader are now synchronous
 - AOT: `compileToSource` / `captureArtifacts` drop the `register` option and always emit the self-registering manifest (the `export const validators` / `handlers` / `groups` / `groupOf` / default-export form is gone)
 - AOT: remove `CompiledProgramRegistration.bf` and the `Compiled.reconstruct` getter (the setter stays)
-- AOT manifest format is now 5: an artifact built before this change is rejected at startup with `[elysia-aot] Registered manifest fingerprint mismatch: abi (…)`; rebuild it
+- AOT manifest format is now 6: an artifact built before this change is rejected at startup with `[elysia-aot] Mismatch fingerprint`; rebuild it
 - remove `ElysiaConfig.handler` (`handler.standardHostname` was ignored; the path is taken from the request URL)
 - `.mount()` no longer takes a `{ detail }` argument; a mounted route is always `detail: { hide: true }`
 - remove the `NonResolvableMacroKey` type
@@ -70,6 +70,8 @@ Breaking Change:
 
 Behavior Change:
 
+- AOT: a route whose runtime hooks, schemas, cookie signing or app config differ from the build now compiles at runtime and warns once (`[elysia-aot] GET /x differs from the AOT build, compiled at runtime`); with the handler JIT stripped it fails instead (a `500` on first request, or at boot under `precompile` / `.compile()`). A route whose schema cannot be compared (a custom prototype, a symbol key, a cycle) is never replayed. A conditional hook must change the hook list (`isProd ? [auth] : []`), never swap one function for another at the same position, and the runtime bundle must keep native `async` functions
+- a cookie schema whose signing config can't be resolved unambiguously now throws at compile: a `$ref` signing can't follow (JSON pointer, anchor, URL, unknown name, `$dynamicRef`, `$recursiveRef`), or same-named definitions that disagree on anything but `sign`
 - the 1.x `(path, handler, hook)` argument order now throws at registration instead of serving the hook object as the response, including a hook that only enables macros (`{ auth: true }`)
 - `.macro(name, definition)` and `.macro(fn)` now throw at registration instead of silently registering nothing
 - writing `set.redirect` now throws in development — production is unchanged, so a 1.x auth-redirect guard still serves the body it was protecting; `set.redirect` is typed as a `@deprecated` `never`, so assigning a URL is a type error that points at `redirect(url)`
@@ -136,6 +138,11 @@ Improvement:
 - an `.error()` hook no longer disqualifies static-literal `GET` routes from Bun native static promotion: those routes are now promoted even when a global or route-local `.error()` hook exists, because no user code runs on a promoted route and the hook can therefore never fire for it. `afterResponse`, `mapResponse`, `parse`, `transform`, schemas, `trace` and every other hook still keep the route on the JS lane. Since Bun's native static table now serves more routes, be aware that a promoted route answers `HEAD` (200) and conditional `GET` (`If-None-Match` matching Bun's `etag` -> 304) natively, without reaching the JS lane or your `.error()` hook (see Known issue)
 
 Bug fix:
+- AOT replay ran the build's frozen route when the runtime app registered different hooks or schemas: a `beforeHandle`, `derive`, `error` or `mapResponse` added at runtime (by a plugin, guard, macro or root hook) was skipped, a new or tightened validator and response redaction were not applied (HTTP and WebSocket), runtime cookie signing accepted unsigned cookies, and runtime default headers were dropped
+- cookie signing config was ignored when the cookie schema reached the route indirectly (a model name, `t.Ref`, a guard, a macro, a plugin model, `t.Intersect` / `t.Union`): forged unsigned cookies were accepted and outgoing cookies were not signed, on HTTP, WebSocket upgrades and AOT replay
+- `t.Partial`, `t.Required`, `t.Pick`, `t.Omit`, `t.ReadonlyObject`, `t.Composite`, `t.Interface`, `t.Mapped` and `t.Evaluate` dropped a `t.Cookie` signing config
+- cookies set before a WebSocket upgrade answers with an HTTP response (a hook return, validation or error response) are now signed like HTTP routes, and fail closed when signing fails
+- a route with a non-literal path made every Eden path type-check; it now adds nothing to the route types
 - a response schema violation whose custom `error` callback throws answered `422` in development; it now answers the masked `500` like every other response violation
 - return 415 when unsure about content-type
 - `context.server` now receives the active Bun server for socket requests and is `null` for direct `app.handle()`

@@ -103,12 +103,15 @@ const materialiseHandlersForReplay = (
 ): HandlerManifest => {
 	const manifest: HandlerManifest = {}
 	for (const h of captured) {
+		// WS records have no handler
+		if (!h.code) continue
 		;(manifest[h.method] ??= {})[h.path] = {
 			a: h.alias ? h.alias.split(',') : [],
 			// eslint-disable-next-line sonarjs/code-eval
 			f: new Function(
 				`return ${Source.handlerFactory(h.alias, h.code)}`
-			)() as any
+			)() as any,
+			k: h.k
 		}
 	}
 
@@ -599,18 +602,33 @@ function emitModule(
 	}
 
 	const aliasRef = new Map<string, string>()
+	const factoryRef = new Map<string, string>()
 	const handlerRef = new Map<string, string>()
 
 	let handlerDecls = ''
 	const handlerTree = nullObject() as Record<string, Record<string, string>>
 
 	for (const h of handlers) {
+		// without a shape the route never replays
+		const k = h.k === undefined ? '' : `k: ${JSON.stringify(h.k)}`
+
+		// a WS route records only its shape
+		if (!h.code) {
+			;(handlerTree[h.method] ??= {})[h.path] = `{ ${k} }`
+			continue
+		}
+
 		const src = Source.handlerFactory(h.alias, h.code)
 
-		let wref = handlerRef.get(src)
-		if (wref === undefined) {
-			const n = handlerRef.size
+		let fref = factoryRef.get(src)
+		if (fref === undefined) {
+			fref = `_h${factoryRef.size}`
+			factoryRef.set(src, fref)
+			handlerDecls += `const ${fref} = ${src}\n`
+		}
 
+		let wref = handlerRef.get(fref + k)
+		if (wref === undefined) {
 			let aref = aliasRef.get(h.alias)
 			if (aref === undefined) {
 				aref = `_a${aliasRef.size}`
@@ -620,9 +638,9 @@ function emitModule(
 				)}\n`
 			}
 
-			wref = `_w${n}`
-			handlerRef.set(src, wref)
-			handlerDecls += `const _h${n} = ${src}\nconst ${wref} = { a: ${aref}, f: _h${n} }\n`
+			wref = `_w${handlerRef.size}`
+			handlerRef.set(fref + k, wref)
+			handlerDecls += `const ${wref} = { a: ${aref}, f: ${fref}, ${k} }\n`
 		}
 
 		;(handlerTree[h.method] ??= {})[h.path] = wref

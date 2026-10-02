@@ -58,7 +58,7 @@ describe('AOT unplugin Vite adapter', () => {
 		expect(/setupTypebox/.test(vt)).toBe(false)
 		expect(
 			vt.split('\n').filter((l) => l.startsWith('export')).length
-		).toBe(29)
+		).toBe(38)
 		expect(vt).toBe(native.load(native.resolveId('elysia/type')!)!)
 
 		expect(

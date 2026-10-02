@@ -110,8 +110,7 @@ const handlerParams = (): Record<string, Resolver | undefined> =>
 	va: (c) => c.vali,
 	// returned-error forwarder
 	fe: () => forwardError,
-	// `fe` that also rethrows a registered non-Error class. Not in
-	// `hookStateAliases`: own error hooks holding one also link `er`
+	// `fe` that also rethrows a registered non-Error class
 	ie: (c) => {
 		const classes = returnedErrorClasses(c.hook as any, c.root)
 		return classes ? forwardErrorOf(classes) : forwardError

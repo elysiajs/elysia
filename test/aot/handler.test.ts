@@ -144,9 +144,9 @@ describe('AOT handler freeze', () => {
 	})
 })
 
-/** Same-shape routes share their factory, aliases, and manifest wrapper. */
+/** same-code routes share a factory and aliases, same-shape ones a wrapper */
 describe('AOT handler emit dedup', () => {
-	it('shares the factory, alias, and wrapper across same-shape routes', async () => {
+	it('shares the factory and alias across same-code routes, the wrapper per route shape', async () => {
 		const app = new Elysia()
 			.beforeHandle(() => {})
 			.post(
@@ -174,11 +174,41 @@ describe('AOT handler emit dedup', () => {
 		const src = await compileToSource(app as any)
 		delete process.env.ELYSIA_AOT_BUILD
 
+		// one emitted factory, but each body schema is its own route shape
 		expect((src.match(/const _h\d+ =/g) ?? []).length).toBe(1)
 		expect((src.match(/const _a\d+ =/g) ?? []).length).toBe(1)
-		expect((src.match(/const _w\d+ =/g) ?? []).length).toBe(1)
-		expect(src).toMatch(/_w0 = \{ a: _a0, f: _h0 \}/)
-		expect((src.match(/: _w0\b/g) ?? []).length).toBe(3)
+		expect(
+			(
+				src.match(
+					/const _w\d+ = \{ a: _a0, f: _h0, k: \d+ \}/g
+				) ?? []
+			).length
+		).toBe(3)
+
+		// the same schema three times is one shape: one wrapper
+		const same = new Elysia()
+			.beforeHandle(() => {})
+			.post(
+				'/a',
+				{ body: t.Object({ a: t.String() }) },
+				({ body }: any) => body
+			)
+			.post(
+				'/b',
+				{ body: t.Object({ a: t.String() }) },
+				({ body }: any) => body
+			)
+			.post(
+				'/c',
+				{ body: t.Object({ a: t.String() }) },
+				({ body }: any) => body
+			)
+		process.env.ELYSIA_AOT_BUILD = '1'
+		const sameSrc = await compileToSource(same as any)
+		delete process.env.ELYSIA_AOT_BUILD
+
+		expect((sameSrc.match(/const _w\d+ =/g) ?? []).length).toBe(1)
+		expect((sameSrc.match(/: _w0\b/g) ?? []).length).toBe(3)
 	})
 })
 

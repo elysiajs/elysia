@@ -10,11 +10,12 @@ class CustomError<T extends string> extends HTTPError.id('CUSTOM_ERROR') {
 	}
 }
 
-const app = new Elysia()
-	.get('/', () => Math.random() > 0.5 ? new CustomError('q') : 'ok')
-	.listen(3000)
+const app = new Elysia().get('/', () =>
+	Math.random() > 0.5 ? new CustomError('q') : 'ok'
+)
 
+app.handle('/')
+	.then((res) => res.status)
+	.then(console.log)
 
-
-
-type a = (typeof app['~Routes'])['get']['response']
+type a = (typeof app)['~Routes']['get']['response']

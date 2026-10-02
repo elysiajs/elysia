@@ -8,7 +8,11 @@ import {
 	endValidatorCapture,
 	endHandlerCapture
 } from '../../src/compile/aot-capture'
-import { materialise, registerManifest } from '../aot/_manifest'
+import {
+	materialise,
+	materialiseHandlers,
+	registerManifest
+} from '../aot/_manifest'
 import { newWebsocket, wsOpen, wsMessage, wsClosed } from './utils'
 
 // Frozen WebSocket builds capture and reuse body, query, and response validators.
@@ -53,14 +57,16 @@ const buildCodec = () =>
 	})
 
 // `.use(websocket()).ws()` returns AddWSRoute, so builders use the concrete value through `any`.
+// the route record carries the WS route's shape, or it validates live not frozen
 const captureManifest = (builder: () => any) => {
 	process.env.ELYSIA_AOT_BUILD = '1'
 	endValidatorCapture()
 	endHandlerCapture()
 	;(builder() as any).compile()
 	const captured = endValidatorCapture()
+	const handlers = materialiseHandlers(endHandlerCapture())
 	delete process.env.ELYSIA_AOT_BUILD
-	return captured
+	return { captured, handlers }
 }
 
 const sendBody = async (app: any, payload: string): Promise<string> => {
@@ -88,12 +94,12 @@ describe('AOT WebSocket schemas', () => {
 	})
 
 	it('reuses captured validators instead of recompiling them', () => {
-		const captured = captureManifest(build)
+		const { captured, handlers } = captureManifest(build)
 
 		Validator.clear()
 		// Register the frozen manifest as a generated module would; the next
 		// build claims it through its own `~programId` (program lane).
-		registerManifest({ validators: materialise(captured) })
+		registerManifest({ validators: materialise(captured), handlers })
 
 		// A successful build alone cannot distinguish reuse from recompilation.
 		const original = Compiled.getValidator
@@ -131,10 +137,10 @@ describe('AOT WebSocket schemas', () => {
 		})
 		const INVALID = JSON.stringify({ when: 'not-a-date', n: 'abc' })
 
-		const captured = captureManifest(buildCodec)
+		const { captured, handlers } = captureManifest(buildCodec)
 		Validator.clear()
 		// Register the frozen manifest; `buildCodec()` below claims it.
-		registerManifest({ validators: materialise(captured) })
+		registerManifest({ validators: materialise(captured), handlers })
 
 		const frozenApp = buildCodec().listen(0)
 		await Bun.sleep(0)

@@ -47,7 +47,7 @@ const compile = (index: number) => {
 }
 
 // index 0 is the duplicate LOSER (the earlier registration) ⇒ `liveOnly`;
-// index 1 is the winner ⇒ ordinary bridge-not-initialized path.
+// index 1 is the winner, no manifest record either ⇒ also `liveOnly`
 // Duplicate losers are not reachable through dispatch, so compile directly.
 const loser = compile(0)
 const winner = compile(1)

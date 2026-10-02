@@ -46,7 +46,7 @@ export abstract class Reconstrct {
 
 			if (liveOnly)
 				throw new Error(
-					'Duplicate route must compile JIT but the TypeBox bridge is not initialized',
+					'Route requires live compilation but the TypeBox bridge is not initialized',
 					{ cause: error }
 				)
 
@@ -58,9 +58,13 @@ export abstract class Reconstrct {
 	}
 
 	static cookie(hook: AnyLocalHook, root: AnyElysia) {
+		const frozenRoot = frozenRootOf(root)
+
 		return compileCookieConfig(
 			hook?.cookie as any,
-			frozenRootOf(root)['~config']?.cookie as any
+			frozenRoot['~config']?.cookie as any,
+			frozenRoot['~ext']?.models,
+			hook?.schemas as any
 		)
 	}
 

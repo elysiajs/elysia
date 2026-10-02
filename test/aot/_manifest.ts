@@ -104,7 +104,10 @@ export const materialiseHandlers = (
 	for (const h of captured) {
 		;(m[h.method] ??= {})[h.path] = {
 			a: h.alias ? h.alias.split(',') : [],
-			f: fn(Source.handlerFactory(h.alias, h.code)) as any
+			f: h.code
+				? (fn(Source.handlerFactory(h.alias, h.code)) as any)
+				: undefined,
+			k: h.k
 		}
 	}
 	return m

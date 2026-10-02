@@ -7,7 +7,6 @@ import type { Validator } from '../../validator'
 
 import { isAsyncFunction, isAsyncLifecycle, mayReturnPromise } from '../utils'
 
-import { compileCookieConfig } from '../../cookie/config'
 import type { CompiledCookieConfig } from '../../cookie/config'
 import { hasSyncHmac } from '../../cookie/utils'
 
@@ -19,6 +18,7 @@ import {
 	traceCapabilityRequired
 } from '../../generation'
 import { JITProbe } from '../jit-probe'
+import { Reconstrct } from './reconstruct'
 
 import { isNotEmpty, type CompactBeforeHandlePrefix } from '../../utils'
 import type { AnyLocalHook, MaybeArray } from '../../types'
@@ -238,10 +238,9 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 	const queryValiIsAsync = vali?.query && isAsyncValidator(vali.query)
 	const cookieValidIsAsync = vali?.cookie && isAsyncValidator(vali.cookie)
 
-	const appCookieConfig = frozenRootOf(root)['~config']?.cookie
 	const needsCookie = !!vali?.cookie || !!inference.cookie
 	const cookieConfig = needsCookie
-		? compileCookieConfig(hook?.cookie as any, appCookieConfig as any)
+		? Reconstrct.cookie(hook as any, root)
 		: undefined
 	const hasCookieSign = !!cookieConfig?.hasSign
 

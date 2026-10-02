@@ -359,6 +359,8 @@ export interface CompileHandlerJitOptions {
 	 * The JIT no longer re-derives these facts; it names its emissions off them.
 	 */
 	state: RouteCompileState
+	/** `routeShape`, recorded with the captured code */
+	shape?: number
 }
 
 export function compileHandlerJit(
@@ -378,7 +380,8 @@ export function compileHandlerJit(
 		isStaticResponse,
 		isPromiseHandler,
 		errorClasses,
-		state
+		state,
+		shape
 	} = options
 	const {
 		vali,
@@ -1334,7 +1337,7 @@ export function compileHandlerJit(
 
 	const alias = aliasKeys.join(',')
 	const fullAlias = alias ? `rt,fre,${alias}` : 'rt,fre'
-	Capture.handler({ method, path, alias: fullAlias, code })
+	Capture.handler({ method, path, alias: fullAlias, code, k: shape })
 	onEmit?.(code)
 	const isGeneratorHandler =
 		isHandleFunction &&

@@ -1,5 +1,5 @@
 import '../../src/compile/aot-capture'
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { Compiled, createAotFingerprint } from '../../src/compile/aot'
@@ -101,11 +101,8 @@ describe('AOT manifest ownership and compiler sessions', () => {
 		expect(frozenFactoryCalls).toBe(1)
 	})
 
-	// The reachable bypass: whichever app builds first claims, whoever it is.
-	// A foreign claimant then rejects its own valid body and accepts the
-	// manifest owner's — a silent request-validation bypass in exactly the
-	// configuration AOT exists for. The owner always builds at boot, so that
-	// is where the process is made to die.
+	// whichever app builds first claims; a foreign claimant must keep its own
+	// validator, but the owner always builds at boot, so the process dies there
 	it('fails the displaced owner when a foreign app claimed first', async () => {
 		await register()
 
@@ -114,11 +111,16 @@ describe('AOT manifest ownership and compiler sessions', () => {
 			{ body: t.Object({ b: t.Number() }) },
 			({ body }) => body
 		)
-		void foreign.fetch
+		const warn = spyOn(console, 'warn').mockImplementation(() => {})
+		try {
+			void foreign.fetch
+		} finally {
+			warn.mockRestore()
+		}
 
-		// the symptom being guarded: `foreign` runs appA's frozen validator
-		expect((await foreign.handle('/x', json({ b: 1 }))).status).toBe(422)
-		expect((await foreign.handle('/x', json({ a: 'x' }))).status).toBe(200)
+		// `foreign` validates its own body, never appA's frozen validator
+		expect((await foreign.handle('/x', json({ b: 1 }))).status).toBe(200)
+		expect((await foreign.handle('/x', json({ a: 'x' }))).status).toBe(422)
 
 		expect(() => void buildA().fetch).toThrow('one app per process')
 	})
@@ -148,7 +150,7 @@ describe('AOT manifest ownership and compiler sessions', () => {
 			handlers
 		})
 
-		expect(() => void buildA().fetch).toThrow('abi')
+		expect(() => void buildA().fetch).toThrow('Mismatch fingerprint')
 	})
 
 	// Format 5 dropped the manifest `bf` field and changed the emitted trace
@@ -170,7 +172,7 @@ describe('AOT manifest ownership and compiler sessions', () => {
 		} as any)
 
 		expect(() => void buildA().fetch).toThrow(
-			`[elysia-aot] Registered manifest fingerprint mismatch: abi (manifest ${stale}, app ${app}).`
+			'[elysia-aot] Mismatch fingerprint'
 		)
 	})
 

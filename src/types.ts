@@ -2025,6 +2025,14 @@ export type CreateEden<
 		? Property
 		: _CreateEden<Path, Property>
 
+// a `string` path can't be addressed by Eden and would widen `~Routes`
+// into an index signature, so it adds no route
+type CreateRouteEden<
+	BasePath extends string,
+	Path extends string,
+	Property extends Record<string, unknown>
+> = string extends Path ? {} : CreateEden<JoinPath<BasePath, Path>, Property>
+
 type _CreateEden<
 	Path extends string,
 	Property extends Record<string, unknown> = {}
@@ -2868,8 +2876,9 @@ export type AddRoute<
 	Definitions,
 	Metadata,
 	Routes &
-		CreateEden<
-			JoinPath<BasePath, Path>,
+		CreateRouteEden<
+			BasePath,
+			Path,
 			{
 				[method in Method]: WithHandledErrors<
 					CreateEdenResponse<
@@ -3232,8 +3241,9 @@ export type AddWSRoute<
 	Definitions,
 	Metadata,
 	Routes &
-		CreateEden<
-			JoinPath<BasePath, Path>,
+		CreateRouteEden<
+			BasePath,
+			Path,
 			{
 				subscribe: CreateWSEdenResponse<
 					Path,

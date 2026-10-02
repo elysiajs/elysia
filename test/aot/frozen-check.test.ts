@@ -6,9 +6,15 @@ import { Validator } from '../../src/validator'
 import { Compiled, type ValidatorManifest } from '../../src/compile/aot'
 import {
 	beginValidatorCapture,
+	endHandlerCapture,
 	endValidatorCapture
 } from '../../src/compile/aot-capture'
-import { claimManifest, materialise, registerManifest } from './_manifest'
+import {
+	claimManifest,
+	materialise,
+	materialiseHandlers,
+	registerManifest
+} from './_manifest'
 import { post, json } from '../utils'
 
 /** Frozen checks are selected by method, path, and validator slot. */
@@ -56,7 +62,10 @@ describe('frozen validator checks', () => {
 	})
 
 	it('binds the captured check before serving requests', async () => {
+		endHandlerCapture()
 		const m = captureManifest(bodyApp)
+		// a route replays its validators only with its own record
+		const handlers = materialiseHandlers(endHandlerCapture())
 		Validator.clear()
 
 		let frozenBound = false
@@ -65,7 +74,7 @@ describe('frozen validator checks', () => {
 			frozenBound = true
 			return (orig as any)(...d)
 		}) as any
-		registerManifest({ validators: m })
+		registerManifest({ validators: m, handlers })
 
 		const app = bodyApp()
 		app.compile()
