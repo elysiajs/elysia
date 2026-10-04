@@ -1,4 +1,4 @@
-/** Runs `Reconstrct.validator` with the TypeBox bridge deliberately unwired. */
+/** Runs `Reconstruct.validator` with the TypeBox bridge deliberately unwired. */
 import { readFileSync } from 'node:fs'
 
 import { type CapturedValidator } from '../../../src/compile/aot'
@@ -9,7 +9,7 @@ const out = (tag: string, data: unknown) =>
 	console.log(tag, JSON.stringify(data))
 
 // The bridge must remain unwired for this process to isolate the
-// `!isBridgeLive()` branch in `Reconstrct.validator`.
+// `!isBridgeLive()` branch in `Reconstruct.validator`.
 try {
 	hasTypes([], { '~kind': 'Object' } as any)
 	out('BRIDGE', 'wired')
@@ -31,16 +31,16 @@ const claimed = claimManifest({ validators: materialise(payload.captured) })
 const hook = { body: payload.schema } as any
 const root = { ...claimed, '~config': {}, '~ext': {} } as any
 
-// Exercise the actual detour site directly: `Reconstrct.validator` must
+// Exercise the actual detour site directly: `Reconstruct.validator` must
 // either return a frozen validator without ever wiring the bridge, or
 // (when reconstruction is impossible) surface the same
 // "Typebox module isn't initialized" error the wired path would throw.
-const { Reconstrct } = await import(
+const { Reconstruct } = await import(
 	'../../../src/compile/handler/reconstruct'
 )
 
 try {
-	const result = Reconstrct.validator(
+	const result = Reconstruct.validator(
 		hook,
 		root,
 		payload.method as any,

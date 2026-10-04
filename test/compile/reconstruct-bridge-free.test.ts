@@ -14,7 +14,7 @@ import {
 } from '../../src/compile/aot-capture'
 
 /**
- * `Reconstrct.validator` (src/compile/handler/reconstruct.ts) branches on
+ * `Reconstruct.validator` (src/compile/handler/reconstruct.ts) branches on
  * `!isBridgeLive()`. Once any file in a `bun test` run imports `t` from
  * 'elysia', the bridge is wired for the rest of that process (see
  * src/type/index.ts's top-level `setupTypebox()`), so the only reliable way
@@ -84,7 +84,7 @@ function runChild(payloadFile: string) {
 	return { proc, parsed }
 }
 
-describe('Reconstrct.validator without a TypeBox bridge', () => {
+describe('Reconstruct.validator without a TypeBox bridge', () => {
 	it('returns a frozen validator at the detour site (reconstruct.ts:27-28), without wiring the bridge', () => {
 		const SCHEMA = {
 			'~kind': 'Object',

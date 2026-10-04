@@ -26,7 +26,7 @@ export interface CompiledCookieConfig {
 	legacySignature: boolean
 }
 
-const ATTRIBUTE_KEYS = new Set([
+const ATTRIBUTE_KEYS = new Set<string>([
 	'domain',
 	'expires',
 	'httpOnly',
@@ -36,24 +36,18 @@ const ATTRIBUTE_KEYS = new Set([
 	'sameSite',
 	'secure',
 	'partitioned'
-] as const)
+])
 
 function getAttributes(source: Partial<BaseCookie> | undefined) {
 	if (!source) return
 
-	const keys = Object.keys(source)
-	if (!keys.length) return
+	let out: Record<string, unknown> | undefined
 
-	let out: Partial<BaseCookie> | undefined
+	for (const key of Object.keys(source))
+		if (ATTRIBUTE_KEYS.has(key))
+			(out ??= nullObject())[key] = source[key as keyof BaseCookie]
 
-	for (const key of keys)
-		if (ATTRIBUTE_KEYS.has(key as any)) {
-			out ??= nullObject()
-			// @ts-expect-error
-			out[key] = (source as any)[key]
-		}
-
-	return out
+	return out as Partial<BaseCookie> | undefined
 }
 
 // an empty secret is a real HMAC under a zero-length key, which anyone can
@@ -71,40 +65,40 @@ interface Gathered {
 	fields: Record<string, AppCookieConfig>
 }
 
-const gathered = (): Gathered => ({
+const emptyGathered = (): Gathered => ({
 	config: nullObject(),
 	fields: nullObject()
 })
 
-// comparable form: no `sign`, sorted keys, `secrets` as a list
-function canonical(config: Record<string, any>) {
+// without `sign`, sorted keys, `secrets` as a list
+function comparableConfig(config: Record<string, any>) {
 	const out: Record<string, unknown> = nullObject()
 
 	for (const key of Object.keys(config).sort())
 		if (key !== 'sign')
-			out[key] = key === 'secrets' ? asList(config[key]) : config[key]
+			out[key] = key === 'secrets' ? listKey(config[key]) : config[key]
 
 	return out
 }
 
-// a candidate's config without `sign`, for comparison
-const unsigned = (from: Gathered) => {
+// string key of a candidate's config ignoring `sign`, for equality
+const signlessKey = (from: Gathered) => {
 	const fields: Record<string, unknown> = nullObject()
 	for (const name of Object.keys(from.fields).sort()) {
-		const field = canonical(from.fields[name])
+		const field = comparableConfig(from.fields[name])
 		if (Object.keys(field).length) fields[name] = field
 	}
 
-	return JSON.stringify([canonical(from.config), fields])
+	return JSON.stringify([comparableConfig(from.config), fields])
 }
 
-// unresolvable or ambiguous `$ref`
-const unclear = () =>
+const badRefError = () =>
 	new Error(
 		'[Elysia] Cookie schema `$ref` is unresolvable or ambiguous; use a model name or `$id` instead'
 	)
 
-const asList = (value: unknown) =>
+// a string and a one-item list compare equal
+const listKey = (value: unknown) =>
 	JSON.stringify(typeof value === 'string' ? [value] : value)
 
 function foldConfig(into: Record<string, any>, config: any) {
@@ -121,7 +115,7 @@ function foldConfig(into: Record<string, any>, config: any) {
 				([] as unknown[]).concat(prev, value)
 		else if (
 			(key === 'secrets' || key === 'legacySignature') &&
-			asList(prev) !== asList(value)
+			listKey(prev) !== listKey(value)
 		)
 			throw new Error(
 				`[Elysia] Merged cookie schemas disagree on \`${key}\``
@@ -141,9 +135,9 @@ export function compileCookieConfig(
 		...(schemas ?? []).map((schema) => schema?.cookie).reverse()
 	].map((schema) => (typeof schema === 'string' ? models?.[schema] : schema))
 
-	let targets: ReturnType<typeof refTargets> | undefined
+	let findTargets: ReturnType<typeof refTargets> | undefined
 	const resolve = (name: string) =>
-		(targets ??= refTargets(roots, models))(name)
+		(findTargets ??= refTargets(roots, models))(name)
 
 	const gather = (
 		schema: any,
@@ -163,7 +157,7 @@ export function compileCookieConfig(
 			schema.$dynamicRef !== undefined ||
 			schema.$recursiveRef !== undefined
 		)
-			throw unclear()
+			throw badRefError()
 
 		if (field === undefined) {
 			foldConfig(into.config, schema.config)
@@ -176,11 +170,11 @@ export function compileCookieConfig(
 			// ambiguous name: candidates must agree but `sign`
 			let first: string | undefined
 			for (const target of targets) {
-				const from = gathered()
+				const from = emptyGathered()
 				gather(target, from, field, path)
 
-				if ((first ??= unsigned(from)) !== unsigned(from))
-					throw unclear()
+				if ((first ??= signlessKey(from)) !== signlessKey(from))
+					throw badRefError()
 
 				foldConfig(into.config, from.config)
 				for (const name in from.fields)
@@ -204,7 +198,7 @@ export function compileCookieConfig(
 		path.delete(schema)
 	}
 
-	const route = gathered()
+	const route = emptyGathered()
 	for (const root of roots) gather(root, route, undefined, new Set())
 
 	const routeConfig = route.config
@@ -223,7 +217,7 @@ export function compileCookieConfig(
 
 	if (!defaults.path) defaults.path = '/'
 
-	const rawSign = routeConfig?.sign ?? appConfig?.sign
+	const rawSign = routeConfig.sign ?? appConfig?.sign
 	let globalSign: true | string[] | undefined
 
 	if (rawSign === undefined) globalSign = undefined
@@ -233,7 +227,7 @@ export function compileCookieConfig(
 	else globalSign = [rawSign]
 
 	const globalSecrets =
-		routeConfig?.secrets !== undefined
+		routeConfig.secrets !== undefined
 			? routeConfig.secrets
 			: appConfig?.secrets
 
@@ -295,13 +289,15 @@ export function compileCookieConfig(
 		hasSign,
 		verify: appConfig?.verify ?? 'lazy',
 		legacySignature:
-			(routeConfig?.legacySignature ?? appConfig?.legacySignature) !==
+			(routeConfig.legacySignature ?? appConfig?.legacySignature) !==
 			false
 	}
 }
 
-export const legacySignatureOf = (name: string, config: CompiledCookieConfig) =>
-	config.fields[name]?.legacySignature ?? config.legacySignature
+export const acceptsLegacySignature = (
+	name: string,
+	config: CompiledCookieConfig
+) => config.fields[name]?.legacySignature ?? config.legacySignature
 
 export function resolveSignSecrets(
 	name: string,

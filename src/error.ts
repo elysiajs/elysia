@@ -657,7 +657,6 @@ export class ValidationError extends ElysiaError {
 	}
 
 	get payload() {
-		// Response validation always reports a server error.
 		const server = this.type === 'response'
 
 		if (this.#productionDetail) {

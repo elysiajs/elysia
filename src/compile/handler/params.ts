@@ -59,8 +59,7 @@ interface HandlerParamContext {
 
 type Resolver = (c: HandlerParamContext) => unknown
 
-// Built on first AOT manifest reconstruction. Only staticCloneResolver is
-// allocated eagerly; the remaining resolver closures stay lazy.
+// Built on first AOT manifest reconstruction, non-AOT apps never allocate it
 let _handlerParams: Record<string, Resolver | undefined> | undefined
 
 const handlerParams = (): Record<string, Resolver | undefined> =>

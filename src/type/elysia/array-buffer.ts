@@ -1,5 +1,5 @@
 import { Refine, Unsafe } from '../typebox-type'
-import type { TSchema } from 'typebox'
+import type { Static, TSchema } from 'typebox'
 
 import { isEmpty } from '../../utils'
 import { ELYSIA_TYPES } from '../constants'
@@ -11,19 +11,19 @@ import {
 	type Refines as RefinesType
 } from './utils'
 
-// `base`, refined by `minByteLength` / `maxByteLength` when given
-export function bufferType(
+// `createBase()`, refined by `minByteLength` / `maxByteLength` when given
+export function bufferType<S extends TSchema>(
 	tag: ELYSIA_TYPES[keyof ELYSIA_TYPES],
-	base: () => TSchema
+	createBase: () => S
 ) {
-	let Base: TSchema | undefined
-	let empty: TSchema | undefined
+	let base: S | undefined
+	let empty: Readonly<S> | undefined
 
-	return (property?: ArrayBufferOptions): any => {
-		Base ??= base()
+	return (property?: ArrayBufferOptions): Readonly<S> => {
+		base ??= createBase()
 
 		if (!property || isEmpty(property))
-			return (empty ??= Object.freeze(elyType(tag, Base)))
+			return (empty ??= Object.freeze(elyType(tag, base)))
 
 		// `base` already refines the instance type
 		const refines: RefinesType<ArrayBufferLike> = []
@@ -42,7 +42,7 @@ export function bufferType(
 
 		return elyType(
 			tag,
-			withMeta(Refines(Base as any, refines as any), property)
+			withMeta(Refines(base, refines as RefinesType<Static<S>>), property)
 		)
 	}
 }
@@ -55,6 +55,6 @@ const arrayBuffer = /* @__PURE__ */ bufferType(ELYSIA_TYPES.ArrayBuffer, () =>
 	)
 )
 
-export function ArrayBufferType(property?: ArrayBufferOptions): any {
+export function ArrayBufferType(property?: ArrayBufferOptions) {
 	return arrayBuffer(property)
 }

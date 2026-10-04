@@ -112,7 +112,7 @@ function computedDestructuringChannel<K extends string>(
  * @internal Which `channelOf`-mapped members of a function's first parameter
  * the function may read, or `null` when any member may be read
  */
-export function inferFunction<K extends string>(
+export function inferParameterReads<K extends string>(
 	source: string,
 	channelOf: (value: string) => K | undefined,
 	// bail on any alias made by `=`: the scan does not follow it through a
@@ -383,7 +383,7 @@ export function sucrose(
 	let merged = false
 
 	const events: Handler[] = []
-	if (handler && typeof handler === 'function') events.push(handler)
+	if (typeof handler === 'function') events.push(handler)
 	if (lifeCycle)
 		for (const name of lifeCycleEvents) {
 			const array = lifeCycle[name] as Handler[] | undefined
@@ -394,7 +394,7 @@ export function sucrose(
 		}
 
 	const session = getCompilerSession()
-	const caches = session?.external
+	const sourceCache = session?.external
 		? (session.sucroseCache as SourceCache)
 		: globalSourceCache
 
@@ -410,26 +410,26 @@ export function sucrose(
 			else {
 				const content = event.toString()
 				const key = fnv1a(content)
-				const cached = caches.get(key)
+				const cached = sourceCache.get(key)
 
 				if (cached && cached.content === content) {
 					inferred = cached.inference
-					if (caches.size >= DEFAULT_CACHE_LIMIT) {
-						caches.delete(key)
-						caches.set(key, cached)
+					if (sourceCache.size >= DEFAULT_CACHE_LIMIT) {
+						sourceCache.delete(key)
+						sourceCache.set(key, cached)
 					}
 				} else {
-					const channels = inferFunction(content, channel)
+					const channels = inferParameterReads(content, channel)
 					if (channels) {
 						const fresh = defaultSucrose()
 						for (const c of channels) fresh[c] = true
 						inferred = Object.freeze(fresh)
 					} else inferred = allAccessed
 
-					if (caches.size >= DEFAULT_CACHE_LIMIT)
-						evictOldestHalf(caches)
+					if (sourceCache.size >= DEFAULT_CACHE_LIMIT)
+						evictOldestHalf(sourceCache)
 
-					caches.set(key, { content, inference: inferred })
+					sourceCache.set(key, { content, inference: inferred })
 				}
 			}
 

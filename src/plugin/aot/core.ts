@@ -513,7 +513,7 @@ export const STUB_SOURCES: Record<
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]handler[\\/]reconstruct\.(m?js|ts)$/,
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] handler reconstruction was stripped (strip mode) but a route needed it. Rebuild with strip:false.")}\n` +
-				`export class Reconstrct {\n` +
+				`export class Reconstruct {\n` +
 				`  static validator(){return e()}\n` +
 				`  static cookie(){return e()}\n` +
 				`  static trace(){return e()}\n` +
@@ -1081,9 +1081,12 @@ export async function generateCompiledArtifacts(
 			artifacts.validators
 		)
 
+		const hasReplayableCapture =
+			artifacts.handlers.some((h) => h.code) ||
+			artifacts.validators.length > 0
+
 		const allBridgeFree =
-			(artifacts.handlers.some((h) => h.code) ||
-				artifacts.validators.length > 0) &&
+			hasReplayableCapture &&
 			!routesForbidSeal &&
 			validatorSlotsMatch &&
 			artifacts.validators.every((v) => v.bridgeFree === true)
@@ -1095,8 +1098,7 @@ export async function generateCompiledArtifacts(
 			mayTrace,
 			aliases,
 			allBridgeFree,
-			!artifacts.handlers.some((h) => h.code) &&
-				artifacts.validators.length === 0,
+			!hasReplayableCapture,
 			adapterStub,
 			productionStub,
 			wsCookie,

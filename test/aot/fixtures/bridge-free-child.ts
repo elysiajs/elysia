@@ -74,13 +74,13 @@ const results = payload.cases.map((value) => {
 
 out('RESULT', { reconstructed: true, results })
 
-// Exercise the actual detour site: with a dead bridge `Reconstrct.validator`
+// Exercise the actual detour site: with a dead bridge `Reconstruct.validator`
 // must return a frozen validator without throwing, and must not wire the
 // bridge as a side effect
-const { Reconstrct } = await import(
+const { Reconstruct } = await import(
 	'../../../src/compile/handler/reconstruct'
 )
-const detour = Reconstrct.validator(
+const detour = Reconstruct.validator(
 	hook,
 	root,
 	payload.method as any,

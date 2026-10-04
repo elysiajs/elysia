@@ -399,7 +399,7 @@ export class MultiValidator extends Validator {
 			codecs.push(HasCodec(coercedSchema))
 			hasDefaults.push(hd)
 
-			if ((TypeBoxValidator as any).member(coercedSchema, compiled)) {
+			if ((TypeBoxValidator as any).isAsyncMember(coercedSchema, compiled)) {
 				this.isAsync = true
 
 				asyncMembers.push(
@@ -599,12 +599,9 @@ export class MultiValidator extends Validator {
 			if (asyncTbv) {
 				if (!allowAsync) throw asyncStandardSchemaError()
 
-				return (
-					(asyncTbv as any).FromAsync(
-						this.#cloneForMember(value),
-						type
-					) as Promise<unknown>
-				).then(
+				return asyncTbv
+					.FromAsync(this.#cloneForMember(value), type)
+					.then(
 						// eslint-disable-next-line sonarjs/function-inside-loop
 						(result) =>
 							this.#fromLoop(
@@ -625,19 +622,15 @@ export class MultiValidator extends Validator {
 			let memberValue: unknown
 			if (this.#codecs[i])
 				try {
-					memberValue = (compiled as any).Clean(
-						(compiled as any).Decode(v)
-					)
+					memberValue = compiled.Clean(compiled.Decode(v))
 				} catch {
 					throw new ValidationError(type, value, () =>
-						(compiled as CompiledTypeBoxValidator).Errors(value)
+						compiled.Errors(value)
 					)
 				}
-			else if (!(compiled as CompiledTypeBoxValidator).Check(v))
-				throw new ValidationError(type, value, () =>
-					(compiled as CompiledTypeBoxValidator).Errors(v)
-				)
-			else memberValue = (compiled as any).Clean(v)
+			else if (!compiled.Check(v))
+				throw new ValidationError(type, value, () => compiled.Errors(v))
+			else memberValue = compiled.Clean(v)
 
 			snapshot = MultiValidator.#merge(snapshot, memberValue)
 		}

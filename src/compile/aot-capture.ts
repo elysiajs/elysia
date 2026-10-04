@@ -29,7 +29,7 @@ import {
 	applyPrecomputed,
 	buildDefaultClonerSource,
 	buildObjectDefaultMergeSource,
-	canonical,
+	stableStringify,
 	createMergerFromSource,
 	setDefaultProbeImpl,
 	verifyPreallocatableDefault
@@ -132,7 +132,7 @@ function validateMergeSource(schema: TSchema, source: string): boolean {
 			return false
 		}
 
-		if (canonical(expected) !== canonical(actual)) return false
+		if (stableStringify(expected) !== stableStringify(actual)) return false
 	}
 
 	return true
@@ -174,7 +174,7 @@ function validateObjectDefault(
 		}
 
 		const actual = applyPrecomputed(pod, structuredClone(probe))
-		if (canonical(expected) !== canonical(actual)) return false
+		if (stableStringify(expected) !== stableStringify(actual)) return false
 	}
 
 	return true

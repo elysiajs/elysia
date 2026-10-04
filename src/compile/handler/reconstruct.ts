@@ -14,7 +14,7 @@ import {
 import type { AnyLocalHook, HTTPMethod } from '../../types'
 import type { AnyElysia } from '../../base'
 
-export abstract class Reconstrct {
+export abstract class Reconstruct {
 	static validator(
 		hook: AnyLocalHook,
 		root: AnyElysia,

@@ -50,10 +50,10 @@ export function createSharedReference<
 		if (hash[1]) return createType(property)
 
 		const h = hash[0]
-		const canonicalKey = JSON.stringify(property)
+		const serialized = JSON.stringify(property)
 		const bucket = shared.get(h)
 
-		if (bucket?.key === canonicalKey) {
+		if (bucket?.key === serialized) {
 			// LRU-touch only at cap: per-hit delete+set permanently grows the
 			// JSC heap (bucket churn survives gc/clear)
 			if (shared.size >= SHARED_REFERENCE_CACHE_LIMIT) {
@@ -69,7 +69,7 @@ export function createSharedReference<
 		// hash-collision replace overwrites in place, no delete needed
 		if (!bucket && shared.size >= SHARED_REFERENCE_CACHE_LIMIT)
 			evictOldestHalf(shared)
-		shared.set(h, { key: canonicalKey, schema })
+		shared.set(h, { key: serialized, schema })
 
 		return schema
 	}

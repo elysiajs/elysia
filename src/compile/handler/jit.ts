@@ -85,9 +85,8 @@ const awaitValue = (value: string, arm = '') =>
 
 let captureHeaderShorthand: boolean | undefined
 /**
- * @internal test hook: receives each route's emitted source. A sync-first
- * route's async tail is a helper beside it, so `toString()` of the compiled
- * handler does not show the whole pipeline
+ * @internal test hook: receives each route's full emitted source, including
+ * the async tail helper that `toString()` of the handler does not show
  */
 let onEmit: ((code: string) => void) | undefined
 export const setOnEmit = (fn: typeof onEmit) => {
@@ -95,9 +94,8 @@ export const setOnEmit = (fn: typeof onEmit) => {
 }
 
 /**
- * @internal test hook: `false` compiles sync-first routes on the `async`
- * lane instead, the reference the async tail is differentially tested
- * against. `undefined` restores the default (see `tail` below)
+ * @internal test hook: `false` compiles sync-first routes on the plain
+ * `async` lane (the differential reference), `undefined` restores the default
  */
 let asyncTailOn: boolean | undefined
 export const setAsyncTail = (on: boolean | undefined) => {
@@ -349,15 +347,9 @@ export interface CompileHandlerJitOptions {
 	isHandleFunction: boolean
 	isStaticResponse: boolean
 	isPromiseHandler: boolean
-	/**
-	 * Non-Error classes a returned value is rethrown for, see
-	 * `returnedErrorClasses`
-	 */
+	/** Non-Error classes a returned value is rethrown for (`returnedErrorClasses`) */
 	errorClasses?: Function[]
-	/**
-	 * Per-route descriptor + compile artifacts, computed by `describeRoute`.
-	 * The JIT no longer re-derives these facts; it names its emissions off them.
-	 */
+	/** Per-route descriptor + compile artifacts from `describeRoute` */
 	state: RouteCompileState
 	/** `routeShape`, recorded with the captured code */
 	shape?: number
@@ -401,7 +393,7 @@ export function compileHandlerJit(
 			headersValiIsAsync,
 			paramsValiIsAsync,
 			queryValiIsAsync,
-			cookieValiIsAsync: cookieValidIsAsync,
+			cookieValiIsAsync,
 			responseValiAsync,
 			hasCookieSign,
 			syncCookieSign,
@@ -470,13 +462,14 @@ export function compileHandlerJit(
 	const abortPeek = "c['~sig']?.aborted"
 	const arm = abortOn ? "_as??=(c['~sig']??=c.request.signal)" : ''
 
+	// run before an abort's early return, filled in once known
 	let abortSchedule = ''
-	let discard = ''
+	let abortDiscard = ''
 	const abortCheck = () =>
 		abortOn
 			? plain(
-					abortSchedule || discard
-						? `if(${abortPeek}){${discard}${abortSchedule}return emp.clone()}\n`
+					abortSchedule || abortDiscard
+						? `if(${abortPeek}){${abortDiscard}${abortSchedule}return emp.clone()}\n`
 						: `if(${abortPeek})return emp.clone()\n`
 				)
 			: ''
@@ -755,7 +748,7 @@ export function compileHandlerJit(
 			// unsigned + unvalidated lane: defer per-cookie decode to first
 			// access in the jar (no validator/signing observes the raw record)
 			let deferDecode = false
-			if (!hasCookieSign && !cookieValidIsAsync) {
+			if (!hasCookieSign && !cookieValiIsAsync) {
 				if (!vali?.cookie) {
 					link(parseCookieRawDeferred, 'pcrd')
 					code += `let _ck=pcrd(${cookieHeaderExpr},cc)\n`
@@ -764,7 +757,7 @@ export function compileHandlerJit(
 					link(parseCookieRawSync, 'pcrs')
 					code += `let _ck=pcrs(${cookieHeaderExpr},cc)\n`
 				}
-			} else if (syncCookieSign && !cookieValidIsAsync) {
+			} else if (syncCookieSign && !cookieValiIsAsync) {
 				link(parseCookieRawSigned, 'pcrsg')
 				code += `let _ck=pcrsg(${cookieHeaderExpr},cc)\n`
 			} else {
@@ -776,8 +769,8 @@ export function compileHandlerJit(
 				link(vali, 'va')
 
 				const cookieIsOptional = !!(hook?.cookie as any)?.['~optional']
-				const value = `va.cookie.From(_ck,${fromArgs('cookie', !!cookieValidIsAsync)})`
-				const validateExpr = `_ck=${cookieValidIsAsync ? awaitValue(value, arm) : value}\n`
+				const value = `va.cookie.From(_ck,${fromArgs('cookie', cookieValiIsAsync)})`
+				const validateExpr = `_ck=${cookieValiIsAsync ? awaitValue(value, arm) : value}\n`
 				if (cookieIsOptional)
 					code += `if(Object.keys(_ck).length){${validateExpr}}\n`
 				else code += validateExpr
@@ -818,9 +811,8 @@ export function compileHandlerJit(
 		: ''
 
 	let resolveHandlePostDrain = ''
-	// `r()` resolves either shape (numeric fast-path token or
-	// recorder) and tolerates undefined (_hr only set when the
-	// response streamed)
+	// `r()` takes a fast-path token or a recorder, and `undefined` (`_hr` is
+	// only set when the response streamed)
 	if (traceHandleOn)
 		for (let i = 0; i < traceCount; i++)
 			resolveHandlePostDrain += `tr${i}.r(_hr${i},_ser)\n`
@@ -1031,7 +1023,7 @@ export function compileHandlerJit(
 			code += plain(`if(_r===undefined){\n${callHandler()}${teeBlock}}\n`)
 		else code += plain(callHandler() + teeBlock)
 
-		if (teeBlock) discard = '_sv?.return()\n'
+		if (teeBlock) abortDiscard = '_sv?.return()\n'
 		code += abortCheck()
 
 		if (syncAfterResponse) {
@@ -1211,9 +1203,7 @@ export function compileHandlerJit(
 
 			if (allowUnsafeDetail) link(ValidationError, 'verr')
 
-			// The hook-less lane reaches `fallbackResponse` through `fre`.
-			// This lane has already run the hooks, so it calls the same
-			// function directly
+			// `_efb`: hooks already ran, so call `fallbackResponse` directly, not via `fre`
 			factoryHelpers +=
 				`function _em(c,_r){return typeof _r?.then==='function'?Promise.resolve(_r).catch((_e)=>fre(rt,c,_e)):_r}\n` +
 				`function _fbm(_r,_s,_c){return ${map}(_r,_s,_c.request,true)}\n` +

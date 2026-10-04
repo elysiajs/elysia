@@ -1986,11 +1986,10 @@ type RefDefSchema<D> = {
 }
 
 /**
- * Captures the verbatim `.macro()` definition record into a separate first-pass
- * generic. This lets each definition's enabled
- * sibling flags (`{ auth: true }`) be read back without reusing the contextually
- * typed `NewMacro`, which would form the record -> handler-typing inference
- * cycle documented on {@link ObjectMacroDefs}.
+ * Captures the verbatim `.macro()` definition record in a first-pass generic,
+ * so each definition's sibling flags (`{ auth: true }`) are read back without
+ * reusing the contextually typed `NewMacro`, which would form the inference
+ * cycle documented on {@link ObjectMacroDefs}
  */
 type MacroRefChannel<Refs> = {
 	[K in keyof Refs]: MaybeValueOrVoidFunction<
@@ -2115,13 +2114,8 @@ type _CreateEden<
  * Value an annotation knob resolves to, `never` when it annotates nothing.
  *
  * Both knobs are canonically methods, so what they *return* is the
- * annotation. A value or getter reads as the value itself. An `unknown`
- * declaration resolves to `unknown` — the runtime serves whatever a knob
- * returns and can't see its declared type — and `undefined` is excluded, it
- * falls through to the next tier rather than being served.
- *
- * The base declares both knobs optional, so a subclass that doesn't override
- * them never reaches here
+ * annotation. A value or getter reads as the value itself. `unknown` stays
+ * `unknown`, and `undefined` is excluded: it falls through to the next tier
  */
 type ResolveAnnotation<V> = (
 	V extends (...args: any) => infer Returned ? Returned : V

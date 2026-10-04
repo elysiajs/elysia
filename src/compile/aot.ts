@@ -246,9 +246,9 @@ export function reconstruct() {
 	return reconstructImpl
 }
 
-let drifted: Set<string>
+let drifted: Set<string> | undefined
 
-export const aotDrift = (method: string, path: string) =>
+export const aotDriftMessage = (method: string, path: string) =>
 	`[elysia-aot] ${method} ${path} differs from the AOT build`
 
 export function warnAotDrift(method: string, path: string) {
@@ -257,7 +257,7 @@ export function warnAotDrift(method: string, path: string) {
 
 	drifted ??= new Set()
 	drifted.add(key)
-	console.warn(aotDrift(method, path) + ', compiled at runtime')
+	console.warn(aotDriftMessage(method, path) + ', compiled at runtime')
 }
 
 // build registry
@@ -278,9 +278,7 @@ export abstract class Compiled {
 		if (!registered || claimed) return false
 
 		const manifest = registered
-		const expected = manifest.fingerprint
-
-		if (expected.abi !== fingerprint.abi)
+		if (manifest.fingerprint.abi !== fingerprint.abi)
 			throw new Error(`[elysia-aot] Mismatch fingerprint`)
 
 		claimed = new WeakRef(id)
@@ -334,8 +332,7 @@ export abstract class Compiled {
 		if (g !== undefined && !program.builtGroups.has(g)) {
 			program.builtGroups.add(g)
 			const slice = program.lazyGroups![g]!()
-			// drop the lazy group after the first build to free memory
-			// the manifest is now fully merged into `program.validators`
+			// free the thunk, its slice is merged into `program.validators` below
 			program.lazyGroups![g] = undefined as any
 
 			programValidators ??= program.validators =

@@ -58,8 +58,6 @@ export function jsonString<T extends TSchema>(
 
 					return true
 				} catch {
-					// JSON.parse (or check) threw past the charCode fast-reject —
-					// same reasoning as the `!check(next)` branch above
 					raw = parsed = undefined
 					return false
 				}

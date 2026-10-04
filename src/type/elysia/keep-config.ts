@@ -12,9 +12,9 @@ import {
 import { compositionKeys } from '../../utils'
 
 // holds what cookie signing reads: `config`, `$ref` or a deferred action
-const carries = (
+const mayCarryCookieConfig = (
 	schema: any,
-	field = false,
+	isProperty = false,
 	seen = new Set<unknown>()
 ): boolean => {
 	if (!schema || typeof schema !== 'object' || seen.has(schema)) return false
@@ -29,21 +29,21 @@ const carries = (
 			(key) =>
 				Array.isArray(schema[key]) &&
 				schema[key].some((member: unknown) =>
-					carries(member, field, seen)
+					mayCarryCookieConfig(member, isProperty, seen)
 				)
 		)
 	)
 		return true
 
 	// `for..in` like the walk, inherited fields included
-	if (!field)
+	if (!isProperty)
 		for (const name in schema.properties)
-			if (carries(schema.properties[name], true)) return true
+			if (mayCarryCookieConfig(schema.properties[name], true)) return true
 
 	return false
 }
 
-const from = (schema: any, sources: unknown[]): any =>
+const withSources = (schema: any, sources: unknown[]): any =>
 	Object.defineProperty(
 		Object.create(
 			Object.getPrototypeOf(schema),
@@ -62,9 +62,10 @@ const keep = <F extends (...args: any[]) => any>(
 	((...args: any[]) => {
 		const sources = sourcesOf(...args)
 		const result = build(...args)
-		if (!sources.some((source) => carries(source))) return result
+		if (!sources.some((source) => mayCarryCookieConfig(source)))
+			return result
 
-		const built = from(result, sources)
+		const built = withSources(result, sources)
 		const ref = built.$ref
 		const replaced = (sources[0] as any)?.$defs?.[ref]
 
@@ -72,7 +73,7 @@ const keep = <F extends (...args: any[]) => any>(
 		if (replaced && built.$defs?.[ref] && built.$defs[ref] !== replaced)
 			built.$defs = {
 				...built.$defs,
-				[ref]: from(built.$defs[ref], [replaced])
+				[ref]: withSources(built.$defs[ref], [replaced])
 			}
 
 		return built

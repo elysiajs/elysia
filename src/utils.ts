@@ -330,32 +330,30 @@ export function flattenChain(
 				? resolveAdded(node)
 				: (node as { added: Partial<AppHook> }).added
 
-			if (added) {
-				const nodeScope = (node as { scope?: EventScope }).scope
+			if (
+				added &&
+				(!keep || keep((node as { scope?: EventScope }).scope))
+			)
+				for (const key in added) {
+					const v = (added as any)[key]
+					if (v === undefined || v === null) continue
 
-				if (!(keep && !keep(nodeScope)))
-					for (const key in added) {
-						const v = (added as any)[key]
-						if (v === undefined || v === null) continue
+					if (
+						eventProperties.has(key) ||
+						key === 'schemas' ||
+						key === '~deriveEntries'
+					) {
+						const existing = (result as any)[key]
 
-						if (
-							eventProperties.has(key) ||
-							key === 'schemas' ||
-							key === '~deriveEntries'
-						) {
-							const existing = (result as any)[key]
-
-							if (Array.isArray(v)) {
-								if (existing) {
-									const arr = existing as any[]
-									for (let i = 0; i < v.length; i++)
-										arr.push(v[i])
-								} else (result as any)[key] = v.slice()
-							} else if (existing) (existing as any[]).push(v)
-							else (result as any)[key] = [v]
-						} else (result as any)[key] = v
-					}
-			}
+						if (Array.isArray(v)) {
+							if (existing)
+								for (let i = 0; i < v.length; i++)
+									existing.push(v[i])
+							else (result as any)[key] = v.slice()
+						} else if (existing) existing.push(v)
+						else (result as any)[key] = [v]
+					} else (result as any)[key] = v
+				}
 
 			continue
 		}
@@ -959,12 +957,12 @@ export const createErrorEventHandler = (fn: EventFn<'error'>, error: Error) => {
 			return fn!(context as any)
 	}
 
-	const p = (error as any)?.prototype
+	const prototype = (error as any)?.prototype
 	if (
-		typeof p === 'object' &&
-		p !== null &&
-		p !== Error.prototype &&
-		!(p instanceof Error)
+		typeof prototype === 'object' &&
+		prototype !== null &&
+		prototype !== Error.prototype &&
+		!(prototype instanceof Error)
 	)
 		(handler as any)['~errorClass'] = error
 

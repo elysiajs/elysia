@@ -222,7 +222,7 @@ export function createStreamHandler({
 		skipFormat?: boolean,
 		owned = false
 	) => {
-		// Internal preparation marker; valid public requests still map normally.
+		// `null` request = static pre-mapping (`mapStaticValue`), don't consume
 		if (request === null) return undefined!
 
 		if (isByteStream(generator)) {
@@ -419,18 +419,22 @@ export function createStreamHandler({
 				return
 			}
 
-			let p: Promise<void> | boolean
 			if (value instanceof Blob)
-				p = value.arrayBuffer().then((buffer) => {
+				return value.arrayBuffer().then((buffer) => {
 					controller.enqueue(new Uint8Array(buffer))
 				})
-			else if (value instanceof Uint8Array) {
+
+			if (value instanceof Uint8Array) {
 				controller.enqueue(value)
-				p = true
-			} else if (value instanceof ArrayBuffer) {
+				return
+			}
+
+			if (value instanceof ArrayBuffer) {
 				controller.enqueue(new Uint8Array(value))
-				p = true
-			} else if (ArrayBuffer.isView(value)) {
+				return
+			}
+
+			if (ArrayBuffer.isView(value)) {
 				controller.enqueue(
 					new Uint8Array(
 						value.buffer,
@@ -438,10 +442,8 @@ export function createStreamHandler({
 						value.byteLength
 					)
 				)
-				p = true
-			} else p = false
-
-			if (p !== false) return p === true ? undefined : p
+				return
+			}
 
 			if (typeof value === 'object')
 				try {
@@ -805,13 +807,10 @@ interface Pending<T> {
 }
 
 /**
- * A returned `ReadableStream` is consumed after the handler returns, so
- * afterResponse, `defer()` and derive dispose must wait for it the way a tee'd
- * generator is waited on
- *
- * A returned `Response` is not observed, reading `.body` would move
- * every Response on these routes off Bun's native send path; a `bytes()`
- * stream keeps its exact-stream contract and releases early as before
+ * Tee a returned `ReadableStream` so afterResponse, `defer()` and derive
+ * dispose wait for it, as for a tee'd generator. A `bytes()` stream is left
+ * alone (exact-stream contract), and so is a `Response`: reading its `.body`
+ * would move it off Bun's native send path
  */
 export function observeStream(
 	source: ReadableStream

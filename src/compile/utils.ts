@@ -23,14 +23,13 @@ export function mayReturnPromise(fn: Function): boolean {
 	const literal = Function.prototype.toString.call(fn).trim()
 	const arrow = matchArrow.exec(literal)
 	const body = (arrow?.[1] ?? matchFunction.exec(literal)?.[1])?.trimStart()
-	result =
-		literal.includes('[native code]') ||
-		!(
-			(body?.startsWith('{') &&
-				body.endsWith('}') &&
-				!/\breturn\b/.test(body)) ||
-			(arrow && matchLiteral.test(body!))
-		)
+	const neverPromise =
+		(body?.startsWith('{') &&
+			body.endsWith('}') &&
+			!/\breturn\b/.test(body)) ||
+		(arrow && matchLiteral.test(body!))
+
+	result = literal.includes('[native code]') || !neverPromise
 	mayReturnPromiseCache.set(fn, result)
 
 	return result

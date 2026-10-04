@@ -49,11 +49,9 @@ export function Cookie(
 			const value = options[key]
 			if (value === undefined) continue
 
-			if ((COOKIE_OPTION_KEYS as readonly string[]).includes(key)) {
-				;(config ??= {})[key] = value
-			} else {
-				;(rest ??= {})[key] = value
-			}
+			if ((COOKIE_OPTION_KEYS as readonly string[]).includes(key))
+				(config ??= {})[key] = value
+			else (rest ??= {})[key] = value
 		}
 
 	if (isSchema(first)) {

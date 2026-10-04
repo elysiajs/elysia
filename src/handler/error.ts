@@ -165,13 +165,9 @@ const problemOf = (
 	)
 
 /**
- * Read one annotation knob.
- *
- * Both knobs are canonically methods, so they're evaluated per serve and may
- * be `async`. Running a stranger's function is side-effect surface (it may
- * consume a stream or do IO), so it takes the same problem claim the shaping
- * does — an unclaimed duck error never invokes one. A *value* annotation stays
- * inert data and keeps duck-participating as it always has
+ * Read one annotation knob, a method (may be `async`) or a plain value.
+ * A method may have side effects, so only an error claiming a problem type
+ * gets it invoked; a plain value is read from any error
  */
 export const readAnnotation = (
 	self: any,
@@ -238,16 +234,11 @@ function fallbackErrorResponse(
 				context
 			)
 
-		if (error?.message != null) {
-			if (context.set.status === undefined || context.set.status === 200)
-				context.set.status = 500
-
-			return mapResponse(
-				internalServerErrorResponse(error),
-				context.set,
-				context
-			)
-		}
+		if (
+			error?.message != null &&
+			(context.set.status === undefined || context.set.status === 200)
+		)
+			context.set.status = 500
 
 		return mapResponse(
 			internalServerErrorResponse(error),
@@ -273,7 +264,7 @@ function fallbackErrorResponse(
 		)
 	}
 
-	const tier = (key: 'value' | 'detail'): unknown => {
+	const serveAnnotation = (key: 'value' | 'detail'): unknown => {
 		let annotation: unknown
 
 		try {
@@ -283,13 +274,15 @@ function fallbackErrorResponse(
 		}
 
 		if (annotation === undefined)
-			return key === 'value' ? tier('detail') : serveMessage()
+			return key === 'value' ? serveAnnotation('detail') : serveMessage()
 
 		if (annotation instanceof Promise)
 			return annotation.then((resolved: unknown) => {
-				// Resolving `undefined` annotates nothing, fall to the next tier
+				// Resolving `undefined` annotates nothing, fall to the next knob
 				if (resolved === undefined)
-					return key === 'value' ? tier('detail') : serveMessage()
+					return key === 'value'
+						? serveAnnotation('detail')
+						: serveMessage()
 
 				mergeHeaders()
 
@@ -341,7 +334,7 @@ function fallbackErrorResponse(
 			status >= 100 &&
 			!(isProduction() && status >= 500))
 	)
-		return tier('value')
+		return serveAnnotation('value')
 
 	return legacy()
 }
@@ -403,7 +396,7 @@ export function createErrorHandler(
 		)
 	}
 
-	const settle = (context: Context, error: Error, sign: Sign) =>
+	const serveUnhandled = (context: Context, error: Error, sign: Sign) =>
 		isPristineNotFound(context, error)
 			? getNotFound()
 			: fallbackResponse(context, error, mapWith(sign))
@@ -422,7 +415,7 @@ export function createErrorHandler(
 					return respond(context, error, result, sign)
 			}
 
-			return settle(context, error, sign)
+			return serveUnhandled(context, error, sign)
 		}
 
 	return (context: Context, error: Error, sign?: Sign) => {
@@ -435,6 +428,6 @@ export function createErrorHandler(
 				return respond(context, error, result, sign)
 		}
 
-		return settle(context, error, sign)
+		return serveUnhandled(context, error, sign)
 	}
 }

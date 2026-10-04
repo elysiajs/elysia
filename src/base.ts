@@ -821,7 +821,7 @@ export class Elysia<
 
 	#setField(
 		field: 'decorator' | 'store',
-		length: number,
+		argCount: number,
 		typeOrName: unknown,
 		nameOrValue: unknown,
 		value: unknown
@@ -829,7 +829,7 @@ export class Elysia<
 		let as: ContextAppendType = 'append'
 		let name = ''
 
-		switch (length) {
+		switch (argCount) {
 			case 1:
 				value = typeOrName
 				break
@@ -1102,13 +1102,13 @@ export class Elysia<
 
 		if (type === 'trace') this['~hasTrace'] = true
 
-		this.#link(added, scope, this)
+		this.#pushChainNode(added, scope, this)
 		this.#tagOrigin(fn)
 
 		return this
 	}
 
-	#link(
+	#pushChainNode(
 		added: Partial<AppHook>,
 		scope: EventScope | undefined,
 		owner: object,
@@ -2298,9 +2298,8 @@ export class Elysia<
 		this.#assertMutable('error')
 		switch (arguments.length) {
 			case 1:
-				// 1.x `.error({ CODE: Class })` code dictionary: 2.0 dispatches
-				// by class, so there is nothing to register. Also swallows the
-				// typed `.error([fn])` array form (pre-existing, unresolved)
+				// 1.x `.error({ CODE: Class })`: 2.0 dispatches by class, nothing
+				// to register. Known gap: also swallows the typed `.error([fn])`
 				if (scopeOrFnOrError && typeof scopeOrFnOrError === 'object')
 					return this
 
@@ -2310,16 +2309,15 @@ export class Elysia<
 				)
 
 			case 2:
-				// Any class is an error class, Error or not (zod v4 `ZodError`). A
-				// prototype-less function (arrow) fails as a scope here instead of
-				// throwing from `instanceof` on every later error dispatch
+				// Any class counts, Error or not (zod v4 `ZodError`). An arrow has no
+				// prototype, so it fails as a scope here instead of in `instanceof`
 				if (
 					typeof scopeOrFnOrError === 'function' &&
 					scopeOrFnOrError.prototype instanceof Object
 				)
 					// scopeOrFnOrError: Error
 					// fnOrError: EventFn<'error'>
-					return this.#errorClass(scopeOrFnOrError, fnOrError)
+					return this.#onErrorClass(scopeOrFnOrError, fnOrError)
 
 				return this.#onBranch(
 					'error',
@@ -2328,7 +2326,7 @@ export class Elysia<
 				)
 
 			case 3:
-				return this.#errorClass(
+				return this.#onErrorClass(
 					fnOrError,
 					fn,
 					scopeOrFnOrError as EventScope
@@ -2338,7 +2336,7 @@ export class Elysia<
 		return this
 	}
 
-	#errorClass(ErrorClass: unknown, fn: unknown, scope?: EventScope): this {
+	#onErrorClass(ErrorClass: unknown, fn: unknown, scope?: EventScope): this {
 		const run = (
 			typeof fn === 'function' ? fn : () => fn
 		) as EventFn<'error'>
@@ -3889,7 +3887,7 @@ export class Elysia<
 
 		if (hook.trace) this['~hasTrace'] = true
 
-		this.#link(hook, scope, this)
+		this.#pushChainNode(hook, scope, this)
 
 		return this
 	}
@@ -4534,13 +4532,13 @@ export class Elysia<
 		if (app['~introspect'] || config?.introspect) this['~introspect'] = true
 
 		const name = config?.name
-		const hash = name ? app.hash! : app
-		const exists = this.childrenHash?.has(hash)
+		const childKey = name ? app.hash! : app
+		const exists = this.childrenHash?.has(childKey)
 		if (name && exists) return
 		if (!exists) {
 			this.childrenHash ??= new Set()
-			this.childrenHash.add(hash)
-			;(addedByThisCall ??= new Set()).add(hash)
+			this.childrenHash.add(childKey)
+			;(addedByThisCall ??= new Set()).add(childKey)
 		}
 
 		if (app.childrenHash)
@@ -4736,9 +4734,7 @@ export class Elysia<
 
 				if (incomingOptions?.length) {
 					const base: WSOptionsEntry[] = existing.options ?? []
-					const seen = new Set(
-						base.map((e: WSOptionsEntry) => e.origin)
-					)
+					const seen = new Set(base.map((e) => e.origin))
 					let next: WSOptionsEntry[] | undefined
 
 					for (const entry of incomingOptions) {
@@ -4888,10 +4884,10 @@ export class Elysia<
 		nodes.length = 0
 
 		if (globalEvents)
-			this.#link(globalEvents, 'global', app, globalMayRef, true)
+			this.#pushChainNode(globalEvents, 'global', app, globalMayRef, true)
 
 		if (pluginEvents)
-			this.#link(pluginEvents, 'plugin', app, pluginMayRef, true)
+			this.#pushChainNode(pluginEvents, 'plugin', app, pluginMayRef, true)
 	}
 
 	#emitChildRoutes(
@@ -4902,9 +4898,11 @@ export class Elysia<
 		const declared = app.declaredRoutes!
 		const limit = declared.length
 
+		// A route `app` absorbed before its latest local hook carries `tail`, so
+		// `app`'s later local hooks still run for it (see `ChainNode`)
 		const tail = app['~hookChain']
-		let recent: Set<ChainNode | undefined> | undefined
-		let hasLocal = false
+		let tailSinceLocal: Set<ChainNode | undefined> | undefined
+		let tailHasLocal = false
 
 		let lastChildChain: ChainNode | undefined
 		let lastCombined: ChainNode | undefined
@@ -4917,17 +4915,17 @@ export class Elysia<
 			const childChain = route[6]
 			const absorbed = tail !== undefined && route[3] !== app
 
-			if (absorbed && recent === undefined) {
-				recent = new Set()
+			if (absorbed && tailSinceLocal === undefined) {
+				tailSinceLocal = new Set()
 
 				for (
 					let node: ChainNode | undefined = tail;
 					node && 'added' in node;
 					node = node.parent
 				) {
-					recent.add(node)
+					tailSinceLocal.add(node)
 					if (isLocalScope(node.scope)) {
-						hasLocal = true
+						tailHasLocal = true
 						break
 					}
 				}
@@ -4936,8 +4934,8 @@ export class Elysia<
 			let inheritedChain: ChainNode | undefined
 			if (
 				absorbed &&
-				hasLocal &&
-				!recent!.has(rootSnapshot(childChain))
+				tailHasLocal &&
+				!tailSinceLocal!.has(rootSnapshot(childChain))
 			) {
 				if (childChain !== lastTailChild) {
 					lastTailChild = childChain
@@ -5136,12 +5134,10 @@ export class Elysia<
 		if (this['~Prefix']) path = joinPath(this['~Prefix'], path)
 		else if (path && path.charCodeAt(0) !== 47) path = '/' + path
 
-		// Only flag the old order when a plain handler is followed by hook data;
-		// both positions otherwise accept several kinds of value. A hook that
-		// only enables macros (`{ auth: true }`) is hook data too, otherwise the
-		// macro never runs and the object is served as the response body
-		// isPlainObject first: for..in over the handler reifies its lazy
-		// name/length, +~115 B and ~3x slower per route
+		// Reject the 1.x (path, handler, hook) order: a function followed by hook
+		// data, including macro-only hooks (`{ auth: true }`) that would otherwise
+		// be served as the body. isPlainObject first: for..in over a function
+		// reifies its lazy name/length (+~115 B, ~3x slower per route)
 		if (
 			typeof hookOrFn === 'function' &&
 			isPlainObject(fn) &&
@@ -5192,7 +5188,8 @@ export class Elysia<
 					: [method, path, handler, this]) as unknown as InternalRoute
 		)
 
-		if (this.routerBuilt || this.compiled !== undefined) this.#invalidate()
+		if (this.routerBuilt || this.compiled !== undefined)
+			this.#invalidateRouter()
 
 		return this
 	}
@@ -5249,10 +5246,11 @@ export class Elysia<
 
 		if (source) (this.routeSources ??= [])[sequence] = source
 
-		if (this.routerBuilt || this.compiled !== undefined) this.#invalidate()
+		if (this.routerBuilt || this.compiled !== undefined)
+			this.#invalidateRouter()
 	}
 
-	#invalidate() {
+	#invalidateRouter() {
 		this.compiled = undefined
 		this.jitColdRemaining = undefined
 		this.jitTable = undefined
@@ -6180,7 +6178,7 @@ export class Elysia<
 
 	/**
 	 * ### query
-	 * Register handler for path with method [OPTIONS]
+	 * Register handler for path with method [QUERY]
 	 *
 	 * ---
 	 * @example
@@ -7000,7 +6998,7 @@ export class Elysia<
 	compile() {
 		this['~config'] ??= nullObject()
 		this['~config']!.precompile = true
-		this.#invalidate()
+		this.#invalidateRouter()
 
 		void this.fetch
 
@@ -7234,13 +7232,12 @@ export class Elysia<
 	static #slotHasTypeBox(
 		value: unknown,
 		models: Record<string, unknown> | undefined,
-		// Only responses may contain one level of status-keyed schemas.
-		record?: boolean
+		allowStatusMap?: boolean
 	): boolean {
 		if (typeof value === 'string') value = models?.[value]
 		if (!value || typeof value !== 'object') return false
 		if ('~kind' in value || '~elyAcl' in value) return true
-		if (!record || '~standard' in value) return false
+		if (!allowStatusMap || '~standard' in value) return false
 
 		for (const status in value)
 			if (
@@ -7546,24 +7543,19 @@ export class Elysia<
 
 				if (
 					localRoot['~ext']?.macro ||
-					// route[4]: localHook (per-route)
 					Elysia.#hookHasString(
 						table.localHook[i] as Record<string, unknown>
 					) ||
-					// Chain sources: route[5] (appHook), route[6] (inheritedChain).
-					// `~hookChain` is the caller's hoisted third source. Every node
-					// carries the answer for its whole ancestry (`refs`, computed at
-					// creation), so no walk is needed here.
+					// `refs` covers a node's whole ancestry, so no walk is needed
 					(table.appHook[i] as ChainNode | undefined)?.refs ||
 					(table.inheritedChain[i] as ChainNode | undefined)?.refs
 				)
 					this.#assertRouteModelRefs(routeRow(table, i), method[i])
 			}
 
-		// Load TypeBox before serving to avoid blocking the first validated request.
-		// The scan preserves fast startup for apps that do not use TypeBox.
-		// This may warm TypeBox after a closer schema overrides it, avoiding a
-		// full hook merge during build.
+		// Warm TypeBox now so the first validated request doesn't load it; skipped
+		// when no route uses TypeBox. May over-warm: closer overrides are ignored
+		// to avoid a full hook merge at build
 		let hasTypeBoxSchema = false
 		if (length) {
 			const models = this['~ext']?.models as
@@ -7571,6 +7563,7 @@ export class Elysia<
 				| undefined
 
 			const resolve = chainResolver(this as unknown as AnyElysia)
+			// re-read: a function macro run by the model-ref scan may push hooks
 			const rootChain = this['~hookChain']
 			const seen = new Set<ChainNode>()
 
@@ -7811,10 +7804,10 @@ export class Elysia<
 				return this.ready ? this.modules.then(run, run) : run()
 			}
 
-		return this.#dispatch()
+		return this.#buildFetch()
 	}
 
-	#dispatch() {
+	#buildFetch() {
 		this.#buildRouter(!this._pending)
 
 		if (this.ready) return applyHoc(this, createFetchHandler(this))
@@ -7835,7 +7828,7 @@ export class Elysia<
 			requestOrUrl: Request | string,
 			options?: RequestInit
 		) =>
-			(this.fetchFn ?? this.#dispatch())(
+			(this.fetchFn ?? this.#buildFetch())(
 				typeof requestOrUrl === 'string'
 					? new Request(
 							requestOrUrl.charCodeAt(0) === 47

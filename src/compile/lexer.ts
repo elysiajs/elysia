@@ -55,6 +55,7 @@ export function skipString(src: string, start: number): number {
 
 // Single-pass token scanner, shared by sucrose and derive key extraction
 export interface ScanToken {
+	// identifier, string or punctuator
 	k: 'i' | 's' | 'p'
 	value: string
 	// source offset of the token's first character (a string's opening quote)
@@ -97,7 +98,7 @@ const isIdentifierPart = (char: number) =>
 // whether a `(` opens an `if` / `while` / `for` / `with` header. Kept out of
 // scanTokens and never reading a negative index: either makes JSC run the
 // whole scan loop on a slow path
-function isHeader(tokens: ScanToken[]) {
+function opensControlHeader(tokens: ScanToken[]) {
 	let keyword = tokens.length - 1
 	// `for await (`
 	if (
@@ -130,7 +131,8 @@ export function scanTokens(source: string): ScanToken[] | undefined {
 	let index = 0
 	let canEndExpression = false
 
-	const headers: boolean[] = []
+	// per open `(`: a control header's `)` does not end an expression
+	const headerParens: boolean[] = []
 
 	// skips `\u{…}` / `\uXXXX` escape at `index`
 	const skipUnicodeEscape = () => {
@@ -460,14 +462,14 @@ export function scanTokens(source: string): ScanToken[] | undefined {
 			)
 				value = pair
 
-			if (value === '(') headers.push(isHeader(tokens))
+			if (value === '(') headerParens.push(opensControlHeader(tokens))
 
 			tokens.push({ k: 'p', value, at: index })
 			index += value.length
 
 			if (value !== '++' && value !== '--')
 				canEndExpression =
-					(value === ')' && !headers.pop()) ||
+					(value === ')' && !headerParens.pop()) ||
 					value === ']' ||
 					value === '}'
 		}

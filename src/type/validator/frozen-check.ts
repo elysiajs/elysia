@@ -15,14 +15,14 @@ export function buildFrozenCheck(
 	if (!build?.functions?.length || !build.entry) return
 
 	// the live schema must reproduce this build's externals
-	const b = alignBuildExternals(build, node)
-	if (!b) return
-	const cr = reconstructCheck(b)
+	const aligned = alignBuildExternals(build, node)
+	if (!aligned) return
+	const check = reconstructCheck(aligned)
 
 	return {
-		identifier: b.external.identifier,
-		checkDefs: cr.defs,
-		checkValue: cr.value,
-		external: b.external.variables.length > 0
+		identifier: aligned.external.identifier,
+		checkDefs: check.defs,
+		checkValue: check.value,
+		external: aligned.external.variables.length > 0
 	}
 }

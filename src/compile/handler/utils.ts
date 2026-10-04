@@ -78,7 +78,7 @@ export function armEntryAbort(context: any) {
 	return (context['~sig'] = context.request.signal).aborted
 }
 
-const trace = (report: TraceReporter | undefined, fn: Function) =>
+const traceChild = (report: TraceReporter | undefined, fn: Function) =>
 	report?.resolveChild(
 		(fn as any)?.name && typeof (fn as any).name === 'string'
 			? (fn as any).name
@@ -89,11 +89,11 @@ const toArray = <T>(v: MaybeArray<T>): T[] => (Array.isArray(v) ? v : [v])
 
 export const mapTransform = /*#__PURE__*/ map<
 	'transform',
-	[isAsync: AsyncMode, report?: TraceReporter, arm?: string]
->((i, fn, [isAsync, report, arm]) => {
-	const t = trace(report, fn)
-	const call = isAsync
-		? awaitSite(`tf${at(i)}(c)`, fn, isAsync, '_tf', arm)
+	[mode: AsyncMode, report?: TraceReporter, arm?: string]
+>((i, fn, [mode, report, arm]) => {
+	const t = traceChild(report, fn)
+	const call = mode
+		? awaitSite(`tf${at(i)}(c)`, fn, mode, '_tf', arm)
 		: `tf${at(i)}(c)\n`
 
 	return t.begin + call + t.end()
@@ -130,10 +130,10 @@ function returnedObjectKeys(src: string): string[] | null {
 	const tokens = scanTokens(src)
 	if (!tokens) return null
 
-	const is = (i: number, value: string) =>
+	const isPunct = (i: number, value: string) =>
 		tokens[i]?.k === 'p' && tokens[i].value === value
 
-	const blank = (i: number) => {
+	const spaceOnlyAfter = (i: number) => {
 		const token = tokens[i]
 
 		return /^[ \t\n\r]*$/.test(
@@ -156,12 +156,12 @@ function returnedObjectKeys(src: string): string[] | null {
 		else if (value === '(' || value === '[' || value === '{') depth++
 		else if (value === ')' || value === ']' || value === '}') depth--
 		else if (depth === 0 && value === '=>') {
-			if (!blank(i)) return null
-			if (is(i + 1, '(')) {
-				if (!blank(i + 1) || !is(i + 2, '{')) return null
+			if (!spaceOnlyAfter(i)) return null
+			if (isPunct(i + 1, '(')) {
+				if (!spaceOnlyAfter(i + 1) || !isPunct(i + 2, '{')) return null
 				open = i + 2
 				parens = 1
-			} else if (!is(i + 1, '{')) return null
+			} else if (!isPunct(i + 1, '{')) return null
 			break
 		}
 	}
@@ -183,22 +183,22 @@ function returnedObjectKeys(src: string): string[] | null {
 		}
 		if (at === -1) return null
 
-		for (; blank(at) && is(at + 1, '('); at++) parens++
-		if (!blank(at) || !is(at + 1, '{')) return null
+		for (; spaceOnlyAfter(at) && isPunct(at + 1, '('); at++) parens++
+		if (!spaceOnlyAfter(at) || !isPunct(at + 1, '{')) return null
 		open = at + 1
 	}
 
 	const keys: string[] = []
 	let i = open + 1
-	while (!is(i, '}')) {
+	while (!isPunct(i, '}')) {
 		const key = tokens[i]
 		if (
 			!key ||
 			(key.k === 's'
 				? key.value.includes('\\')
 				: key.k !== 'i' || !/^[\w$]+$/.test(key.value)) ||
-			!blank(i) ||
-			!is(i + 1, ':')
+			!spaceOnlyAfter(i) ||
+			!isPunct(i + 1, ':')
 		)
 			return null
 
@@ -221,13 +221,13 @@ function returnedObjectKeys(src: string): string[] | null {
 			} else if (value === ',' && depth === 0) break
 		}
 
-		if (is(i, ',')) i++
+		if (isPunct(i, ',')) i++
 	}
 
 	// the literal must be the whole returned expression, not `({ a }).a`
-	for (; parens; parens--) if (!is(++i, ')')) return null
+	for (; parens; parens--) if (!isPunct(++i, ')')) return null
 
-	return i + 1 === tokens.length || is(i + 1, ';') || is(i + 1, '}')
+	return i + 1 === tokens.length || isPunct(i + 1, ';') || isPunct(i + 1, '}')
 		? keys
 		: null
 }
@@ -302,14 +302,14 @@ export function mapBeforeHandle(
 	_hooks: AppHook['beforeHandle'] | AppHook['beforeHandle'][0],
 	derive: readonly DeriveEntry[] | undefined,
 	link: Link,
-	isAsync: AsyncMode,
+	mode: AsyncMode,
 	report?: TraceReporter,
 	abortGuard?: string,
 	arm?: string
 ) {
 	const hooks = toArray(_hooks)
 	const modes = deriveModes(hooks, derive)
-	const tail = asyncTail(isAsync)
+	const tail = asyncTail(mode)
 
 	let code = ''
 	let depth = 0
@@ -328,9 +328,9 @@ export function mapBeforeHandle(
 			depth++
 		}
 
-		const t = trace(report, fn)
+		const t = traceChild(report, fn)
 		code += t.begin
-		code += awaitSite(`bf${at(i)}(c)`, fn, isAsync, 'tmp', arm)
+		code += awaitSite(`bf${at(i)}(c)`, fn, mode, 'tmp', arm)
 		if (modes?.[i] !== undefined) {
 			needsEs = true
 			link(registerDeriveDisposable, 'dsp')
@@ -428,13 +428,13 @@ export async function runBeforeHandlePrefixAsync(
 export function mapChainHook(
 	_hooks: Function | Function[],
 	prefix: string,
-	isAsync: AsyncMode,
+	mode: AsyncMode,
 	report?: TraceReporter,
 	abortGuard?: string,
 	arm?: string
 ) {
 	const hooks = toArray(_hooks)
-	const tail = asyncTail(isAsync)
+	const tail = asyncTail(mode)
 	let code = ''
 	let depth = 0
 
@@ -451,15 +451,15 @@ export function mapChainHook(
 			depth++
 		}
 
-		const t = trace(report, fn)
+		const t = traceChild(report, fn)
 		code += t.begin
-		code += awaitSite(`${prefix}${at(i)}(c)`, fn, isAsync, 'tmp', arm)
+		code += awaitSite(`${prefix}${at(i)}(c)`, fn, mode, 'tmp', arm)
 		code += t.end('tmp')
 		if (tail) code += '}\n'
 	}
 
 	code += '}'.repeat(depth)
-	code += tailPlain(isAsync, `if(tmp!==undefined)_r=c.responseValue=tmp\n`)
+	code += tailPlain(mode, `if(tmp!==undefined)_r=c.responseValue=tmp\n`)
 	return code
 }
 
@@ -467,7 +467,7 @@ export const mapAfterResponse = /*#__PURE__*/ map<
 	'afterResponse',
 	[report?: TraceReporter]
 >((i, fn, [report]) => {
-	const t = trace(report, fn)
+	const t = traceChild(report, fn)
 	const call = isAsyncFunction(fn)
 		? `await ar${at(i)}(c)\n`
 		: `let _ar=ar${at(i)}(c)\nif(typeof _ar?.then==='function')await _ar\n`
@@ -483,14 +483,14 @@ export const mapError = /*#__PURE__*/ map<
 		mapResponse: ElysiaAdapter['response']['map'],
 		schedule: string,
 		sign: string,
-		isAsync: AsyncMode,
+		mode: AsyncMode,
 		arm?: string
 	]
->((i, fn, [map, link, mapResponse, schedule, sign, isAsync, arm]) => {
+>((i, fn, [map, link, mapResponse, schedule, sign, mode, arm]) => {
 	link(mapResponse, 'rm')
 	link(adoptErrorType, 'aet')
 	return (
-		awaitSite(`er${at(i)}(c)`, fn, isAsync, '_r', arm) +
+		awaitSite(`er${at(i)}(c)`, fn, mode, '_r', arm) +
 		`if(_r!==undefined){\n` +
 		`if(_r instanceof Response)c.set.status=_r.status\n` +
 		`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
@@ -642,17 +642,18 @@ export function getQueryParseChannels(
 export type AsyncMode = boolean | TailMode
 
 export interface TailMode {
-	// should render async tail? fast on bun, slow on node
+	// rendering the async tail `_t`, not the sync route
 	async: boolean
 	// next await point index
 	n: number
-	// `_r`, state across await points
+	// `_r` is live across await points
 	r?: boolean
-	// error
+	// inside the error hooks: `e` is live
 	e?: boolean
-	// route-scope locals carry into tail, each prefixed by `,`
+	// route-scope locals carried into the tail, each prefixed by `,`
 	live: string
-	// emit await point as `e:`
+	// each await point's `target=call` (`e:` inside the error hooks), so the
+	// route and its tail can be checked to be in step
 	sites: string[]
 }
 
@@ -663,21 +664,21 @@ export const asyncTail = (mode: AsyncMode) =>
 export function awaitSite(
 	call: string,
 	fn: Function,
-	isAsync: AsyncMode,
+	mode: AsyncMode,
 	target: string,
 	arm = ''
 ) {
-	if (typeof isAsync !== 'object')
-		return `${target}=${call}\n${awaitGuard(fn, isAsync, target, arm)}`
+	if (typeof mode !== 'object')
+		return `${target}=${call}\n${awaitGuard(fn, mode, target, arm)}`
 
-	const k = isAsync.n++
-	isAsync.sites.push(`${isAsync.e ? 'e:' : ''}${target}=${call}`)
+	const k = mode.n++
+	mode.sites.push(`${mode.e ? 'e:' : ''}${target}=${call}`)
 
-	return isAsync.async
+	return mode.async
 		? `${target}=_rk===${k}?_y:${call}\n` +
 				`if(_rk===${k}||typeof ${target}?.then==='function'){${arm ? `;${arm}\n` : ''}${target}=await ${target}}\n`
 		: `${target}=${call}\n` +
-				`if(typeof ${target}?.then==='function')return _t(c,${k},${target},${isAsync.r ? '_r' : 'undefined'},${isAsync.e ? 'e' : 'undefined'}${isAsync.live})\n`
+				`if(typeof ${target}?.then==='function')return _t(c,${k},${target},${mode.r ? '_r' : 'undefined'},${mode.e ? 'e' : 'undefined'}${mode.live})\n`
 }
 
 export const tailStage = (mode: TailMode, guard?: string) =>
@@ -692,11 +693,11 @@ export const tailPlain = (mode: AsyncMode, code: string) =>
 
 export function awaitGuard(
 	fn: Function,
-	isAsync: AsyncMode,
+	mode: AsyncMode,
 	target: string,
 	arm = ''
 ) {
-	if (!isAsync) return ''
+	if (!mode) return ''
 
 	const code = `${arm ? `;${arm}\n` : ''}${target}=await ${target}\n`
 	return isAsyncFunction(fn)

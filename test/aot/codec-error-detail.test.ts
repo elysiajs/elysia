@@ -427,7 +427,7 @@ describe('the coarse-detail build warning', () => {
 
 describe('end to end codec error detail', () => {
 	/**
-	 * This drives the WIRED lane: `Reconstrct.validator` only takes the sealed
+	 * This drives the WIRED lane: `Reconstruct.validator` only takes the sealed
 	 * branch when `isBridgeLive()` is false, and importing `t` wires the bridge
 	 * for the whole process (see test/compile/reconstruct-bridge-free.test.ts).
 	 * A genuinely sealed `handle()` needs the subprocess/esbuild-bundle fixture

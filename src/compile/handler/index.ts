@@ -7,7 +7,7 @@ import { ElysiaFile } from '../../universal/file'
 import { ElysiaStatus } from '../../error'
 import { isBun } from '../../universal/constants'
 
-import { Capture, Compiled, aotDrift, warnAotDrift } from '../aot'
+import { Capture, Compiled, aotDriftMessage, warnAotDrift } from '../aot'
 import { frozenRootOf } from '../../generation'
 import { resolveHandlerParams } from './params'
 import { compileHandlerJit, createInlineHandler } from './jit'
@@ -16,7 +16,7 @@ import { returnedErrorClasses } from '../../handler/utils'
 import { deriveModes } from './utils'
 import { isAsyncFunction } from '../utils'
 import { describeRoute, routeDescriptors } from './descriptor'
-import { Reconstrct } from './reconstruct'
+import { Reconstruct } from './reconstruct'
 import { isResponseMap } from './frozen-validator'
 import type { Context } from '../../context'
 import {
@@ -636,9 +636,8 @@ const shapeSlots = ['body', 'headers', 'params', 'query', 'cookie', 'response']
 
 const isCookieAt = (at: string) => at === 'cookie' || at === 'field'
 
-// mirror `gather` in cookie/config
-// trailing `*` marks a container that hold all value
-// `^` = deferred action's `parameters`
+// mirrors `gather` in cookie/config: a trailing `*` marks a container whose
+// every value is a schema, `^` a Deferred's `parameters`
 function childAt(at: string, k: string, value: unknown, deferred: boolean) {
 	if (at.endsWith('*')) return at.slice(0, -1)
 	if (at.endsWith('^'))
@@ -926,7 +925,7 @@ export function compileHandler(
 
 	const buildValidator = () =>
 		hook
-			? Reconstrct.validator(hook as any, root, method, path, liveOnly)
+			? Reconstruct.validator(hook as any, root, method, path, liveOnly)
 			: undefined
 
 	const errorClasses = returnedErrorClasses(hook as any, root)
@@ -999,7 +998,7 @@ export function compileHandler(
 			try {
 				live = compileHandler(route, root, true)
 			} catch (cause) {
-				throw new Error(aotDrift(method, path), { cause })
+				throw new Error(aotDriftMessage(method, path), { cause })
 			}
 
 			warnAotDrift(method, path)
@@ -1019,10 +1018,10 @@ export function compileHandler(
 					? buildValidator()
 					: undefined,
 				cookieConfig: reconstructed.a!.includes('cc')
-					? Reconstrct.cookie(hook, root)
+					? Reconstruct.cookie(hook, root)
 					: undefined,
 				tracers: reconstructed.a!.includes('tr')
-					? Reconstrct.trace(hook, root)
+					? Reconstruct.trace(hook, root)
 					: undefined
 			})
 		) as CompiledHandler

@@ -67,8 +67,9 @@ function collectErrorClasses(error: unknown, into: Function[] | undefined) {
 
 	const list = Array.isArray(error) ? error : [error]
 	for (let i = 0; i < list.length; i++) {
-		const C = (list[i] as any)?.['~errorClass']
-		if (C && !into?.includes(C)) (into ??= []).push(C)
+		const errorClass = (list[i] as any)?.['~errorClass']
+		if (errorClass && !into?.includes(errorClass))
+			(into ??= []).push(errorClass)
 	}
 
 	return into

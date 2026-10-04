@@ -33,6 +33,7 @@ describe('route descriptor', () => {
 		expect(descriptor).toEqual({
 			handlerKind: 'response',
 			async: false,
+			tail: false,
 			responseMode: 'compact',
 			hasBeforeHandle: false,
 			hasAfterHandle: false,

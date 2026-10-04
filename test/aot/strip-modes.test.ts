@@ -77,7 +77,7 @@ describe('AOT strip disabled', () => {
 
 		// live sucrose code must be retained. `separateFunction` used to be the
 		// marker, but it no longer exists (trace-phase inference now runs on
-		// `inferFunction`, severed into `elysia/trace`).
+		// `inferParameterReads`, severed into `elysia/trace`).
 		// `sucrose` itself (parameter inference) is still core-live, so it is the
 		// correct strip-disabled sucrose signal.
 		expect(text).toContain('function sucrose')

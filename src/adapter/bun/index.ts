@@ -204,14 +204,12 @@ function isNativePath(path: string) {
 /**
  * HTML bundles served by Bun's native router.
  *
- * A `:param` / `*` bundle (SPA fallback) matches before `fetch`, so with a
- * `handoff` every other route of that method is registered natively too,
- * handing off to `fetch`: Bun's specificity (exact > param > wildcard) then
- * picks the Elysia route, and only unmatched paths reach the bundle (Elysia's
- * own router leaves these bundles out, see `#buildRouterUnsafe`).
- *
- * All or nothing: when any route cannot be expressed in Bun's router, dynamic
- * bundles are not served natively at all, since that route would be shadowed.
+ * A `:param` / `*` bundle matches before `fetch`, so with a `handoff` every
+ * other route of that method is registered natively too, pointing at `fetch`;
+ * Bun's specificity (exact > param > wildcard) then picks the Elysia route over
+ * the bundle (Elysia's own router skips these bundles, see `#buildRouterUnsafe`).
+ * If any route can't be expressed in Bun's router, dynamic bundles are skipped
+ * entirely, since the bundle would shadow that route.
  */
 export function collectHTMLBundleRoutes(
 	app: AnyElysia,

@@ -86,7 +86,7 @@ export function alignBuildExternals(
 	schema: unknown
 ): CheckBuildResult | undefined {
 	const variables = build.external.variables
-	const canonical = collectExternals(schema)
+	const expected = collectExternals(schema)
 	const id = build.external.identifier
 	// spliced into the emitted code as a reassignment, so only a bare
 	// identifier is safe. TypeBox 1.3.x always uses 'External'
@@ -95,12 +95,11 @@ export function alignBuildExternals(
 	const slots: string[] = []
 
 	let j = 0
-	let same = variables.length === canonical.length
-	for (let i = 0; i < variables.length; i++) {
-		const v = variables[i] as any
-		const c = canonical[j] as any
+	let same = variables.length === expected.length
+	for (const v of variables) {
+		const c = expected[j]
 
-		if (j < canonical.length && externalsMatch([c], [v]))
+		if (j < expected.length && externalsMatch([c], [v]))
 			slots.push(`${id}[${j++}]`)
 		else if (Array.isArray(c) && c.length === 1 && c[0] === v) {
 			slots.push(`${id}[${j++}][0]`)
@@ -108,13 +107,13 @@ export function alignBuildExternals(
 		} else return
 	}
 
-	if (j !== canonical.length) return
+	if (j !== expected.length) return
 	if (same) return build
 
 	return {
 		...build,
 		functions: [`${id}=[${slots.join(',')}]`, ...build.functions],
-		external: { identifier: id, variables: canonical }
+		external: { identifier: id, variables: expected }
 	}
 }
 

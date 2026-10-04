@@ -1,5 +1,5 @@
 import { traceEvents, type TraceEvent } from './constants'
-import { inferFunction } from './sucrose'
+import { inferParameterReads } from './sucrose'
 import type { Context } from './context'
 import type { Prettify, RouteSchema, SingletonBase } from './types'
 
@@ -32,14 +32,12 @@ function scanTracePhases(fn: Function) {
 	if (fn.length)
 		try {
 			// the prototype method, so an own `toString` cannot forge the source
-			result = inferFunction(
+			result = inferParameterReads(
 				Function.prototype.toString.call(fn),
 				phaseOf,
 				true
 			)
-		} catch {
-			result = null
-		}
+		} catch {}
 
 	tracePhaseCache.set(fn, result)
 
@@ -183,7 +181,7 @@ export type TraceHandler<
 }
 
 /** Prevent rejected trace callbacks from becoming unhandled rejections. */
-function fire(result: unknown) {
+function logRejection(result: unknown) {
 	if (typeof (result as PromiseLike<unknown>)?.then === 'function')
 		(result as PromiseLike<unknown>).then(undefined, (error) =>
 			console.error(error)
@@ -295,7 +293,7 @@ class TraceRecorder {
 			const callbacks = this.callbacksBegin
 			if (callbacks)
 				for (let i = 0; i < callbacks.length; i++)
-					fire(callbacks[i](result))
+					logRejection(callbacks[i](result))
 		}
 
 		return this
@@ -336,7 +334,8 @@ class TraceRecorder {
 				}
 			} as any
 
-			for (let i = 0; i < children.length; i++) fire(children[i](result))
+			for (let i = 0; i < children.length; i++)
+				logRejection(children[i](result))
 
 			let resolved = false
 			return (err: Error | null = null) => {
@@ -356,7 +355,7 @@ class TraceRecorder {
 				}
 
 				for (let i = 0; i < callbacksEnd.length; i++)
-					fire(callbacksEnd[i](detail))
+					logRejection(callbacksEnd[i](detail))
 
 				resolveEnd(endAt)
 				resolveError(err)
@@ -387,7 +386,7 @@ class TraceRecorder {
 			}
 
 			for (let i = 0; i < callbacks.length; i++)
-				fire(callbacks[i](detail))
+				logRejection(callbacks[i](detail))
 		}
 
 		this.endResolve?.(end)
@@ -540,7 +539,7 @@ export const createTracer =
 		const handle = new TracerHandle()
 		handle.rid = context.rid ?? ''
 
-		fire(traceListener(new TracerLifecycle(handle, context) as any))
+		logRejection(traceListener(new TracerLifecycle(handle, context) as any))
 
 		return handle
 	}

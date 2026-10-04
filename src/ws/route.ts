@@ -35,7 +35,12 @@ import {
 	resolveWSLocalHook,
 	routeShape
 } from '../compile/handler'
-import { Capture, Compiled, aotDrift, warnAotDrift } from '../compile/aot'
+import {
+	Capture,
+	Compiled,
+	aotDriftMessage,
+	warnAotDrift
+} from '../compile/aot'
 
 import {
 	ElysiaWS,
@@ -328,7 +333,7 @@ function sendErrorFrame(ws: ElysiaWS<any>, error: unknown) {
 	)
 }
 
-function validateUpgradeChannel(
+function validateChannel(
 	validator: any,
 	value: unknown,
 	type: 'body' | 'params' | 'query' | 'headers' | 'cookie'
@@ -413,7 +418,7 @@ export function buildWSRoute(
 			validators = new RouteValidator(composed as any, {
 				models: frozenRootOf(app)['~ext']?.models,
 				app,
-				// `normalize` and `sanitize` are not used in the WS validator, but they are included here for consistency with the HTTP validator
+				// unused by WS, kept for parity with the HTTP validator
 				normalize: frozenRootOf(app)['~config']?.normalize,
 				sanitize: frozenRootOf(app)['~config']?.sanitize,
 				schemas: (composed as { schemas?: any }).schemas,
@@ -423,7 +428,9 @@ export function buildWSRoute(
 		} catch (error) {
 			if (!isBridgeNotInitialized(error)) throw error
 			if (live)
-				throw new Error(aotDrift('WS', route[1]), { cause: error })
+				throw new Error(aotDriftMessage('WS', route[1]), {
+					cause: error
+				})
 
 			const frozen = buildFrozenRouteValidator(
 				composed as any,
@@ -650,7 +657,7 @@ export function buildWSRoute(
 			let decoded: unknown
 
 			try {
-				decoded = validateUpgradeChannel(bodyValidator, message, 'body')
+				decoded = validateChannel(bodyValidator, message, 'body')
 			} catch (error) {
 				return onMessageValidationError(ws, error)
 			}
@@ -790,7 +797,7 @@ export function buildWSRoute(
 
 		try {
 			if (validators.params) {
-				let r = validateUpgradeChannel(
+				let r = validateChannel(
 					validators.params as any,
 					context.params ?? nullObject(),
 					'params'
@@ -808,7 +815,7 @@ export function buildWSRoute(
 				)
 
 				if (validators.query) {
-					r = validateUpgradeChannel(validators.query, r, 'query')
+					r = validateChannel(validators.query, r, 'query')
 					if (r instanceof Promise) r = await r
 				}
 				;(context as any).query = r
@@ -820,7 +827,7 @@ export function buildWSRoute(
 					: Object.fromEntries(request.headers)
 
 				if (validators.headers) {
-					r = validateUpgradeChannel(validators.headers, r, 'headers')
+					r = validateChannel(validators.headers, r, 'headers')
 					if (r instanceof Promise) r = await r
 				}
 				;(context as any).headers = r
@@ -836,7 +843,7 @@ export function buildWSRoute(
 
 					let r: unknown = raw
 					if (!cookieIsOptional || Object.keys(raw).length) {
-						r = validateUpgradeChannel(
+						r = validateChannel(
 							validators.cookie as any,
 							raw,
 							'cookie'

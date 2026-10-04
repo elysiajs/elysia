@@ -196,3 +196,62 @@ import { expectTypeOf } from 'expect-type'
 		}
 	)
 }
+
+// ArrayBuffer, Uint8Array and NumericEnum are hand-built schemas; their
+// handler types must come from the schema, not an `any` return
+{
+	type IsAny<T> = 0 extends 1 & T ? true : false
+
+	enum E {
+		A = 1,
+		B = 2
+	}
+
+	expectTypeOf<
+		IsAny<ReturnType<typeof t.ArrayBuffer>>
+	>().toEqualTypeOf<false>()
+	expectTypeOf<
+		IsAny<ReturnType<typeof t.Uint8Array>>
+	>().toEqualTypeOf<false>()
+	expectTypeOf<
+		IsAny<ReturnType<typeof t.NumericEnum<typeof E>>>
+	>().toEqualTypeOf<false>()
+
+	const app = new Elysia()
+		.post('/array-buffer', { body: t.ArrayBuffer() }, ({ body }) => {
+			expectTypeOf(body).toEqualTypeOf<ArrayBuffer>()
+		})
+		.post(
+			'/array-buffer-limit',
+			{ body: t.ArrayBuffer({ maxByteLength: 4 }) },
+			({ body }) => {
+				expectTypeOf(body).toEqualTypeOf<ArrayBuffer>()
+			}
+		)
+		.post('/uint8-array', { body: t.Uint8Array() }, ({ body }) => {
+			expectTypeOf(body).toEqualTypeOf<Uint8Array>()
+		})
+		.get(
+			'/enum',
+			{
+				query: t.Object({
+					e: t.NumericEnum(E),
+					c: t.NumericEnum({ X: 1, Y: 2 } as const)
+				})
+			},
+			({ query }) => {
+				expectTypeOf(query.e).toEqualTypeOf<E>()
+				expectTypeOf(query.c).toEqualTypeOf<1 | 2>()
+			}
+		)
+
+	// a client sends a member as a number or its numeric string; the handler
+	// sees `E`
+	type Routes = (typeof app)['~Routes']
+	expectTypeOf<Routes['enum']['get']['query']['e']>().toEqualTypeOf<
+		E | `${E}`
+	>()
+	expectTypeOf<Routes['enum']['get']['query']['c']>().toEqualTypeOf<
+		1 | 2 | '1' | '2'
+	>()
+}

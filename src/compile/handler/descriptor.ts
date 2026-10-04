@@ -18,7 +18,7 @@ import {
 	traceCapabilityRequired
 } from '../../generation'
 import { JITProbe } from '../jit-probe'
-import { Reconstrct } from './reconstruct'
+import { Reconstruct } from './reconstruct'
 
 import { isNotEmpty, type CompactBeforeHandlePrefix } from '../../utils'
 import type { AnyLocalHook, MaybeArray } from '../../types'
@@ -236,11 +236,11 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 	const headersValiIsAsync = vali?.headers && isAsyncValidator(vali.headers)
 	const paramsValiIsAsync = vali?.params && isAsyncValidator(vali.params)
 	const queryValiIsAsync = vali?.query && isAsyncValidator(vali.query)
-	const cookieValidIsAsync = vali?.cookie && isAsyncValidator(vali.cookie)
+	const cookieValiIsAsync = vali?.cookie && isAsyncValidator(vali.cookie)
 
 	const needsCookie = !!vali?.cookie || !!inference.cookie
 	const cookieConfig = needsCookie
-		? Reconstrct.cookie(hook as any, root)
+		? Reconstruct.cookie(hook as any, root)
 		: undefined
 	const hasCookieSign = !!cookieConfig?.hasSign
 
@@ -348,7 +348,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		headersValiIsAsync ||
 		paramsValiIsAsync ||
 		queryValiIsAsync ||
-		cookieValidIsAsync
+		cookieValiIsAsync
 
 	const callHandlerSyncOnAsync =
 		isAsync && isHandleFunction && !handlerIsAsync
@@ -367,7 +367,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		!headersValiIsAsync &&
 		!paramsValiIsAsync &&
 		!queryValiIsAsync &&
-		!cookieValidIsAsync &&
+		!cookieValiIsAsync &&
 		!(
 			hook &&
 			(isAsyncLifecycle(hook.afterHandle) ||
@@ -411,7 +411,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 	const descriptor: RouteDescriptor = {
 		handlerKind,
 		async: !!isAsync,
-		tail: tail as boolean,
+		tail: !!tail,
 		responseMode,
 
 		hasBeforeHandle,
@@ -430,7 +430,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		headersValiIsAsync: !!headersValiIsAsync,
 		paramsValiIsAsync: !!paramsValiIsAsync,
 		queryValiIsAsync: !!queryValiIsAsync,
-		cookieValiIsAsync: !!cookieValidIsAsync,
+		cookieValiIsAsync: !!cookieValiIsAsync,
 		responseValiAsync,
 
 		hasCookieSign,

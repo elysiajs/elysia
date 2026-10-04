@@ -7,7 +7,11 @@ import { nullObject } from '../utils'
 import type { Context } from '../context'
 import type { BaseCookie } from './types'
 import type { CompiledCookieConfig } from './config'
-import { isCookieSigned, legacySignatureOf, resolveSignSecrets } from './config'
+import {
+	isCookieSigned,
+	acceptsLegacySignature,
+	resolveSignSecrets
+} from './config'
 import { InvalidCookie } from './error'
 
 import {
@@ -83,13 +87,13 @@ export function parseCookieRawLazy(
 }
 
 /**
- * Raw-record value of a signed cookie that failed verification on a lane that
- * can't verify on access (asynchronous HMAC, AOT); the jar rejects its first
- * read. A string key, not a module identity, so a second Elysia copy agrees.
- * Null-prototype, which `JSON.parse` never yields, so no cookie value a client
- * sends (unsigned, or accepted by a `null` rotation secret) can take its shape
+ * Stands in for a signed cookie that failed verification on a lane that can't
+ * verify on access (async HMAC, AOT); the jar rejects its first read.
+ * String key so a second Elysia copy agrees; null-prototype, which
+ * `JSON.parse` never yields, so no client-sent value (unsigned, or accepted by a
+ * `null` rotation secret) can forge it
  */
-const invalidSignature = () => {
+const invalidSignatureMarker = () => {
 	const marker = nullObject()
 	marker['~invalid'] = 1
 
@@ -122,13 +126,13 @@ export async function parseCookieRaw(
 					name,
 					value,
 					signCheck,
-					legacySignatureOf(name, config)
+					acceptsLegacySignature(name, config)
 				)
 			} catch (error) {
 				// only a bad signature defers, a crypto failure stays loud
 				if (!lazy || !(error instanceof InvalidCookie)) throw error
 
-				out[name] = invalidSignature()
+				out[name] = invalidSignatureMarker()
 				continue
 			}
 
@@ -165,13 +169,13 @@ export function parseCookieRawSigned(
 					name,
 					value,
 					signCheck,
-					legacySignatureOf(name, config)
+					acceptsLegacySignature(name, config)
 				)
 			} catch (error) {
 				// only a bad signature defers, a crypto failure stays loud
 				if (!lazy || !(error instanceof InvalidCookie)) throw error
 
-				out[name] = invalidSignature()
+				out[name] = invalidSignatureMarker()
 				continue
 			}
 
@@ -227,7 +231,7 @@ export function buildCookieJar(
 			const secrets = resolveSignSecrets(name, config)
 			if (secrets !== undefined) {
 				;(entry as any)['~unsign'] = secrets
-				if (!legacySignatureOf(name, config))
+				if (!acceptsLegacySignature(name, config))
 					(entry as any)['~strict'] = 1
 			}
 		} else {

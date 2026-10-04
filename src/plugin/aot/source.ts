@@ -110,7 +110,7 @@ const materialiseHandlersForReplay = (
 			// eslint-disable-next-line sonarjs/code-eval
 			f: new Function(
 				`return ${Source.handlerFactory(h.alias, h.code)}`
-			)() as any,
+			)(),
 			k: h.k
 		}
 	}
@@ -689,8 +689,7 @@ function emitModule(
 	// `Compiled.release` the module retains nothing but the fingerprint
 	body += '\n'
 
-	// wire the reconstruction table before the app can observe a frozen
-	// entry top-level, ahead of the register call
+	// install the reconstruction table before `register`, ahead of any frozen entry
 	if (captured.length) body += 'Compiled.reconstruct = Reconstruct\n'
 
 	body +=

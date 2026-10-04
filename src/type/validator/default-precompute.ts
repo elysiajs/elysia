@@ -80,7 +80,7 @@ function nestedOwnDefaultDiverges(objectSchema: any) {
 		if ('default' in child) {
 			if (
 				!(key in own) ||
-				canonical((own as any)[key]) !== canonical(child.default)
+				stableStringify((own as any)[key]) !== stableStringify(child.default)
 			)
 				return true
 		} else if (child['~kind'] === 'Object' || child.type === 'object') {
@@ -195,14 +195,14 @@ function structuralPreallocatable(schema: any, depth = 0) {
 		)
 	) {
 		const ownKey =
-			'default' in schema ? canonical(schema.default) : undefined
+			'default' in schema ? stableStringify(schema.default) : undefined
 
 		return !schemaSome(
 			schema,
 			(n) =>
 				n !== schema &&
 				'default' in n &&
-				(ownKey === undefined || canonical(n.default) !== ownKey),
+				(ownKey === undefined || stableStringify(n.default) !== ownKey),
 			undefined,
 			undefined,
 			true
@@ -673,11 +673,11 @@ function probe() {
 	return probeImpl
 }
 
-export function canonical(v: unknown): string {
+export function stableStringify(v: unknown): string {
 	if (v === undefined) return '\0u'
 	if (Object.is(v, -0)) return '-0'
 	if (v === null || typeof v !== 'object') return JSON.stringify(v) ?? '\0u'
-	if (Array.isArray(v)) return '[' + v.map(canonical).join(',') + ']'
+	if (Array.isArray(v)) return '[' + v.map(stableStringify).join(',') + ']'
 
 	return (
 		'{' +
@@ -687,7 +687,7 @@ export function canonical(v: unknown): string {
 				(k) =>
 					JSON.stringify(k) +
 					':' +
-					canonical((v as Record<string, unknown>)[k])
+					stableStringify((v as Record<string, unknown>)[k])
 			)
 			.join(',') +
 		'}'
@@ -735,12 +735,10 @@ export function verifyPreallocatableDefault(schema: TSchema, validate = true) {
 
 	let ms: string | undefined
 	const category = mergeCategory(schema)
-	if (category !== 'object' && category !== 'array') ms = undefined
-	else {
+	if (category === 'object' || category === 'array') {
 		const helpers: string[] = []
-		const memo = new WeakMap<object, string>()
-		const root = emitMerger(schema, helpers, memo)
-		ms = root ? `(function(){${helpers.join(';')};return ${root}})()` : undefined
+		const root = emitMerger(schema, helpers)
+		if (root) ms = `(function(){${helpers.join(';')};return ${root}})()`
 	}
 	if (ms !== undefined && validate && !probe().validateMergeSource(schema, ms))
 		ms = undefined

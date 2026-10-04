@@ -459,7 +459,8 @@ interface DefaultFastPath {
 export class TypeBoxValidator<
 	const in out T extends TSchema = TAny
 > extends Validator {
-	static member(schema: TSchema, compiled: any): boolean {
+	// also guards the member's refinements so an async refine fails closed
+	static isAsyncMember(schema: TSchema, compiled: any): boolean {
 		const isAsync = (
 			compiled.buildResult ?? Build(schema)
 		).external.variables.some(isAsyncPredicate)
@@ -586,20 +587,16 @@ export class TypeBoxValidator<
 			}
 		}
 
-		let isFrozen: boolean
-		if (
-			!options?.aot ||
-			!options.slot ||
-			options.normalize === 'typebox'
+		const isFrozen = !!(
+			options?.aot &&
+			options.slot &&
+			options.normalize !== 'typebox' &&
+			(frozen?.c || frozen?.cm)
 		)
-			isFrozen = false
-		else if (!frozen?.c && !frozen?.cm) isFrozen = false
-		else {
-			this.isAsync = frozen.a === 1
-			this.hasDefault = frozen.d === 1
-			this.hasCodec = frozen.k === 1
-
-			isFrozen = true
+		if (isFrozen) {
+			this.isAsync = frozen!.a === 1
+			this.hasDefault = frozen!.d === 1
+			this.hasCodec = frozen!.k === 1
 		}
 
 		this.schema = (
@@ -788,9 +785,10 @@ export class TypeBoxValidator<
 
 			try {
 				if (options?.normalize === false) this.Clean = undefined
-				else if (options?.normalize === 'typebox')
-					this.Clean = (value) => Clean(this.schema, value)
-				else if (schemaHasDangerousProperties(this.schema))
+				else if (
+					options?.normalize === 'typebox' ||
+					schemaHasDangerousProperties(this.schema)
+				)
 					this.Clean = (value) => Clean(this.schema, value)
 				else {
 					const aot = options?.aot
