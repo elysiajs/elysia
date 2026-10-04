@@ -1,5 +1,5 @@
 import { expectTypeOf } from 'expect-type'
-import { Elysia, t } from '../../src'
+import { Elysia, macroType, t } from '../../src'
 import type { AnySchema, MacroTypeLambda, UnwrapSchema } from '../../src'
 
 interface ChannelLambda extends MacroTypeLambda {
@@ -9,9 +9,8 @@ interface ChannelLambda extends MacroTypeLambda {
 }
 
 const channel = new Elysia({ name: 'channel' }).macro({
-	channel: (option: {
-		of: AnySchema
-	}): { $type?: ChannelLambda; derive(): unknown } => ({
+	channel: (option: { of: AnySchema }) => ({
+		$type: macroType<ChannelLambda>(),
 		derive: () => ({ of: option.of })
 	})
 })
@@ -52,10 +51,8 @@ const channel = new Elysia({ name: 'channel' }).macro({
 
 	new Elysia()
 		.macro({
-			scoped: (option: {
-				of: AnySchema
-				readonly?: boolean
-			}): { $type?: ScopedLambda; derive(): unknown } => ({
+			scoped: (option: { of: AnySchema; readonly?: boolean }) => ({
+				$type: macroType<ScopedLambda>(),
 				derive: () => ({ of: option.of })
 			})
 		})
@@ -87,10 +84,8 @@ const channel = new Elysia({ name: 'channel' }).macro({
 
 	new Elysia()
 		.macro({
-			loose: (_option: {
-				of?: AnySchema
-				label: string
-			}): { $type?: LooseLambda; derive(): unknown } => ({
+			loose: (_option: { of?: AnySchema; label: string }) => ({
+				$type: macroType<LooseLambda>(),
 				derive: () => ({})
 			})
 		})
@@ -175,6 +170,31 @@ const channel = new Elysia({ name: 'channel' }).macro({
 				expectTypeOf(custom).toEqualTypeOf<{ id: string }>()
 				expectTypeOf(params).toEqualTypeOf<{ id: number }>()
 				expectTypeOf(body).toEqualTypeOf<{ msg: string }>()
+			}
+		)
+}
+
+// Early returns without the marker keep the lambda.
+{
+	interface EarlyLambda extends MacroTypeLambda {
+		output: this['input'] extends { of: infer S extends AnySchema }
+			? { early: UnwrapSchema<S> }
+			: {}
+	}
+
+	new Elysia()
+		.macro({
+			early: (option: { of: AnySchema } | false) => {
+				if (!option) return {}
+
+				return { $type: macroType<EarlyLambda>(), derive: () => ({}) }
+			}
+		})
+		.get(
+			'/early',
+			{ early: { of: t.Object({ n: t.Number() }) } },
+			({ early }) => {
+				expectTypeOf(early).toEqualTypeOf<{ n: number }>()
 			}
 		)
 }

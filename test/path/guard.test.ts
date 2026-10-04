@@ -144,6 +144,36 @@ describe('guard', () => {
 		expect(error.status).toBe(422)
 	})
 
+	it('prefers the nearer chained callback guard schema', async () => {
+		const app = new Elysia()
+			.guard({ body: t.Object({ a: t.String() }) })
+			.guard({ body: t.Object({ b: t.Number() }) }, (app) =>
+				app.post('/', ({ body }) => body)
+			)
+
+		const inherited = await app.handle('/', json({ a: 'a' }))
+		const nearer = await app.handle('/', json({ b: 1 }))
+
+		expect(inherited.status).toBe(422)
+		expect(nearer.status).toBe(200)
+	})
+
+	it('prefers a plugin guard used inside a callback guard', async () => {
+		const plugin = new Elysia().guard('plugin', {
+			body: t.Object({ c: t.Boolean() })
+		})
+		const app = new Elysia().guard(
+			{ body: t.Object({ b: t.Number() }) },
+			(app) => app.use(plugin).post('/', ({ body }) => body)
+		)
+
+		const outer = await app.handle('/', json({ b: 1 }))
+		const nearer = await app.handle('/', json({ c: true }))
+
+		expect(outer.status).toBe(422)
+		expect(nearer.status).toBe(200)
+	})
+
 	it('validate response', async () => {
 		const app = new Elysia().guard(
 			{

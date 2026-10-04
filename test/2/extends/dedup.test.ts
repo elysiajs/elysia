@@ -338,3 +338,46 @@ describe('plugin deduplication', () => {
 		expect(count).toBe(1)
 	})
 })
+
+describe('.has()', () => {
+	it('finds named plugins by name and seed', () => {
+		const plugin = new Elysia({ name: 'plugin', seed: 'a' })
+		const app = new Elysia().use(plugin)
+
+		expect(app.has(plugin)).toBe(true)
+		expect(app.has(new Elysia({ name: 'plugin', seed: 'a' }))).toBe(true)
+		expect(app.has(new Elysia({ name: 'plugin', seed: 'b' }))).toBe(false)
+	})
+
+	it('finds unnamed plugins by reference', () => {
+		const plugin = new Elysia()
+		const app = new Elysia().use(plugin)
+
+		expect(app.has(plugin)).toBe(true)
+		expect(app.has(new Elysia())).toBe(false)
+	})
+
+	it('finds transitive unnamed plugins', () => {
+		const plugin = new Elysia()
+		const parent = new Elysia({ name: 'parent' }).use(plugin)
+		const app = new Elysia().use(parent)
+
+		expect(app.has(plugin)).toBe(true)
+	})
+
+	it('returns false for an unregistered plugin', () => {
+		const app = new Elysia()
+
+		expect(app.has(new Elysia({ name: 'plugin' }))).toBe(false)
+		expect(app.has(app)).toBe(false)
+	})
+
+	it('reflects plugins registered later', () => {
+		const plugin = new Elysia()
+		const app = new Elysia()
+
+		expect(app.has(plugin)).toBe(false)
+		app.use(plugin)
+		expect(app.has(plugin)).toBe(true)
+	})
+})

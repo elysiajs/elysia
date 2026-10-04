@@ -1,21 +1,21 @@
-import { Elysia, HTTPError, status } from '../src'
+import { Elysia } from '../src'
+import * as z from 'zod'
 
-class CustomError<T extends string> extends HTTPError.id('CUSTOM_ERROR') {
-	constructor(public message: T) {
-		super(message)
-	}
-
-	value() {
-		return status(418, `quack! ${this.message}`)
-	}
-}
-
-const app = new Elysia().get('/', () =>
-	Math.random() > 0.5 ? new CustomError('q') : 'ok'
+const app = new Elysia().post(
+	'/hello',
+	{
+		query: z.object({ number: z.coerce.number() }),
+		body: z.object({ number: z.coerce.number() })
+	},
+	() => {}
 )
 
-app.handle('/')
-	.then((res) => res.status)
-	.then(console.log)
+type App = typeof app
 
-type a = (typeof app)['~Routes']['get']['response']
+type Query = App['~Routes']['hello']['post']['query']
+// actual: { number: number; }
+// expected: { number: string; }
+
+type Body = App['~Routes']['hello']['post']['body']
+// actual: { number: number; }
+// expected: { number: string; }

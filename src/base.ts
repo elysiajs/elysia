@@ -139,6 +139,7 @@ import type {
 	Handler,
 	HistoryEntry,
 	MacroToProperty,
+	MacroOptionContext,
 	ObjectMacroDefs,
 	WrapFn,
 	ExcludeElysiaResponse,
@@ -355,7 +356,7 @@ export class Elysia<
 	private _error?: { error: unknown }
 
 	private hash?: number
-	private childrenHash?: Set<number>
+	private childrenHash?: Set<number | AnyElysia>
 
 	private scopeParent?: AnyElysia
 	// Macro defs a scope-child absorbed via a nested plugin `.use()` (name → def)
@@ -2455,13 +2456,6 @@ export class Elysia<
 	 *     .guard({ body: t.Object({ name: t.String() }) })
 	 *     .post('/', ({ body }) => body)
 	 * ```
-	 *
-	 * @remarks
-	 * Chaining a very large number of `.guard()` calls on a single instance
-	 * (~120+) can exhaust the TypeScript type-instantiation budget and slow or
-	 * error `tsc`, because each `.guard()` re-expands the accumulated schema
-	 * metadata. For large counts, compose the guards across plugins and combine
-	 * them with `.use()` instead.
 	 */
 	guard<
 		const Input extends Metadata['macro'] &
@@ -2512,7 +2506,16 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle
-		> & { schema: 'merge' }
+		> & { schema: 'merge' } & MacroOptionContext<
+				Metadata['macroFn'],
+				Schema,
+				GuardHookSingleton<
+					Singleton,
+					Ephemeral,
+					Volatile,
+					{ derive: {} }
+				>
+			>
 	): Elysia<
 		BasePath,
 		Scope,
@@ -2524,11 +2527,8 @@ export class Elysia<
 		{
 			derive: Volatile['derive'] &
 				// @ts-ignore
-				MacroContext['resolve']
+				MacroContext['derive']
 			schema: Volatile['schema']
-			// `schema: 'merge'` input + response schemas accumulate here; a route's
-			// own response overrides the merged response via the OVERRIDE
-			// semantics in `IntersectIfObjectSchema`.
 			schemas: Volatile['schemas'] &
 				UnwrapRoute<Input, Definitions['typebox']> &
 				// @ts-ignore
@@ -2595,7 +2595,17 @@ export class Elysia<
 			AfterHandle,
 			ErrorHandle,
 			'override'
-		>
+		> &
+			MacroOptionContext<
+				Metadata['macroFn'],
+				Schema,
+				GuardHookSingleton<
+					Singleton,
+					Ephemeral,
+					Volatile,
+					{ derive: {} }
+				>
+			>
 	): Elysia<
 		BasePath,
 		Scope,
@@ -2607,7 +2617,7 @@ export class Elysia<
 		{
 			derive: Volatile['derive'] &
 				// @ts-ignore
-				MacroContext['resolve']
+				MacroContext['derive']
 			schema: {} extends Pick<Input, Extract<keyof Input, InputSchemaKey>>
 				? Volatile['schema']
 				: MergeSchema<
@@ -2681,7 +2691,16 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle
-		> & { schema: 'merge' },
+		> & { schema: 'merge' } & MacroOptionContext<
+				Metadata['macroFn'],
+				Schema,
+				GuardHookSingleton<
+					Singleton,
+					Ephemeral,
+					Volatile,
+					{ derive: {} }
+				>
+			>,
 		run: (
 			group: Elysia<
 				BasePath,
@@ -2691,7 +2710,7 @@ export class Elysia<
 					store: Singleton['store']
 					derive: Singleton['derive'] &
 						// @ts-ignore
-						MacroContext['resolve']
+						MacroContext['derive']
 				},
 				Definitions,
 				{
@@ -2777,7 +2796,17 @@ export class Elysia<
 			AfterHandle,
 			ErrorHandle,
 			'override'
-		>,
+		> &
+			MacroOptionContext<
+				Metadata['macroFn'],
+				Schema,
+				GuardHookSingleton<
+					Singleton,
+					Ephemeral,
+					Volatile,
+					{ derive: {} }
+				>
+			>,
 		run: (
 			group: Elysia<
 				BasePath,
@@ -2787,7 +2816,7 @@ export class Elysia<
 					store: Singleton['store']
 					derive: Singleton['derive'] &
 						// @ts-ignore
-						MacroContext['resolve']
+						MacroContext['derive']
 				},
 				Definitions,
 				{
@@ -2810,8 +2839,20 @@ export class Elysia<
 						ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle>
 				},
 				{},
-				Ephemeral,
-				Volatile
+				{
+					derive: Ephemeral['derive']
+					schema: {}
+					schemas: Ephemeral['schemas']
+					response: Ephemeral['response']
+					error: Ephemeral['error']
+				},
+				{
+					derive: Volatile['derive']
+					schema: {}
+					schemas: Volatile['schemas']
+					response: Volatile['response']
+					error: Volatile['error']
+				}
 			>
 		) => NewElysia
 	): Elysia<
@@ -2875,7 +2916,16 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle
-		> & { schema: 'merge' }
+		> & { schema: 'merge' } & MacroOptionContext<
+				Metadata['macroFn'],
+				Schema,
+				GuardHookSingleton<
+					Singleton,
+					Ephemeral,
+					Volatile,
+					{ derive: {} }
+				>
+			>
 	): Elysia<
 		BasePath,
 		Scope,
@@ -2887,7 +2937,7 @@ export class Elysia<
 		{
 			derive: Volatile['derive'] &
 				// @ts-ignore
-				MacroContext['resolve']
+				MacroContext['derive']
 			schema: Volatile['schema']
 			schemas: Volatile['schemas'] &
 				UnwrapRoute<Input, Definitions['typebox']> &
@@ -2956,7 +3006,17 @@ export class Elysia<
 			AfterHandle,
 			ErrorHandle,
 			'override'
-		>
+		> &
+			MacroOptionContext<
+				Metadata['macroFn'],
+				Schema,
+				GuardHookSingleton<
+					Singleton,
+					Ephemeral,
+					Volatile,
+					{ derive: {} }
+				>
+			>
 	): Elysia<
 		BasePath,
 		Scope,
@@ -2968,7 +3028,7 @@ export class Elysia<
 		{
 			derive: Volatile['derive'] &
 				// @ts-ignore
-				MacroContext['resolve']
+				MacroContext['derive']
 			schema: {} extends Pick<Input, Extract<keyof Input, InputSchemaKey>>
 				? Volatile['schema']
 				: MergeSchema<
@@ -3040,7 +3100,16 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle
-		> & { schema: 'merge' }
+		> & { schema: 'merge' } & MacroOptionContext<
+				Metadata['macroFn'],
+				Schema,
+				GuardHookSingleton<
+					Singleton,
+					Ephemeral,
+					Volatile,
+					{ derive: {} }
+				>
+			>
 	): Elysia<
 		BasePath,
 		Scope,
@@ -3051,7 +3120,7 @@ export class Elysia<
 		{
 			derive: Ephemeral['derive'] &
 				// @ts-ignore
-				MacroContext['resolve']
+				MacroContext['derive']
 			schema: Ephemeral['schema']
 			schemas: Ephemeral['schemas'] &
 				UnwrapRoute<Input, Definitions['typebox']> &
@@ -3121,7 +3190,17 @@ export class Elysia<
 			AfterHandle,
 			ErrorHandle,
 			'override'
-		>
+		> &
+			MacroOptionContext<
+				Metadata['macroFn'],
+				Schema,
+				GuardHookSingleton<
+					Singleton,
+					Ephemeral,
+					Volatile,
+					{ derive: {} }
+				>
+			>
 	): Elysia<
 		BasePath,
 		Scope,
@@ -3132,7 +3211,7 @@ export class Elysia<
 		{
 			derive: Ephemeral['derive'] &
 				// @ts-ignore
-				MacroContext['resolve']
+				MacroContext['derive']
 			schema: {} extends Pick<Input, Extract<keyof Input, InputSchemaKey>>
 				? Ephemeral['schema']
 				: MergeSchema<
@@ -3205,7 +3284,16 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle
-		> & { schema: 'merge' }
+		> & { schema: 'merge' } & MacroOptionContext<
+				Metadata['macroFn'],
+				Schema,
+				GuardHookSingleton<
+					Singleton,
+					Ephemeral,
+					Volatile,
+					{ derive: {} }
+				>
+			>
 	): Elysia<
 		BasePath,
 		Scope,
@@ -3214,7 +3302,7 @@ export class Elysia<
 			store: Singleton['store']
 			derive: Singleton['derive'] &
 				// @ts-ignore
-				MacroContext['resolve']
+				MacroContext['derive']
 		},
 		Definitions,
 		{
@@ -3291,7 +3379,17 @@ export class Elysia<
 			AfterHandle,
 			ErrorHandle,
 			'override'
-		>
+		> &
+			MacroOptionContext<
+				Metadata['macroFn'],
+				Schema,
+				GuardHookSingleton<
+					Singleton,
+					Ephemeral,
+					Volatile,
+					{ derive: {} }
+				>
+			>
 	): Elysia<
 		BasePath,
 		Scope,
@@ -3300,7 +3398,7 @@ export class Elysia<
 			store: Singleton['store']
 			derive: Singleton['derive'] &
 				// @ts-ignore
-				MacroContext['resolve']
+				MacroContext['derive']
 		},
 		Definitions,
 		{
@@ -3478,7 +3576,16 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle
-		> & { schema: 'merge' },
+		> & { schema: 'merge' } & MacroOptionContext<
+				Metadata['macroFn'],
+				Schema,
+				GuardHookSingleton<
+					Singleton,
+					Ephemeral,
+					Volatile,
+					{ derive: {} }
+				>
+			>,
 		run: (
 			group: Elysia<
 				JoinPath<BasePath, Prefix>,
@@ -3488,7 +3595,7 @@ export class Elysia<
 					store: Singleton['store']
 					derive: Singleton['derive'] &
 						// @ts-ignore
-						MacroContext['resolve']
+						MacroContext['derive']
 				},
 				Definitions,
 				{
@@ -3580,7 +3687,17 @@ export class Elysia<
 			AfterHandle,
 			ErrorHandle,
 			'override'
-		>,
+		> &
+			MacroOptionContext<
+				Metadata['macroFn'],
+				Schema,
+				GuardHookSingleton<
+					Singleton,
+					Ephemeral,
+					Volatile,
+					{ derive: {} }
+				>
+			>,
 		run: (
 			group: Elysia<
 				JoinPath<BasePath, Prefix>,
@@ -3590,7 +3707,7 @@ export class Elysia<
 					store: Singleton['store']
 					derive: Singleton['derive'] &
 						// @ts-ignore
-						MacroContext['resolve']
+						MacroContext['derive']
 				},
 				Definitions,
 				{
@@ -3613,8 +3730,20 @@ export class Elysia<
 						ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle>
 				},
 				{},
-				Ephemeral,
-				Volatile
+				{
+					derive: Ephemeral['derive']
+					schema: {}
+					schemas: Ephemeral['schemas']
+					response: Ephemeral['response']
+					error: Ephemeral['error']
+				},
+				{
+					derive: Volatile['derive']
+					schema: {}
+					schemas: Volatile['schemas']
+					response: Volatile['response']
+					error: Volatile['error']
+				}
 			>
 		) => NewElysia
 	): Elysia<
@@ -4327,6 +4456,14 @@ export class Elysia<
 		return this
 	}
 
+	has(plugin: AnyElysia) {
+		const hash = plugin.hash
+
+		return (
+			this.childrenHash?.has(hash === undefined ? plugin : hash) ?? false
+		)
+	}
+
 	#useFn(app: (app: any) => unknown): any {
 		const prevBaseline = this.macroBaseline
 		const baseline = new Set<string>()
@@ -4390,17 +4527,17 @@ export class Elysia<
 	}
 
 	#use(app: AnyElysia) {
-		let addedByThisCall: Set<number> | undefined
+		let addedByThisCall: Set<number | AnyElysia> | undefined
 
 		const config = app['~config']
 
 		if (app['~introspect'] || config?.introspect) this['~introspect'] = true
 
 		const name = config?.name
-		if (name) {
-			const hash = app.hash!
-			if (this.childrenHash?.has(hash)) return
-
+		const hash = name ? app.hash! : app
+		const exists = this.childrenHash?.has(hash)
+		if (name && exists) return
+		if (!exists) {
 			this.childrenHash ??= new Set()
 			this.childrenHash.add(hash)
 			;(addedByThisCall ??= new Set()).add(hash)
@@ -4435,7 +4572,7 @@ export class Elysia<
 
 	#absorbChildrenHash(
 		app: AnyElysia,
-		addedByThisCall: Set<number> | undefined
+		addedByThisCall: Set<number | AnyElysia> | undefined
 	) {
 		const incoming = app.childrenHash!
 
@@ -4460,7 +4597,7 @@ export class Elysia<
 	 */
 	#assertMacroUnique(
 		app: AnyElysia,
-		addedByThisCall: Set<number> | undefined
+		addedByThisCall: Set<number | AnyElysia> | undefined
 	) {
 		const incomingMacro = app['~ext']?.macro as
 			| Record<string, unknown>
@@ -4631,7 +4768,7 @@ export class Elysia<
 	#propagateHooks(
 		app: AnyElysia,
 		hookChain: ChainNode | undefined,
-		addedByThisCall: Set<number> | undefined
+		addedByThisCall: Set<number | AnyElysia> | undefined
 	) {
 		let pluginEvents: Partial<AppHook> | undefined
 		let globalEvents: Partial<AppHook> | undefined
@@ -5302,7 +5439,8 @@ export class Elysia<
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
-		>,
+		> &
+			MacroOptionContext<Metadata['macroFn'], Schema, Decorator>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -5435,7 +5573,8 @@ export class Elysia<
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
-		>,
+		> &
+			MacroOptionContext<Metadata['macroFn'], Schema, Decorator>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -5568,7 +5707,8 @@ export class Elysia<
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
-		>,
+		> &
+			MacroOptionContext<Metadata['macroFn'], Schema, Decorator>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -5701,7 +5841,8 @@ export class Elysia<
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
-		>,
+		> &
+			MacroOptionContext<Metadata['macroFn'], Schema, Decorator>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -5834,7 +5975,8 @@ export class Elysia<
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
-		>,
+		> &
+			MacroOptionContext<Metadata['macroFn'], Schema, Decorator>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -5967,7 +6109,8 @@ export class Elysia<
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
-		>,
+		> &
+			MacroOptionContext<Metadata['macroFn'], Schema, Decorator>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -6100,7 +6243,8 @@ export class Elysia<
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
-		>,
+		> &
+			MacroOptionContext<Metadata['macroFn'], Schema, Decorator>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -6233,7 +6377,8 @@ export class Elysia<
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
-		>,
+		> &
+			MacroOptionContext<Metadata['macroFn'], Schema, Decorator>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -6367,7 +6512,8 @@ export class Elysia<
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
-		>,
+		> &
+			MacroOptionContext<Metadata['macroFn'], Schema, Decorator>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -6498,7 +6644,8 @@ export class Elysia<
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
-		>,
+		> &
+			MacroOptionContext<Metadata['macroFn'], Schema, Decorator>,
 		fn: Handle
 	): this
 	all<
@@ -6567,11 +6714,7 @@ export class Elysia<
 		>,
 		const MacroContext extends {} extends Metadata['macroFn']
 			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Input,
-					Definitions['typebox']
-				>
+			: MacroToContext<Metadata['macroFn'], Input, Definitions['typebox']>
 	>(
 		path: Path,
 		options: WSLocalHook<
@@ -6582,9 +6725,19 @@ export class Elysia<
 				derive: Ephemeral['derive'] &
 					Volatile['derive'] &
 					// @ts-ignore
-					MacroContext['resolve']
+					MacroContext['derive']
 			}
-		>
+		> &
+			MacroOptionContext<
+				Metadata['macroFn'],
+				Schema,
+				GuardHookSingleton<
+					Singleton,
+					Ephemeral,
+					Volatile,
+					{ derive: {} }
+				>
+			>
 	): AddWSRoute<
 		BasePath,
 		Scope,
@@ -6637,7 +6790,7 @@ export class Elysia<
 				derive: Ephemeral['derive'] &
 					Volatile['derive'] &
 					// @ts-ignore
-					MacroContext['resolve']
+					MacroContext['derive']
 			}
 		>
 	>(
@@ -6696,7 +6849,7 @@ export class Elysia<
 				derive: Ephemeral['derive'] &
 					Volatile['derive'] &
 					// @ts-ignore
-					MacroContext['resolve']
+					MacroContext['derive']
 			}
 		>
 	>(
@@ -6709,9 +6862,19 @@ export class Elysia<
 				derive: Ephemeral['derive'] &
 					Volatile['derive'] &
 					// @ts-ignore
-					MacroContext['resolve']
+					MacroContext['derive']
 			}
-		>,
+		> &
+			MacroOptionContext<
+				Metadata['macroFn'],
+				Schema,
+				GuardHookSingleton<
+					Singleton,
+					Ephemeral,
+					Volatile,
+					{ derive: {} }
+				>
+			>,
 		handler: Handler
 	): AddWSRoute<
 		BasePath,
@@ -6785,8 +6948,7 @@ export class Elysia<
 			return this
 		}
 
-		const handle =
-			typeof handler === 'function' ? handler : null
+		const handle = typeof handler === 'function' ? handler : null
 
 		if (!handle) throw new Error('Invalid handler')
 
@@ -7420,7 +7582,12 @@ export class Elysia<
 						localHook[i] as Record<string, unknown>,
 						models
 					) ||
-					Elysia.#chainHasTypeBox(appHook[i], models, seen, resolve) ||
+					Elysia.#chainHasTypeBox(
+						appHook[i],
+						models,
+						seen,
+						resolve
+					) ||
 					Elysia.#chainHasTypeBox(
 						inheritedChain[i],
 						models,
@@ -7429,7 +7596,12 @@ export class Elysia<
 					) ||
 					// The root chain applies only to routes owned by another instance.
 					(owner[i] !== (this as unknown as AnyElysia) &&
-						Elysia.#chainHasTypeBox(rootChain, models, seen, resolve))
+						Elysia.#chainHasTypeBox(
+							rootChain,
+							models,
+							seen,
+							resolve
+						))
 				) {
 					hasTypeBoxSchema = true
 					break
@@ -7706,8 +7878,8 @@ export class Elysia<
 	 *
 	 * new Elysia()
 	 *	.wrap(
-	 *		(fetch) => (request) =>
-	 *			ctx.run({ counter: 0 }, () => fetch(request))
+	 *		(fetch) => (request, ...rest) =>
+	 *			ctx.run({ counter: 0 }, () => fetch(request, ...rest))
 	 *	)
 	 *	.get('/', () => ctx.getStore())
 	 * ```

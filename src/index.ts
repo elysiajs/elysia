@@ -1,6 +1,6 @@
 import { Elysia, type AnyElysia } from './base'
 
-export { redirect, sse, bytes, form, prefix } from './utils'
+export { redirect, sse, bytes, form, prefix, macroType } from './utils'
 export { borrow } from './adapter/response-ownership'
 export {
 	status,

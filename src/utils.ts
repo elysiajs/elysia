@@ -13,7 +13,8 @@ import type {
 	AnyLocalHook,
 	GuardSchemaType,
 	ElysiaFormData,
-	AnySchema
+	AnySchema,
+	MacroTypeLambda
 } from './types'
 
 export type DeriveEntry = Function | readonly [Function, 'mapDerive']
@@ -528,6 +529,9 @@ export const form = <const T extends Record<keyof any, unknown>>(
 		{ ...value },
 		ELYSIA_FORM_PROTOTYPE
 	) as unknown as ElysiaFormData<T>
+
+export const macroType = <L extends MacroTypeLambda>() =>
+	undefined as L | undefined
 
 export const assignOwn = <T extends object>(target: T, source: any): T =>
 	source != null && Object.hasOwn(source, '__proto__')

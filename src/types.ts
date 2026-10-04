@@ -386,7 +386,7 @@ export type LocalHook<
 	 * - 'arraybuffer': parse body as readable stream
 	 */
 	parse?: MaybeArray<
-		| BodyHandler<Schema, Singleton & { derive: Schema['resolve'] }>
+		| BodyHandler<Schema, Singleton & { derive: Schema['derive'] }>
 		| ContentType
 		| Parser
 	>
@@ -394,37 +394,37 @@ export type LocalHook<
 	 * Transform context's value
 	 */
 	transform?: MaybeArray<
-		TransformHandler<Schema, Singleton & { derive: Schema['resolve'] }>
+		TransformHandler<Schema, Singleton & { derive: Schema['derive'] }>
 	>
 	/**
 	 * Execute before main handler
 	 */
 	beforeHandle?: MaybeArray<
-		OptionalHandler<Schema, Singleton & { derive: Schema['resolve'] }>
+		OptionalHandler<Schema, Singleton & { derive: Schema['derive'] }>
 	>
 	/**
 	 * Execute after main handler
 	 */
 	afterHandle?: MaybeArray<
-		AfterHandler<Schema, Singleton & { derive: Schema['resolve'] }>
+		AfterHandler<Schema, Singleton & { derive: Schema['derive'] }>
 	>
 	/**
 	 * Execute after main handler
 	 */
 	mapResponse?: MaybeArray<
-		MapResponse<Schema, Singleton & { derive: Schema['resolve'] }>
+		MapResponse<Schema, Singleton & { derive: Schema['derive'] }>
 	>
 	/**
 	 * Execute after response is sent
 	 */
 	afterResponse?: MaybeArray<
-		AfterResponseHandler<Schema, Singleton & { derive: Schema['resolve'] }>
+		AfterResponseHandler<Schema, Singleton & { derive: Schema['derive'] }>
 	>
 	/**
 	 * Catch error
 	 */
 	error?: MaybeArray<
-		ErrorHandler<Errors, Schema, Singleton & { derive: Schema['resolve'] }>
+		ErrorHandler<Errors, Schema, Singleton & { derive: Schema['derive'] }>
 	>
 	tags?: DocumentDecoration['tags']
 } & (Input extends any ? Input : Prettify<Input>)
@@ -747,15 +747,15 @@ export type InlineHandler<
 	MacroContext extends {
 		response: PossibleResponse
 		return: PossibleResponse
-		resolve: Record<string, unknown>
+		derive: Record<string, unknown>
 	} = {
 		response: {}
 		return: {}
-		resolve: {}
+		derive: {}
 	}
 > = InlineHandlerNonMacro<
 	Route & MacroContext,
-	Singleton & { derive: MacroContext['resolve'] }
+	Singleton & { derive: MacroContext['derive'] }
 >
 
 export type InlineHandlerNonMacro<
@@ -845,7 +845,9 @@ export type MergeSchema<
 	AParamsPathDerived extends boolean = false
 > = {} extends A
 	? Path extends PathParameterLike
-		? Omit<B, 'params'> & { params: ResolvePath<Path> }
+		? IsNever<keyof B['params']> extends true
+			? Omit<B, 'params'> & { params: ResolvePath<Path> }
+			: B
 		: B
 	: {} extends B
 		? Path extends PathParameterLike
@@ -938,8 +940,7 @@ export type MacroProperty<
 	/**
 	 * Phantom {@link MacroTypeLambda} computing per call site context from
 	 * the route's literal hook value. Reserved key like `seed`/`meta`/
-	 * `introspect` — carry it on the declared return type only; a runtime
-	 * value is tolerated and stripped
+	 * `introspect` — set it with `macroType<Lambda>()`; stripped at runtime
 	 */
 	$type?: MacroTypeLambda
 	/**
@@ -1502,7 +1503,9 @@ export type UnwrapModels<
 export type MacroToProperty<in out T> = Prettify<{
 	[K in keyof T]: T[K] extends Function
 		? T[K] extends (a: infer Params) => any
-			? Params
+			? MacroOptionLambda<T[K]> extends never
+				? Params
+				: unknown
 			: boolean
 		: boolean
 }>
@@ -1510,7 +1513,7 @@ export type MacroToProperty<in out T> = Prettify<{
 interface RouteSchemaWithResolvedMacro extends RouteSchema {
 	response: PossibleResponse
 	return: PossibleResponse
-	resolve: Record<string, unknown>
+	derive: Record<string, unknown>
 }
 
 export type IntersectIfObject<A, B> = unknown extends A
@@ -1683,7 +1686,7 @@ export type ExcludeElysiaResponse<T> =
 				: A & {}
 		: {}
 
-type ExtractResolveFromMacro<A> =
+type ExtractDeriveFromMacro<A> =
 	IsNever<A> extends true
 		? {}
 		: A extends AnyElysiaStatus
@@ -1757,14 +1760,76 @@ type FlattenMacroResponse<T> = T extends object
 	: T
 
 /**
- * Type-level lambda applied to a macro's per call site hook value. Extend
- * this interface, compute `output` from `this['input']`, and carry it on
- * the macro's declared return type as a phantom `$type` member — the
- * computed `output` joins the route's context
+ * Type-level lambda applied to a macro's per call site hook value
+ *
+ * Return type as `$type: macroType<Lambda>()`
+ * `output` will be added to route's context
+ *
+ * A function-form macro may also compute `option` from `this['context']`.
+ * The hook value is then typed as `option` per route, guard, group and ws,
+ * replacing the macro's declared parameter
+ *
+ * `this` is not allowed in a nested type literal
+ *
+ * ```ts
+ * interface LiveOption<Context> { topic?: (ctx: Context) => string }
+ * interface Live extends MacroTypeLambda { option: LiveOption<this['context']> }
+ *
+ * new Elysia().macro({
+ *     live: (option: LiveOption<Context>) => ({
+ *         $type: macroType<Live>(),
+ *         beforeHandle() {}
+ *     })
+ * })
+ * ```
  */
 export interface MacroTypeLambda {
 	input: unknown
+	/**
+	 * The call-site schema and accumulated singleton context, excluding output
+	 * from macros selected at the same call site
+	 */
+	context: unknown
 }
+
+type MacroOptionLambda<Fn> = Fn extends (option: any) => infer Def
+	? NonNullable<Def> extends {
+			$type?: infer Lambda extends MacroTypeLambda
+		}
+		? 'option' extends keyof Lambda
+			? Lambda
+			: never
+		: never
+	: never
+
+export type MacroOptionContext<
+	MacroFn,
+	Route extends RouteSchema,
+	Singleton extends SingletonBase
+> = {
+	[K in keyof MacroFn]?: MacroOptionLambda<MacroFn[K]> extends never
+		? unknown
+		: ElaborateOption<
+				(MacroOptionLambda<MacroFn[K]> & {
+					context: Context<Route, Singleton>
+				})['option']
+			>
+}
+
+// Boolean members get the object keys as `never`, so an invalid object
+// option reports on the offending property instead of the macro key
+type ElaborateOption<
+	Option,
+	Keys extends PropertyKey = keyof Extract<Option, object>
+> = unknown extends Option
+	? Option
+	: Option extends boolean
+		? Option & {
+				[K in Exclude<Keys, keyof Option> as {} extends Record<K, 0>
+					? never
+					: K]?: never
+			}
+		: Option
 
 type MacroLambdaContext<Value, HookValue> =
 	NonNullable<Value> extends {
@@ -1807,7 +1872,7 @@ export type MacroToContext<
 		: {}
 >
 
-// There's only resolve that can add new properties to Context
+// There's only derive that can add new properties to Context
 type InnerMacroToContext<
 	MacroFn extends Macro = {},
 	SelectedMacro extends BaseMacro = {},
@@ -1828,7 +1893,7 @@ type InnerMacroToContext<
 									meta: 'meta' extends keyof Def
 										? Def['meta']
 										: never
-									resolve: ExtractResolveFromMacro<
+									derive: ExtractDeriveFromMacro<
 										Extract<
 											Exclude<
 												FunctionArrayReturnType<
@@ -1934,12 +1999,12 @@ type MacroRefChannel<Refs> = {
 }
 
 /**
- * `resolve` (derive) context contributed by the sibling macros a definition
+ * `derive` context contributed by the sibling macros a definition
  * enables via `{ name: true }`. Extracted through `infer` because
- * {@link MacroToContext} is a mapped type whose `resolve` key cannot be indexed
- * with a plain `['resolve']` on the generic form.
+ * {@link MacroToContext} is a mapped type whose `derive` key cannot be indexed
+ * with a plain `['derive']` on the generic form.
  */
-type MacroRefResolve<MacroFn, SelectedMacro, Definitions> =
+type MacroRefDerive<MacroFn, SelectedMacro, Definitions> =
 	MacroToContext<
 		// @ts-ignore MacroFn is the verbatim macroFn record
 		MacroFn,
@@ -1947,8 +2012,8 @@ type MacroRefResolve<MacroFn, SelectedMacro, Definitions> =
 		SelectedMacro,
 		// @ts-ignore Definitions is the typebox model map
 		Definitions
-	> extends { resolve: infer Resolve }
-		? Resolve
+	> extends { derive: infer Derive }
+		? Derive
 		: {}
 
 /**
@@ -1990,7 +2055,7 @@ export type ObjectMacroDefs<
 				>,
 				Singleton & {
 					derive: Singleton['derive'] &
-						MacroRefResolve<
+						MacroRefDerive<
 							MacroFn,
 							K extends keyof Refs ? Refs[K] : {},
 							Definitions['typebox']
@@ -3290,7 +3355,7 @@ export type GuardHookSingleton<
 	derive: Ephemeral['derive'] &
 		Volatile['derive'] &
 		// @ts-ignore
-		MacroContext['resolve']
+		MacroContext['derive']
 }
 
 export interface StaticMapAliases {

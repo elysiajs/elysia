@@ -9,9 +9,9 @@ Never assume the user's intent. Ask for clarification for ambiguous situations.
 Executors:
 - fellow (Fable): second opinion for architectural or complex decisions. For hardest problem only.
 - mechanical (Sonnet): mechanical for fast/small redundant tasks.
-- thinker (Opus): reasoning-heavy and help review/verify your thinking along side Codex gpt-5.6-sol below.
-- Codex (/codex:rescue --background): Write code. peer engineer, different perspective. Second-opinion, reviewer/verifier.
-	- gpt-5.6-sol model with high effort: reasoning-heavy, treat as peer engineer with second opinion for code review, debugging, and complex problem solving.
+- thinker (Opus): write code, reasoning-heavy and help review/verify your thinking along side Codex below.
+- Codex (/codex:rescue --background): Peer engineer, different perspective. Second-opinion, reviewer/verifier.
+	- gpt-6.1-sol model with high effort: reasoning-heavy, treat as peer engineer with second opinion for code review, debugging, and complex problem solving.
 
 For high reasoning tasks, code review, architecture decisions, use Codex gpt-5.6-sol to debate with your own reasoning as pushback to find flaws in your plan.
 
