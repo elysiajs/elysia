@@ -1,4 +1,5 @@
-import { Elysia, t } from '../../src'
+import { Elysia, t, type MacroToContext } from '../../src'
+import type { CreateEdenResponse } from '../../src/types'
 import { expectTypeOf } from 'expect-type'
 
 // guard handle resolve macro
@@ -399,6 +400,182 @@ const app = new Elysia()
 		})
 		.post('/', { b: true }, ({ body }) => {
 			expectTypeOf(body).toEqualTypeOf<{ b: 'B'; a: 'A' }>()
+		})
+}
+
+// A macro's schema still reaches the handler when a schema-less macro is
+// enabled beside it. Eden already requires `friends` from the client, so a
+// handler typed without it would disagree with what the route validates.
+{
+	const app = new Elysia()
+		.macro({
+			withFriends: {
+				body: t.Object({ friends: t.Array(t.String()) }),
+				query: t.Object({ page: t.String() }),
+				meta: { friends: true }
+			},
+			flag: { beforeHandle() {} },
+			withUser: { derive: () => ({ user: 'saltyaom' as const }) },
+			// Own schema plus a nested schema-less macro
+			withTag: {
+				flag: true,
+				body: t.Object({ tag: t.String() })
+			}
+		})
+		.post(
+			'/one',
+			{ withFriends: true, body: t.Object({ name: t.String() }) },
+			({ body }) => {
+				expectTypeOf(body).toEqualTypeOf<{
+					name: string
+					friends: string[]
+				}>()
+			}
+		)
+		.post('/two', { withFriends: true, flag: true }, ({ body, query }) => {
+			expectTypeOf(body).toEqualTypeOf<{ friends: string[] }>()
+			expectTypeOf(query).toEqualTypeOf<{ page: string }>()
+		})
+		.post(
+			'/two-route-body',
+			{
+				flag: true,
+				withFriends: true,
+				body: t.Object({ name: t.String() })
+			},
+			({ body }) => {
+				expectTypeOf(body).toEqualTypeOf<{
+					name: string
+					friends: string[]
+				}>()
+			}
+		)
+		.post(
+			'/three',
+			{ withFriends: true, flag: true, withUser: true },
+			({ body, user }) => {
+				expectTypeOf(body).toEqualTypeOf<{ friends: string[] }>()
+				expectTypeOf(user).toEqualTypeOf<'saltyaom'>()
+			}
+		)
+		.post('/nested', { withTag: true }, ({ body }) => {
+			expectTypeOf(body).toEqualTypeOf<{ tag: string }>()
+		})
+
+	expectTypeOf<
+		(typeof app)['~Routes']['two-route-body']['post']['body']
+	>().toEqualTypeOf<{ name: string; friends: string[] }>()
+	expectTypeOf<
+		(typeof app)['~Routes']['two']['post']['meta']
+	>().toEqualTypeOf<{ readonly friends: true }>()
+}
+
+// Different literal metas (`'a'` vs `'b'`, null vs object) are a valid route,
+// but intersecting them makes TypeScript reduce the whole combined macro
+// context to never, erasing every schema and derive the macros contribute.
+{
+	const app = new Elysia()
+		.macro({
+			a: {
+				body: t.Object({ name: t.String() }),
+				query: t.Object({ page: t.String() }),
+				meta: 'a'
+			},
+			b: {
+				body: t.Object({ name: t.String() }),
+				query: t.Object({ page: t.String() }),
+				meta: 'b'
+			},
+			nullMeta: { meta: null },
+			objectMeta: { meta: { x: 1 } },
+			withUser: { derive: () => ({ user: 'saltyaom' as const }) },
+			// Own meta conflicts with the nested macro's meta
+			nested: {
+				meta: 'nested',
+				a: true,
+				derive: () => ({ role: 'admin' as const })
+			}
+		})
+		.post('/meta-literal', { a: true, b: true }, ({ body, query }) => {
+			expectTypeOf(body).toEqualTypeOf<{ name: string }>()
+			expectTypeOf(query).toEqualTypeOf<{ page: string }>()
+		})
+		.post(
+			'/meta-null',
+			{ nullMeta: true, objectMeta: true, withUser: true, a: true },
+			({ body, user }) => {
+				expectTypeOf(body).toEqualTypeOf<{ name: string }>()
+				expectTypeOf(user).toEqualTypeOf<'saltyaom'>()
+			}
+		)
+		.post('/meta-nested', { nested: true }, ({ body, role }) => {
+			expectTypeOf(body).toEqualTypeOf<{ name: string }>()
+			expectTypeOf(role).toEqualTypeOf<'admin'>()
+		})
+
+	expectTypeOf<
+		(typeof app)['~Routes']['meta-literal']['post']['body']
+	>().toEqualTypeOf<{ name: string }>()
+	expectTypeOf<
+		(typeof app)['~Routes']['meta-literal']['post']['query']
+	>().toEqualTypeOf<{ page: string }>()
+}
+
+// Exported context types carry meta as declared: `MacroToContext` is public
+// and `CreateEdenResponse` is emitted in the .d.ts, so an internal wrapper
+// must not leak into either.
+{
+	expectTypeOf<
+		MacroToContext<{ m: { meta: { x: 1 } } }, { m: true }>['meta']
+	>().toEqualTypeOf<{ x: 1 }>()
+	expectTypeOf<
+		CreateEdenResponse<
+			'/',
+			{},
+			{ body: unknown; meta: { x: 1 } },
+			{}
+		>['meta']
+	>().toEqualTypeOf<{ x: 1 }>()
+}
+
+// A macro's union or optional body keeps its shape, like a route's own body.
+// Bodies of different macros intersect, since every macro's validator runs.
+{
+	new Elysia()
+		.macro({
+			either: {
+				body: t.Union([
+					t.Object({ a: t.String() }),
+					t.Object({ b: t.Number() })
+				])
+			},
+			maybe: { body: t.Optional(t.Object({ c: t.String() })) },
+			withC: { body: t.Object({ c: t.String() }) },
+			flag: { beforeHandle() {} }
+		})
+		.post('/union', { either: true }, ({ body }) => {
+			expectTypeOf(body).toEqualTypeOf<{ a: string } | { b: number }>()
+		})
+		.post('/optional', { maybe: true }, ({ body }) => {
+			expectTypeOf(body).toEqualTypeOf<
+				{ c?: string | undefined } | null | undefined
+			>()
+		})
+		.post('/union-flag', { either: true, flag: true }, ({ body }) => {
+			expectTypeOf(body).toEqualTypeOf<{ a: string } | { b: number }>()
+		})
+		.post('/optional-flag', { maybe: true, flag: true }, ({ body }) => {
+			expectTypeOf(body).toEqualTypeOf<
+				{ c?: string | undefined } | null | undefined
+			>()
+		})
+		.post('/union-body', { either: true, withC: true }, ({ body }) => {
+			expectTypeOf(body).toEqualTypeOf<
+				{ a: string; c: string } | { b: number; c: string }
+			>()
+		})
+		.post('/optional-body', { maybe: true, withC: true }, ({ body }) => {
+			expectTypeOf(body).toEqualTypeOf<{ c: string }>()
 		})
 }
 

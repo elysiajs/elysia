@@ -502,10 +502,23 @@ export class ValidationError extends ElysiaError {
 				resolved = resolved.slice(0, MAX_ERRORS)
 			resolved = scopeIssues(resolved)
 
-			const sub: any = walkSubSchema(
-				this.schema,
-				resolved[0]?.instancePath
-			)
+			let sub: any = walkSubSchema(this.schema, resolved[0]?.instancePath)
+
+			// TypeBox reports a missing required key at its object: use the
+			// first missing key that has its own error (only on a plain
+			// object, a union's branch keys stay with the union). Not always
+			// an array: `scopeIssues` swaps an oversized list for a string
+			const missing =
+				resolved[0]?.keyword === 'required' && sub?.properties
+					? resolved[0].params?.requiredProperties
+					: undefined
+
+			if (Array.isArray(missing))
+				for (const key of missing)
+					if (sub.properties[key]?.error !== undefined) {
+						sub = sub.properties[key]
+						break
+					}
 
 			if (sub?.error !== undefined)
 				custom =
@@ -557,13 +570,13 @@ export class ValidationError extends ElysiaError {
 			(e) => {
 				if (!e) return e
 
-				const path = Array.isArray(e.path)
-					? e.path.length
-						? e.path.map(segmentString).join('.')
-						: 'root'
-					: typeof e.path === 'string'
-						? e.path.replace(/^\//, '').replace(/\//g, '.') || 'root'
-						: 'root'
+				const raw = e.path ?? e.instancePath
+				const path =
+					Array.isArray(raw) && raw.length
+						? raw.map(segmentString).join('.')
+						: typeof raw === 'string' && raw
+							? raw.replace(/^\//, '').replace(/\//g, '.')
+							: 'root'
 
 				const issue = {
 					path,
@@ -829,6 +842,17 @@ export class ElysiaStatus<
 
 		if (!emptyHttpStatus.has(this.status as number))
 			this.response = response as T
+		// No body left for a `content-type` to describe, in any casing.
+		// Copied, the caller's object may be shared or frozen
+		else if (headers) {
+			const kept: Record<string, string> = {}
+
+			for (const key of Object.keys(headers))
+				if (key.toLowerCase() !== 'content-type')
+					kept[key] = headers[key]
+
+			headers = kept
+		}
 
 		this.headers = headers
 	}
@@ -913,6 +937,10 @@ export type ProblemResponseBody<Status extends number, P> = Omit<
 > &
 	Omit<P, 'status'> & { status: Status }
 
+/** Title of a status, as `problemBody` fills it */
+export const titleOf = (status: number) =>
+	(StatusMapBack as Record<number, string>)[status] ?? 'Error'
+
 export function problemBody(
 	p: Problem
 ): Record<string, unknown> & { status: number } {
@@ -922,9 +950,7 @@ export function problemBody(
 			: (p.status ?? 500)
 
 	const body: any = { type: 'about:blank', ...p, status }
-	if (body.title == null)
-		body.title =
-			(StatusMapBack as Record<number, string>)[status] ?? 'Error'
+	body.title ??= titleOf(status)
 
 	return body
 }
@@ -1129,9 +1155,9 @@ export type TaggedHTTPError<Type extends string, Annotation = {}> = {
  * the instance to a response on its own, no `.error(Class, handler)` needed
  *
  * Everything an owned `HTTPError` serves is an RFC 9457 problem document:
- * `type` is the problem type carried on the wire, an annotated object body
- * merges into the envelope, and any other body (or the error message, when
- * there is none) becomes `detail`
+ * `type` is the problem type carried on the wire, and the body (or the error
+ * message, when there is none) becomes `detail`, an object nested verbatim
+ * and never merged into the envelope
  *
  * - `detail()` - the common case. Whatever it returns becomes the `detail`
  *   member of the problem document, verbatim, objects included. The envelope
@@ -1202,8 +1228,10 @@ export abstract class HTTPError<
 
 	/**
 	 * Absolute base for the RFC 9457 `type` URI, applied to every class made
-	 * by {@link HTTPError.id} and to every built-in `ElysiaError`
-	 * (`NotFound`, `ParseError`, …) both derive `type` from the same slug
+	 * by {@link HTTPError.id} and to the built-in `ElysiaError`s (`NotFound`,
+	 * `ParseError`, `InvalidCookie`, `InternalServerError`) both derive `type`
+	 * from the same slug. Request validation is the exception, it keeps
+	 * `type: 'validation'` unprefixed
 	 *
 	 * @example
 	 * ```ts

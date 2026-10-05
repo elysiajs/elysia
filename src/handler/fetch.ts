@@ -23,13 +23,14 @@ import {
 } from '../utils'
 import { handleSet, materializeSetHeaders } from '../adapter/utils'
 import {
+	InternalServerError,
 	NotFound,
 	PROBLEM_JSON,
 	internalServerErrorResponse,
 	isProduction
 } from '../error'
 
-import type { CompiledHandler, MaybePromise } from '../types'
+import type { AppHook, CompiledHandler, MaybePromise } from '../types'
 
 function extractPath(url: string, context: any) {
 	const s = url.indexOf('/', authorityEnd(url))
@@ -150,12 +151,15 @@ function findRoute(
 	request: Request,
 	map: NonNullable<AnyElysia['~map']>,
 	router: NonNullable<AnyElysia['~router']>,
-	hasError: boolean,
+	// a 404 isn't a route: the app's whole current chain answers it
+	onNotFound: (context: Context) => MaybePromise<Response>,
+	// a matched route's own lane, see `failRoute`
 	handleError: (context: Context, error: Error) => unknown,
 	afterResponse: ((context: Context, status?: number) => void) | undefined,
 	strictPath: boolean,
-	hasWS?: boolean,
-	hasDynamicWS?: boolean
+	hasWS: boolean | undefined,
+	hasDynamicWS: boolean | undefined,
+	app: AnyElysia
 ) {
 	const path = context.path
 	const method = request.method
@@ -184,7 +188,7 @@ function findRoute(
 						: decodeParams(found!.params)
 
 				return dispatchResult(
-					found!.store(context),
+					(found!.store as CompiledHandler)(context),
 					context,
 					handleError,
 					afterResponse
@@ -226,24 +230,22 @@ function findRoute(
 		context.params =
 			path.indexOf('%') === -1 ? found.params : decodeParams(found.params)
 
+		// a number store is a lazy route's index
+		const store = found.store
+		const dynamic =
+			typeof store === 'number' ? app['compiled']?.[store] : store
+
 		return dispatchResult(
-			found.store(context),
+			dynamic
+				? dynamic(context)
+				: app['~dispatch'](store as number, context),
 			context,
 			handleError,
 			afterResponse
 		)
 	}
 
-	if (hasError)
-		return finalizeError(
-			context,
-			handleError,
-			afterResponse,
-			new NotFound()
-		)
-
-	afterResponse?.(context, 404)
-	return notFound(context)
+	return onNotFound(context)
 }
 
 export function createFetchHandler(
@@ -314,68 +316,72 @@ export function createFetchHandler(
 			: baseMapResponse(response, set, request, true)
 	}
 
+	const plainMap = (
+		response: unknown,
+		set: Context['set'],
+		context?: Context,
+		sign?: (set: Context['set']) => unknown
+	) =>
+		finalMap(
+			response,
+			set,
+			(context as { request?: Request } | undefined)?.request,
+			sign
+		)
+
+	function mapWithHooks(
+		mapResponseHooks: ((context: Context) => unknown)[],
+		response: unknown,
+		set: Context['set'],
+		context?: Context,
+		sign?: (set: Context['set']) => unknown
+	) {
+		if (!context) return baseMapResponse(response, set, undefined, true)
+		;(context as { responseValue?: unknown }).responseValue = response
+
+		const request = context.request
+
+		const run = (i: number): unknown => {
+			for (; i < mapResponseHooks.length; i++) {
+				const result = mapResponseHooks[i](context)
+
+				if (typeof (result as any)?.then === 'function')
+					// eslint-disable-next-line sonarjs/function-inside-loop -- promise continuation for the hook at index i
+					return Promise.resolve(result).then((resolved) => {
+						if (resolved !== undefined)
+							return finalMap(resolved, set, request, sign)
+
+						return run(i + 1)
+					})
+
+				if (result !== undefined)
+					return finalMap(result, set, request, sign)
+			}
+
+			return finalMap(response, set, request, sign)
+		}
+
+		return run(0)
+	}
+
 	const mapResponseHooks = hook?.mapResponse as
 		| ((context: Context) => unknown)[]
 		| undefined
 	const mapResponse = mapResponseHooks?.length
-		? (
-				response: unknown,
-				set: Context['set'],
-				context?: Context,
-				sign?: (set: Context['set']) => unknown
-			) => {
-				if (!context)
-					return baseMapResponse(response, set, undefined, true)
-				;(context as { responseValue?: unknown }).responseValue =
-					response
+		? mapWithHooks.bind(null, mapResponseHooks)
+		: plainMap
 
-				const request = context.request
-
-				const run = (i: number): unknown => {
-					for (; i < mapResponseHooks.length; i++) {
-						const result = mapResponseHooks[i](context)
-
-						if (typeof (result as any)?.then === 'function')
-							// eslint-disable-next-line sonarjs/function-inside-loop -- promise continuation for the hook at index i
-							return Promise.resolve(result).then((resolved) => {
-								if (resolved !== undefined)
-									return finalMap(
-										resolved,
-										set,
-										request,
-										sign
-									)
-
-								return run(i + 1)
-							})
-
-						if (result !== undefined)
-							return finalMap(result, set, request, sign)
-					}
-
-					return finalMap(response, set, request, sign)
-				}
-
-				return run(0)
-			}
-		: (
-				response: unknown,
-				set: Context['set'],
-				context?: Context,
-				sign?: (set: Context['set']) => unknown
-			) =>
-				finalMap(
-					response,
-					set,
-					(context as { request?: Request } | undefined)?.request,
-					sign
-				)
-
+	const allowUnsafe = app['~config']?.allowUnsafeValidationDetails
 	const handleError = createErrorHandler(
 		hook?.error,
 		mapResponse as any,
-		app['~config']?.allowUnsafeValidationDetails
+		allowUnsafe
 	)
+
+	const handleRouteError =
+		hook?.error || mapResponseHooks?.length
+			? createErrorHandler(undefined, plainMap as any, allowUnsafe)
+			: handleError
 
 	const traceHandlers = hook?.trace as
 		| ((context: any) => unknown)[]
@@ -403,8 +409,15 @@ export function createFetchHandler(
 		? traceHandlers!.map((fn) => traceProvider!.createTracer(fn as any))
 		: undefined
 
-	const afterResponses = hook?.afterResponse
-	const afterResponse = (context: Context, status?: number) => {
+	const afterResponse = (
+		context: Context,
+		status?: number,
+		// `null` on a matched route's lane: its own are compiled into it
+		afterResponses:
+			| AppHook['afterResponse']
+			| null
+			| undefined = hook?.afterResponse
+	) => {
 		if ((context as any)._arf) return
 
 		const queue = (context as any)['~afterResponse'] as
@@ -431,7 +444,9 @@ export function createFetchHandler(
 			if (traceAfterResponsePhase) {
 				cache = (context as any).trace as any[] | undefined
 
-				if (!cache && tracerFactories) {
+				// A matched route traced itself with the tracers registered
+				// before it: never start the app's, a later one included
+				if (!cache && tracerFactories && afterResponses !== null) {
 					context.rid ??= requestId()
 					cache = tracerFactories.map((f) => f(context as any))
 					;(context as any).trace = cache
@@ -492,7 +507,77 @@ export function createFetchHandler(
 		sign?: (set: Context['set']) => unknown
 	) => finalizeError(context, handleError, afterResponse, error, sign)
 
-	app['~finalizeError'] = fail
+	const routeAfterResponse = (context: Context, status?: number) =>
+		afterResponse(context, status, null)
+
+	// what a matched route throws: before routing, `fail`
+	const failRoute: typeof fail = (context, error, sign) =>
+		finalizeError(
+			context,
+			handleRouteError,
+			routeAfterResponse,
+			error,
+			sign
+		)
+
+	const routeHandlers = new WeakMap<object, typeof handleRouteError>()
+
+	app['~finalizeError'] = (context, error, sign, wholeChain, route) => {
+		if (wholeChain) return fail(context, error, sign)
+		if (!route) return failRoute(context, error, sign)
+
+		let handle = routeHandlers.get(route)
+		if (!handle) {
+			const withHooks = createErrorHandler(
+				route.error?.length ? (route.error as any) : undefined,
+				(route.mapResponse?.length
+					? mapWithHooks.bind(null, route.mapResponse as any)
+					: plainMap) as any,
+				allowUnsafe
+			)
+
+			handle = (context, error, sign) => {
+				const set = context.set as { '~signFailed'?: true }
+				const end = () =>
+					handleRouteError(
+						context,
+						set['~signFailed'] ? new InternalServerError() : error,
+						sign
+					)
+
+				if (set['~signFailed']) return end()
+
+				const signed = (r: unknown) => (set['~signFailed'] ? end() : r)
+
+				try {
+					const response = withHooks(context, error, sign)
+
+					return response instanceof Promise
+						? response.then(signed, end)
+						: signed(response)
+				} catch {
+					return end()
+				}
+			}
+
+			routeHandlers.set(route, handle)
+		}
+
+		return finalizeError(context, handle, routeAfterResponse, error, sign)
+	}
+
+	const onNotFound = (context: Context) => {
+		if (hasError)
+			return finalizeError(
+				context,
+				handleError,
+				afterResponse,
+				new NotFound()
+			)
+
+		afterResponse(context, 404)
+		return notFound(context)
+	}
 
 	if (traceRequestPhase) {
 		const onRequests = hook?.request ?? []
@@ -532,6 +617,7 @@ export function createFetchHandler(
 						total: onRequests.length
 					})
 
+			let routed = false
 			try {
 				const endReports = new Array(traceLength)
 				for (let i = 0; i < onRequests.length; i++) {
@@ -581,23 +667,25 @@ export function createFetchHandler(
 				for (let i = 0; i < traceLength; i++)
 					trace[i].r(requestReports[i])
 
+				routed = true
 				return await findRoute(
 					context,
 					request,
 					map,
 					router,
-					hasError,
-					handleError,
-					afterResponse,
+					onNotFound,
+					handleRouteError,
+					routeAfterResponse,
 					strictPath,
 					hasWS,
-					hasDynamicWS
+					hasDynamicWS,
+					app
 				)
 			} catch (error) {
 				for (let i = 0; i < traceLength; i++)
 					trace[i].r(requestReports[i], error as Error)
 
-				return fail(context, error as Error)
+				return (routed ? failRoute : fail)(context, error as Error)
 			}
 		}
 	}
@@ -619,6 +707,7 @@ export function createFetchHandler(
 				// @ts-expect-error
 				context.server = server ?? null
 
+				let routed = false
 				try {
 					for (let i = 0; i < onRequests.length; i++) {
 						let result = onRequests[i](context)
@@ -647,20 +736,22 @@ export function createFetchHandler(
 						}
 					}
 
+					routed = true
 					return findRoute(
 						context,
 						request,
 						map,
 						router,
-						hasError,
-						handleError,
-						afterResponse,
+						onNotFound,
+						handleRouteError,
+						routeAfterResponse,
 						strictPath,
 						hasWS,
-						hasDynamicWS
+						hasDynamicWS,
+						app
 					)
 				} catch (error) {
-					return fail(context, error as Error)
+					return (routed ? failRoute : fail)(context, error as Error)
 				}
 			}
 
@@ -674,6 +765,7 @@ export function createFetchHandler(
 			// @ts-expect-error
 			context.server = server ?? null
 
+			let routed = false
 			try {
 				for (let i = 0; i < onRequests.length; i++) {
 					const result = onRequests[i](context)
@@ -706,20 +798,22 @@ export function createFetchHandler(
 					}
 				}
 
+				routed = true
 				return findRoute(
 					context,
 					request,
 					map,
 					router,
-					hasError,
-					handleError,
-					afterResponse,
+					onNotFound,
+					handleRouteError,
+					routeAfterResponse,
 					strictPath,
 					hasWS,
-					hasDynamicWS
+					hasDynamicWS,
+					app
 				)
 			} catch (error) {
-				return fail(context, error as Error)
+				return (routed ? failRoute : fail)(context, error as Error)
 			}
 		}
 	}
@@ -737,15 +831,16 @@ export function createFetchHandler(
 				request,
 				map,
 				router,
-				hasError,
-				handleError,
-				afterResponse,
+				onNotFound,
+				handleRouteError,
+				routeAfterResponse,
 				strictPath,
 				hasWS,
-				hasDynamicWS
+				hasDynamicWS,
+				app
 			)
 		} catch (error) {
-			return fail(context, error as Error)
+			return failRoute(context, error as Error)
 		}
 	}
 }

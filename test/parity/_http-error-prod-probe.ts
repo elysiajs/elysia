@@ -43,6 +43,46 @@ class ZeroStatus extends Error {
 	readonly value = { detail: 'upstream-secret' }
 }
 
+// Owned and body-less beyond 500: the masked `detail` names the status served
+class Owned503 extends HTTPError.id('OWNED_503', 503) {}
+
+class Owned502 extends HTTPError<'OWNED_502'> {
+	type = 'OWNED_502' as const
+	override readonly status = 502
+}
+
+// Only implements the contract, so everything it controls beyond `type` and
+// `status` stays untrusted: knobs, headers, `code` and message
+const invoked: string[] = []
+
+class Implementer extends Error implements HTTPError<'IMPLEMENTER'> {
+	readonly type = 'IMPLEMENTER'
+	readonly code = 'implementer-code'
+	readonly status = 503
+	readonly headers = { 'x-implementer': 'implementer-header' }
+
+	detail() {
+		invoked.push('detail')
+		return 'implementer-detail'
+	}
+
+	value() {
+		invoked.push('value')
+		return { secret: 'implementer-value' }
+	}
+}
+
+// Answers the claim with a string, then anything else: what reaches the
+// wire has to be the read the claim was checked on
+class FlipType extends Error {
+	readonly status = 503
+	#reads = 0
+
+	get type(): unknown {
+		return this.#reads++ === 0 ? 'FLIP' : { marker: 'second-read' }
+	}
+}
+
 async function main() {
 	const app = new Elysia()
 		.get('/owned', () => {
@@ -63,6 +103,27 @@ async function main() {
 		.get('/zero', () => {
 			throw new ZeroStatus()
 		})
+		.get('/owned-503', () => {
+			throw new Owned503('db-secret')
+		})
+		.get('/owned-502', () => {
+			throw new Owned502('upstream-secret')
+		})
+		.get('/implementer-thrown', () => {
+			throw new Implementer('implementer-secret')
+		})
+		.get('/implementer-returned', () => new Implementer('implementer-secret'))
+		.get('/flip-type', () => {
+			throw new FlipType('flip-secret')
+		})
+
+	const served = (path: string) =>
+		app.handle(new Request(`http://localhost${path}`)).then(async (r) => ({
+			status: r.status,
+			contentType: r.headers.get('content-type'),
+			header: r.headers.get('x-implementer'),
+			body: await r.text()
+		}))
 
 	const owned = await app
 		.handle(new Request('http://localhost/owned'))
@@ -88,6 +149,12 @@ async function main() {
 		.handle(new Request('http://localhost/zero'))
 		.then(async (r) => ({ status: r.status, body: await r.text() }))
 
+	const owned503 = await served('/owned-503')
+	const owned502 = await served('/owned-502')
+	const implementerThrown = await served('/implementer-thrown')
+	const implementerReturned = await served('/implementer-returned')
+	const flipType = await served('/flip-type')
+
 	console.log(
 		JSON.stringify({
 			NODE_ENV: process.env.NODE_ENV,
@@ -96,7 +163,13 @@ async function main() {
 			namedForeign,
 			namedOwned,
 			nan,
-			zero
+			zero,
+			owned503,
+			owned502,
+			implementerThrown,
+			implementerReturned,
+			flipType,
+			invoked
 		})
 	)
 }

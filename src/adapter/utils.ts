@@ -261,8 +261,21 @@ export function createStreamHandler({
 			typedSSE ? undefined : (generator as Generator).next?.()
 		) as IteratorResult<unknown> | undefined
 
-		if (set) handleSet(set)
 		if (init instanceof Promise) init = await init
+
+		const sign = (set as { '~sign'?: Function } | undefined)?.['~sign']
+		if (sign)
+			try {
+				await sign(set)
+			} catch (error) {
+				try {
+					await (generator as Generator).return?.(undefined)
+				} catch {}
+
+				throw error
+			}
+
+		if (set) handleSet(set)
 
 		const yieldedStream = init?.value instanceof ReadableStream
 		if (yieldedStream)

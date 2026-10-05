@@ -12,6 +12,7 @@ import { frozenRootOf } from '../../generation'
 import { resolveHandlerParams } from './params'
 import { compileHandlerJit, createInlineHandler } from './jit'
 export { setCaptureHeaderShorthand } from './jit'
+export { releaseAnalysisCaches } from './descriptor'
 import { returnedErrorClasses } from '../../handler/utils'
 import { deriveModes } from './utils'
 import { isAsyncFunction } from '../utils'
@@ -25,13 +26,11 @@ import {
 	compactBeforeHandlePrefix,
 	compositionKeys,
 	eventProperties,
-	flattenChain,
 	flattenChainMemo,
 	flattenChainMemoReadonly,
 	fnOrigin,
 	fnv1a,
 	isCompactBeforeHandleOnly,
-	isLocalScope,
 	isNotEmpty,
 	macroEpoch,
 	mergeHook,
@@ -39,7 +38,6 @@ import {
 	refTargets,
 	replaceUrlPath,
 	isHTMLBundle,
-	rootSnapshot,
 	type ChainNode
 } from '../../utils'
 
@@ -163,6 +161,17 @@ function promoteDerive(hook: any) {
 	hook.derive = undefined
 }
 
+// macro `introspect`s queued by `~applyMacro`, run once the hooks they
+// inspect are all merged
+export function runIntrospect(hook: any) {
+	const introspects = hook?.['~introspect']
+	if (!introspects) return
+
+	for (let i = 0; i < introspects.length; i++) introspects[i](hook)
+
+	delete hook['~introspect']
+}
+
 type ResolutionMemo = WeakMap<
 	object,
 	{ e: number; per: WeakMap<object, WeakMap<object, any>> }
@@ -254,11 +263,16 @@ export function resolveWSLocalHook(
 	root: AnyElysia = scope
 ): Partial<AnyLocalHook> | undefined {
 	const resolved = resolveLocalHook(scope, hook, root)
-	if (!resolved || (resolved as { derive?: unknown }).derive === undefined)
+	if (
+		!resolved ||
+		((resolved as { derive?: unknown }).derive === undefined &&
+			!resolved['~introspect'])
+	)
 		return resolved
 
 	const owned = cloneHook(resolved)
 	promoteDerive(owned)
+	runIntrospect(owned)
 
 	return owned
 }
@@ -307,6 +321,7 @@ function resolveChainNode(
 			applyMacros(resolved, scope, frozenRoot, scopeMacro, rootMacro)
 
 		promoteDerive(resolved)
+		runIntrospect(resolved)
 		perScope.set(added, resolved)
 	}
 
@@ -377,30 +392,6 @@ function mapStaticValue(
 	return mapped
 }
 
-function afterUseHooks(
-	node: ChainNode | undefined,
-	resolve: ((node: ChainNode) => Partial<AppHook> | undefined) | undefined
-) {
-	let after: Partial<AppHook> | undefined
-
-	while (node && 'combine' in node) {
-		if (node.tail) {
-			const own = flattenChain(
-				node.tail,
-				isLocalScope,
-				rootSnapshot(node.combine),
-				resolve
-			)
-
-			if (own) after = after ? mergeHook(own, after, false, true) : own
-		}
-
-		node = node.combine
-	}
-
-	return after
-}
-
 export function buildNativeStaticResponse(
 	route: InternalRoute,
 	root: AnyElysia
@@ -433,35 +424,25 @@ export function buildNativeStaticResponse(
 
 	const resolve = chainResolver(root)
 	const flatAppHook = flattenChainMemo(root, appHook as ChainNode, resolve)
-	let rootHook: Partial<AppHook> | undefined
-	if (instance !== root) {
-		const locals = flattenChain(
-			frozenRootOf(root)['~hookChain'],
-			isLocalScope,
-			rootSnapshot(inheritedChain),
-			resolve
-		)
-
-		const inherited = locals
-			? flattenChainMemo(root, inheritedChain as any, resolve)
-			: flattenChainMemoReadonly(root, inheritedChain as any, resolve)
-
-		if (!inherited) rootHook = locals
-		else if (!locals) rootHook = inherited
-		else rootHook = mergeHook(inherited, locals as any)
-
-		const after = afterUseHooks(inheritedChain as any, resolve)
-		if (after) rootHook = rootHook ? mergeHook(after, rootHook) : after
-	}
+	// what the parents had registered by the `.use()`: a later hook of theirs
+	// never reaches a used route
+	const rootHook =
+		instance !== root
+			? flattenChainMemoReadonly(root, inheritedChain, resolve)
+			: undefined
 	const hook = applyHook(ownedHook, flatAppHook as any, rootHook)
 
 	if (hook && !isEmptyPipelineHook(hook as any)) return
 	// `isEmptyPipelineHook` skips `error`: a registered class instance must
-	// reach `compileHandler`, which throws it
+	// reach `compileHandler`, which throws it. A callback's error hooks count
+	const callback =
+		instance !== root
+			? callbackErrors(inheritedChain, root, resolve)
+			: undefined
 	if (
-		returnedErrorClasses(hook as any, root)?.some(
-			(C) => handler instanceof (C as any)
-		)
+		returnedErrorClasses({
+			error: withCallbackErrors((hook as any)?.error, callback ?? [])
+		})?.some((C) => handler instanceof (C as any))
 	)
 		return
 
@@ -515,18 +496,12 @@ export function composeRouteHook(
 		? flattenChainMemo(root, appHook as ChainNode, resolve)
 		: undefined
 
-	let locals =
+	// A hook reaches only the routes registered after it, a parent's after
+	// `.use()` included. The one exception, kept from Elysia 1: a `.group()`
+	// or `.guard()` callback's error hooks cover all its routes
+	const callback =
 		instance !== root
-			? flattenChain(
-					frozenRootOf(root)['~hookChain'],
-					isLocalScope,
-					rootSnapshot(inheritedChain),
-					resolve
-				)
-			: undefined
-	const instanceLocal =
-		instance !== root
-			? flattenChain((instance as AnyElysia)['~hookChain'], isLocalScope)
+			? callbackErrors(inheritedChain, root, resolve)
 			: undefined
 
 	const compactPrefix =
@@ -537,8 +512,7 @@ export function composeRouteHook(
 		resolve === undefined &&
 		isCompactBeforeHandleOnly(localHook as any) &&
 		isCompactBeforeHandleOnly(flatAppHook as any) &&
-		isCompactBeforeHandleOnly(locals as any) &&
-		!instanceLocal?.error
+		!callback
 			? compactBeforeHandlePrefix(inheritedChain)
 			: undefined
 
@@ -549,12 +523,9 @@ export function composeRouteHook(
 		compactPrefix &&
 		!present?.size &&
 		!compactBeforeHandleConflicts(localHook as any) &&
-		!compactBeforeHandleConflicts(flatAppHook as any) &&
-		!compactBeforeHandleConflicts(locals as any)
+		!compactBeforeHandleConflicts(flatAppHook as any)
 	) {
 		let hook = applyHook(localHook, flatAppHook as any, undefined)
-		if (locals)
-			hook = hook ? mergeHook(hook, locals, false, true) : (locals as any)
 
 		hook ??= nullObject() as any
 		;(hook as any)['~beforeHandlePrefix'] = compactPrefix
@@ -571,18 +542,8 @@ export function composeRouteHook(
 				) as Partial<AppHook> | undefined)
 			: undefined
 
-	let after =
-		instance !== root ? afterUseHooks(inheritedChain, resolve) : undefined
-
-	if (
-		(inherited || after || locals) &&
-		(flatAppHook || localHook) &&
-		present?.size
-	) {
-		if (inherited) inherited = dropHooksByOrigin(inherited, present)
-		if (after) after = dropHooksByOrigin(after, present)
-		if (locals) locals = dropHooksByOrigin(locals, present)
-	}
+	if (inherited && (flatAppHook || localHook) && present?.size)
+		inherited = dropHooksByOrigin(inherited, present)
 
 	let hook = applyHook(
 		localHook,
@@ -592,33 +553,47 @@ export function composeRouteHook(
 			: undefined
 	)
 
-	// After the plugin's own hooks: each intermediate instance's after-use
-	// hooks, innermost first, then the root's.
-	if (after) hook = hook ? mergeHook(hook, after, false, true) : after
-	if (locals) hook = hook ? mergeHook(hook, locals, false, true) : locals
-
-	if (instance !== root) {
-		const errors = instanceLocal?.error
-		if (errors) {
-			hook ??= nullObject() as any
-			let existing = (hook as any).error
-
-			if (existing) {
-				if (!Array.isArray(existing))
-					existing = (hook as any).error = [existing]
-
-				if (Array.isArray(errors)) {
-					for (const fn of errors)
-						if (!existing.includes(fn)) existing.push(fn)
-				} else if (!existing.includes(errors)) existing.push(errors)
-			} else
-				(hook as any).error = Array.isArray(errors)
-					? errors.slice()
-					: [errors]
-		}
+	if (callback) {
+		hook ??= nullObject() as any
+		;(hook as any).error = withCallbackErrors((hook as any).error, callback)
 	}
 
 	return hook
+}
+
+/**
+ * Error hooks of the `.group()`/`.guard()` callbacks a route came out of,
+ * innermost first (see `ChainNode`)
+ */
+function callbackErrors(
+	node: ChainNode | undefined,
+	root: AnyElysia,
+	resolve: ((node: ChainNode) => Partial<AppHook> | undefined) | undefined
+): Function[] | undefined {
+	let out: Function[] | undefined
+
+	for (; node && 'combine' in node; node = node.combine)
+		if (node.callback) {
+			const error = flattenChainMemoReadonly(
+				root,
+				node.callback,
+				resolve
+			)?.error
+			if (error) out = ([] as Function[]).concat(error, out ?? [])
+		}
+
+	return out
+}
+
+// `own` error hooks, then each callback one not among them
+const withCallbackErrors = (
+	own: Function | Function[] | undefined,
+	callback: Function[]
+) => {
+	const list = ([] as Function[]).concat(own ?? [])
+	for (const fn of callback) if (!list.includes(fn)) list.push(fn)
+
+	return list
 }
 
 const shapeEvents = [
@@ -838,7 +813,7 @@ export function routeShape(
 			// not `compact`: captured code works either way
 			!!(config?.adapter ?? defaultAdapter).response
 				.supportsDefaultHeaderSink,
-			!!returnedErrorClasses(hook as any, root)
+			!!returnedErrorClasses(hook as any)
 		]) +
 		shape(config?.sanitize)
 
@@ -913,6 +888,7 @@ export function compileHandler(
 
 	if (hook) {
 		promoteDerive(hook)
+		runIntrospect(hook)
 
 		toArray('parse', hook)
 		toArray('transform', hook)
@@ -921,6 +897,7 @@ export function compileHandler(
 		toArray('mapResponse', hook)
 		toArray('afterResponse', hook)
 		toArray('error', hook)
+		toArray('handler', hook)
 	}
 
 	const buildValidator = () =>
@@ -928,7 +905,7 @@ export function compileHandler(
 			? Reconstruct.validator(hook as any, root, method, path, liveOnly)
 			: undefined
 
-	const errorClasses = returnedErrorClasses(hook as any, root)
+	const errorClasses = returnedErrorClasses(hook as any)
 
 	// A static instance of a registered class throws like a static Error. A
 	// handler function never counts, even for a class like `Function`
@@ -947,6 +924,12 @@ export function compileHandler(
 				`[Elysia] ${method} ${path} is an HTML bundle, only Bun's native router serves it`
 			)
 		}
+
+	// macro `handler` wrappers, latest macro first: fold so it ends outermost
+	const wrappers = hook?.handler as Function[] | undefined
+	if (wrappers && typeof handler === 'function')
+		for (let i = wrappers.length - 1; i >= 0; i--)
+			handler = wrappers[i](handler)
 
 	const declaresResponse =
 		!!hook &&

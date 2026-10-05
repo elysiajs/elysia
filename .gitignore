@@ -20,3 +20,4 @@ plans
 bench/d1/baseline
 bench/d1/runs
 ARCHITECTURE.md
+.audit

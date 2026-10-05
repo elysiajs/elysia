@@ -329,7 +329,7 @@ const scenarios: Scenario[] = [
 	{
 		// signs on the success lane and through `_sfre` on the error lane
 		name: 'signed cookie',
-		emits: ['scv(c.set.cookie,cc)', '_sfre(rt,c,'],
+		emits: ['scv(c.set.cookie,cc,c.set)', '_sfre(rt,c,'],
 		sites: ['bh', 'handler'],
 		build: (site) =>
 			new Elysia({ cookie: { secrets: 's', sign: ['session'] } }).get(

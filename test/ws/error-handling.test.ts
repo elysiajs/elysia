@@ -472,3 +472,122 @@ describe('WebSocket self-describing errors', () => {
 		}
 	})
 })
+
+// A hook reaches only the routes registered after it, as in Elysia 1, on a
+// WebSocket route as on HTTP
+describe('WebSocket error hook registered after the route', () => {
+	class Late extends Error {}
+
+	const upgrade = (app: { server: any }, path = '/ws') =>
+		fetch(`http://${app.server!.hostname}:${app.server!.port}${path}`, {
+			headers: {
+				upgrade: 'websocket',
+				connection: 'Upgrade',
+				'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
+				'sec-websocket-version': '13'
+			}
+		})
+
+	const onValidation = ({ error }: any) => {
+		if (error instanceof ValidationError) return status(401, 'hook')
+	}
+
+	const routes = (app: any, error?: () => void) =>
+		app
+			.use(websocket())
+			.ws('/ws', {
+				query: t.Object({ name: t.String() }),
+				...(error ? { error } : {}),
+				message() {}
+			})
+			.get('/http', { query: t.Object({ name: t.String() }) }, () => 'ok')
+
+	it('answers an upgrade error with an earlier error hook only, as on HTTP', async () => {
+		for (const [hook, code] of [
+			['later', 422],
+			['earlier', 401]
+		] as const)
+			for (const error of [undefined, () => {}]) {
+				const app = (
+					hook === 'later'
+						? routes(new Elysia(), error).error(onValidation)
+						: routes(new Elysia().error(onValidation), error)
+				).listen(0)
+
+				try {
+					expect([
+						hook,
+						(await upgrade(app)).status,
+						(await app.handle(new Request('http://localhost/http')))
+							.status
+					]).toEqual([hook, code, code])
+				} finally {
+					app.stop()
+				}
+			}
+	})
+
+	it('keeps a later error hook off a message error', async () => {
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws', {
+				message() {
+					throw new Late()
+				}
+			})
+			.error(Late, () => status(418, 'late'))
+			.listen(0)
+
+		let ws: WebSocket | undefined
+
+		try {
+			ws = newWebsocket(app.server!)
+			await wsOpen(ws)
+
+			const msg = wsMessage(ws)
+			ws.send('trigger')
+
+			const { data } = await msg
+
+			expect(JSON.parse(String(data)).status).toBe(500)
+		} finally {
+			if (ws && ws.readyState !== WebSocket.CLOSED) await wsClosed(ws)
+			app.stop()
+		}
+	})
+
+	// What an upgrade's error hook throws ends with the route's own hooks,
+	// as on HTTP: an earlier handler for the new error still answers
+	it('answers what an error hook throws with the earlier hooks, as on HTTP', async () => {
+		for (const precompile of [false, true]) {
+			const app = new Elysia({ precompile })
+				.use(websocket())
+				.error(({ error }: any) => {
+					if (error instanceof RangeError)
+						throw new TypeError('secondary')
+				})
+				.error(TypeError, () => status(418, 'caught secondary'))
+				.beforeHandle(() => {
+					throw new RangeError('original')
+				})
+				.get('/http', () => 'ok')
+				.ws('/ws', { message: () => 'ok' })
+
+			const served = async (path: string, headers?: HeadersInit) => {
+				const response = await app.handle(
+					new Request(`http://localhost${path}`, { headers })
+				)
+
+				return `${response.status} ${await response.text()}`
+			}
+
+			expect({
+				http: await served('/http'),
+				ws: await served('/ws', { upgrade: 'websocket' })
+			}).toEqual({
+				http: '418 caught secondary',
+				ws: '418 caught secondary'
+			})
+		}
+	})
+})

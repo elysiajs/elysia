@@ -8,6 +8,7 @@ import {
 	isProduction,
 	internalServerErrorResponse,
 	problemBody,
+	titleOf,
 	PROBLEM_JSON
 } from '../error'
 import { StatusMap } from '../constants'
@@ -50,29 +51,37 @@ const isPristineNotFound = (context: Context, error: any) =>
 	!context.set.cookie &&
 	!isNotEmpty(context.set.headers)
 
-export const claimsProblemType = (error: any) =>
-	typeof error?.type === 'string'
+/**
+ * Whether an error claims a problem type, judged on `type` as the caller
+ * read it once: a getter read again could answer anything else, `undefined`
+ * included
+ */
+export const claimsProblemType = (error: any, type: unknown) =>
+	typeof type === 'string'
 		? !(error instanceof ValidationError) &&
 			error.constructor?.name !== 'ValidationError'
 		: error instanceof HTTPError
 
 export function adoptErrorType(result: any, error: any) {
 	const body = result?.response
+	const type = error?.type
 
 	if (
-		typeof error?.type !== 'string' ||
-		!claimsProblemType(error) ||
+		typeof type !== 'string' ||
+		!claimsProblemType(error, type) ||
 		body?.type !== 'about:blank' ||
 		result.headers?.['content-type'] !== PROBLEM_JSON
 	)
 		return result
 
+	const code = error.code
+
 	return new ElysiaStatus(
 		result.status,
 		{
 			...body,
-			type: error.type,
-			...(typeof error.code === 'string' ? { code: error.code } : {})
+			type,
+			...(typeof code === 'string' ? { code } : {})
 		},
 		result.headers
 	)
@@ -117,11 +126,6 @@ export function fallbackResponse(
 	return fallbackErrorResponse(context, error, mapResponse)
 }
 
-/**
- * Numeric form of an annotated status, which may be written as a name.
- * A numeric string keeps coercing so the production mask below can't be
- * slipped past with `'502'`
- */
 export const resolveStatus = (status: unknown) =>
 	typeof status === 'string'
 		? (StatusMap[status as keyof StatusMap] ?? +status)
@@ -129,40 +133,49 @@ export const resolveStatus = (status: unknown) =>
 
 /**
  * Body served by an error that carries a status but no usable body:
- * its declared `response`, otherwise its message
+ * its declared `response`, otherwise its message, or `mask` in its place
+ * on a production 5xx
  */
-export function statusFallbackBody(error: any, status: unknown) {
+export function statusFallbackBody(
+	error: any,
+	status: unknown,
+	mask = 'Internal Server Error'
+) {
 	const masked = isProduction() && (status as number) >= 500
 	const declared = error.response
 
 	return declared !== undefined && !(masked && typeof declared === 'object')
 		? declared
 		: masked
-			? 'Internal Server Error'
+			? mask
 			: (error.message ?? '')
 }
 
 /**
  * RFC 9457 problem document carrying `detail` verbatim, mirroring `problem()`.
+ * `type` comes in as the value the claim was checked on, and `code` is read
+ * once, so a getter can't put anything but a string on the wire
  */
 const problemOf = (
 	self: any,
+	type: unknown,
 	detail: unknown,
 	status: number,
 	claimsProblem: boolean
-) =>
-	new ElysiaStatus(
+) => {
+	const code = claimsProblem ? self.code : undefined
+
+	return new ElysiaStatus(
 		status as any,
 		problemBody({
-			type: self.type ?? 'about:blank',
-			...(claimsProblem && typeof self.code === 'string'
-				? { code: self.code }
-				: {}),
+			type: typeof type === 'string' ? type : 'about:blank',
+			...(typeof code === 'string' ? { code } : {}),
 			detail: detail as string,
 			status
 		}),
 		{ 'content-type': PROBLEM_JSON }
 	)
+}
 
 /**
  * Read one annotation knob, a method (may be `async`) or a plain value.
@@ -204,7 +217,9 @@ function fallbackErrorResponse(
 	}
 	const status = resolveStatus(self.status)
 	const owned = error instanceof HTTPError
-	const claimsProblem = claimsProblemType(error)
+	// Read once: what the claim is checked on is what gets served
+	const type: unknown = self.type
+	const claimsProblem = claimsProblemType(error, type)
 	const served = (
 		typeof status === 'number' ? status : resolveStatus(context.set.status)
 	) as number
@@ -252,10 +267,12 @@ function fallbackErrorResponse(
 
 		mergeHeaders()
 
+		// A masked 5xx `detail` names the status it serves, as `title` does
 		return mapResponse(
 			problemOf(
 				self,
-				statusFallbackBody(error, served),
+				type,
+				statusFallbackBody(error, served, titleOf(served)),
 				served,
 				claimsProblem
 			),
@@ -289,7 +306,13 @@ function fallbackErrorResponse(
 				return mapResponse(
 					key === 'value'
 						? resolved
-						: problemOf(self, resolved, served, claimsProblem),
+						: problemOf(
+								self,
+								type,
+								resolved,
+								served,
+								claimsProblem
+							),
 					context.set,
 					context
 				)
@@ -300,7 +323,7 @@ function fallbackErrorResponse(
 		return mapResponse(
 			key === 'value'
 				? annotation
-				: problemOf(self, annotation, served, claimsProblem),
+				: problemOf(self, type, annotation, served, claimsProblem),
 			context.set,
 			context
 		)
@@ -335,6 +358,18 @@ function fallbackErrorResponse(
 			!(isProduction() && status >= 500))
 	)
 		return serveAnnotation('value')
+
+	if (
+		claimsProblem &&
+		error instanceof Error &&
+		typeof status === 'number' &&
+		status >= 500
+	)
+		return mapResponse(
+			problemOf(self, type, titleOf(status), status, false),
+			context.set,
+			context
+		)
 
 	return legacy()
 }

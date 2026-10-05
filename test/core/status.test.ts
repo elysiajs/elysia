@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 
-import Elysia, { status, t } from '../../src'
+import Elysia, { ElysiaStatus, HTTPError, problem, status, t } from '../../src'
 
 describe('Status', () => {
 	it('work', async () => {
@@ -47,6 +47,95 @@ describe('Status', () => {
 
 		expect(response.status).toBe(204)
 		await expect(response.text()).resolves.toBe('')
+	})
+
+	// The body is dropped, so a problem+json `content-type` would describe
+	// nothing and send a client (Eden) parsing JSON out of an empty body
+	describe('drop the content-type along with the body', () => {
+		class NoContent extends HTTPError.id('NO_CONTENT', 204) {
+			headers = { 'x-trace': 'kept' }
+		}
+
+		class NotModified extends HTTPError.id('NOT_MODIFIED', 304) {}
+
+		// Shared and frozen: the constructor has to copy, not delete in place
+		const shared = Object.freeze({
+			'content-type': 'application/problem+json',
+			'x-trace': 'kept'
+		})
+
+		const app = new Elysia()
+			.get('/problem', () => problem(204))
+			.get('/thrown', () => {
+				throw new NoContent()
+			})
+			.get('/returned', () => new NoContent())
+			.get('/not-modified', () => {
+				throw new NotModified()
+			})
+			.get('/shared', () => new ElysiaStatus(204, undefined, shared))
+			// Header names are case-insensitive, every spelling describes the body
+			.get(
+				'/mixed-case',
+				() =>
+					new ElysiaStatus(204, undefined, {
+						'Content-Type': 'application/json',
+						'x-trace': 'kept'
+					})
+			)
+			.get(
+				'/duplicate-casing',
+				() =>
+					new ElysiaStatus(205, undefined, {
+						'content-type': 'application/json',
+						'Content-Type': 'application/json',
+						'CONTENT-TYPE': 'application/json',
+						'x-trace': 'kept'
+					})
+			)
+			.get(
+				'/mixed-case-304',
+				() =>
+					new ElysiaStatus(304, undefined, {
+						'Content-Type': 'application/json',
+						'x-trace': 'kept'
+					})
+			)
+
+		for (const [path, code] of [
+			['/problem', 204],
+			['/thrown', 204],
+			['/returned', 204],
+			['/not-modified', 304],
+			['/shared', 204],
+			['/mixed-case', 204],
+			['/duplicate-casing', 205],
+			['/mixed-case-304', 304]
+		] as const)
+			it(path, async () => {
+				const response = await app.handle(path)
+
+				expect(response.status).toBe(code)
+				expect(response.headers.get('content-type')).toBeNull()
+				await expect(response.text()).resolves.toBe('')
+			})
+
+		it('keep every other header', async () => {
+			for (const path of [
+				'/thrown',
+				'/returned',
+				'/shared',
+				'/mixed-case',
+				'/duplicate-casing',
+				'/mixed-case-304'
+			]) {
+				const response = await app.handle(path)
+
+				expect(response.headers.get('x-trace')).toBe('kept')
+			}
+
+			expect(shared['content-type']).toBe('application/problem+json')
+		})
 	})
 
 	it('ignore response body of 205', async () => {

@@ -1,18 +1,16 @@
 // Hooks an instance registers AFTER `.use(R)`, for the routes R brought in.
 //
-// Rule: with P as the root, P's local hooks registered after `.use(R)` run
-// after R's own hooks. P must behave the same once nested, so for R's routes
-// reached through P the order is
+// Rule, as in Elysia 1: a hook reaches only the routes registered after it,
+// so a hook registered after `.use(R)` never reaches R's routes, at any
+// depth. For R's routes reached through P the order is
 //
-//   [G-before, P-before, R-own, P-after, G-after]
+//   [G-before, P-before, R-own]
 //
-// and, deeper, each level's after-use hooks run innermost first. Local hooks
-// registered after a route an instance declares ITSELF still don't apply to
-// that route.
+// whatever G and P register after their `.use()`.
 //
 // Plugin deduplication (`name` / `seed`) is untouched: the same routes exist,
-// and P's after-use hooks attach only to the route copies that came through
-// P, exactly where P's before-use hooks already attach.
+// and P's before-use hooks attach only to the route copies that came through
+// P.
 
 import { describe, expect, it } from 'bun:test'
 import { Elysia, status, t } from '../../src'
@@ -170,7 +168,7 @@ const shapes: Shape[] = [
 				'P-after',
 				log
 			),
-		order: ['P-before', 'R', 'P-after']
+		order: ['P-before', 'R']
 	},
 	{
 		name: 'G.use(P.use(R))',
@@ -181,7 +179,7 @@ const shapes: Shape[] = [
 				'G-after',
 				log
 			),
-		order: ['G-before', 'P-before', 'R', 'P-after', 'G-after']
+		order: ['G-before', 'P-before', 'R']
 	},
 	{
 		name: 'G.use(Q.use(P.use(R)))',
@@ -194,15 +192,7 @@ const shapes: Shape[] = [
 				'G-after',
 				log
 			),
-		order: [
-			'G-before',
-			'Q-before',
-			'P-before',
-			'R',
-			'P-after',
-			'Q-after',
-			'G-after'
-		]
+		order: ['G-before', 'Q-before', 'P-before', 'R']
 	},
 	{
 		name: 'P has no hooks before .use(R)',
@@ -215,20 +205,20 @@ const shapes: Shape[] = [
 				'G-after',
 				log
 			),
-		order: ['G-before', 'R', 'P-after', 'G-after']
+		order: ['G-before', 'R']
 	},
 	{
 		name: 'G has no hooks before .use(P)',
 		prefix: '',
 		define: (base, log) =>
 			hooks(base.use(around('P', plugin(log), log)), 'G-after', log),
-		order: ['P-before', 'R', 'P-after', 'G-after']
+		order: ['P-before', 'R']
 	},
 	{
 		name: 'only P-after',
 		prefix: '',
 		define: (base, log) => base.use(around('P', plugin(log), log, false)),
-		order: ['R', 'P-after']
+		order: ['R']
 	},
 	{
 		name: 'guard inside P',
@@ -248,7 +238,7 @@ const shapes: Shape[] = [
 				'G-after',
 				log
 			),
-		order: ['G-before', 'P-before', 'R', 'P-after', 'G-after']
+		order: ['G-before', 'P-before', 'R']
 	},
 	{
 		name: 'group inside P',
@@ -268,7 +258,7 @@ const shapes: Shape[] = [
 				'G-after',
 				log
 			),
-		order: ['G-before', 'P-before', 'R', 'P-after', 'G-after']
+		order: ['G-before', 'P-before', 'R']
 	}
 ]
 
@@ -313,7 +303,7 @@ for (const lane of lanes)
 			}
 		})
 
-		it('a class handler registered after .use(R) serves nested like at the root', async () => {
+		it('a class handler registered after .use(R) never serves it, at any depth', async () => {
 			const P = () =>
 				new Elysia()
 					.use(
@@ -329,14 +319,11 @@ for (const lane of lanes)
 			] as Define[]) {
 				const [served] = await serve(lane, define, [get('/')])
 
-				expect([served!.status, served!.body]).toEqual([
-					404,
-					'p-after-use'
-				])
+				expect(served!.status).toBe(500)
 			}
 		})
 
-		it('a guard registered after .use(R) validates nested like at the root', async () => {
+		it('a guard registered after .use(R) never validates it, at any depth', async () => {
 			const P = () =>
 				new Elysia()
 					.use(
@@ -357,14 +344,14 @@ for (const lane of lanes)
 				])
 
 				expect([valid!.status, valid!.body]).toEqual([200, 'x'])
-				expect(invalid!.status).toBe(422)
+				expect([invalid!.status, invalid!.body]).toEqual([200, '1'])
 			}
 		})
 	})
 
 // A static route only gets promoted to a native Bun static response when no
-// hook applies to it, so an after-use hook must keep it off that path
-it('an after-use hook keeps a nested static route off the native static path', async () => {
+// hook applies to it: an after-use hook doesn't apply, so it never runs
+it('an after-use hook never reaches a nested static route', async () => {
 	const log: Log = []
 	const [served] = await serve(
 		nativeStaticOn,
@@ -381,39 +368,12 @@ it('an after-use hook keeps a nested static route off the native static path', a
 	)
 
 	expect([served!.status, served!.body]).toEqual([200, 'static'])
-	expect(served!.log).toEqual(['P-after'])
-})
-
-// Routes whose absorbing instance registered no local hook after them keep
-// their chain unchanged, so the compact beforeHandle path still applies
-it('routes with no after-use hook carry no tail', () => {
-	const P = new Elysia().beforeHandle(() => {})
-
-	for (let i = 0; i < 5; i++)
-		P.use(
-			new Elysia().beforeHandle('global', () => {}).get(`/c${i}`, () => i)
-		)
-
-	const chains = (app: any) =>
-		app['~routes'].map((route: any) => route[6] && 'tail' in route[6])
-
-	expect(chains(new Elysia().use(P))).toEqual([
-		false,
-		false,
-		false,
-		false,
-		false
-	])
-
-	P.beforeHandle(() => {})
-
-	expect(chains(new Elysia().use(P))).toEqual([true, true, true, true, true])
+	expect(served!.log).toEqual([])
 })
 
 // Plugin deduplication. For each shape: which route copies exist (history),
-// which tagged beforeHandle hooks each copy composes, and what serves. The
-// only difference from before the fix is `P-after` appearing next to
-// `P-before`, on the copies that came through P
+// which tagged beforeHandle hooks each copy composes, and what serves. A
+// `P-after` never appears: it was registered after the `.use()`
 describe('after-use hooks and plugin deduplication', () => {
 	const log: Log = []
 	const tags = new Map<Function, string>()
@@ -473,8 +433,8 @@ describe('after-use hooks and plugin deduplication', () => {
 				const r = R('R')
 				return root.use(r).use(P('P', r))
 			},
-			['GET /r(R) [R-own]', 'GET /r [P-before, R-own, P-after]'],
-			{ '/r': ['P-before', 'R-own', 'P-after'] }
+			['GET /r(R) [R-own]', 'GET /r [P-before, R-own]'],
+			{ '/r': ['P-before', 'R-own'] }
 		],
 		[
 			'(b) G.use(P.use(R named)).use(R named): the second use is deduplicated',
@@ -482,8 +442,8 @@ describe('after-use hooks and plugin deduplication', () => {
 				const r = R('R')
 				return root.use(P('P', r)).use(r)
 			},
-			['GET /r [P-before, R-own, P-after]'],
-			{ '/r': ['P-before', 'R-own', 'P-after'] }
+			['GET /r [P-before, R-own]'],
+			{ '/r': ['P-before', 'R-own'] }
 		],
 		[
 			'(c) G.use(P1.use(R named)).use(P2.use(R named))',
@@ -491,11 +451,8 @@ describe('after-use hooks and plugin deduplication', () => {
 				const r = R('R')
 				return root.use(P('P1', r)).use(P('P2', r))
 			},
-			[
-				'GET /r [P1-before, R-own, P1-after]',
-				'GET /r [P2-before, R-own, P2-after]'
-			],
-			{ '/r': ['P2-before', 'R-own', 'P2-after'] }
+			['GET /r [P1-before, R-own]', 'GET /r [P2-before, R-own]'],
+			{ '/r': ['P2-before', 'R-own'] }
 		],
 		[
 			'(d) same name, different seed',
@@ -503,13 +460,10 @@ describe('after-use hooks and plugin deduplication', () => {
 				root
 					.use(P('P1', R('R', 1, '/r1', 'R1-own')))
 					.use(P('P2', R('R', 2, '/r2', 'R2-own'))),
-			[
-				'GET /r1 [P1-before, R1-own, P1-after]',
-				'GET /r2 [P2-before, R2-own, P2-after]'
-			],
+			['GET /r1 [P1-before, R1-own]', 'GET /r2 [P2-before, R2-own]'],
 			{
-				'/r1': ['P1-before', 'R1-own', 'P1-after'],
-				'/r2': ['P2-before', 'R2-own', 'P2-after']
+				'/r1': ['P1-before', 'R1-own'],
+				'/r2': ['P2-before', 'R2-own']
 			}
 		],
 		[
@@ -518,11 +472,8 @@ describe('after-use hooks and plugin deduplication', () => {
 				const u = R(undefined, undefined, '/u', 'U-own')
 				return root.use(P('P1', u)).use(P('P2', u))
 			},
-			[
-				'GET /u [P1-before, U-own, P1-after]',
-				'GET /u [P2-before, U-own, P2-after]'
-			],
-			{ '/u': ['P2-before', 'U-own', 'P2-after'] }
+			['GET /u [P1-before, U-own]', 'GET /u [P2-before, U-own]'],
+			{ '/u': ['P2-before', 'U-own'] }
 		],
 		[
 			'(e) unnamed R used directly and through P',
@@ -530,8 +481,8 @@ describe('after-use hooks and plugin deduplication', () => {
 				const u = R(undefined, undefined, '/u', 'U-own')
 				return root.use(u).use(P('P', u))
 			},
-			['GET /u [U-own]', 'GET /u [P-before, U-own, P-after]'],
-			{ '/u': ['P-before', 'U-own', 'P-after'] }
+			['GET /u [U-own]', 'GET /u [P-before, U-own]'],
+			{ '/u': ['P-before', 'U-own'] }
 		],
 		[
 			'(f) a global hook on R still propagates as before',
@@ -546,13 +497,9 @@ describe('after-use hooks and plugin deduplication', () => {
 					.use(r)
 					.get('/g', () => 'g')
 			},
-			[
-				'GET /g0 []',
-				'GET /r [P-before, R-global, P-after]',
-				'GET /g [R-global]'
-			],
+			['GET /g0 []', 'GET /r [P-before, R-global]', 'GET /g [R-global]'],
 			{
-				'/r': ['P-before', 'R-global', 'P-after'],
+				'/r': ['P-before', 'R-global'],
 				'/g0': [],
 				'/g': ['R-global']
 			}

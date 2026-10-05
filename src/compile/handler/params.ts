@@ -18,7 +18,7 @@ import { adoptErrorType, fallbackResponse } from '../../handler/error'
 import {
 	drainDisposables,
 	emptyResponse,
-	finalizeRouteError,
+	finalizeRouteErrorOf,
 	forwardError,
 	forwardErrorOf,
 	returnedErrorClasses,
@@ -111,11 +111,11 @@ const handlerParams = (): Record<string, Resolver | undefined> =>
 	fe: () => forwardError,
 	// `fe` that also rethrows a registered non-Error class
 	ie: (c) => {
-		const classes = returnedErrorClasses(c.hook as any, c.root)
+		const classes = returnedErrorClasses(c.hook as any)
 		return classes ? forwardErrorOf(classes) : forwardError
 	},
 	// route-level error boundary
-	fre: () => finalizeRouteError,
+	fre: (c) => finalizeRouteErrorOf(c.hook as any),
 	// shared error fallback, reached once every error hook has declined
 	fbr: () => fallbackResponse,
 	// adopts the error's `type` into an unspecified problem a hook returned

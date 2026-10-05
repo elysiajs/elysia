@@ -288,19 +288,18 @@ const cases: Case[] = [
 			[{ 'x-deny': '1' }, 418, 'catch-all']
 		]
 	],
-	// Not typed (see test/types/parent-hook-response.ts): a local hook after
-	// `.use` runs on the plugin's routes, at any nesting level (the order is
-	// pinned by test/lifecycle/after-use-hook-order.test.ts); plugin-scoped
-	// and global ones don't
+	// A hook reaches only the routes registered after it, as in Elysia 1: no
+	// hook after `.use` reaches the plugin's routes, at any nesting level or
+	// scope
 	[
-		'local hook after .use (runs, not typed)',
+		"local hook after .use doesn't reach",
 		() => new Elysia().use(routes()).beforeHandle(deny),
-		denied
+		[[{ 'x-deny': '1' }, 200, 'ok']]
 	],
 	[
-		"intermediate plugin's local hook after its .use (runs, not typed)",
+		"intermediate plugin's local hook after its .use doesn't reach",
 		() => new Elysia().use(new Elysia().use(routes()).beforeHandle(deny)),
-		denied
+		[[{ 'x-deny': '1' }, 200, 'ok']]
 	],
 	[
 		"plugin-scoped hook after .use doesn't reach",

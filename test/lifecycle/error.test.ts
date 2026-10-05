@@ -93,6 +93,53 @@ describe('Error lifecycle', () => {
 		expect(res.status).toBe(400)
 	})
 
+	// TypeBox issues carry `instancePath`, not `path`. Reading only `path`
+	// reported every TypeBox issue as 'root', so a handler building a
+	// per-field error map could not tell which field failed. Only the empty
+	// pointer is the root: '/' is the property named ''. TypeBox does not
+	// escape keys in `instancePath` (the key `a~1b` arrives as '/a~1b'), so a
+	// '~' sequence is part of the key and must pass through undecoded
+	it('ValidationError.all reports the path of TypeBox issues', async () => {
+		const app = new Elysia()
+			.error(({ error }) => {
+				if (error instanceof ValidationError)
+					return error.all.map((i) => i.path)
+			})
+			.post(
+				'/user',
+				{
+					body: t.Object({ user: t.Object({ name: t.String() }) })
+				},
+				({ body }) => body
+			)
+			.post(
+				'/empty',
+				{ body: t.Object({ '': t.Number() }) },
+				({ body }) => body
+			)
+			.post(
+				'/tilde',
+				{ body: t.Object({ 'a~1b': t.Number() }) },
+				({ body }) => body
+			)
+
+		const nested = await app.handle('/user', json({ user: { name: 1 } }))
+		const root = await app.handle('/user', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify('not an object')
+		})
+		const [empty, tilde] = await Promise.all([
+			app.handle('/empty', json({ '': 'bad' })),
+			app.handle('/tilde', json({ 'a~1b': 'bad' }))
+		])
+
+		expect(await nested.json()).toEqual(['user.name'])
+		expect(await root.json()).toEqual(['root'])
+		expect(await empty.json()).toEqual([''])
+		expect(await tilde.json()).toEqual(['a~1b'])
+	})
+
 	it('inherits plugin', async () => {
 		const plugin = new Elysia().error('global', () => 'hi')
 

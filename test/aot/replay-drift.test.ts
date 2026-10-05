@@ -229,7 +229,7 @@ const drifted: Row[] = [
 		requests: [['/s']]
 	},
 	{
-		why: 'an error class registered after the route still handles it',
+		why: 'an error class registered before the route handles it',
 		build: () =>
 			new Elysia().get(
 				'/s',
@@ -238,9 +238,9 @@ const drifted: Row[] = [
 			),
 		runtime: () =>
 			new Elysia()
-				.get('/s', { beforeHandle: [noop] }, () => new Internal())
 				// a registered non-Error class: the typed API takes Error subclasses
-				.error(Internal as any, () => status(418, 'handled')),
+				.error(Internal as any, () => status(418, 'handled'))
+				.get('/s', { beforeHandle: [noop] }, () => new Internal()),
 		requests: [['/s']]
 	},
 	// derive and beforeHandle at the same position

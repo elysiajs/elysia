@@ -87,7 +87,9 @@ describe('route absorption', () => {
 		})
 	})
 
-	it('preserves root hook order before and after use', async () => {
+	// A hook reaches only the routes registered after it, as in Elysia 1: the
+	// root's hook after `.use()` doesn't
+	it('applies the root hook from before use, not after', async () => {
 		const order: string[] = []
 		const plugin = new Elysia().get('/ordered', () => {
 			order.push('handler')
@@ -100,7 +102,7 @@ describe('route absorption', () => {
 
 		expectOwner(root, '/ordered', plugin)
 		await expect((await root.handle('/ordered')).text()).resolves.toBe('ok')
-		expect(order).toEqual(['before-use', 'after-use', 'handler'])
+		expect(order).toEqual(['before-use', 'handler'])
 	})
 
 	it('does not mutate a plain plugin reused by two roots', async () => {

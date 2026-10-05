@@ -185,21 +185,32 @@ export function parseCookieRawSigned(
 	return out
 }
 
-export function buildCookieJar(
-	set: Context['set'],
-	raw: Record<string, unknown>,
-	config: CompiledCookieConfig,
-	lazySign?: 1,
-	// unsigned + unvalidated lane: `raw` holds still-URL-encoded strings
-	// (parseCookieRawDeferred), so decode per-name on first access too
-	deferDecode?: 1
-) {
-	const store = raw as Record<string, BaseCookie>
-	const materialized: Record<string, 1> = nullObject()
+class CookieJarHandler {
+	declare setRef: Context['set']
+	declare config: CompiledCookieConfig
+	declare lazySign: 1 | undefined
+	declare deferDecode: 1 | undefined
+	declare materialized: Record<string, 1> | undefined
+	declare cache: Record<string, Cookie<unknown>> | undefined
 
-	function materializeEntry(name: string): BaseCookie {
-		if (materialized[name]) return store[name]!
+	constructor(
+		setRef: Context['set'],
+		config: CompiledCookieConfig,
+		lazySign: 1 | undefined,
+		deferDecode: 1 | undefined
+	) {
+		this.setRef = setRef
+		this.config = config
+		this.lazySign = lazySign
+		this.deferDecode = deferDecode
+		this.materialized = undefined
+		this.cache = undefined
+	}
 
+	materialize(store: Record<string, BaseCookie>, name: string): BaseCookie {
+		if (this.materialized?.[name]) return store[name]!
+
+		const config = this.config
 		const rawValue = store[name] as unknown
 		const fieldDefaults = config.fields[name]?.defaults
 		const entry = Object.assign(
@@ -207,7 +218,7 @@ export function buildCookieJar(
 			config.defaults,
 			fieldDefaults,
 			{
-				value: deferDecode
+				value: this.deferDecode
 					? // fall back to the raw string on malformed percent-encoding
 						maybeJsonDecode(
 							(decodeComponent(
@@ -227,7 +238,7 @@ export function buildCookieJar(
 		)
 			// never a string, so every read rejects the signature
 			(entry as any)['~unsign'] = 1
-		else if (lazySign && typeof entry.value === 'string') {
+		else if (this.lazySign && typeof entry.value === 'string') {
 			const secrets = resolveSignSecrets(name, config)
 			if (secrets !== undefined) {
 				;(entry as any)['~unsign'] = secrets
@@ -245,52 +256,70 @@ export function buildCookieJar(
 		}
 
 		store[name] = entry
-		materialized[name] = 1
+		;(this.materialized ??= nullObject())[name] = 1
 
 		return entry
 	}
 
-	const cache: Record<string, Cookie<unknown>> = nullObject()
-
-	function settle(key: string) {
+	settle(store: Record<string, BaseCookie>, key: string) {
 		if (!(key in store)) return
 
-		const entry = materializeEntry(key)
+		const entry = this.materialize(store, key)
 		if ('~unsign' in entry)
 			resolvePendingCookie(entry as Record<string, any>, key)
 	}
 
-	return new Proxy(store, {
-		get(_, key: string) {
-			return (cache[key] ??= new Cookie(
-				key,
-				set,
-				key in store
-					? materializeEntry(key)
-					: Object.assign(
-							nullObject(),
-							config.defaults,
-							config.fields[key]?.defaults
-						)
-			))
-		},
-		has(target, key) {
-			if (typeof key === 'string') settle(key)
+	get(store: Record<string, BaseCookie>, key: string) {
+		return ((this.cache ??= nullObject())[key] ??= new Cookie(
+			key,
+			this.setRef,
+			key in store
+				? this.materialize(store, key)
+				: Object.assign(
+						nullObject(),
+						this.config.defaults,
+						this.config.fields[key]?.defaults
+					)
+		))
+	}
 
-			return Reflect.has(target, key)
-		},
-		ownKeys(target) {
-			const keys = Reflect.ownKeys(target)
-			for (let i = 0; i < keys.length; i++) settle(keys[i] as string)
+	has(store: Record<string, BaseCookie>, key: string | symbol) {
+		if (typeof key === 'string') this.settle(store, key)
 
-			return keys
-		},
-		getOwnPropertyDescriptor(target, key) {
-			if (typeof key === 'string') settle(key)
+		return Reflect.has(store, key)
+	}
 
-			return Reflect.getOwnPropertyDescriptor(target, key)
-		}
-	}) as Record<string, Cookie<unknown>>
+	ownKeys(store: Record<string, BaseCookie>) {
+		const keys = Reflect.ownKeys(store)
+		for (let i = 0; i < keys.length; i++)
+			this.settle(store, keys[i] as string)
+
+		return keys
+	}
+
+	getOwnPropertyDescriptor(
+		store: Record<string, BaseCookie>,
+		key: string | symbol
+	) {
+		if (typeof key === 'string') this.settle(store, key)
+
+		return Reflect.getOwnPropertyDescriptor(store, key)
+	}
+}
+
+export function buildCookieJar(
+	set: Context['set'],
+	raw: Record<string, unknown>,
+	config: CompiledCookieConfig,
+	lazySign?: 1,
+	// unsigned + unvalidated lane: `raw` holds still-URL-encoded strings
+	// (parseCookieRawDeferred), so decode per-name on first access too
+	deferDecode?: 1
+) {
+	return new Proxy(
+		raw as Record<string, BaseCookie>,
+		new CookieJarHandler(set, config, lazySign, deferDecode)
+	) as Record<string, Cookie<unknown>>
 }
 
 function collectSignPending(
@@ -340,25 +369,51 @@ function collectSignPending(
 }
 
 function dropSigned(
-	cookies: NonNullable<Context['set']['cookie']>,
-	config: CompiledCookieConfig
+	cookies: Context['set']['cookie'] | undefined,
+	config: CompiledCookieConfig,
+	set: Context['set'] | undefined
 ) {
+	// Record `set` that outlive a replaced cookie and a derive's context
+	// every later sign of the request refuses,
+	// so no answer goes out with its cookie silently missing (`~finalizeError`)
+	if (set)
+		Object.defineProperty(set, '~signFailed', {
+			value: true,
+			configurable: true
+		})
+
+	const signed = (name: string) =>
+		config.fields[name]?.sign ||
+		config.globalSign === true ||
+		config.globalSignSet?.has(name)
+
+	let kept = false
 	for (const name in cookies)
-		if (
-			config.fields[name]?.sign ||
-			config.globalSign === true ||
-			config.globalSignSet?.has(name)
-		)
-			delete cookies[name]
+		if (signed(name) && !Reflect.deleteProperty(cookies!, name)) kept = true
+
+	// keep the frozen one, the response sends a copy without them
+	if (kept && set?.cookie === cookies) {
+		const copy = nullObject()
+		for (const name in cookies)
+			if (!signed(name)) copy[name] = cookies![name]
+		set!.cookie = copy
+	}
 }
 
 export function signCookieValues(
 	cookies: Context['set']['cookie'] | undefined,
-	config: CompiledCookieConfig
+	config: CompiledCookieConfig,
+	// the request's `set`, to record a failure on
+	set?: Context['set']
 ) {
 	let pending: ReturnType<typeof collectSignPending>
 
 	try {
+		if ((set as { '~signFailed'?: true } | undefined)?.['~signFailed'])
+			throw new TypeError(
+				'A signed cookie of this request failed to sign'
+			)
+
 		pending = collectSignPending(cookies, config)
 		if (!pending) return
 
@@ -372,12 +427,12 @@ export function signCookieValues(
 			return
 		}
 	} catch (error) {
-		dropSigned(cookies!, config)
+		dropSigned(cookies, config, set)
 		throw error
 	}
 
 	return signPending(pending).catch((error) => {
-		dropSigned(cookies!, config)
+		dropSigned(cookies, config, set)
 		throw error
 	})
 }

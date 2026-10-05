@@ -362,6 +362,33 @@ describe('WebSocket upgrade responses fail closed when signing fails', () => {
 		}
 	})
 
+	// the hook writes nothing, so nothing is left to sign: its answer still
+	// never goes out once a cookie failed to sign
+	it('replaces a hook answer after a failed sign with the fallback', async () => {
+		const app = unsignable()
+			.ws('/p', {
+				cookie: session(),
+				beforeHandle({ cookie }: any) {
+					writeBoth(cookie)
+					return 'denied'
+				},
+				error() {
+					return new Response('handled', { status: 200 })
+				},
+				message() {}
+			})
+			.listen(0)
+
+		try {
+			const res = await upgrade(app, '/p')
+			expect(res.status).toBe(500)
+			expect(await res.text()).not.toBe('handled')
+			expectDropped(res)
+		} finally {
+			await app.stop(true)
+		}
+	})
+
 	it('drops on the app-level fallback after an error hook throws', async () => {
 		const app = unsignable()
 			.ws('/p', {

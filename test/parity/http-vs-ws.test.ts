@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { Elysia, t, status } from '../../src'
+import { Elysia, problem, t, status } from '../../src'
 import { websocket } from '../../src/plugin/websocket'
 import { ElysiaError } from '../../src/error'
 import { newWebsocket, wsOpen, wsClosed } from '../ws/utils'
@@ -618,5 +618,44 @@ describe('path encoding parity', () => {
 		} finally {
 			app.stop()
 		}
+	})
+})
+
+// The claim checks `type` is a string, the copy checks `code`; reading either
+// again to adopt it lets a getter swap in anything past that check. The
+// transport-level read-once pins live in test/ws/error-redaction.test.ts
+describe('problem members are read once', () => {
+	it('adopts the checked `type` and `code` into a hook-made problem', async () => {
+		class ForeignFlip extends Error {
+			readonly status = 409
+			typeReads = 0
+			codeReads = 0
+
+			get type(): any {
+				return this.typeReads++ === 0
+					? 'FOREIGN_FLIP'
+					: { marker: 'second-read' }
+			}
+
+			get code(): any {
+				return this.codeReads++ === 0
+					? 'foreign-code'
+					: { marker: 'second-read' }
+			}
+		}
+
+		const response = await new Elysia()
+			.error(() => problem(409))
+			.get('/', () => {
+				throw new ForeignFlip('flip-message')
+			})
+			.handle(new Request('http://localhost/'))
+
+		expect(await response.json()).toEqual({
+			type: 'FOREIGN_FLIP',
+			code: 'foreign-code',
+			title: 'Conflict',
+			status: 409
+		})
 	})
 })

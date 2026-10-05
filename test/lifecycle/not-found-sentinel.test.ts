@@ -209,11 +209,11 @@ describe('NotFound miss sentinel', () => {
 		const custom = new NotFound('custom message')
 
 		const app = new Elysia()
-			.get('/', () => {
-				throw custom
-			})
 			.error(({ error }) => {
 				observed = error
+			})
+			.get('/', () => {
+				throw custom
 			})
 
 		const response = await app.handle('/')

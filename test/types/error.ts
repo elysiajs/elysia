@@ -108,10 +108,10 @@ class OtherError extends Error {
 // Resolving one returned error keeps the remaining error at 500.
 {
 	const app = new Elysia()
+		.error(MyError, ({ error }) => status(404, { message: error.message }))
 		.get('/', () =>
 			Math.random() > 0.5 ? new MyError('x') : new OtherError('x')
 		)
-		.error(MyError, ({ error }) => status(404, { message: error.message }))
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
 		404: { readonly message: string }
@@ -373,7 +373,9 @@ class OtherError extends Error {
 	>().toEqualTypeOf<never>()
 }
 
-// Error handlers map routes even when registered after the route or plugin.
+// An error handler reaches only the routes registered after it, as in 1.x.
+// A late handler leaves an earlier route, its own or a plugin's, typed as it
+// was: the error is still unhandled.
 {
 	const sameInstance = new Elysia()
 		.get('/', () => new MyError('x'))
@@ -382,8 +384,11 @@ class OtherError extends Error {
 	expectTypeOf<
 		(typeof sameInstance)['~Routes']['get']['response']
 	>().toEqualTypeOf<{
-		404: { readonly message: string }
+		500: MyError
 	}>()
+	expectTypeOf<
+		(typeof sameInstance)['~Routes']['get']['error']
+	>().toEqualTypeOf<MyError>()
 
 	const afterUse = new Elysia()
 		.use(new Elysia().get('/', () => new MyError('x')))
@@ -392,8 +397,102 @@ class OtherError extends Error {
 	expectTypeOf<
 		(typeof afterUse)['~Routes']['get']['response']
 	>().toEqualTypeOf<{
-		404: { readonly message: string }
+		500: MyError
 	}>()
+
+	// A catch-all registered before the route doesn't change that
+	const afterOwnHook = new Elysia()
+		.error(() => {})
+		.get('/', () => new MyError('x'))
+		.error(MyError, ({ error }) => status(404, { message: error.message }))
+
+	expectTypeOf<
+		(typeof afterOwnHook)['~Routes']['get']['response']
+	>().toEqualTypeOf<{
+		500: MyError
+	}>()
+
+	// Nor does a late catch-all add its response
+	const lateCatchAll = new Elysia()
+		.get('/', () => new MyError('x'))
+		.error(() => status(418, 'late' as const))
+
+	expectTypeOf<
+		(typeof lateCatchAll)['~Routes']['get']['response']
+	>().toEqualTypeOf<{
+		500: MyError
+	}>()
+
+	// Nor does a plugin used later that brings its own handler
+	const handlerPlugin = new Elysia().error('global', MyError, () =>
+		status(418, 'plugin' as const)
+	)
+
+	const lateUse = new Elysia()
+		.get('/', () => new MyError('x'))
+		.use(handlerPlugin)
+
+	expectTypeOf<
+		(typeof lateUse)['~Routes']['get']['response']
+	>().toEqualTypeOf<{
+		500: MyError
+	}>()
+
+	const lateUseMany = new Elysia()
+		.get('/', () => new MyError('x'))
+		.use([handlerPlugin])
+
+	expectTypeOf<
+		(typeof lateUseMany)['~Routes']['get']['response']
+	>().toEqualTypeOf<{
+		500: MyError
+	}>()
+}
+
+// A class handler that may return nothing passes the error on to the next
+// hook, as at runtime: it doesn't handle the error, so a later handler for the
+// same class still answers
+{
+	const before = new Elysia()
+		.error(MyError, () => {})
+		.error(MyError, () => status(418, 'next' as const))
+		.get('/', () => new MyError('x'))
+
+	expectTypeOf<
+		(typeof before)['~Routes']['get']['response']
+	>().toEqualTypeOf<{
+		418: 'next'
+	}>()
+	expectTypeOf<
+		(typeof before)['~Routes']['get']['error']
+	>().toEqualTypeOf<never>()
+
+	// What it answers when it does answer stays
+	const sometimes = new Elysia()
+		.error(MyError, ({ error }) =>
+			error.message ? status(409, 'own' as const) : undefined
+		)
+		.error(MyError, () => status(418, 'next' as const))
+		.get('/', () => new MyError('x'))
+
+	expectTypeOf<
+		(typeof sometimes)['~Routes']['get']['response']
+	>().toEqualTypeOf<{
+		409: 'own'
+		418: 'next'
+	}>()
+
+	// With nothing after it, the error stays unhandled and is served as one
+	const alone = new Elysia()
+		.error(MyError, () => {})
+		.get('/', () => new MyError('x'))
+
+	expectTypeOf<(typeof alone)['~Routes']['get']['response']>().toEqualTypeOf<{
+		500: MyError
+	}>()
+	expectTypeOf<
+		(typeof alone)['~Routes']['get']['error']
+	>().toEqualTypeOf<MyError>()
 }
 
 // A parent handler registered before `.use()` runs before the plugin's own at
@@ -604,8 +703,8 @@ class OtherError extends Error {
 
 	// A parent handler removes the matched error and adds its response.
 	const resolved = new Elysia()
-		.use(used)
 		.error(MyError, () => 'handled' as const)
+		.use(used)
 
 	expectTypeOf<
 		(typeof resolved)['~Routes']['x']['get']['error']

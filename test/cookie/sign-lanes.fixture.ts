@@ -1,7 +1,8 @@
-// The app-level error lane signs on every lane: a root `.error()` the route
-// didn't compile in (registered after it) and a root `mapResponse` both run
-// after the route's own exit, so they must still sign what they write, with
-// the first (current) secret, and read the value the route wrote
+// The error lane signs on every lane: a root `.error()` and a root
+// `mapResponse` both run after the route's own exit, so they must still sign
+// what they write, with the first (current) secret, and read the value the
+// route wrote. Each is registered before the route: a hook reaches only the
+// routes after it
 import assert from 'node:assert/strict'
 
 const lane = process.argv[2] as 'jit' | 'subtle' | 'aot'
@@ -71,31 +72,35 @@ const throwing = ({ cookie: { session } }: any) => {
 	throw new Error('boom')
 }
 
-// a late error hook that writes and handles
+// an error hook that writes and handles
 {
 	let seen: unknown
 	const app = make(() =>
-		new Elysia(config).get('/', throwing).error(({ cookie }: any) => {
-			seen = cookie.session.value
-			cookie.session.value = 'from-error'
-			return 'handled'
-		})
+		new Elysia(config)
+			.error(({ cookie }: any) => {
+				seen = cookie.session.value
+				cookie.session.value = 'from-error'
+				return 'handled'
+			})
+			.get('/', throwing)
 	)
 	const res = await app.handle(new Request('http://localhost/'))
-	check(await emitted(res), 'from-error', 'late error hook writes')
-	check(seen, 'user-42', 'late error hook reads the plain value')
+	check(await emitted(res), 'from-error', 'error hook writes')
+	check(seen, 'user-42', 'error hook reads the plain value')
 }
 
-// a late error hook that writes and declines
+// an error hook that writes and declines
 {
 	const app = make(() =>
-		new Elysia(config).get('/', throwing).error(({ cookie }: any) => {
-			cookie.session.value = 'from-error'
-		})
+		new Elysia(config)
+			.error(({ cookie }: any) => {
+				cookie.session.value = 'from-error'
+			})
+			.get('/', throwing)
 	)
 	const res = await app.handle(new Request('http://localhost/'))
-	check(res.status, 500, 'late error hook declines: status')
-	check(await emitted(res), 'from-error', 'late error hook declines')
+	check(res.status, 500, 'error hook declines: status')
+	check(await emitted(res), 'from-error', 'error hook declines')
 }
 
 // a root mapResponse, sync and async, on the hookless error lane
@@ -123,21 +128,21 @@ for (const async of [false, true]) {
 }
 
 // secret rotation: a cookie signed with the old secret is re-issued with the
-// current one when a late hook touches it
+// current one when an error hook touches it
 {
 	let seen: unknown
 	const app = make(() =>
 		new Elysia({
 			cookie: { secrets: ['new-secret', 'old-secret'], sign: ['session'] }
 		})
-			.get('/', ({ cookie: { session } }: any) => {
-				void session.value
-				throw new Error('boom')
-			})
 			.error(({ cookie }: any) => {
 				seen = cookie.session.value
 				cookie.session.update({ maxAge: 10 })
 				return 'handled'
+			})
+			.get('/', ({ cookie: { session } }: any) => {
+				void session.value
+				throw new Error('boom')
 			})
 	)
 	const old = await signCookie('rotated-user', 'old-secret', 'session')
@@ -187,15 +192,15 @@ for (const async of [false, true]) {
 					throw new Error('boom')
 				})
 		),
-		'late error hook': make(() =>
+		'error hook writes': make(() =>
 			new Elysia(config)
-				.get('/', ({ cookie }: any) => {
-					void cookie
-					throw new Error('boom')
-				})
 				.error(({ cookie }: any) => {
 					write(cookie)
 					return 'handled'
+				})
+				.get('/', ({ cookie }: any) => {
+					void cookie
+					throw new Error('boom')
 				})
 		),
 		'validation error': make(() =>
@@ -206,50 +211,108 @@ for (const async of [false, true]) {
 				return { ok: 'no' }
 			}) as any)
 		),
-		'validation error, late hook': make(() =>
+		'validation error, error hook': make(() =>
 			new Elysia(config)
+				.error(() => 'handled')
 				.get('/', { response: invalid }, (({ cookie }: any) => {
 					write(cookie)
 					return { ok: 'no' }
 				}) as any)
+		),
+		// the hook writes nothing, so nothing is left to sign
+		'hook answers after the success lane failed': make(() =>
+			new Elysia(config)
 				.error(() => 'handled')
+				.get('/', ({ cookie }: any) => {
+					write(cookie)
+					return 'ok'
+				})
 		)
 	}
 
-	if (lane === 'subtle')
-		crypto.subtle.sign = () => Promise.reject(new Error('signer down'))
-	else
-		(Bun as any).CryptoHasher.prototype.digest = () => {
-			throw new Error('signer down')
+	// the hook swaps the cookies out before the sign settles: the failure
+	// is recorded on the request, not on the cookies it replaced
+	const replacing = (replacement: () => unknown) =>
+		make(() =>
+			new Elysia(config)
+				.error(({ cookie, set }: any) => {
+					write(cookie)
+					queueMicrotask(() => {
+						set.cookie = replacement()
+					})
+
+					return 'handled'
+				})
+				.get('/', ({ cookie }: any) => {
+					void cookie
+					throw new Error('boom')
+				})
+		)
+	const replaced = {
+		'hook replaces the cookies with {}': replacing(() => ({})),
+		'hook replaces the cookies with undefined': replacing(() => undefined)
+	}
+
+	// what the signer throws doesn't matter, a frozen error or a primitive
+	// included: the failure is recorded per request
+	for (const thrown of [
+		new Error('signer down'),
+		Object.freeze(new Error('signer down')),
+		'signer down'
+	])
+		for (const [name, app] of Object.entries(apps)) {
+			if (lane === 'subtle')
+				crypto.subtle.sign = () => Promise.reject(thrown)
+			else
+				(Bun as any).CryptoHasher.prototype.digest = () => {
+					throw thrown
+				}
+
+			const res = await app.handle(new Request('http://localhost/'))
+			const setCookie = res.headers.get('set-cookie') ?? ''
+			check(
+				/(^|, )session=/.test(setCookie),
+				false,
+				`${name}: no unsigned session`
+			)
+			check(
+				/(^|, )theme=dark/.test(setCookie),
+				true,
+				`${name}: unsigned cookie kept`
+			)
+			// On the success lane the signer's failure is the error (a 500), and
+			// an error hook's answer fails closed to the 500 fallback, never sent
+			// with its cookie silently missing. Without a hook, the response the
+			// error lane chose goes out unchanged
+			const body = await res.text()
+			check(res.status, 500, `${name}: status`)
+			if (name === 'validation error')
+				check(
+					body.includes('signer down'),
+					false,
+					`${name}: error response kept`
+				)
+			else if (name !== 'success')
+				check(
+					body === 'handled',
+					false,
+					`${name}: hook response replaced`
+				)
 		}
 
-	for (const [name, app] of Object.entries(apps)) {
+	for (const [name, app] of Object.entries(replaced)) {
 		const res = await app.handle(new Request('http://localhost/'))
-		const setCookie = res.headers.get('set-cookie') ?? ''
 		check(
-			/(^|, )session=/.test(setCookie),
+			/(^|, )session=/.test(res.headers.get('set-cookie') ?? ''),
 			false,
 			`${name}: no unsigned session`
 		)
+		check(res.status, 500, `${name}: status`)
 		check(
-			/(^|, )theme=dark/.test(setCookie),
-			true,
-			`${name}: unsigned cookie kept`
+			(await res.text()) === 'handled',
+			false,
+			`${name}: hook response replaced`
 		)
-		// On the success lane the signer's failure is the error (a 500).
-		// Anywhere else the response the error lane chose goes out unchanged
-		const body = await res.text()
-		if (name === 'success') check(res.status, 500, `${name}: status`)
-		else {
-			check(
-				body.includes('signer down'),
-				false,
-				`${name}: error response kept`
-			)
-			if (name === 'validation error')
-				check(res.status, 500, `${name}: status`)
-			else check(body, 'handled', `${name}: hook response kept`)
-		}
 	}
 }
 

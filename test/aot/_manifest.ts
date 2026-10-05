@@ -113,6 +113,52 @@ export const materialiseHandlers = (
 	return m
 }
 
+/**
+ * Build once under AOT capture, register the single captured handler as a
+ * frozen manifest, then build again and compile from it. Throws unless the
+ * rebuild ran the frozen factory exactly once, so a test can't pass on JIT.
+ */
+export const compileFromFrozenHandler = async <
+	App extends { compile(): unknown }
+>(
+	build: () => App
+): Promise<App> => {
+	// loaded on call, keeping the capture module out of the bridge-free
+	// fixtures that import this file
+	const { endHandlerCapture, endValidatorCapture } =
+		await import('../../src/compile/aot-capture')
+
+	let factoryCalls = 0
+	process.env.ELYSIA_AOT_BUILD = '1'
+	try {
+		endValidatorCapture()
+		endHandlerCapture()
+		build().compile()
+		const handlers = endHandlerCapture()
+		endValidatorCapture()
+		if (handlers.length !== 1)
+			throw new Error(`captured ${handlers.length} handlers, expected 1`)
+
+		const manifest = materialiseHandlers(handlers)
+		const entry = manifest[handlers[0]!.method]![handlers[0]!.path]!
+		const factory = entry.f!
+		entry.f = (...deps) => {
+			factoryCalls++
+			return factory(...deps)
+		}
+		registerManifest({ handlers: manifest })
+	} finally {
+		delete process.env.ELYSIA_AOT_BUILD
+	}
+
+	const app = build()
+	app.compile()
+	if (factoryCalls !== 1)
+		throw new Error(`frozen factory ran ${factoryCalls} times, expected 1`)
+
+	return app
+}
+
 /** Materialise captured validators into the frozen manifest emitted by builds. */
 export const materialise = (
 	captured: CapturedValidator[]

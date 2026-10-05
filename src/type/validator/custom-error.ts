@@ -9,13 +9,17 @@ import {
 } from '../../compile/aot'
 import { buildFrozenCheck } from './frozen-check'
 import { nullObject } from '../../utils'
-import { subValueAt } from '../../error'
+
+// a property key, a tuple index (number) or array items, so the walk knows
+// the container kind. For array items the walk steps into the first item
+// failing `items`, the item TypeBox reports first
+type Segment = string | number | { items: any }
 
 interface UnionInfo {
 	node: any
 
-	// path segments to the union value (element-relative when inside `each`)
-	segments: string[]
+	// path segments to the union value
+	segments: Segment[]
 
 	// which branch (index into anyOf/oneOf) this node lives under
 	branchIndex: number
@@ -26,27 +30,34 @@ interface CustomErrorNode {
 	path: string
 
 	node: any
-	segments: string[]
-	each?: { itemSegments: string[] }
+	segments: Segment[]
+
+	// the last segment is a required key of a plain object
+	required?: boolean
 
 	// nearest enclosing union
 	union?: UnionInfo
 }
 
-function encodePointer(segments: string[]): string {
+function encodePointer(segments: Segment[]): string {
 	let out = ''
 	for (const s of segments)
-		out += '/' + s.replace(/~/g, '~0').replace(/\//g, '~1')
+		out +=
+			'/' +
+			(typeof s === 'object'
+				? '[]'
+				: String(s).replace(/~/g, '~0').replace(/\//g, '~1'))
 
 	return out
 }
 
 function collectCustomErrorNodes(
 	schema: any,
-	segments: string[],
+	segments: Segment[],
 	out: CustomErrorNode[],
 	seen: WeakSet<object>,
-	union?: UnionInfo
+	union?: UnionInfo,
+	required?: boolean
 ) {
 	if (!schema || typeof schema !== 'object') return out
 	if (seen.has(schema)) return out
@@ -58,44 +69,46 @@ function collectCustomErrorNodes(
 			path: encodePointer(segments),
 			node: schema,
 			segments,
+			required,
 			union
 		})
 
-	if (schema.properties)
+	if (schema.properties) {
+		// development reports a union branch's own missing key at the union
+		const keys =
+			union?.segments !== segments && Array.isArray(schema.required)
+				? schema.required
+				: undefined
+
 		for (const k in schema.properties)
 			collectCustomErrorNodes(
 				schema.properties[k],
 				[...segments, k],
 				out,
 				seen,
-				union
+				union,
+				keys?.includes(k)
 			)
+	}
 
 	const items = schema.items
 	if (Array.isArray(items)) {
 		for (let i = 0; i < items.length; i++)
 			collectCustomErrorNodes(
 				items[i],
-				[...segments, String(i)],
+				[...segments, i],
 				out,
 				seen,
 				union
 			)
-	} else if (items && typeof items === 'object') {
-		const inner: CustomErrorNode[] = []
-		collectCustomErrorNodes(items, [], inner, seen, union)
-
-		for (const child of inner)
-			out.push({
-				path: encodePointer(segments) + '/[]' + child.path,
-				node: child.node,
-				segments,
-				each: { itemSegments: child.segments },
-				// nested unions inside array items keep their own gate; a union
-				// straddling the array boundary is not disambiguated here.
-				union: child.union
-			})
-	}
+	} else if (items && typeof items === 'object')
+		collectCustomErrorNodes(
+			items,
+			[...segments, { items }],
+			out,
+			seen,
+			union
+		)
 
 	const branches = schema.anyOf ?? schema.oneOf
 	if (Array.isArray(branches))
@@ -171,23 +184,53 @@ export function buildFindCustomError(
 		? new Map(frozen.ce.map((e) => [e.p, e]))
 		: undefined
 
-	const unionCheckCache = new WeakMap<object, (v: unknown) => boolean>()
+	const checkCache = new WeakMap<object, (v: unknown) => boolean>()
 	const discriminatorCache = new WeakMap<
 		object,
 		Array<Record<string, unknown>> | null
 	>()
 
-	const compileUnion = (node: any): ((v: unknown) => boolean) | undefined => {
-		const cached = unionCheckCache.get(node)
+	const compileOnce = (node: any): ((v: unknown) => boolean) | undefined => {
+		const cached = checkCache.get(node)
 		if (cached) return cached
 		try {
 			const uc = Compile(node)
 			const fn = (v: unknown) => uc.Check(v)
-			unionCheckCache.set(node, fn)
+			checkCache.set(node, fn)
 			return fn
 		} catch {
 			return undefined
 		}
+	}
+
+	let found: unknown
+
+	const reach = (value: unknown, segments: Segment[]) => {
+		let current: any = value
+		for (let i = 0; i < segments.length; i++) {
+			const s = segments[i]
+			if (
+				current === null ||
+				typeof current !== 'object' ||
+				// a property key needs a non-array object, the rest an array
+				Array.isArray(current) === (typeof s === 'string')
+			)
+				return -1
+
+			if (typeof s === 'object') {
+				const check = compileOnce(s.items)
+				const at = check
+					? current.findIndex((x: unknown) => !check(x))
+					: -1
+				if (at < 0) return -1
+
+				current = current[at]
+			} else if (s in current) current = current[s]
+			else return i === segments.length - 1 ? 0 : -1
+		}
+
+		found = current
+		return 1
 	}
 
 	const discriminatorsOf = (node: any, branches: any[]) => {
@@ -198,15 +241,15 @@ export function buildFindCustomError(
 	}
 
 	const checks: {
-		segments: string[]
-		each?: { itemSegments: string[] }
+		segments: Segment[]
+		required?: boolean
 		check: (v: unknown) => boolean
 		gate?: (root: unknown) => boolean
 		path: string
 		error: unknown
 	}[] = []
 
-	for (const { path, node, each, segments, union } of nodes) {
+	for (const { path, node, segments, required, union } of nodes) {
 		let check: ((v: unknown) => boolean) | undefined
 
 		// Union-branch nodes must not reuse a frozen `ce` entry
@@ -227,14 +270,6 @@ export function buildFindCustomError(
 
 		if (!check) continue
 
-		if (each) {
-			const leafCheck = check
-			const itemSegments = each.itemSegments
-			check = (v) =>
-				!Array.isArray(v) ||
-				v.every((x) => leafCheck(subValueAt(x, itemSegments)))
-		}
-
 		let gate: ((root: unknown) => boolean) | undefined
 		if (union) {
 			const branches: any[] = union.node.anyOf ?? union.node.oneOf ?? []
@@ -242,21 +277,23 @@ export function buildFindCustomError(
 
 			if (!discriminators) gate = () => true
 			else {
-				const unionCheck = compileUnion(union.node)
+				const unionCheck = compileOnce(union.node)
 				if (!unionCheck) continue
 
 				const unionSegments = union.segments
 				const branchIndex = union.branchIndex
 
 				gate = (root) => {
-					const unionValue = subValueAt(root, unionSegments)
+					if (reach(root, unionSegments) < 1) return true
+
+					const unionValue = found
 					// union succeeds → no error to report
 					if (unionCheck(unionValue)) return true
 					if (unionValue === null || typeof unionValue !== 'object')
 						return true
 
-					// value must match THIS branch's discriminators and no
-					// other branch's, so selection is unambiguous.
+					// value must match this branch's discriminators and
+					// no other branch's, so selection is unambiguous.
 					let matches = 0
 					let selected = -1
 					for (let i = 0; i < discriminators.length; i++) {
@@ -281,22 +318,31 @@ export function buildFindCustomError(
 			}
 		}
 
-		checks.push({ segments, each, check, gate, path, error: node.error })
+		checks.push({
+			segments,
+			required,
+			check,
+			gate,
+			path,
+			error: node.error
+		})
 	}
 
 	if (!checks.length) return
 
-	// deepest path first (by segment count, then path length as a tiebreak)
-	checks.sort(
-		(a, b) =>
-			b.segments.length - a.segments.length ||
-			b.path.length - a.path.length
-	)
+	// deepest first; a stable sort keeps siblings in declaration order, the
+	// order TypeBox reports them in
+	checks.sort((a, b) => b.segments.length - a.segments.length)
 
 	return (value) => {
 		for (const c of checks) {
 			if (c.gate && c.gate(value)) continue
-			if (!c.check(subValueAt(value, c.segments)))
+
+			const at = reach(value, c.segments)
+			if (at < 0 || (!at && !c.required)) continue
+
+			// a missing required key fails even if its schema accepts undefined
+			if (!at || !c.check(found))
 				return { instancePath: c.path, error: c.error }
 		}
 	}
@@ -314,9 +360,9 @@ export function captureCustomErrors(
 	if (!ceNodes.length) return
 
 	const entries: NonNullable<CapturedValidator['customErrors']> = []
-	for (const { path, node, union, each } of ceNodes) {
-		// union-branch and array-element nodes are handled at runtime only
-		if (union || each) continue
+	for (const { path, node, union, segments } of ceNodes) {
+		// union-branch and array-item nodes are handled at runtime only
+		if (union || segments.some((s) => typeof s === 'object')) continue
 
 		try {
 			const cf = buildFrozenCheck(

@@ -27,7 +27,7 @@ import { fallbackResponse } from '../../handler/error'
 import {
 	drainDisposables,
 	emptyResponse,
-	finalizeRouteError,
+	finalizeRouteErrorOf,
 	forwardError,
 	forwardErrorOf
 } from '../../handler/utils'
@@ -69,7 +69,7 @@ import { resolvedTraceOf, traceCapabilityRequired } from '../../generation'
 import { Capture } from '../aot'
 import { JITProbe } from '../jit-probe'
 
-import { requestId } from '../../utils'
+import { requestId, evictOldestHalf } from '../../utils'
 
 import type { Link } from './utils'
 import type { Context } from '../../context'
@@ -82,6 +82,14 @@ import type {
 
 const awaitValue = (value: string, arm = '') =>
 	arm ? `await (_av=(${value}),${arm},_av)` : `await ${value}`
+
+/**
+ * @internal one factory per emitted source, each route calls it for its own
+ * closure. JSC stops sharing code between identical `new Function` sources
+ * once its source cache churns, so without this every route links a copy
+ */
+export const factoryCache = new Map<string, Function>()
+export const FACTORY_CACHE_LIMIT = 256
 
 let captureHeaderShorthand: boolean | undefined
 /**
@@ -441,7 +449,10 @@ export function compileHandlerJit(
 	const plain = (code: string) => tailPlain(asyncMode, code)
 
 	const seenKeys = new Set<string>(['rt', 'fre'])
-	const paramValues: unknown[] = [errorRoot, finalizeRouteError]
+	const paramValues: unknown[] = [
+		errorRoot,
+		finalizeRouteErrorOf(hook as any)
+	]
 
 	const aliasKeys: string[] = []
 	function link(v: unknown, key: string) {
@@ -903,12 +914,18 @@ export function compileHandlerJit(
 		`return _m\n`
 
 	const signPrefix = syncCookieSign
-		? `scv(c.set.cookie,cc)\n`
+		? `scv(c.set.cookie,cc,c.set)\n`
 		: asyncCookieSign
-			? `_sg=scv(c.set.cookie,cc)\nif(_sg){${arm ? `${arm}\n` : ''}await _sg}\n`
+			? `_sg=scv(c.set.cookie,cc,c.set)\nif(_sg){${arm ? `${arm}\n` : ''}await _sg}\n`
 			: ''
 
 	if (syncCookieSign || asyncCookieSign) link(signCookieValues, 'scv')
+
+	// A streamed body runs on the first pull, after the sign above: the
+	// stream handler signs again before it builds the headers
+	const streamSign = signPrefix
+		? `if(typeof _r?.next==='function')c.set['~sign']=_sgn\n`
+		: ''
 
 	let factoryHelpers = ''
 	// first await point inside the error hooks, `-1` without error hooks
@@ -1043,6 +1060,7 @@ export function compileHandlerJit(
 				`function _fin2(c,_r,_stl,_sv){try{\n` +
 				`c.responseValue=_r\n` +
 				signPrefix +
+				streamSign +
 				`const _m=${mapValue('_r')}\n` +
 				mapThenSchedule(
 					syncScheduleDecl ? `_scf(c,_stl)\n` : scheduleAfterResponse,
@@ -1134,7 +1152,7 @@ export function compileHandlerJit(
 
 			const deferSchedule = !!schedule
 
-			code += plain(signPrefix)
+			code += plain(signPrefix + streamSign)
 			const finalMap = mapValue('_r')
 			const onMapReject = syncErrorHook
 				? `(_e)=>_ce(_e,c)`
@@ -1319,7 +1337,7 @@ export function compileHandlerJit(
 		code = code.replaceAll('fre(rt,c,', '_sfre(rt,c,')
 		factoryHelpers =
 			factoryHelpers.replaceAll('fre(rt,c,', '_sfre(rt,c,') +
-			`function _sgn(s){return scv(s.cookie,cc)}\nfunction _sfre(rt,c,e){return fre(rt,c,e,_sgn)}\n`
+			`function _sgn(s){return scv(s.cookie,cc,s)}\nfunction _sfre(rt,c,e){return fre(rt,c,e,_sgn)}\n`
 	}
 
 	if (factoryHelpers)
@@ -1375,11 +1393,19 @@ export function compileHandlerJit(
 		}
 	}
 
+	// per route, hit or miss: a fresh isolate still needs `new Function`
 	JITProbe.record('handler:new-function')
 
-	// eslint-disable-next-line sonarjs/code-eval -- AOT codegen is the architecture
-	return new Function('h', fullAlias, `return ${code}`)(
-		handler,
-		...paramValues
-	)
+	const key = fullAlias + '\n' + code
+	let factory = factoryCache.get(key)
+	if (!factory) {
+		if (factoryCache.size >= FACTORY_CACHE_LIMIT)
+			evictOldestHalf(factoryCache)
+
+		// eslint-disable-next-line sonarjs/code-eval -- AOT codegen is the architecture
+		factory = new Function('h', fullAlias, `return ${code}`)
+		factoryCache.set(key, factory)
+	}
+
+	return factory(handler, ...paramValues)
 }

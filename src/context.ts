@@ -94,9 +94,13 @@ function buildEmptyContext(Base: any, headers: object | null = null) {
 		declare route?: string
 		declare trace?: any[]
 		declare '~sig'?: AbortSignal
+		declare request: Request
 
-		constructor(public request: Request) {
+		// a parameter property compiles to a class field, which caps JSC's
+		// inline slots at 2 and spills every per-request field to a butterfly
+		constructor(request: Request) {
 			super()
+			this.request = request
 
 			if (immutableHeaders)
 				this.set = {

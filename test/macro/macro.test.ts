@@ -1555,6 +1555,103 @@ describe('Macro', () => {
 		})
 	})
 
+	it('keep distinct function arguments with the same source', async () => {
+		// Closures from one factory share source text but capture different
+		// state, so deduplicating by source silently drops a user's hook
+		const ran: string[] = []
+		const make = (tag: string) => () => ran.push(tag)
+
+		const app = new Elysia()
+			.macro({
+				check: (fn: () => unknown) => ({
+					beforeHandle() {
+						fn()
+					}
+				}),
+				first: () => ({ check: make('first') }),
+				second: () => ({ check: make('second') })
+			})
+			.get('/', { first: true, check: make('route') }, () => 'ok')
+			.get('/both', { first: true, second: true }, () => 'ok')
+
+		await app.handle('/')
+		expect(ran.sort()).toEqual(['first', 'route'])
+
+		ran.length = 0
+		await app.handle('/both')
+		expect(ran.sort()).toEqual(['first', 'second'])
+	})
+
+	it('deduplicate the same function argument', async () => {
+		let count = 0
+		const check = () => count++
+
+		const app = new Elysia()
+			.macro({
+				check: (fn: () => unknown) => ({
+					beforeHandle() {
+						fn()
+					}
+				}),
+				first: () => ({ check }),
+				second: () => ({ check })
+			})
+			.get('/', { first: true, second: true, check }, () => 'ok')
+
+		await app.handle('/')
+		expect(count).toBe(1)
+	})
+
+	it('keep distinct symbol arguments with the same description', async () => {
+		// Every Symbol('a') is a different value, so deduplicating by
+		// description silently drops a user's hook. Symbol.for('a') is one
+		// shared value, so it still runs once
+		const ran: symbol[] = []
+		const first = Symbol('a')
+		const route = Symbol('a')
+
+		const app = new Elysia()
+			.macro({
+				check: (s: symbol) => ({
+					beforeHandle() {
+						ran.push(s)
+					}
+				}),
+				nested: (option: { s: symbol }) => ({
+					beforeHandle() {
+						ran.push(option.s)
+					}
+				}),
+				first: () => ({ check: first, nested: { s: first } }),
+				registered: () => ({ check: Symbol.for('a') })
+			})
+			.get(
+				'/',
+				{ first: true, check: route, nested: { s: route } },
+				() => 'ok'
+			)
+			.get(
+				'/registered',
+				{ registered: true, check: Symbol.for('a') },
+				() => 'ok'
+			)
+			.get('/mixed', { registered: true, check: first }, () => 'ok')
+
+		await app.handle('/')
+		expect(ran.filter((s) => s === first).length).toBe(2)
+		expect(ran.filter((s) => s === route).length).toBe(2)
+
+		ran.length = 0
+		await app.handle('/registered')
+		expect(ran).toEqual([Symbol.for('a')])
+
+		ran.length = 0
+		await app.handle('/mixed')
+		expect(ran.length).toBe(2)
+		expect(ran).toContain(first)
+		expect(ran).toContain(Symbol.for('a'))
+	})
+
 	it('handle macro name', async () => {
 		const app = new Elysia()
 			.macro({

@@ -141,4 +141,26 @@ describe('HOC', () => {
 
 		expect(calls).toBe(1)
 	})
+
+	it('runs a named plugin wrap once per request when two sub-plugins reach it', async () => {
+		const calls: string[] = []
+		const tap = (name: string) => (fn: any) => (request: Request) => {
+			calls.push(name)
+			return fn(request)
+		}
+
+		const shared = () =>
+			new Elysia({ name: 'shared-wrap' }).wrap(tap('shared'))
+		const other = new Elysia({ name: 'other-wrap' }).wrap(tap('other'))
+
+		const app = new Elysia()
+			.use(new Elysia({ name: 'sub-a' }).use(shared()))
+			.use(new Elysia({ name: 'sub-b' }).use(shared()).use(other))
+			.use(shared())
+			.get('/', () => 'ok')
+
+		await app.handle('/')
+
+		expect(calls).toEqual(['shared', 'other'])
+	})
 })

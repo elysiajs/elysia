@@ -139,9 +139,9 @@ describe('as', () => {
 			app.handle('/').then((x) => x.status)
 		])
 
-		// /inner 2 (inner's, then plugin's registered after `.use(inner)`),
-		// /plugin 2, / 1
-		expect(called).toBe(5)
+		// /inner 1 (plugin's hook came after `.use(inner)`: a hook reaches only
+		// the routes after it), /plugin 2, / 1
+		expect(called).toBe(4)
 		expect(response).toEqual([500, 200, 500])
 	})
 

@@ -178,10 +178,6 @@ const shapes: Array<[name: string, build: () => AnyElysia, prefix?: string]> = [
 				.derive(() => ({ user: 'alice' }))
 				.beforeHandle(deny)
 				.use(routes())
-	],
-	[
-		'a root hook registered after .use()',
-		() => new Elysia().use(websocket()).use(routes()).beforeHandle(deny)
 	]
 ]
 
@@ -215,6 +211,27 @@ describe('WebSocket inherited beforeHandle enforcement', () => {
 				app.stop(true)
 			}
 		})
+
+	// A hook reaches only the routes registered after it, as in Elysia 1: a
+	// root hook after `.use()` guards neither the HTTP nor the WS route, so
+	// they still agree. Registered before, it guards both (the first shape
+	// above)
+	it('keeps a root hook registered after .use() off HTTP and WS alike', async () => {
+		const app = new Elysia()
+			.use(websocket())
+			.use(routes())
+			.beforeHandle(deny)
+			.listen(0)
+
+		try {
+			const http = (await app.handle('/http')).status
+			const upgrade = await upgradeStatus(app.server!, '/ws')
+
+			expect([http, upgrade]).toEqual([200, 101])
+		} finally {
+			app.stop(true)
+		}
+	})
 
 	// `beforeHandle` also runs per frame on WS: inherited ones must too, or a
 	// hook that vets message content protects only root-mounted routes

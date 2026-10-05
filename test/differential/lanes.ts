@@ -57,6 +57,17 @@ export const precompileHandle = handleLane('precompile-handle', {
 	precompile: true
 })
 
+// No compile() up front: each route compiles on its first request.
+export const lazyHandle = {
+	id: 'lazy-handle',
+	transport: 'handle',
+	async make(define) {
+		const app = define(new Elysia())
+
+		return { handle: (req) => app.handle(req), dispose: async () => {} }
+	}
+} satisfies LaneFactory
+
 // Real-socket lanes
 
 const listenLane = (

@@ -14,7 +14,11 @@ const matchFunction =
 	/^(?:function(?:\s+[\w$]+)?|[\w$]+)\s*\([\w$\s,.[\]{}:]*\)\s*(\{[\s\S]*\})$/
 const matchLiteral = /^(?:true|false|null|-?\d+(?:\.\d+)?|'[^'\\]*'|"[^"\\]*")$/
 
-const mayReturnPromiseCache = new WeakMap<Function, boolean>()
+let mayReturnPromiseCache = new WeakMap<Function, boolean>()
+
+export const resetMayReturnPromiseCache = () => {
+	mayReturnPromiseCache = new WeakMap()
+}
 
 export function mayReturnPromise(fn: Function): boolean {
 	let result = mayReturnPromiseCache.get(fn)

@@ -52,11 +52,14 @@ import { createMessageParser } from './parser'
 import {
 	ElysiaError,
 	ElysiaStatus,
+	HTTPError,
 	ValidationError,
 	elysiaErrorProblem,
 	internalServerErrorBodyString,
+	isProduction,
 	problemBody,
-	problemResponse
+	problemResponse,
+	titleOf
 } from '../error'
 
 import {
@@ -67,7 +70,7 @@ import {
 	resolveStatus,
 	statusFallbackBody
 } from '../handler/error'
-import { finalizeRouteError } from '../handler/utils'
+import { finalizeRouteErrorOf } from '../handler/utils'
 
 import { isBun } from '../universal/constants'
 import { mapResponse } from '../adapter/web-standard/handler'
@@ -208,7 +211,10 @@ export async function handleWSResponse(
 }
 
 function wsErrorFrameFallback(error: any): string | Promise<string> {
-	if (claimsProblemType(error))
+	// Read once, as on HTTP: what the claim is checked on is what gets served
+	const type = error?.type
+
+	if (claimsProblemType(error, type))
 		try {
 			const status = resolveStatus(error.status)
 			const served =
@@ -219,20 +225,37 @@ function wsErrorFrameFallback(error: any): string | Promise<string> {
 					? JSON.stringify(value)
 					: String(value)
 
-			const problemFrame = (detail: unknown) =>
-				JSON.stringify(
+			const problemFrame = (detail: unknown, trusted = true) => {
+				const code = trusted ? error.code : undefined
+
+				return JSON.stringify(
 					problemBody({
-						type: error.type ?? 'about:blank',
-						...(typeof error.code === 'string'
-							? { code: error.code }
-							: {}),
+						type: typeof type === 'string' ? type : 'about:blank',
+						...(typeof code === 'string' ? { code } : {}),
 						detail: detail as string,
 						status: served
 					})
 				)
+			}
 
+			// As on HTTP, only an owned error is trusted past a production 5xx
+			// mask: a foreign Error keeps its problem shape, nothing past
+			// `type` and `status`, any other foreign claim falls to the legacy
+			// mask
+			if (
+				isProduction() &&
+				served >= 500 &&
+				!(error instanceof HTTPError)
+			)
+				return error instanceof Error &&
+					typeof status === 'number' &&
+					status >= 500
+					? problemFrame(titleOf(served), false)
+					: wsLegacyFrame(error)
+
+			// A masked 5xx `detail` names the status it serves, as `title` does
 			const serveMessage = () =>
-				problemFrame(statusFallbackBody(error, served))
+				problemFrame(statusFallbackBody(error, served, titleOf(served)))
 			const serveDetail = () => {
 				const detail = readAnnotation(error, 'detail', true)
 
@@ -270,7 +293,8 @@ function wsErrorFrameFallback(error: any): string | Promise<string> {
 
 function wsLegacyFrame(error: any) {
 	if (error?.status) {
-		const body = statusFallbackBody(error, error.status)
+		// Resolved as on HTTP, `'Bad Gateway' >= 500` would skip the mask
+		const body = statusFallbackBody(error, resolveStatus(error.status))
 
 		return typeof body === 'object' ? JSON.stringify(body) : String(body)
 	}
@@ -362,22 +386,24 @@ export function buildWSRoute(
 	) => Promise<Response | undefined> | Response | undefined,
 	options: Partial<WebSocketHandler<any>>
 ] {
-	const hook: AnyWSLocalHook = (resolveWSLocalHook(
+	const localHook = resolveWSLocalHook(
 		localMacroRoot(
 			(route[7] as AnyElysia) ?? (route[3] as AnyElysia) ?? app,
 			app
 		),
 		route[4] as AnyWSLocalHook | undefined,
 		app
-	) ?? nullObject()) as AnyWSLocalHook
+	) as AnyWSLocalHook | undefined
+	const hook = localHook ?? (nullObject() as AnyWSLocalHook)
 
 	const instance = (route[3] as AnyElysia | undefined) ?? app
 	const appHookChain = route[5] as Parameters<typeof composeRouteHook>[2]
 	const inheritedChain = route[6] as Parameters<typeof composeRouteHook>[3]
 
+	// the local hook introspected by its macros, so `composed` carries it too
 	const composed = (composeRouteHook(
 		instance,
-		route[4] as AnyWSLocalHook | undefined,
+		localHook,
 		appHookChain,
 		inheritedChain,
 		app,
@@ -525,8 +551,12 @@ export function buildWSRoute(
 		flatAppHook.error as any
 	)
 
-	// same handler analysis HTTP compiles with: a hook touching
-	// headers/query/cookie materializes the channel even without a schema
+	const finalizeOwnError = finalizeRouteErrorOf({
+		error: errorHandlers as any,
+		mapResponse: mapResponses as any
+	})
+
+	// analyze without schema
 	const inference = sucrose(hook.message as any, {
 		beforeHandle: [
 			...allBeforeHandles,
@@ -557,7 +587,8 @@ export function buildWSRoute(
 
 	// sign like an HTTP route when a hook or error answers with HTTP
 	const signCookies = cookieConfig?.hasSign
-		? (set: Context['set']) => signCookieValues(set.cookie, cookieConfig)
+		? (set: Context['set']) =>
+				signCookieValues(set.cookie, cookieConfig, set)
 		: undefined
 
 	const parseMessage = createMessageParser(parseHooks as any)
@@ -965,8 +996,7 @@ export function buildWSRoute(
 					error as Error
 				)) as Response
 			} catch (thrown) {
-				// a throwing error hook falls to the app-level fallback
-				return finalizeRouteError(app, context, thrown, signCookies) as
+				return finalizeOwnError(app, context, thrown, signCookies) as
 					| Response
 					| Promise<Response>
 			}

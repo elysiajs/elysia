@@ -11,7 +11,7 @@ import {
 	type AotModuleCondition
 } from './source'
 import type { JITProbeResult } from '../../compile/jit-probe'
-import { composeRouteHook } from '../../compile/handler'
+import { composeRouteHook, runIntrospect } from '../../compile/handler'
 import {
 	isStandardSchema,
 	isResponseMap,
@@ -496,6 +496,7 @@ export const STUB_SOURCES: Record<
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] handler compiler JIT was stripped (strip mode) but a route needed runtime compilation. Rebuild with strip:false.")}\n` +
 				`export function describeRoute(){return e()}\n` +
+				`export function releaseAnalysisCaches(){}\n` +
 				`export const routeDescriptors=new WeakMap()\n`
 		}
 	],
@@ -1018,6 +1019,7 @@ export async function generateCompiledArtifacts(
 				typedApp,
 				macroScope
 			) as Record<string, unknown> | undefined
+			runIntrospect(hooks)
 
 			if (
 				method === 'WS' &&

@@ -37,7 +37,7 @@ class OutOfCredit extends HTTPError<'OUT_OF_CREDIT'> {
 
 describe('HTTPError', () => {
 	// Everything an owned error serves is RFC 9457: `type` is the tag, the
-	// annotated object body merges into the envelope, `title` is filled in
+	// body becomes `detail`, `title` is filled in
 	it('map a thrown self-describing error', async () => {
 		const app = new Elysia().get('/', () => {
 			throw new OutOfCredit()
@@ -124,9 +124,9 @@ describe('HTTPError', () => {
 		})
 	})
 
-	// A body that isn't a plain object can't merge into the envelope, it
-	// becomes the `detail` member instead. Arrays included, spreading one
-	// would produce `{"0":…}` garbage
+	// A string or array body is served as the `detail` member verbatim, never
+	// spread into the envelope, which would produce `{"0":…}` garbage for
+	// an array
 	it('serve a non-object body as `detail`', async () => {
 		class StringBody extends HTTPError<'STRING_BODY'> {
 			type = 'STRING_BODY' as const
@@ -694,8 +694,8 @@ describe('HTTPError', () => {
 
 	it('prefer a registered handler over self-description', async () => {
 		const app = new Elysia()
-			.get('/', () => new OutOfCredit())
 			.error(OutOfCredit, () => status(409, 'handled'))
+			.get('/', () => new OutOfCredit())
 
 		const response = await app.handle('/')
 
@@ -704,11 +704,12 @@ describe('HTTPError', () => {
 		expect(response.headers.get('x-credit')).toBeNull()
 	})
 
-	// `ErrorFallbackBody` types this fall-through as the served problem
+	// A handler that may return nothing passes the error on (`passes`), so its
+	// type stays the served problem
 	it('self-describe when a registered handler returns undefined', async () => {
 		const app = new Elysia()
-			.get('/', () => new OutOfCredit())
 			.error(OutOfCredit, () => undefined)
+			.get('/', () => new OutOfCredit())
 
 		const response = await app.handle('/')
 
@@ -1164,10 +1165,10 @@ describe('HTTPError', () => {
 			const Teapot = HTTPError.id('TEAPOT')
 
 			const app = new Elysia()
+				.error(Teapot, () => status(400, 'handled'))
 				.get('/', () => {
 					throw new Teapot()
 				})
-				.error(Teapot, () => status(400, 'handled'))
 
 			const response = await app.handle('/')
 
@@ -1179,10 +1180,10 @@ describe('HTTPError', () => {
 			const Teapot = HTTPError.id('TEAPOT', 418)
 
 			const app = new Elysia()
+				.error(Teapot, () => status(400, 'handled'))
 				.get('/', () => {
 					throw new Teapot()
 				})
-				.error(Teapot, () => status(400, 'handled'))
 
 			const response = await app.handle('/')
 

@@ -734,8 +734,12 @@ describe('derive dispose: under a real server', () => {
 	// for every route would make a pre-existing `afterResponse` hook fire on
 	// client disconnect with no response to report, so the order is swapped
 	// only on derive routes - which is the pair below.
+	// Abort once the handler has run, not on a timer: `localhost` can take
+	// 20 ms to connect, and a request cancelled before the server sees it
+	// leaves nothing to drain
 	const abortDuringErrorHook = async (
-		app: Elysia<any, any, any, any, any, any, any, any>
+		app: Elysia<any, any, any, any, any, any, any, any>,
+		reached: Promise<void>
 	) => {
 		app.listen(0)
 		await Bun.sleep(1)
@@ -745,7 +749,8 @@ describe('derive dispose: under a real server', () => {
 			signal: controller.signal
 		}).catch(() => undefined)
 
-		await Bun.sleep(5)
+		// the handler has thrown and the error hook is sleeping
+		await reached
 		controller.abort()
 		await response
 		await Bun.sleep(40)
@@ -754,6 +759,7 @@ describe('derive dispose: under a real server', () => {
 
 	it('does not run afterResponse on an aborted non-derive route', async () => {
 		const log: string[] = []
+		const reached = Promise.withResolvers<void>()
 
 		await abortDuringErrorHook(
 			new Elysia()
@@ -765,8 +771,10 @@ describe('derive dispose: under a real server', () => {
 					return 'handled'
 				})
 				.get('/', () => {
+					reached.resolve()
 					throw new Error('boom')
-				})
+				}),
+			reached.promise
 		)
 
 		// HEAD behaviour: a disconnect means the hook never sees a response
@@ -775,6 +783,7 @@ describe('derive dispose: under a real server', () => {
 
 	it('drains an aborted derive route through the same lane', async () => {
 		const log: string[] = []
+		const reached = Promise.withResolvers<void>()
 
 		await abortDuringErrorHook(
 			new Elysia()
@@ -787,8 +796,10 @@ describe('derive dispose: under a real server', () => {
 					return 'handled'
 				})
 				.get('/', () => {
+					reached.resolve()
 					throw new Error('boom')
-				})
+				}),
+			reached.promise
 		)
 
 		// the mirror: a derive route must still release its resource

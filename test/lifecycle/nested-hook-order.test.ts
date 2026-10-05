@@ -254,11 +254,14 @@ for (const lane of lanes)
 					log
 				)
 
+				// A hook reaches only the routes registered after it, as in
+				// Elysia 1: root-after's never reaches R, but `request` runs
+				// before routing
 				const order = (type: string) => [
 					'root-before',
 					...shape.between(type),
 					'R',
-					'root-after'
+					...(type === 'request' ? ['root-after'] : [])
 				]
 
 				expect([ok!.status, ok!.body]).toEqual([200, 'ok'])
@@ -290,7 +293,9 @@ for (const lane of lanes)
 			})
 		}
 
-		it('local hooks a plugin registers after its route skip it, except error', async () => {
+		// error included: only a `.group()`/`.guard()` callback's error hooks
+		// cover its earlier routes
+		it('local hooks a plugin registers after its route skip it', async () => {
 			const log: Log = []
 			const [ok, error] = await serve(
 				lane,
@@ -315,9 +320,7 @@ for (const lane of lanes)
 			expectOrder(ok!.log, okTypes, perRoute)
 
 			expect(error!.status).toBe(500)
-			expectOrder(error!.log, errorTypes, (type) =>
-				type === 'error' ? ['R', 'R-after'] : perRoute(type)
-			)
+			expectOrder(error!.log, errorTypes, perRoute)
 		})
 	})
 

@@ -930,6 +930,13 @@ export type MacroProperty<
 	mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
 	afterResponse?: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
 	derive?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
+	/**
+	 * Wrap the route handler. The wrapper's return is the handler value.
+	 * A macro listed later in the route options wraps outside an earlier one
+	 */
+	handler?: (
+		handler: (context: Context<TypedRoute, Singleton>) => unknown
+	) => (context: Context<TypedRoute, Singleton>) => unknown
 	detail?: DocumentDecoration
 	/**
 	 * Type-level route metadata surfaced on the route's Eden type
@@ -944,7 +951,12 @@ export type MacroProperty<
 	 */
 	$type?: MacroTypeLambda
 	/**
-	 * Introspect hook option for documentation generation or analysis
+	 * Inspect or rewrite the hooks a route compiles with. Runs once per
+	 * route at compile time, after every macro on the route has expanded,
+	 * on the route's final hooks: its own, the ones every macro added and
+	 * the ones it inherits from hooks registered before it. A WebSocket
+	 * route hands over its own hooks only. Applied by
+	 * a guard, it sees the guard's hooks once instead of each route's
 	 *
 	 * @param option
 	 */
@@ -1844,9 +1856,12 @@ type MacroLambdaContext<Value, HookValue> =
 			: {}
 		: {}
 
-type UnionMacroContext<A> = UnionToIntersect<{
-	[K in Exclude<keyof A, 'return'>]: A[K]
-}> & {
+// Distribute over the selected macros before intersecting. Indexing the union
+// instead collapses a schema-less macro's `unknown` with its sibling's schema
+// into `unknown`
+type UnionMacroContext<A> = UnionToIntersect<
+	A extends unknown ? { [K in Exclude<keyof A, 'return'>]: A[K] } : never
+> & {
 	// @ts-ignore Allow recursive Macro.return without collapse into
 	return: { _: A['return'] }
 }
@@ -1864,7 +1879,14 @@ export type MacroToContext<
 		R
 	> extends infer A
 		? {
-				[K in Exclude<keyof A, 'return'>]: UnionToIntersect<A[K]>
+				// Macros are already intersected by UnionMacroContext, so a
+				// schema keeps its own union. `meta` unwraps the box from
+				// InnerMacroToContext
+				[K in Exclude<keyof A, 'return'>]: K extends 'derive'
+					? UnionToIntersect<A[K]>
+					: K extends 'meta'
+						? (A[K] & { value: unknown })['value']
+						: A[K]
 			} & Prettify<{
 				// @ts-ignore
 				return: FlattenMacroResponse<A['return']>
@@ -1890,9 +1912,12 @@ type InnerMacroToContext<
 					> extends infer Value
 						? NonNullable<Value> extends infer Def
 							? {
+									// Boxed: conflicting literal metas
+									// (`'a'` vs `'b'`) would reduce the whole
+									// intersected context to never
 									meta: 'meta' extends keyof Def
-										? Def['meta']
-										: never
+										? { value: Def['meta'] }
+										: unknown
 									derive: ExtractDeriveFromMacro<
 										Extract<
 											Exclude<
@@ -2327,9 +2352,8 @@ export type CreateEdenResponse<
 		} & (MacroContext extends { meta: infer Meta }
 			? IsNever<Meta> extends true
 				? {}
-				: // UnionToIntersect<never> === unknown — a route whose
-					// selected macros declare no meta reaches here as
-					// unknown, not never
+				: // A route whose selected macros declare no meta
+					// reaches here as unknown, not never
 					unknown extends Meta
 					? {}
 					: { meta: Meta }
@@ -2485,18 +2509,11 @@ export type ExtractErrorFromHandle<in out Handle> = {
 }
 
 /**
- * Status used when an error handler returns a plain value (or falls through):
- * the error's declared literal `status`, otherwise 500
+ * Status used when an error handler returns a plain value: the error's
+ * declared literal `status`, otherwise 500
  */
 type ErrorFallbackStatus<E> =
 	IsNever<LiteralErrorStatus<E>> extends true ? 500 : LiteralErrorStatus<E>
-
-/**
- * Body produced when no error handler returns a value. Falling through lands
- * on exactly the lane an unhandled error takes, so it resolves the same three
- * tiers — `MessageTier` already carries the foreign `response` fallback
- */
-type ErrorFallbackBody<E> = ValueTier<E>
 
 /**
  * `Definitions['error']` / `EphemeralType['error']` entry registered by an
@@ -2508,22 +2525,32 @@ export type ErrorDefinitionEntry<
 > = {
 	error: InstanceType<E>
 	response: ErrorHandlerResponseSchema<Awaited<R>, InstanceType<E>>
+	/**
+	 * The handler may return nothing, which passes the error on to the next
+	 * hook: it answers sometimes, but doesn't handle the error
+	 */
+	passes: undefined extends Awaited<R> ? true : false
 }
 
 export type ErrorHandlerResponseSchema<R, E> = ExtractErrorFromHandle<
 	Exclude<R, Error>
 > &
 	// The handler's own `status()` returns are extracted above. What is left is
-	// its plain return plus, when it may fall through, whatever the error
-	// self-describes — which can itself carry a `status()` that escapes
-	(
-		| Exclude<R, Extract<Exclude<R, Error>, AnyElysiaStatus> | undefined>
-		| (undefined extends R
-				? ErrorFallbackBody<E>
-				: never) extends infer Served
+	// its plain return. Returning nothing adds nothing: the error goes on to
+	// the next hook, and in the end to the unhandled lane (see `passes`)
+	(Exclude<
+		R,
+		Extract<Exclude<R, Error>, AnyElysiaStatus> | undefined | void
+	> extends infer Served
 		? ServedAtStatus<Served, ErrorFallbackStatus<E>>
 		: {})
 
+type PassesError<Entry> = Entry extends { passes: true } ? true : false
+
+/**
+ * What the handlers registered for `V` respond with: the first one that
+ * always answers, and every one before it that may pass the error on
+ */
 type MatchRegisteredError<
 	V,
 	Errors extends ErrorDefinition[]
@@ -2532,16 +2559,21 @@ type MatchRegisteredError<
 	...infer Rest extends ErrorDefinition[]
 ]
 	? V extends Head['error']
-		? Head['response']
+		? PassesError<Head> extends true
+			? Head['response'] | MatchRegisteredError<V, Rest>
+			: Head['response']
 		: MatchRegisteredError<V, Rest>
 	: never
 
+// Handled only by a handler that always answers
 type HasErrorMatch<V, Errors extends ErrorDefinition[]> = Errors extends [
 	infer Head extends ErrorDefinition,
 	...infer Rest extends ErrorDefinition[]
 ]
 	? [V] extends [Head['error']]
-		? true
+		? PassesError<Head> extends true
+			? HasErrorMatch<V, Rest>
+			: true
 		: HasErrorMatch<V, Rest>
 	: false
 
@@ -2674,25 +2706,6 @@ type ResolveRouteLeafErrors<
 		} & HandledErrorKey<
 			RouteHandled<Route> | HandledReturnedError<Route['error'], Errors>
 		>
-
-export type ResolveRouteErrors<
-	Routes,
-	Errors extends ErrorDefinition[]
-> = Errors extends []
-	? Routes
-	: {
-			[K in keyof Routes]: Routes[K] extends {
-				params: any
-				query: any
-				headers: any
-				response: any
-				error: any
-			}
-				? ResolveRouteLeafErrors<Routes[K], Errors>
-				: Routes[K] extends Record<keyof any, any>
-					? ResolveRouteErrors<Routes[K], Errors>
-					: Routes[K]
-		}
 
 /**
  * Take a parent's handlers registered before `.use()` in front of the
@@ -2860,13 +2873,7 @@ export type MergeElysiaInstances<
 					Current['~Ephemeral']['response']
 				error: [...Volatile['error'], ...Current['~Ephemeral']['error']]
 			},
-			ResolveRouteErrors<
-				Routes,
-				[
-					...Current['~Definitions']['error'],
-					...Current['~Ephemeral']['error']
-				]
-			> &
+			Routes &
 				(Prefix extends ``
 					? ResolveUsedRouteErrors<
 							Current['~Routes'],

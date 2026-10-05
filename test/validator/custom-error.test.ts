@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from 'bun:test'
 
-import { t } from '../../src'
+import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { TypeBoxValidator } from '../../src/type/validator'
+import { post } from '../utils'
 
 describe('custom schema errors', () => {
 	afterEach(() => {
@@ -185,6 +186,209 @@ describe('custom schema errors', () => {
 		}
 
 		expect(message).toBe('name error')
+	})
+
+	const pet = t.Union(
+		[
+			t.Object({
+				type: t.Literal('cat'),
+				meow: t.Boolean({ error: 'meow error' })
+			}),
+			t.Object({ type: t.Literal('dog'), bark: t.Boolean() })
+		],
+		{ error: 'pet error' }
+	)
+	const pets = t.Object({ pets: t.Array(pet) })
+	const pair = t.Object({
+		tup: t.Tuple(
+			[t.Number({ error: 't0 error' }), t.String({ error: 't1 error' })],
+			{ error: 'tup error' }
+		)
+	})
+
+	const messageOf = (schema: any, value: unknown) => {
+		try {
+			new TypeBoxValidator(schema).FromSync(value)
+		} catch (error: any) {
+			return error.message as string
+		}
+	}
+
+	// Production skips the full error walk for speed, but must still pick the
+	// error development picks: a missing or wrong-shaped parent is the
+	// parent's failure, a missing required key is its own field's (as 1.x)
+	it('reports the same custom error in production as in development', () => {
+		const body = t.Object(
+			{ x: t.Number({ error: 'x must be a number' }) },
+			{ error: 'body must be an object' }
+		)
+		const rows = t.Array(
+			t.Object(
+				{ name: t.String({ error: 'name error' }) },
+				{ error: 'row error' }
+			)
+		)
+		const user = t.Object(
+			{
+				nick: t.Optional(t.String({ error: 'nick error' })),
+				name: t.String()
+			},
+			{ error: 'user error' }
+		)
+		// an array is not an object, and an object is not a tuple, even when
+		// the key ('0') exists on it
+		const indexed = t.Object(
+			{ '0': t.Number({ error: 'child error' }) },
+			{ error: 'parent error' }
+		)
+		const nested = t.Object({
+			a: t.Object(
+				{ '0': t.Number({ error: 'child error' }) },
+				{ error: 'a error' }
+			)
+		})
+		// several missing keys: the first declared key that has an error wins
+		const account = t.Object({
+			id: t.Number({ error: 'id error' }),
+			name: t.String({ error: 'name error' })
+		})
+		const unlabeled = t.Object({
+			id: t.Number(),
+			name: t.String({ error: 'name error' })
+		})
+		// required even though the schema accepts undefined or null
+		const loose = t.Object({
+			u: t.Union([t.String(), t.Undefined()], { error: 'u error' })
+		})
+		const nullable = t.Object({
+			n: t.Nullable(t.String(), { error: 'n error' })
+		})
+		const partial = t.Object({
+			p: t.Partial(t.Object({ a: t.String({ error: 'a error' }) })),
+			q: t.String({ error: 'q error' })
+		})
+		const tagged = t.Array(
+			t.Union(
+				[
+					t.Object({
+						type: t.Literal('a'),
+						a: t.String({ error: 'a error' })
+					}),
+					t.Object({
+						type: t.Literal('b'),
+						b: t.String({ error: 'b error' })
+					})
+				],
+				{ error: 'union error' }
+			)
+		)
+		const grid = t.Array(
+			t.Array(t.String({ error: 'cell error' }), { error: 'line error' })
+		)
+
+		const cases: [schema: any, value: unknown, expected: string][] = [
+			[body, 'hello', 'body must be an object'],
+			[body, null, 'body must be an object'],
+			[body, [], 'body must be an object'],
+			[body, {}, 'x must be a number'],
+			[body, { x: 'a' }, 'x must be a number'],
+			[rows, [1], 'row error'],
+			[rows, [{}], 'name error'],
+			[rows, [{ name: 1 }], 'name error'],
+			[pet, { type: 'cat' }, 'pet error'],
+			[pet, { type: 'cat', meow: 'yes' }, 'meow error'],
+			// an absent optional field is valid, so its error must not fire
+			[user, {}, 'user error'],
+			[user, { nick: 1, name: 'a' }, 'nick error'],
+			[indexed, ['bad'], 'parent error'],
+			[nested, { a: ['bad'] }, 'a error'],
+			[pair, { tup: { '0': 'a', '1': 'b' } }, 'tup error'],
+			[pair, { tup: [1] }, 'tup error'],
+			[account, {}, 'id error'],
+			[account, { id: 'x', name: 1 }, 'id error'],
+			[unlabeled, {}, 'name error'],
+			[loose, {}, 'u error'],
+			[nullable, {}, 'n error'],
+			// a Partial key is optional, so its error must not fire
+			[partial, { p: {}, q: 1 }, 'q error'],
+			// a union inside array items selects its branch per item
+			[pets, { pets: [{ type: 'cat', meow: 'yes' }] }, 'meow error'],
+			// a branch's own missing key is reported at the union
+			[pets, { pets: [{ type: 'cat' }] }, 'pet error'],
+			// only the first failing item reports, as TypeBox does
+			[rows, [5, { name: 1 }], 'row error'],
+			[tagged, [{ type: 'a' }, { type: 'b', b: 1 }], 'union error'],
+			[tagged, [1, { type: 'b', b: 1 }], 'union error'],
+			[
+				tagged,
+				[
+					{ type: 'a', a: 'ok' },
+					{ type: 'a', a: 1 }
+				],
+				'a error'
+			],
+			[grid, [['a', 1]], 'cell error'],
+			[grid, [['a'], 5], 'line error']
+		]
+
+		const actual: string[] = []
+		const expected: string[] = []
+
+		for (const [schema, value, message] of cases)
+			for (const env of ['development', 'production']) {
+				process.env.NODE_ENV = env
+
+				const received = messageOf(schema, value)
+
+				actual.push(`${env} ${JSON.stringify(value)}: ${received}`)
+				expected.push(`${env} ${JSON.stringify(value)}: ${message}`)
+			}
+
+		expect(actual).toEqual(expected)
+	})
+
+	it('reports a missing required field with its own error over HTTP', async () => {
+		for (const env of ['development', 'production']) {
+			process.env.NODE_ENV = env
+
+			const app = new Elysia().post(
+				'/',
+				{
+					body: t.Object({
+						name: t.String({ error: 'name is required' })
+					})
+				},
+				({ body }) => body
+			)
+
+			const response = await app.handle(post('/', {}))
+
+			expect(`${env} ${response.status}`).toBe(`${env} 422`)
+			expect(`${env} ${await response.text()}`).toBe(
+				`${env} name is required`
+			)
+		}
+	})
+
+	// Not parity cases: development differs on each, as noted per row
+	it('returns the custom error of the failing element in production', () => {
+		process.env.NODE_ENV = 'production'
+
+		const cases: [schema: any, value: unknown, expected: string][] = [
+			// development drops tuple element errors (walkSubSchema can't
+			// descend a tuple index), a known open divergence
+			[pair, { tup: ['a', 'b'] }, 't0 error'],
+			// development reports the first branch's `type` mismatch, which has
+			// no custom error. A dog's stray `meow` is not the cat branch's error
+			[
+				pets,
+				{ pets: [{ type: 'dog', bark: 1, meow: 'yes' }] },
+				'pet error'
+			]
+		]
+
+		for (const [schema, value, expected] of cases)
+			expect([value, messageOf(schema, value)]).toEqual([value, expected])
 	})
 
 	it('builds custom errors for 200 union fields in under 500 ms', () => {

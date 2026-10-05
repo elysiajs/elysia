@@ -175,8 +175,9 @@ function walk(
 function walkObject(value: any, mode: number, state: WalkState): string {
 	const keys = Object.keys(value)
 
-	let serialized = '{'
-	let first = true
+	// `join` builds a flat string; a `+=` key stays a rope whose fibers the
+	// meta cache would pin for the schema's lifetime
+	const parts = ['{']
 
 	for (let i = 0; i < keys.length; i++) {
 		const key = keys[i]!
@@ -195,19 +196,18 @@ function walkObject(value: any, mode: number, state: WalkState): string {
 		if (piece === undefined) continue
 
 		if (state.buildKey) {
-			if (first) first = false
-			else serialized += ','
-
-			serialized += quote(key) + ':' + piece
+			if (parts.length > 1) parts.push(',')
+			parts.push(quote(key), ':', piece)
 		}
 	}
 
-	return serialized + '}'
+	parts.push('}')
+
+	return parts.join('')
 }
 
 function walkOptional(value: any, mode: number, state: WalkState): string {
-	let serialized = '{'
-	let first = true
+	const parts = ['{']
 	let emittedOptional = false
 
 	for (const key in value) {
@@ -228,36 +228,38 @@ function walkOptional(value: any, mode: number, state: WalkState): string {
 		if (piece === undefined) continue
 
 		if (state.buildKey) {
-			if (first) first = false
-			else serialized += ','
-
-			serialized += quote(key) + ':' + piece
+			if (parts.length > 1) parts.push(',')
+			parts.push(quote(key), ':', piece)
 		}
 	}
 
 	if (!emittedOptional && state.buildKey) {
-		if (!first) serialized += ','
-		serialized += '"~optional":true'
+		if (parts.length > 1) parts.push(',')
+		parts.push('"~optional":true')
 	}
 
-	return serialized + '}'
+	parts.push('}')
+
+	return parts.join('')
 }
 
 function walkArray(value: any[], mode: number, state: WalkState): string {
 	const elementMode = mode === CONTAINER ? NODE : OFF
 
-	let serialized = '['
+	const parts = ['[']
 
 	for (let i = 0; i < value.length; i++) {
 		const piece = walk(value[i], i, elementMode, state)
 
 		if (state.buildKey) {
-			if (i) serialized += ','
-			serialized += piece === undefined ? 'null' : piece
+			if (i) parts.push(',')
+			parts.push(piece === undefined ? 'null' : piece)
 		}
 	}
 
-	return serialized + ']'
+	parts.push(']')
+
+	return parts.join('')
 }
 
 export function computeSchemaMeta(
@@ -468,6 +470,8 @@ export class TypeBoxValidatorCache {
 		// or `clear()` will keep last schema alive on its own
 		TypeBoxValidatorCache.#lastSchema = undefined
 		TypeBoxValidatorCache.#lastMeta = undefined
+		// a live schema would otherwise pin its serialized key forever
+		TypeBoxValidatorCache.#metaCache = new WeakMap()
 
 		deferCoercions()
 	}

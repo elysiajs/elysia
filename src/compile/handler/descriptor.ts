@@ -1,11 +1,21 @@
 import type { AnyElysia } from '../../base'
 import type { ElysiaAdapter } from '../../adapter'
-import { mergeInference, sucrose, type Sucrose } from '../../sucrose'
+import {
+	clearSucroseCache,
+	mergeInference,
+	sucrose,
+	type Sucrose
+} from '../../sucrose'
 
 import type { RouteValidator } from '../../validator/route'
 import type { Validator } from '../../validator'
 
-import { isAsyncFunction, isAsyncLifecycle, mayReturnPromise } from '../utils'
+import {
+	isAsyncFunction,
+	isAsyncLifecycle,
+	mayReturnPromise,
+	resetMayReturnPromiseCache
+} from '../utils'
 
 import type { CompiledCookieConfig } from '../../cookie/config'
 import { hasSyncHmac } from '../../cookie/utils'
@@ -98,14 +108,16 @@ export interface DescribeRouteInput {
 	isPromiseHandler: boolean
 }
 
-/**
- * Route descriptors, keyed by root instance → `METHOD path` → descriptor
- * Populated on each JIT compile, and read only by tests and introspection
- */
 export const routeDescriptors = new WeakMap<
 	AnyElysia,
 	Map<string, RouteDescriptor>
 >()
+
+// Lives here, not in base, so strip mode's descriptor stub keeps sucrose tree-shakeable
+export function releaseAnalysisCaches() {
+	clearSucroseCache()
+	resetMayReturnPromiseCache()
+}
 
 // Read-only: consumers only call `.has` (`jit.ts` `phaseOn`, `descriptor.ts` `phaseOn`)
 const noTracePhases: ReadonlySet<TraceEvent> = new Set<TraceEvent>()

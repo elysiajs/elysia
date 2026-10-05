@@ -116,8 +116,28 @@ export const fnOrigin = new WeakMap<Function, number>()
 // Used by `#use()` to skip macro merges from a plugin that has already been absorbed by parent
 export const macroOrigin = new WeakMap<object | Function, number>()
 
-export const isLocalScope = (s: EventScope | undefined) =>
-	s === 'local' || s === undefined
+/**
+ * Id of `ref` in the registry at `globalThis[key]`, `next` being the last id
+ * handed out. Weak so it doesn't retain `ref`, realm-wide so every installed
+ * Elysia copy agrees
+ */
+function realmId(key: '~elysiaPluginIds' | '~elysiaSeedIds', ref: WeakKey) {
+	const realm = globalThis as {
+		[k in typeof key]?: { ids: WeakMap<WeakKey, number>; next: number }
+	}
+	const registry = (realm[key] ??= { ids: new WeakMap(), next: 0 })
+
+	let id = registry.ids.get(ref)
+	if (id === undefined) registry.ids.set(ref, (id = ++registry.next))
+
+	return id
+}
+
+/**
+ * Id of an unnamed plugin in `childrenHash`, negative so it never collides
+ * with a named plugin's unsigned hash
+ */
+export const pluginId = (plugin: object) => -realmId('~elysiaPluginIds', plugin)
 
 /**
  * Linked-list representation of the scope/global hook chain of a route
@@ -136,10 +156,9 @@ export const isLocalScope = (s: EventScope | undefined) =>
  * without flattening - `over` is walked first (older / outer context),
  * then `combine` (newer / inner context)
  *
- * `tail` is the child's own chain head at that `.use()`. Its local hooks
- * registered after the child absorbed the route run after the route's own
- * hooks, as they would with the child as the root (`afterUseHooks` in
- * `compile/handler`)
+ * `callback` is the chain of a `.group()`/`.guard()` callback the route came
+ * out of: its error hooks cover every route the callback produced. Flattening
+ * never reads it
  *
  * Use with {@link flattenChain} to walk tail-first and reconstruct
  * flat `Partial<AppHook>` at compile time
@@ -160,17 +179,9 @@ export type ChainNode =
 	| {
 			combine: ChainNode | undefined
 			over: ChainNode | undefined
-			tail?: ChainNode
+			callback?: ChainNode
 			refs: boolean
 	  }
-
-/**
- * The absorbing instance's chain as it stood at `.use()`: the `over` of a
- * combine node, or the node itself. A combine node is never on an instance's
- * own chain, so it can't serve as a `stopAt` directly
- */
-export const rootSnapshot = (node: ChainNode | undefined) =>
-	node && 'combine' in node ? node.over : node
 
 export interface CompactBeforeHandleChunk {
 	parent?: CompactBeforeHandleChunk
@@ -306,11 +317,9 @@ const flattenPhaseStack: number[] = []
  */
 export function flattenChain(
 	start: ChainNode | undefined,
-	keep?: (s: EventScope | undefined) => boolean,
-	stopAt?: ChainNode,
 	resolveAdded?: (node: ChainNode) => Partial<AppHook> | undefined
 ): Partial<AppHook> | undefined {
-	if (!start || start === stopAt) return
+	if (!start) return
 	const result = nullObject() as Partial<AppHook>
 
 	const nodes = flattenNodeStack
@@ -330,13 +339,19 @@ export function flattenChain(
 				? resolveAdded(node)
 				: (node as { added: Partial<AppHook> }).added
 
-			if (
-				added &&
-				(!keep || keep((node as { scope?: EventScope }).scope))
-			)
+			// hooks lifted out of a `.group()`/`.guard()` callback: its error
+			// hooks stay inside, also one a macro resolved here brings
+			const lifted =
+				(node as { propagated?: boolean }).propagated &&
+				(node as { owner?: { '~scopeChild'?: boolean } }).owner?.[
+					'~scopeChild'
+				]
+
+			if (added)
 				for (const key in added) {
 					const v = (added as any)[key]
 					if (v === undefined || v === null) continue
+					if (lifted && key === 'error') continue
 
 					if (
 						eventProperties.has(key) ||
@@ -358,7 +373,6 @@ export function flattenChain(
 			continue
 		}
 
-		if (stopAt && node === stopAt) continue
 		if ('combine' in node) {
 			if (node.combine) {
 				nodes.push(node.combine)
@@ -373,7 +387,7 @@ export function flattenChain(
 			// Append self after its parent has been visited/appended.
 			nodes.push(node)
 			phases.push(1)
-			if (node.parent && node.parent !== stopAt) {
+			if (node.parent) {
 				nodes.push(node.parent)
 				phases.push(0)
 			}
@@ -426,9 +440,7 @@ export function flattenChainMemoReadonly(
 
 	let cached = perRoot.get(start)
 	if (cached === undefined) {
-		cached =
-			flattenChain(start, undefined, undefined, resolveAdded) ??
-			emptyFlatten
+		cached = flattenChain(start, resolveAdded) ?? emptyFlatten
 		perRoot.set(start, cached)
 	}
 
@@ -1242,25 +1254,24 @@ prefix.capitalize = function prefixModelsCapitalize<
 	return prefixed as any
 }
 
-const macroSeedRefIds = new WeakMap<object, number>()
-let macroSeedRefCounter = 0
-function macroSeedRefId(ref: object): number {
-	let id = macroSeedRefIds.get(ref)
-	if (id === undefined) macroSeedRefIds.set(ref, (id = ++macroSeedRefCounter))
-
-	return id
-}
-
+// A function or symbol is tagged `\0ref:`, which older copies never wrote:
+// their per-copy `\0fn:` ids count from 1 too
 export function serializeMacroSeed(_key: string, value: unknown) {
 	switch (typeof value) {
 		case 'function':
-			return '\0fn:' + macroSeedRefId(value as unknown as object)
+			return '\0ref:' + realmId('~elysiaSeedIds', value)
 
 		case 'bigint':
 			return '\0bigint:' + (value as bigint).toString()
 
-		case 'symbol':
-			return '\0sym:' + String(value as symbol)
+		case 'symbol': {
+			// A registered symbol can't be a WeakMap key, but its key names it
+			const key = Symbol.keyFor(value as symbol)
+
+			return key === undefined
+				? '\0ref:' + realmId('~elysiaSeedIds', value as symbol)
+				: '\0symfor:' + key
+		}
 
 		case 'undefined':
 			return '\0undefined'

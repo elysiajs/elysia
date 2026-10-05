@@ -35,7 +35,16 @@ export function parseQueryFromURL(
 		switch (input.charCodeAt(i)) {
 			// '&'
 			case 38:
-				processKeyValuePair(input, i)
+				processKeyValuePairFromURL(
+					input,
+					i,
+					result,
+					startingIndex,
+					equalityIndex,
+					flags,
+					array,
+					object
+				)
 
 				// Reset state variables
 				startingIndex = i
@@ -68,117 +77,137 @@ export function parseQueryFromURL(
 		}
 
 	// Process the last pair if needed
-	if (startingIndex < inputLength) processKeyValuePair(input, inputLength)
+	if (startingIndex < inputLength)
+		processKeyValuePairFromURL(
+			input,
+			inputLength,
+			result,
+			startingIndex,
+			equalityIndex,
+			flags,
+			array,
+			object
+		)
 
 	return result
+}
 
-	function processKeyValuePair(input: string, endIndex: number) {
-		const hasBothKeyValuePair = equalityIndex > startingIndex
-		const effectiveEqualityIndex = hasBothKeyValuePair
-			? equalityIndex
-			: endIndex
+// Module scope: nested in the parser, it closed over the loop state and cost a
+// scope + closure allocation per parse
+function processKeyValuePairFromURL(
+	input: string,
+	endIndex: number,
+	result: Record<string, any>,
+	startingIndex: number,
+	equalityIndex: number,
+	flags: number,
+	array: { [key: string]: 1 } | undefined,
+	object: { [key: string]: 1 } | undefined
+) {
+	const hasBothKeyValuePair = equalityIndex > startingIndex
+	const effectiveEqualityIndex = hasBothKeyValuePair
+		? equalityIndex
+		: endIndex
 
-		const keySlice = input.slice(startingIndex + 1, effectiveEqualityIndex)
+	const keySlice = input.slice(startingIndex + 1, effectiveEqualityIndex)
 
-		// Skip processing if key is empty
-		if (!hasBothKeyValuePair && keySlice.length === 0) return
+	// Skip processing if key is empty
+	if (!hasBothKeyValuePair && keySlice.length === 0) return
 
-		let finalKey = keySlice
-		if (flags & KEY_HAS_PLUS) finalKey = finalKey.replace(/\+/g, ' ')
-		if (flags & KEY_NEEDS_DECODE)
-			finalKey = decodeComponent(finalKey) || finalKey
+	let finalKey = keySlice
+	if (flags & KEY_HAS_PLUS) finalKey = finalKey.replace(/\+/g, ' ')
+	if (flags & KEY_NEEDS_DECODE)
+		finalKey = decodeComponent(finalKey) || finalKey
 
-		let finalValue = ''
-		if (hasBothKeyValuePair) {
-			let valueSlice = input.slice(equalityIndex + 1, endIndex)
-			if (flags & VALUE_HAS_PLUS)
-				valueSlice = valueSlice.replace(/\+/g, ' ')
-			if (flags & VALUE_NEEDS_DECODE)
-				valueSlice = decodeComponent(valueSlice) || valueSlice
-			finalValue = valueSlice
-		}
+	let finalValue = ''
+	if (hasBothKeyValuePair) {
+		let valueSlice = input.slice(equalityIndex + 1, endIndex)
+		if (flags & VALUE_HAS_PLUS) valueSlice = valueSlice.replace(/\+/g, ' ')
+		if (flags & VALUE_NEEDS_DECODE)
+			valueSlice = decodeComponent(valueSlice) || valueSlice
+		finalValue = valueSlice
+	}
 
-		const currentValue = result[finalKey]
+	const currentValue = result[finalKey]
 
-		if (array && array?.[finalKey]) {
-			let rawValue = hasBothKeyValuePair
-				? input.slice(equalityIndex + 1, endIndex)
-				: ''
+	if (array && array?.[finalKey]) {
+		let rawValue = hasBothKeyValuePair
+			? input.slice(equalityIndex + 1, endIndex)
+			: ''
 
-			if (flags & VALUE_HAS_PLUS) rawValue = rawValue.replace(/\+/g, ' ')
+		if (flags & VALUE_HAS_PLUS) rawValue = rawValue.replace(/\+/g, ' ')
 
-			const rawBracket =
-				rawValue.charCodeAt(0) === 91 &&
-				rawValue.charCodeAt(rawValue.length - 1) === 93
-			const decodedBracket =
-				!rawBracket &&
-				finalValue.charCodeAt(0) === 91 &&
-				(finalValue as string).charCodeAt(
-					(finalValue as string).length - 1
-				) === 93
+		const rawBracket =
+			rawValue.charCodeAt(0) === 91 &&
+			rawValue.charCodeAt(rawValue.length - 1) === 93
+		const decodedBracket =
+			!rawBracket &&
+			finalValue.charCodeAt(0) === 91 &&
+			(finalValue as string).charCodeAt(
+				(finalValue as string).length - 1
+			) === 93
 
-			if (rawBracket || decodedBracket) {
-				// 'ids=[]' is an explicit empty array, not ['']
-				let toBracketArray: any
-				if (rawBracket)
-					toBracketArray =
-						rawValue.length === 2
-							? []
-							: splitRawParts(rawValue.slice(1, -1), flags)
-				else {
-					const inner = (finalValue as string).slice(1, -1)
-					toBracketArray = inner === '' ? [] : inner.split(',')
-				}
-
-				if (object && object?.[finalKey])
-					try {
-						finalValue = JSON.parse(finalValue) as any
-					} catch {
-						finalValue = toBracketArray
-					}
-				else finalValue = toBracketArray
-
-				if (currentValue === undefined) result[finalKey] = finalValue
-				else if (Array.isArray(currentValue))
-					for (let i = 0; i < finalValue.length; i++)
-						currentValue.push(finalValue[i])
-				else {
-					result[finalKey] = finalValue
-					result[finalKey].unshift(currentValue)
-				}
-			} else {
-				if (
-					object &&
-					object?.[finalKey] &&
-					finalValue.charCodeAt(0) === 123
-				) {
-					try {
-						finalValue = JSON.parse(finalValue) as any
-					} catch {}
-				} else if (
-					currentValue === undefined &&
-					!(object && object?.[finalKey]) &&
-					rawValue.indexOf(',') !== -1
-				)
-					finalValue = splitRawParts(rawValue, flags) as any
-
-				if (currentValue === undefined) {
-					result[finalKey] = Array.isArray(finalValue)
-						? finalValue
-						: [finalValue]
-				} else if (Array.isArray(currentValue))
-					currentValue.push(finalValue)
-				else result[finalKey] = [currentValue, finalValue]
+		if (rawBracket || decodedBracket) {
+			// 'ids=[]' is an explicit empty array, not ['']
+			let toBracketArray: any
+			if (rawBracket)
+				toBracketArray =
+					rawValue.length === 2
+						? []
+						: splitRawParts(rawValue.slice(1, -1), flags)
+			else {
+				const inner = (finalValue as string).slice(1, -1)
+				toBracketArray = inner === '' ? [] : inner.split(',')
 			}
-		} else if (object?.[finalKey] && finalValue.charCodeAt(0) === 123) {
-			try {
-				result[finalKey] = JSON.parse(finalValue)
-			} catch {
+
+			if (object && object?.[finalKey])
+				try {
+					finalValue = JSON.parse(finalValue) as any
+				} catch {
+					finalValue = toBracketArray
+				}
+			else finalValue = toBracketArray
+
+			if (currentValue === undefined) result[finalKey] = finalValue
+			else if (Array.isArray(currentValue))
+				for (let i = 0; i < finalValue.length; i++)
+					currentValue.push(finalValue[i])
+			else {
 				result[finalKey] = finalValue
+				result[finalKey].unshift(currentValue)
 			}
 		} else {
+			if (
+				object &&
+				object?.[finalKey] &&
+				finalValue.charCodeAt(0) === 123
+			) {
+				try {
+					finalValue = JSON.parse(finalValue) as any
+				} catch {}
+			} else if (
+				currentValue === undefined &&
+				!(object && object?.[finalKey]) &&
+				rawValue.indexOf(',') !== -1
+			)
+				finalValue = splitRawParts(rawValue, flags) as any
+
+			if (currentValue === undefined) {
+				result[finalKey] = Array.isArray(finalValue)
+					? finalValue
+					: [finalValue]
+			} else if (Array.isArray(currentValue))
+				currentValue.push(finalValue)
+			else result[finalKey] = [currentValue, finalValue]
+		}
+	} else if (object?.[finalKey] && finalValue.charCodeAt(0) === 123) {
+		try {
+			result[finalKey] = JSON.parse(finalValue)
+		} catch {
 			result[finalKey] = finalValue
 		}
+	} else {
+		result[finalKey] = finalValue
 	}
 }
 
@@ -199,7 +228,14 @@ export function parseQuery(input: string) {
 		switch (input.charCodeAt(i)) {
 			// '&'
 			case 38:
-				processKeyValuePair(input, i)
+				processKeyValuePair(
+					input,
+					i,
+					result,
+					startingIndex,
+					equalityIndex,
+					flags
+				)
 
 				// Reset state variables
 				startingIndex = i
@@ -232,39 +268,53 @@ export function parseQuery(input: string) {
 		}
 
 	// Process the last pair if needed
-	if (startingIndex < inputLength) processKeyValuePair(input, inputLength)
+	if (startingIndex < inputLength)
+		processKeyValuePair(
+			input,
+			inputLength,
+			result,
+			startingIndex,
+			equalityIndex,
+			flags
+		)
 
 	return result
+}
 
-	function processKeyValuePair(input: string, endIndex: number) {
-		const hasBothKeyValuePair = equalityIndex > startingIndex
-		const effectiveEqualityIndex = hasBothKeyValuePair
-			? equalityIndex
-			: endIndex
+function processKeyValuePair(
+	input: string,
+	endIndex: number,
+	result: Record<string, string | string[]>,
+	startingIndex: number,
+	equalityIndex: number,
+	flags: number
+) {
+	const hasBothKeyValuePair = equalityIndex > startingIndex
+	const effectiveEqualityIndex = hasBothKeyValuePair
+		? equalityIndex
+		: endIndex
 
-		const keySlice = input.slice(startingIndex + 1, effectiveEqualityIndex)
+	const keySlice = input.slice(startingIndex + 1, effectiveEqualityIndex)
 
-		// Skip processing if key is empty
-		if (!hasBothKeyValuePair && keySlice.length === 0) return
+	// Skip processing if key is empty
+	if (!hasBothKeyValuePair && keySlice.length === 0) return
 
-		let finalKey = keySlice
-		if (flags & KEY_HAS_PLUS) finalKey = finalKey.replace(/\+/g, ' ')
-		if (flags & KEY_NEEDS_DECODE)
-			finalKey = decodeComponent(finalKey) || finalKey
+	let finalKey = keySlice
+	if (flags & KEY_HAS_PLUS) finalKey = finalKey.replace(/\+/g, ' ')
+	if (flags & KEY_NEEDS_DECODE)
+		finalKey = decodeComponent(finalKey) || finalKey
 
-		let finalValue = ''
-		if (hasBothKeyValuePair) {
-			let valueSlice = input.slice(equalityIndex + 1, endIndex)
-			if (flags & VALUE_HAS_PLUS)
-				valueSlice = valueSlice.replace(/\+/g, ' ')
-			if (flags & VALUE_NEEDS_DECODE)
-				valueSlice = decodeComponent(valueSlice) || valueSlice
-			finalValue = valueSlice
-		}
-
-		const currentValue = result[finalKey]
-		if (currentValue === undefined) result[finalKey] = finalValue
-		else if (Array.isArray(currentValue)) currentValue.push(finalValue)
-		else result[finalKey] = [currentValue, finalValue]
+	let finalValue = ''
+	if (hasBothKeyValuePair) {
+		let valueSlice = input.slice(equalityIndex + 1, endIndex)
+		if (flags & VALUE_HAS_PLUS) valueSlice = valueSlice.replace(/\+/g, ' ')
+		if (flags & VALUE_NEEDS_DECODE)
+			valueSlice = decodeComponent(valueSlice) || valueSlice
+		finalValue = valueSlice
 	}
+
+	const currentValue = result[finalKey]
+	if (currentValue === undefined) result[finalKey] = finalValue
+	else if (Array.isArray(currentValue)) currentValue.push(finalValue)
+	else result[finalKey] = [currentValue, finalValue]
 }

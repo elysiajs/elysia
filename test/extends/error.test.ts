@@ -7,6 +7,16 @@ import { post, json, req } from '../utils'
 
 import z from 'zod'
 import type { AnyElysia } from '../../src/base'
+import {
+	aotReconstructHandle,
+	jitHandle,
+	lazyHandle,
+	nativeStaticOn,
+	precompileHandle,
+	type Define,
+	type LaneFactory
+} from '../differential/lanes'
+import { trace } from '../../src/plugin/trace'
 
 class CustomError extends Error {
 	constructor() {
@@ -330,9 +340,9 @@ describe('returned error class instance', () => {
 		expect(await response.text()).toBe('quack! []')
 	})
 
-	// Registered after the routes, the class reaches them only through the
-	// app-level error lane, so they stay on the sync lanes that forward a
-	// returned Promise themselves
+	// Registered before the routes (a hook reaches only the routes after it),
+	// the class rides each lane's own error hooks: a returned instance must
+	// end like a thrown one, a returned Promise included
 	it('ends a returned root-only class instance like a thrown one', async () => {
 		type Route = (app: AnyElysia, handler: () => unknown) => AnyElysia
 
@@ -349,13 +359,12 @@ describe('returned error class instance', () => {
 				(app, h) => app.afterResponse(() => {}).get('/', h),
 				418
 			],
-			// Its own hooks never reach the app-level lane: a thrown instance
-			// falls back to a 500 there, so must a returned one. `() => {}`, not
-			// `() => undefined`, which may return a Promise and goes async
+			// `() => {}`, not `() => undefined`, which may return a Promise and
+			// goes async
 			[
 				'own sync error hook',
 				(app, h) => app.error(() => {}).get('/', h),
-				500
+				418
 			]
 		]
 
@@ -381,9 +390,10 @@ describe('returned error class instance', () => {
 		for (const [lane, route, expected] of lanes)
 			for (const [shape, returns, throws] of shapes) {
 				const respond = async (handler: () => unknown) => {
-					const response = await route(new Elysia(), handler)
-						.error(Problem, problemHandler)
-						.handle(lane === 'bare POST' ? post('/') : req('/'))
+					const response = await route(
+						new Elysia().error(Problem, problemHandler),
+						handler
+					).handle(lane === 'bare POST' ? post('/') : req('/'))
 
 					return {
 						lane,
@@ -481,4 +491,539 @@ describe('returned error class instance', () => {
 
 		expect(() => new Elysia().error(z.ZodError, () => 'x')).not.toThrow()
 	})
+})
+
+// A hook reaches only the routes registered after it, `.error()` included:
+// the Elysia 1 rule (life-cycle "order of code", 1.0 "local first"). A
+// matched route's error ends with its own hooks, as Elysia 1's `skipGlobal`
+describe('hook registered after the route', () => {
+	class Late extends Error {}
+
+	const lanes = [
+		lazyHandle,
+		jitHandle,
+		precompileHandle,
+		aotReconstructHandle
+	]
+
+	const shapes: [shape: string, handler: () => unknown][] = [
+		['returned', () => new Late()],
+		[
+			'thrown',
+			() => {
+				throw new Late()
+			}
+		],
+		['rejected', () => Promise.reject(new Late())]
+	]
+
+	const serve = async (lane: LaneFactory, define: Define, path = '/') => {
+		const instance = await lane.make(define)
+
+		try {
+			const response = await instance.handle(req(path))
+
+			return `${response.status} ${await response.text()}`
+		} finally {
+			await instance.dispose()
+		}
+	}
+
+	const decline = () => {}
+	const answer = () => status(418, 'late')
+
+	const lateHooks: [hook: string, add: (app: AnyElysia) => AnyElysia][] = [
+		['a class handler', (app) => app.error(Late, answer)],
+		['a global class handler', (app) => app.error('global', Late, answer)],
+		['a catch-all', (app) => app.error(answer)],
+		['a global catch-all', (app) => app.error('global', answer)]
+	]
+
+	const routes: [
+		route: string,
+		define: (app: AnyElysia, handler: () => unknown) => AnyElysia
+	][] = [
+		['without error hooks', (app, h) => app.get('/', h)],
+		['after a catch-all', (app, h) => app.error(decline).get('/', h)],
+		[
+			'with a local error hook',
+			(app, h) => app.get('/', { error: decline }, h)
+		],
+		['behind a request hook', (app, h) => app.request(() => {}).get('/', h)]
+	]
+
+	for (const lane of lanes)
+		for (const [shape, handler] of shapes)
+			it(`never reaches an earlier route with ${lane.id}, ${shape}`, async () => {
+				const served: Record<string, string> = {}
+
+				for (const [route, define] of routes)
+					for (const [hook, add] of lateHooks)
+						served[`${route}, ${hook}`] = (
+							await serve(lane, (app) =>
+								add(define(app, handler))
+							)
+						).slice(0, 3)
+
+				expect(served).toEqual(
+					Object.fromEntries(
+						Object.keys(served).map((k) => [k, '500'])
+					)
+				)
+			})
+
+	// The same hooks registered before the route do reach it
+	for (const lane of lanes)
+		for (const [shape, handler] of shapes)
+			it(`reaches a later route with ${lane.id}, ${shape}`, async () => {
+				const served: Record<string, string> = {}
+
+				for (const [hook, add] of lateHooks)
+					served[hook] = await serve(lane, (app) =>
+						add(app).get('/', handler)
+					)
+
+				expect(served).toEqual(
+					Object.fromEntries(
+						lateHooks.map(([hook]) => [hook, '418 late'])
+					)
+				)
+			})
+
+	// What fails before routing has no route to stop at: a 404 or a request
+	// hook's error still reaches every app-level hook, a later one too
+	for (const lane of lanes)
+		it(`leaves errors before routing to every hook with ${lane.id}`, async () => {
+			const served = {
+				notFound: await serve(
+					lane,
+					(app) =>
+						app
+							.get('/', () => 'ok')
+							.error(({ error }) =>
+								error instanceof NotFound
+									? status(418, 'late')
+									: undefined
+							),
+					'/missing'
+				),
+				request: await serve(lane, (app) =>
+					app
+						.request(() => {
+							throw new Late()
+						})
+						.get('/', () => 'ok')
+						.error(Late, answer)
+				)
+			}
+
+			expect(served).toEqual({
+				notFound: '418 late',
+				request: '418 late'
+			})
+		})
+
+	// The one exception Elysia 1 keeps on purpose: inside a `.group()` or
+	// `.guard()` callback, the callback's error hooks, of any scope, cover
+	// every route the callback produces (1.x "handle error in group"), and
+	// stay inside it
+	const callbacks: [
+		kind: string,
+		wrap: (
+			app: AnyElysia,
+			run: (inner: AnyElysia) => AnyElysia
+		) => AnyElysia,
+		prefix: string
+	][] = [
+		['group', (app, run) => app.group('/g', run), '/g'],
+		['guard', (app, run) => app.guard({}, run), '']
+	]
+
+	const produced: [
+		route: string,
+		declare: (inner: AnyElysia) => AnyElysia,
+		path: string
+	][] = [
+		['its own route', (inner) => inner.get('/r', () => new Late()), '/r'],
+		[
+			'a used plugin',
+			(inner) => inner.use(new Elysia().get('/r', () => new Late())),
+			'/r'
+		],
+		[
+			'a nested group',
+			(inner) => inner.group('/n', (n) => n.get('/r', () => new Late())),
+			'/n/r'
+		],
+		[
+			'a nested guard',
+			(inner) => inner.guard({}, (n) => n.get('/r', () => new Late())),
+			'/r'
+		]
+	]
+
+	const callbackHooks: [
+		scope: string,
+		add: (inner: AnyElysia) => AnyElysia
+	][] = [
+		['local', (inner) => inner.error(Late, answer)],
+		['plugin', (inner) => inner.error('plugin', Late, answer)],
+		['global', (inner) => inner.error('global', Late, answer)]
+	]
+
+	for (const lane of lanes)
+		it(`lets a group or guard callback's error hook cover its routes with ${lane.id}`, async () => {
+			const served: Record<string, string> = {}
+
+			for (const [kind, wrap, prefix] of callbacks)
+				for (const [route, declare, path] of produced)
+					for (const [scope, add] of callbackHooks)
+						served[`${kind}, ${route}, ${scope}`] = await serve(
+							lane,
+							(app) => wrap(app, (inner) => add(declare(inner))),
+							prefix + path
+						)
+
+			expect(served).toEqual(
+				Object.fromEntries(
+					Object.keys(served).map((k) => [k, '418 late'])
+				)
+			)
+		})
+
+	// Nested callbacks, as in Elysia 1.4.30: the callbacks' later error hooks
+	// run innermost first. One an outer callback registered before creating
+	// the inner is an ordinary earlier hook: it comes first, before the
+	// inner's later one, and before a route's own hook too
+	for (const lane of lanes)
+		it(`runs nested callbacks' error hooks innermost first with ${lane.id}`, async () => {
+			const nested = (inner: () => unknown) => (app: AnyElysia) =>
+				app.group('/g', (outer) =>
+					outer
+						.group('/n', (n) =>
+							n.get('/r', () => new Late()).error(inner as any)
+						)
+						.error(Late, answer)
+				)
+
+			const outerFirst =
+				(route: (n: AnyElysia) => AnyElysia) => (app: AnyElysia) =>
+					app.group('/g', (outer) =>
+						outer
+							.error(Late, answer)
+							.group('/n', (n) =>
+								route(n).error(() => status(409, 'inner'))
+							)
+					)
+
+			const served = {
+				innerAnswers: await serve(
+					lane,
+					nested(() => status(409, 'inner')),
+					'/g/n/r'
+				),
+				innerDeclines: await serve(lane, nested(decline), '/g/n/r'),
+				outerFirst: await serve(
+					lane,
+					outerFirst((n) => n.get('/r', () => new Late())),
+					'/g/n/r'
+				),
+				outerFirstOverLocal: await serve(
+					lane,
+					outerFirst((n) =>
+						n.get(
+							'/r',
+							{ error: () => status(401, 'local') },
+							() => new Late()
+						)
+					),
+					'/g/n/r'
+				),
+				localOverLaterInner: await serve(
+					lane,
+					(app) =>
+						app.group('/g', (outer) =>
+							outer.group('/n', (n) =>
+								n
+									.get(
+										'/r',
+										{ error: () => status(401, 'local') },
+										() => new Late()
+									)
+									.error(() => status(409, 'inner'))
+							)
+						),
+					'/g/n/r'
+				)
+			}
+
+			expect(served).toEqual({
+				innerAnswers: '409 inner',
+				innerDeclines: '418 late',
+				outerFirst: '418 late',
+				outerFirstOverLocal: '418 late',
+				localOverLaterInner: '401 local'
+			})
+		})
+
+	// An error hook a macro brings counts the same: it covers the callback's
+	// earlier routes too, never the parent's after it (as in Elysia 1.4.30),
+	// and the macro's other hooks still reach where they did
+	for (const lane of lanes)
+		it(`treats a macro's error hook in a callback like the callback's with ${lane.id}`, async () => {
+			const served: Record<string, string> = {}
+			const ran: string[] = []
+
+			for (const scope of ['local', 'plugin', 'global'] as const) {
+				const define = (app: AnyElysia) =>
+					app
+						.macro({
+							rescue: {
+								error: () => status(418, 'macro'),
+								beforeHandle: ({ path }: any) => {
+									ran.push(`${scope} ${path}`)
+								}
+							}
+						})
+						.group('/g', (group) =>
+							(scope === 'local'
+								? group
+										.get('/early', () => new Late())
+										.guard({
+											rescue: true
+										} as any)
+								: group
+										.get('/early', () => new Late())
+										.guard(scope, { rescue: true } as any)
+							).get('/late', () => new Late())
+						)
+						.get('/outside', () => new Late())
+
+				for (const path of ['/g/early', '/g/late', '/outside'])
+					served[`${scope} ${path}`] = (
+						await serve(lane, define, path)
+					).slice(0, 3)
+			}
+
+			expect(served).toEqual({
+				'local /g/early': '418',
+				'local /g/late': '418',
+				'local /outside': '500',
+				'plugin /g/early': '418',
+				'plugin /g/late': '418',
+				'plugin /outside': '500',
+				'global /g/early': '418',
+				'global /g/late': '418',
+				'global /outside': '500'
+			})
+			// the macro's other hooks keep their reach: only the error hook
+			// is held inside
+			expect(ran).toEqual([
+				'local /g/late',
+				'plugin /g/late',
+				'plugin /outside',
+				'global /g/late',
+				'global /outside'
+			])
+		})
+
+	// Any key may name a macro, a lifecycle event's included: its error hook
+	// covers the callback's earlier routes too (as in Elysia 1.4.30), and
+	// shows on them
+	for (const lane of lanes)
+		it(`treats a lifecycle-named macro's error hook in a callback the same with ${lane.id}`, async () => {
+			const served: Record<string, string> = {}
+			const introspected: Record<string, number> = {}
+
+			for (const key of ['request', 'beforeHandle']) {
+				const define = (app: AnyElysia) =>
+					app
+						.macro({
+							[key]: { error: () => status(418, 'macro') }
+						} as any)
+						.group('/g', (group) =>
+							group
+								.get('/early', () => new Late())
+								.guard({ [key]: true } as any)
+								.get('/late', () => new Late())
+						)
+
+				for (const path of ['/g/early', '/g/late']) {
+					served[`${key} ${path}`] = (
+						await serve(lane, define, path)
+					).slice(0, 3)
+					introspected[`${key} ${path}`] =
+						define(new Elysia()).routes.find(
+							(route) => route.path === path
+						)?.hooks?.error?.length ?? 0
+				}
+			}
+
+			expect({ served, introspected }).toEqual({
+				served: {
+					'request /g/early': '418',
+					'request /g/late': '418',
+					'beforeHandle /g/early': '418',
+					'beforeHandle /g/late': '418'
+				},
+				introspected: {
+					'request /g/early': 1,
+					'request /g/late': 1,
+					'beforeHandle /g/early': 1,
+					'beforeHandle /g/late': 1
+				}
+			})
+		})
+
+	for (const lane of lanes)
+		it(`keeps a callback's error hook inside the callback with ${lane.id}`, async () => {
+			const served: Record<string, string> = {}
+
+			for (const [kind, wrap] of callbacks)
+				for (const [scope, add] of callbackHooks)
+					served[`${kind}, ${scope}`] = (
+						await serve(
+							lane,
+							(app) =>
+								wrap(app, (inner) => add(inner)).get(
+									'/outside',
+									() => new Late()
+								),
+							'/outside'
+						)
+					).slice(0, 3)
+
+			// a plugin is not a callback: its later hook stays off
+			served.plugin = (
+				await serve(lane, (app) =>
+					app.use(
+						new Elysia()
+							.get('/', () => new Late())
+							.error(Late, answer)
+					)
+				)
+			).slice(0, 3)
+
+			expect(served).toEqual(
+				Object.fromEntries(Object.keys(served).map((k) => [k, '500']))
+			)
+		})
+
+	// A route's own `mapResponse` and `afterResponse` still run on its error
+	// path, later ones don't
+	for (const lane of lanes)
+		it(`keeps later map and afterResponse hooks off its error path with ${lane.id}`, async () => {
+			const ran: string[] = []
+			const map = ({ responseValue }: any) => {
+				if (typeof responseValue === 'object')
+					return new Response('mapped', { status: 422 })
+			}
+			const thrown = () => {
+				throw status(422, { problem: true })
+			}
+
+			const own = await serve(lane, (app) =>
+				app
+					.mapResponse(map)
+					.afterResponse(() => {
+						ran.push('own')
+					})
+					.get('/', thrown)
+			)
+
+			const later = await serve(lane, (app) =>
+				app
+					.get('/', thrown)
+					.mapResponse(map)
+					.afterResponse(() => {
+						ran.push('later')
+					})
+			)
+
+			await Bun.sleep(10)
+
+			expect({ own, later, ran }).toEqual({
+				own: '422 mapped',
+				later: '422 {"problem":true}',
+				ran: ['own']
+			})
+		})
+
+	// Registering a non-Error class is a hook too: a route before it keeps
+	// serving a returned instance as a value
+	for (const lane of lanes)
+		it(`keeps a later class registration off an earlier route with ${lane.id}`, async () => {
+			class Problem {
+				name = 'Problem'
+				message = 'problem'
+			}
+
+			const define = (handler: () => unknown) => (app: AnyElysia) =>
+				app.get('/', handler).error(Problem as any, answer)
+
+			const served = {
+				returned: (
+					await serve(
+						lane,
+						define(() => new Problem())
+					)
+				).slice(0, 3),
+				thrown: (
+					await serve(
+						lane,
+						define(() => {
+							throw new Problem()
+						})
+					)
+				).slice(0, 3)
+			}
+
+			expect(served).toEqual({ returned: '200', thrown: '500' })
+		})
+
+	// A static instance of a non-Error class a callback registers is still
+	// an error to its routes, the Bun native static table included
+	for (const lane of [...lanes, nativeStaticOn])
+		it(`keeps a callback's class instance off the native static path with ${lane.id}`, async () => {
+			class ValueError {
+				message = 'value'
+			}
+
+			const served = await serve(
+				lane,
+				(app) =>
+					app.group('/g', (group) =>
+						group
+							.get('/own', new ValueError() as any)
+							.error(ValueError as any, answer)
+					),
+				'/g/own'
+			)
+
+			expect(served).toBe('418 late')
+		})
+
+	// A trace registered after the route doesn't see its error either
+	for (const lane of lanes)
+		for (const [shape, handler] of shapes)
+			it(`keeps a later trace off an earlier route's error with ${lane.id}, ${shape}`, async () => {
+				const ran: string[] = []
+
+				const served = (
+					await serve(lane, (app) =>
+						app
+							.use(trace())
+							.get('/', handler)
+							.trace(({ onAfterResponse }) => {
+								onAfterResponse(() => {
+									ran.push('later')
+								})
+							})
+					)
+				).slice(0, 3)
+
+				await Bun.sleep(10)
+
+				expect({ served, ran }).toEqual({ served: '500', ran: [] })
+			})
 })

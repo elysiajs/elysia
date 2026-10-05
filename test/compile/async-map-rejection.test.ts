@@ -79,20 +79,26 @@ for (const rejection of rejectionCases)
 			await expect(response.text()).resolves.toBe('mapped error')
 		}
 
+		// The error hook comes after the route, so it never reaches it (a hook
+		// reaches only the routes after it, as in Elysia 1): the rejection
+		// still ends as the 500 fallback, never unhandled
 		it('handles a response-map rejection on a route without hooks', async () => {
-			const { adapter, mapError, onError, seen } = setup()
+			const { adapter, onError, seen } = setup()
 			const app = new Elysia({ adapter })
 				.get('/', () => routeValue)
 				.error(onError)
 
-			await expectHandled(app, mapError, seen)
+			const response = await app.handle(new Request('http://localhost/'))
+
+			expect(seen).toEqual([])
+			expect(response.status).toBe(500)
 		})
 
 		it('handles a response-map rejection on a route with beforeHandle', async () => {
 			const { adapter, mapError, onError, seen } = setup()
 			const app = new Elysia({ adapter })
-				.get('/', { beforeHandle() {} }, () => routeValue)
 				.error(onError)
+				.get('/', { beforeHandle() {} }, () => routeValue)
 
 			await expectHandled(app, mapError, seen)
 		})
@@ -100,12 +106,12 @@ for (const rejection of rejectionCases)
 		it('handles a response-map rejection when the handler reads context', async () => {
 			const { adapter, mapError, onError, seen } = setup()
 			const app = new Elysia({ adapter })
+				.error(onError)
 				.get('/', ({ headers }) => {
 					void headers
 
 					return routeValue
 				})
-				.error(onError)
 
 			await expectHandled(app, mapError, seen)
 		})

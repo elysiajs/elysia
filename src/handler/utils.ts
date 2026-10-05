@@ -1,5 +1,5 @@
 import { isAsyncFunction, mayReturnPromise } from '../compile/utils'
-import { isDisposable, isSingleton, flattenChain } from '../utils'
+import { isDisposable, isSingleton } from '../utils'
 import { isCloudflareWorker, isFastly } from '../universal/constants'
 import { HTTPError, PROBLEM_JSON, problemTypeOf } from '../error'
 import { env } from '../universal'
@@ -60,11 +60,17 @@ export function forwardError<T>(value: T): T {
 	return value
 }
 
-const chainErrorClasses = new WeakMap<object, Function[] | null>()
+/**
+ * Non-Error classes the route's own error hooks register: like any hook, a
+ * class registered after the route doesn't reach it
+ */
+export function returnedErrorClasses(
+	hook: { error?: unknown } | undefined
+): Function[] | undefined {
+	const error = hook?.error
+	if (!error) return
 
-function collectErrorClasses(error: unknown, into: Function[] | undefined) {
-	if (!error) return into
-
+	let into: Function[] | undefined
 	const list = Array.isArray(error) ? error : [error]
 	for (let i = 0; i < list.length; i++) {
 		const errorClass = (list[i] as any)?.['~errorClass']
@@ -73,23 +79,6 @@ function collectErrorClasses(error: unknown, into: Function[] | undefined) {
 	}
 
 	return into
-}
-
-export function returnedErrorClasses(
-	hook: { error?: unknown } | undefined,
-	root: AnyElysia
-): Function[] | undefined {
-	const head = root['~hookChain']
-	let rootClasses = head && chainErrorClasses.get(head)
-	if (head && rootClasses === undefined)
-		chainErrorClasses.set(
-			head,
-			(rootClasses =
-				collectErrorClasses(flattenChain(head)?.error, undefined) ??
-				null)
-		)
-
-	return collectErrorClasses(hook?.error, rootClasses?.slice())
 }
 
 // `forwardError` of a route that can see a non-Error class
@@ -107,13 +96,32 @@ export function finalizeRouteError(
 	app: AnyElysia,
 	context: Partial<Context>,
 	error: unknown,
-	sign?: (set: Context['set']) => unknown
+	sign?: (set: Context['set']) => unknown,
+	route?: RouteErrorHooks
 ) {
 	const finalize = app['~finalizeError']
 	if (!finalize) throw error
 
-	return finalize(context as Context, error as Error, sign)
+	return finalize(context as Context, error as Error, sign, false, route)
 }
+
+/**
+ * The hooks a matched route's error ends with: its own, never one the app
+ * registered after it
+ */
+export interface RouteErrorHooks {
+	error?: Function[]
+	mapResponse?: Function[]
+}
+
+// a route's `fre`, carrying its own error and `mapResponse` hooks
+export const finalizeRouteErrorOf = (
+	route: RouteErrorHooks | undefined
+): typeof finalizeRouteError =>
+	route?.error?.length || route?.mapResponse?.length
+		? (app, context, error, sign) =>
+				finalizeRouteError(app, context, error, sign, route)
+		: finalizeRouteError
 
 export function registerDeriveDisposable(
 	context: any,

@@ -4,6 +4,13 @@ import { describe, it, expect } from 'bun:test'
 
 const PROBE = new URL('./_http-error-prod-probe.ts', import.meta.url).pathname
 
+type Served = {
+	status: number
+	contentType: string | null
+	header: string | null
+	body: string
+}
+
 async function runProbe(): Promise<{
 	NODE_ENV: string
 	owned: { status: number; body: string }
@@ -12,6 +19,12 @@ async function runProbe(): Promise<{
 	namedOwned: { status: number; body: string }
 	nan: { status: number; body: string }
 	zero: { status: number; body: string }
+	owned503: Served
+	owned502: Served
+	implementerThrown: Served
+	implementerReturned: Served
+	flipType: Served
+	invoked: string[]
 }> {
 	const proc = Bun.spawn(['bun', PROBE], {
 		env: { ...process.env, NODE_ENV: 'production' },
@@ -86,5 +99,69 @@ describe('self-describing error masking in production', () => {
 
 		expect(zero.status).toBe(500)
 		expect(zero.body).not.toContain('upstream-secret')
+	})
+
+	// The mask hides the message, not the status: `detail` names the status
+	// served, as `title` does, instead of claiming every 5xx is a 500
+	it('masks an owned 5xx message with its own status title', async () => {
+		const { owned503, owned502 } = await runProbe()
+
+		expect(owned503.status).toBe(503)
+		expect(owned503.body).not.toContain('db-secret')
+		expect(JSON.parse(owned503.body)).toEqual({
+			type: 'OWNED_503',
+			code: 'OWNED_503',
+			title: 'Service Unavailable',
+			detail: 'Service Unavailable',
+			status: 503
+		})
+
+		expect(owned502.status).toBe(502)
+		expect(owned502.body).not.toContain('upstream-secret')
+		expect(JSON.parse(owned502.body)).toEqual({
+			type: 'OWNED_502',
+			title: 'Bad Gateway',
+			detail: 'Bad Gateway',
+			status: 502
+		})
+	})
+
+	// Implementing the contract types the 5xx as a problem document, so it is
+	// served as one, but only its `type` and `status` are trusted: running a
+	// knob, merging its headers or echoing `code` or the message would hand a
+	// foreign error the disclosure only an owned one opts into
+	it('serves a masked problem document for a foreign 5xx claiming a type', async () => {
+		const { implementerThrown, implementerReturned, invoked } =
+			await runProbe()
+
+		for (const served of [implementerThrown, implementerReturned]) {
+			expect(served.status).toBe(503)
+			expect(served.contentType).toBe('application/problem+json')
+			expect(served.header).toBeNull()
+			expect(served.body).not.toContain('implementer-')
+			expect(JSON.parse(served.body)).toEqual({
+				type: 'IMPLEMENTER',
+				title: 'Service Unavailable',
+				detail: 'Service Unavailable',
+				status: 503
+			})
+		}
+
+		expect(invoked).toEqual([])
+	})
+
+	// The claim checks `type` is a string; reading it again for the document
+	// would let a getter swap in whatever it likes past that check
+	it('serves the `type` its claim was checked on', async () => {
+		const { flipType } = await runProbe()
+
+		expect(flipType.status).toBe(503)
+		expect(flipType.body).not.toContain('second-read')
+		expect(JSON.parse(flipType.body)).toEqual({
+			type: 'FLIP',
+			title: 'Service Unavailable',
+			detail: 'Service Unavailable',
+			status: 503
+		})
 	})
 })
