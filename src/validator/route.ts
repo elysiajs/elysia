@@ -77,13 +77,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 	query: ToSubTypeValidator<T['query']> | undefined
 	params: ToSubTypeValidator<T['params']> | undefined
 	cookie: ToSubTypeValidator<T['cookie']> | undefined
-	response:
-		| {
-				[Status in keyof T['response']]: ToSubTypeValidator<
-					T['response'][Status]
-				>
-		  }
-		| undefined
+	response: Map<number, Validator> | undefined
 
 	constructor(route: T, options?: RouteValidatorOptions) {
 		if (!route) return

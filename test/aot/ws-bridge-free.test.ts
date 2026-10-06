@@ -161,8 +161,8 @@ describe('frozen WebSocket validator reconstruction', () => {
 			if (w.ok) expect(JSON.stringify(f.v)).toBe(JSON.stringify(w.v))
 		}
 
-		const wiredRes = (wired.response as any)[200]
-		const frozenRes = (frozen!.response as any)[200]
+		const wiredRes = (wired.response as any).get(200)
+		const frozenRes = (frozen!.response as any).get(200)
 		expect(frozenRes).toBeDefined()
 		for (const r of [{ echo: 'x' }, { echo: 1 }, {}])
 			expect(

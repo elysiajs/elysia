@@ -223,7 +223,7 @@ export abstract class Validator {
 			| undefined
 			| null,
 		options?: ResponseValidatorOptions
-	): Record<number, Validator> | undefined {
+	): Map<number, Validator> | undefined {
 		if (schema == null) {
 			if (!options?.schemas?.length) return
 
@@ -236,25 +236,26 @@ export abstract class Validator {
 		const responseSlot = (status: number | string) =>
 			options?.aot ? (`response:${status}` as ValidatorSlot) : undefined
 
+		// a `Map`: a numeric key on an object allocates storage sized to it
 		if (isSingleSchema(schema))
-			return {
-				200: Validator.create(
-					schema as TSchema | StandardSchemaV1Like,
-					{
+			return new Map([
+				[
+					200,
+					Validator.create(schema as TSchema | StandardSchemaV1Like, {
 						...options,
 						slot: responseSlot(200),
 						schemas: options?.schemas
 							?.map((s) => toStatusBased(s)[200])
 							?.filter(Boolean)
-					}
-				)
-			}
+					})
+				]
+			])
 
 		const entries = Object.entries(schema)
 
-		return Object.fromEntries(
-			entries.map(([k, v]) => [
-				k,
+		return new Map(
+			entries.map(([k, v]): [number, Validator] => [
+				+k,
 				v instanceof Validator
 					? v
 					: Validator.create(v, {

@@ -535,6 +535,18 @@ describe('AOT sealing with multiple TypeBox responses', () => {
 		)
 		expect(invalid.status).toBe(500)
 
+		// a named set.status is sent as its code, so its schema redacts it
+		const named = await app.handle(
+			new Request('http://localhost/u?mode=named-400')
+		)
+		expect(named.status).toBe(400)
+		await expect(named.json()).resolves.toEqual({ error: 'bad request' })
+
+		const namedInvalid = await app.handle(
+			new Request('http://localhost/u?mode=named-invalid-400')
+		)
+		expect(namedInvalid.status).toBe(500)
+
 		const plain = await app.handle(new Request('http://localhost/plain'))
 		expect(plain.status).toBe(200)
 		await expect(plain.text()).resolves.toBe('second')

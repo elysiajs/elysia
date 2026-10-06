@@ -1,4 +1,6 @@
-import { Elysia, t } from '../../src'
+import { AsyncLocalStorage } from 'node:async_hooks'
+
+import { Elysia, t, createContext } from '../../src'
 import { emittedSource } from '../utils'
 import { drainDisposables } from '../../src/handler/utils'
 import { Validator } from '../../src/validator'
@@ -30,6 +32,37 @@ const disposable = (log: string[], name: string) => ({
 })
 
 const source = (app: any) => emittedSource(app)
+
+// `body`: what the handler answers from the resource it received, so a
+// key the walk cannot see is not mistaken for a resource nobody got
+const requests = async (
+	app: Elysia<any, any, any, any, any, any, any, any>,
+	body: string | ((i: number) => string) = 'ok',
+	paths = ['/']
+) => {
+	for (let i = 0; i < 3; i++)
+		for (const path of paths)
+			expect(await app.handle(path).then((x) => x.text())).toBe(
+				typeof body === 'string' ? body : body(i)
+			)
+
+	await drain()
+}
+
+const hiddenPoolApp = (log: string[]) =>
+	new Elysia()
+		.decorate(
+			'cache',
+			Object.defineProperty(new (class Cache {})(), 'pool', {
+				value: disposable(log, 'pool'),
+				enumerable: false
+			})
+		)
+		.derive(({ cache }: any) => ({
+			pool: cache.pool,
+			tx: disposable(log, 'tx')
+		}))
+		.get('/', ({ pool }: any) => pool.name)
 
 describe('derive dispose', () => {
 	it('disposes after the response, never before the handler runs', async () => {
@@ -954,6 +987,794 @@ describe('derive dispose: under a real server', () => {
 			await stop()
 		}
 	})
+
+	it('does not dispose a pool a decorated instance hides', async () => {
+		const log: string[] = []
+
+		const { get, stop } = await serve(hiddenPoolApp(log))
+		try {
+			expect(await get()).toBe('200:pool')
+			expect(await get()).toBe('200:pool')
+			await Bun.sleep(5)
+
+			expect(log).toEqual(['tx', 'tx'])
+		} finally {
+			await stop()
+		}
+	})
+})
+
+// A client library often keeps its connection under a symbol or a
+// non-enumerable key. Held by a decorator or the store, it is still shared:
+// a derive handing it out introduced nothing, so it must not dispose it
+describe('derive dispose: singletons under a symbol or non-enumerable key', () => {
+	const client = Symbol('client')
+	const hidden = (value: unknown) =>
+		Object.defineProperty({}, 'client', { value, enumerable: false })
+
+	// A client class often hides its pool from `JSON.stringify` and logs
+	class Client {
+		declare pool: unknown
+
+		constructor(pool: unknown) {
+			Object.defineProperty(this, 'pool', {
+				value: pool,
+				enumerable: false
+			})
+		}
+	}
+
+	const countingOwnKeys = (count: () => void) =>
+		new Proxy(
+			{},
+			{
+				ownKeys(target) {
+					count()
+
+					return Reflect.ownKeys(target)
+				}
+			}
+		)
+
+	type Case = [
+		name: string,
+		body: string,
+		build: (log: string[]) => Elysia<any, any, any, any, any, any, any, any>
+	]
+
+	const cases: Case[] = [
+		[
+			'a decorated resource under a symbol key',
+			'db',
+			(log) =>
+				new Elysia()
+					.decorate('db', { [client]: disposable(log, 'db') })
+					.derive(({ db }: any) => ({ conn: db[client] }))
+					.get('/', ({ conn }: any) => conn.name)
+		],
+		[
+			'a resource a decorated instance holds under a symbol key',
+			'db',
+			(log) => {
+				class Client {
+					[client] = disposable(log, 'db')
+				}
+
+				return new Elysia()
+					.decorate('db', new Client())
+					.derive(({ db }: any) => ({ conn: db[client] }))
+					.get('/', ({ conn }: any) => conn.name)
+			}
+		],
+		[
+			'a decorated resource under a non-enumerable key',
+			'db',
+			(log) =>
+				new Elysia()
+					.decorate('db', hidden(disposable(log, 'db')))
+					.derive(({ db }: any) => ({ conn: db.client }))
+					.get('/', ({ conn }: any) => conn.name)
+		],
+		[
+			'a stored resource under a symbol key',
+			'pool',
+			(log) =>
+				new Elysia()
+					.state('pool', { [client]: disposable(log, 'pool') })
+					.derive(({ store }: any) => ({ conn: store.pool[client] }))
+					.get('/', ({ conn }: any) => conn.name)
+		],
+		[
+			'a stored resource under a non-enumerable key',
+			'pool',
+			(log) =>
+				new Elysia()
+					.state('pool', hidden(disposable(log, 'pool')))
+					.derive(({ store }: any) => ({ conn: store.pool.client }))
+					.get('/', ({ conn }: any) => conn.name)
+		],
+		[
+			'a non-enumerable store entry, which only the seal walk sees',
+			'pool',
+			(log) =>
+				new Elysia()
+					.state((store) =>
+						Object.defineProperty(store, 'pool', {
+							value: disposable(log, 'pool'),
+							enumerable: false
+						})
+					)
+					.derive(({ store }: any) => ({ conn: store.pool }))
+					.get('/', ({ conn }: any) => conn.name)
+		],
+		...[false, true].map(
+			(precompile): Case => [
+				`a resource a decorated instance holds under a non-enumerable key${precompile ? ' with precompile' : ''}`,
+				'pool',
+				(log) =>
+					new Elysia({ precompile })
+						.decorate('db', new Client(disposable(log, 'pool')))
+						.derive(({ db }: any) => ({ conn: db.pool }))
+						.get('/', ({ conn }: any) => conn.name)
+			]
+		),
+		[
+			'a resource a stored instance holds under a non-enumerable key',
+			'pool',
+			(log) =>
+				new Elysia()
+					.state('db', new Client(disposable(log, 'pool')))
+					.derive(({ store }: any) => ({ conn: store.db.pool }))
+					.get('/', ({ conn }: any) => conn.name)
+		]
+	]
+
+	for (const [name, body, build] of cases)
+		it(`does not dispose ${name}`, async () => {
+			const log: string[] = []
+
+			await requests(build(log), body)
+
+			expect(log).toEqual([])
+		})
+
+	it('still disposes what the derive minted from a decorated class', async () => {
+		const log: string[] = []
+		let minted = 0
+
+		class Tx {
+			id = ++minted;
+
+			[Symbol.dispose]() {
+				log.push(`tx-${this.id}`)
+			}
+		}
+
+		// the class and the symbol-held resource are shared, an instance the
+		// derive builds from the class is its own
+		const app = new Elysia()
+			.decorate('Tx', Tx)
+			.decorate('db', { [client]: disposable(log, 'db') })
+			.derive(({ Tx, db }: any) => ({ shared: db[client], tx: new Tx() }))
+			.get('/', ({ shared }: any) => shared.name)
+
+		await requests(app, 'db')
+
+		expect(log).toEqual(['tx-1', 'tx-2', 'tx-3'])
+	})
+
+	it("never walks a function's non-enumerable keys, which are the runtime's", async () => {
+		let walked = 0
+		function factory() {}
+		// stands in for the `prototype` every regular function and class
+		// has: walking it doubled the seal walk over decorated functions
+		factory.prototype = countingOwnKeys(() => walked++)
+
+		const app = new Elysia()
+			.decorate('factory', factory)
+			.state('factory', factory)
+			.get('/', () => 'ok')
+
+		await requests(app)
+
+		expect(walked).toBe(0)
+	})
+
+	it('never walks a non-enumerable global, which the runtime may build lazily', async () => {
+		let walked = 0
+		const key = '__elysiaHiddenGlobal'
+		// stands in for a lazy global: reading its descriptor builds it, and
+		// walking all of them cost +7 MB on a decorated `globalThis`
+		Object.defineProperty(globalThis, key, {
+			value: countingOwnKeys(() => walked++),
+			enumerable: false,
+			configurable: true
+		})
+
+		try {
+			const app = new Elysia()
+				.decorate('global', globalThis)
+				.get('/', () => 'ok')
+
+			await requests(app)
+
+			expect(walked).toBe(0)
+		} finally {
+			delete (globalThis as any)[key]
+		}
+	})
+
+	// Marking is best effort: introspecting a value the app was handed must
+	// not fail `.decorate()`, `.state()` or the first request
+	const throwingProxies = () => [
+		new Proxy(
+			{},
+			{
+				ownKeys() {
+					throw new Error('ownKeys trap')
+				}
+			}
+		),
+		new Proxy(
+			{ name: 'svc', [client]: {} },
+			{
+				getOwnPropertyDescriptor(target, key) {
+					if (key === client) throw new Error('descriptor trap')
+
+					return Reflect.getOwnPropertyDescriptor(target, key)
+				}
+			}
+		)
+	]
+
+	it('registers and serves a proxy whose traps throw', async () => {
+		const [keys, descriptor] = throwingProxies()
+
+		const app = new Elysia()
+			.decorate('keys', keys)
+			.decorate('descriptor', descriptor)
+			.state('keys', keys)
+			.state('descriptor', descriptor)
+			.get('/', () => 'ok')
+
+		await requests(app)
+	})
+
+	it('serves a proxy whose traps throw, added where only the seal walk sees it', async () => {
+		const holder: Record<string, unknown> = {}
+		const box: Record<string, unknown> = {}
+
+		const app = new Elysia()
+			.decorate('holder', holder)
+			.state('box', box)
+			.get('/', () => 'ok')
+
+		;[holder.keys, holder.descriptor] = throwingProxies()
+		;[box.keys, box.descriptor] = throwingProxies()
+
+		await requests(app)
+	})
+
+	it('does not dispose a resource behind a proxy whose prototype trap throws', async () => {
+		const log: string[] = []
+		// telling plain from not fails, the enumerable keys are still there
+		const service = new Proxy(
+			{ db: disposable(log, 'db') },
+			{
+				getPrototypeOf() {
+					throw new Error('prototype trap')
+				}
+			}
+		)
+
+		const app = new Elysia()
+			.decorate('service', service)
+			.state('service', service)
+			.derive(({ service, store }: any) => ({
+				a: service.db,
+				b: store.service.db
+			}))
+			.get('/', ({ a, b }: any) => `${a.name},${b.name}`)
+
+		await requests(app, 'db,db')
+
+		expect(log).toEqual([])
+	})
+
+	it("never walks an error's non-enumerable keys, which the runtime builds on read", async () => {
+		let walked = 0
+		const error = new Error('decorated')
+		// stands in for `stack`: reading its descriptor builds the string
+		Object.defineProperty(error, 'detail', {
+			value: countingOwnKeys(() => walked++),
+			enumerable: false
+		})
+
+		const app = new Elysia()
+			.decorate('error', error)
+			.state('error', error)
+			.get('/', () => 'ok')
+
+		await requests(app)
+
+		expect(walked).toBe(0)
+	})
+
+	it('never lists the keys of a decorated typed array or DataView', async () => {
+		// listing a view's keys lists every index: a 1 MB Buffer took ~0.5 s
+		// and ~250 MB to walk
+		const buffer = Buffer.alloc(1 << 20)
+		const view = new DataView(buffer.buffer)
+
+		let listed = 0
+		const spied = [
+			[Reflect, 'ownKeys'],
+			[Object, 'keys'],
+			[Object, 'getOwnPropertySymbols'],
+			[Object, 'getOwnPropertyDescriptor']
+		] as const
+		const originals = spied.map(([owner, key]) => (owner as any)[key])
+		spied.forEach(([owner, key], i) => {
+			;(owner as any)[key] = function (
+				this: unknown,
+				target: unknown,
+				...rest: unknown[]
+			) {
+				if (target === buffer || target === view) listed++
+
+				return originals[i].call(this, target, ...rest)
+			}
+		})
+
+		try {
+			const app = new Elysia()
+				.decorate('buffer', buffer)
+				.state('view', view)
+				.get('/', () => 'ok')
+
+			await requests(app)
+		} finally {
+			spied.forEach(([owner, key], i) => {
+				;(owner as any)[key] = originals[i]
+			})
+		}
+
+		expect(listed).toBe(0)
+	})
+
+	it('does not dispose a resource a shallow path reaches after a deep hidden one', async () => {
+		// the hidden path reaches `holder` at the depth limit first; the
+		// shallow `pool.holder` must still mark what `holder` holds
+		for (const precompile of [false, true])
+			for (const kind of ['derive', 'mapDerive'] as const) {
+				const log: string[] = []
+				const holder = { resource: disposable(log, 'shared') }
+				const pool = Object.defineProperty(
+					new (class Pool {})(),
+					'hidden',
+					{
+						value: { next: { next: { next: holder } } }
+					}
+				) as any
+				pool.holder = holder
+
+				const app = (
+					new Elysia({ precompile }).decorate('pool', pool) as any
+				)
+					[kind]((context: any) => ({
+						...context,
+						resource: context.pool.holder.resource
+					}))
+					.get('/', ({ resource }: any) => resource.name)
+
+				await requests(app, 'shared')
+
+				expect({ precompile, kind, log }).toEqual({
+					precompile,
+					kind,
+					log: []
+				})
+			}
+	})
+
+	it('does not dispose a resource one table entry reaches deep and another shallow', async () => {
+		const log: string[] = []
+		const holder = { resource: disposable(log, 'shared') }
+		const a: Record<string, unknown> = {}
+		const b: Record<string, unknown> = {}
+
+		const app = new Elysia()
+			.decorate('a', a)
+			.decorate('b', b)
+			.derive(({ b }: any) => ({ resource: b.holder.resource }))
+			.get('/', ({ resource }: any) => resource.name)
+
+		// written after `.decorate()`, so only the seal walk sees either path:
+		// `a` reaches `holder` at the depth limit before `b` reaches it early
+		a.x = { y: { z: { w: holder } } }
+		b.holder = holder
+
+		await requests(app, 'shared')
+
+		expect(log).toEqual([])
+	})
+
+	it('marks four levels below a decorator, KNOWN GAP: not a fifth', async () => {
+		const log: string[] = []
+
+		const app = new Elysia()
+			.decorate('root', {
+				a: {
+					b: {
+						c: {
+							four: disposable(log, 'four'),
+							d: { five: disposable(log, 'five') }
+						}
+					}
+				}
+			})
+			.derive(({ root }: any) => ({
+				four: root.a.b.c.four,
+				five: root.a.b.c.d.five
+			}))
+			.get('/', ({ four, five }: any) => `${four.name},${five.name}`)
+
+		await requests(app, 'four,five')
+
+		// the walk is bounded: a resource held deeper is disposed per request
+		expect(log).toEqual(['five', 'five', 'five'])
+	})
+
+	it('walks a cycle once and still finds what it holds', async () => {
+		const log: string[] = []
+		const node: Record<string, unknown> = {
+			resource: disposable(log, 'cyclic')
+		}
+		node.self = node
+		node.next = { back: node }
+
+		const app = new Elysia()
+			.decorate('graph', node)
+			.derive(({ graph }: any) => ({
+				resource: graph.next.back.self.resource
+			}))
+			.get('/', ({ resource }: any) => resource.name)
+
+		await requests(app, 'cyclic')
+
+		expect(log).toEqual([])
+	})
+
+	it('queues an object many references share once', async () => {
+		const log: string[] = []
+		const shared = disposable(log, 'shared')
+		const rows = Array.from({ length: 100 }, () => Array(1000).fill(shared))
+
+		// a queue entry per reference held 1M entries for 1000 x 1000
+		let queued = 0
+		const push = Array.prototype.push
+		Array.prototype.push = function (this: unknown[], ...items: unknown[]) {
+			for (const item of items) if (item === shared) queued++
+
+			return push.apply(this, items)
+		}
+
+		try {
+			const app = new Elysia()
+				.decorate('rows', rows)
+				.derive(({ rows }: any) => ({ resource: rows[99][999] }))
+				.get('/', ({ resource }: any) => resource.name)
+
+			await requests(app, 'shared')
+		} finally {
+			Array.prototype.push = push
+		}
+
+		expect(queued).toBeLessThan(10)
+		expect(log).toEqual([])
+	})
+
+	it('KNOWN GAP: a resource set on a typed array or DataView is disposed per request', async () => {
+		const log: string[] = []
+		const buffer = Object.assign(new Uint8Array(1), {
+			client: disposable(log, 'buffer')
+		})
+		const view = Object.assign(new DataView(new ArrayBuffer(1)), {
+			client: disposable(log, 'view')
+		})
+
+		const app = new Elysia()
+			.decorate('buffer', buffer)
+			.state('view', view)
+			.derive(({ buffer, store }: any) => ({
+				a: buffer.client,
+				b: store.view.client
+			}))
+			.get('/', ({ a, b }: any) => `${a.name},${b.name}`)
+
+		await requests(app, 'buffer,view')
+
+		// a buffer view is never walked, a property set on one included: its
+		// keys can't be listed without listing every index
+		expect(log).toEqual([
+			'view',
+			'buffer',
+			'view',
+			'buffer',
+			'view',
+			'buffer'
+		])
+	})
+
+	it("does not dispose a plugin's resource under a symbol or non-enumerable key", async () => {
+		const log: string[] = []
+
+		// the plugin's copy used to drop both keys, so the derive saw nothing
+		const plugin = new Elysia({ name: 'hidden-resources' })
+			.decorate('a', { [client]: disposable(log, 'symbol') })
+			.decorate('b', hidden(disposable(log, 'hidden')))
+
+		const app = new Elysia()
+			.use(plugin)
+			.derive(({ a, b }: any) => ({ x: a[client], y: b.client }))
+			.get('/', ({ x, y }: any) => `${x.name},${y.name}`)
+
+		await requests(app, 'symbol,hidden')
+
+		expect(log).toEqual([])
+	})
+})
+
+// Elysia never runs a user getter to learn what is shared: a getter can't
+// tell a shared value from one it makes per request, and it may build, throw
+// or reject. A plugin's getter is read once, by the consumer's copy at `.use()`
+describe('derive dispose: getters', () => {
+	const lazy = (log: string[], name: string) => {
+		let client: ReturnType<typeof disposable> | undefined
+
+		return {
+			get client() {
+				return (client ??= disposable(log, name))
+			}
+		}
+	}
+
+	it('KNOWN GAP: a client a root decorator holds behind a getter is disposed per request', async () => {
+		const log: string[] = []
+
+		const app = new Elysia()
+			.decorate('db', lazy(log, 'client'))
+			.derive(({ db }: any) => ({ client: db.client }))
+			.get('/', ({ client }: any) => client.name)
+
+		await requests(app, 'client')
+
+		// the walk never runs the getter, which can't tell a shared client
+		// from one it makes per request: hold the client in data instead
+		expect(log).toEqual(['client', 'client', 'client'])
+	})
+
+	it("does not dispose a plugin's lazily created client, which .use() read once", async () => {
+		const log: string[] = []
+		let reads = 0
+		let client: ReturnType<typeof disposable> | undefined
+
+		const plugin = new Elysia({ name: 'lazy-client' })
+			.decorate('db', {
+				get client() {
+					reads++
+					return (client ??= disposable(log, 'client'))
+				}
+			})
+			.derive('global', ({ db }: any) => ({ client: db.client }))
+			.get('/plugin', ({ client }: any) => client.name)
+
+		const app = new Elysia()
+			.use(plugin)
+			.derive(({ db }: any) => ({ again: db.client }))
+			.get('/', ({ again }: any) => again.name)
+
+		await requests(app, 'client', ['/', '/plugin'])
+
+		expect(reads).toBe(1)
+		expect(log).toEqual([])
+	})
+
+	it('never reads a decorated or stored getter', async () => {
+		let reads = 0
+		const pool = {
+			get client() {
+				reads++
+				return {}
+			}
+		}
+
+		const app = new Elysia()
+			.decorate('pool', pool)
+			.state('pool', pool)
+			.derive(() => ({ tx: disposable([], 'tx') }))
+			.get('/', () => 'ok')
+
+		void app.fetch
+		await requests(app, 'ok')
+
+		expect(reads).toBe(0)
+	})
+
+	it('never reads a getter that rejects, which would end the process', async () => {
+		let reads = 0
+
+		const app = new Elysia()
+			.decorate('pool', {
+				get client() {
+					reads++
+					return Promise.reject(new Error('unused getter'))
+				}
+			})
+			.derive(() => ({ tx: disposable([], 'tx') }))
+			.get('/', () => 'ok')
+
+		await requests(app, 'ok')
+		await Bun.sleep(5)
+
+		expect(reads).toBe(0)
+	})
+
+	it('disposes the transaction a request-scoped getter returns, every request', async () => {
+		const log: string[] = []
+		const scope = new AsyncLocalStorage<{
+			tx?: ReturnType<typeof disposable>
+		}>()
+		let minted = 0
+
+		const app = new Elysia()
+			.decorate('pool', {
+				get tx() {
+					const store = scope.getStore()!
+
+					return (store.tx ??= disposable(log, `tx-${++minted}`))
+				}
+			})
+			.derive(({ pool }: any) => ({ tx: pool.tx }))
+			.get('/', ({ tx }: any) => tx.name)
+
+		for (let i = 1; i <= 3; i++)
+			expect(
+				await scope.run({}, () => app.handle('/')).then((x) => x.text())
+			).toBe(`tx-${i}`)
+		await drain()
+
+		expect(log).toEqual(['tx-1', 'tx-2', 'tx-3'])
+	})
+
+	it('disposes what a getter mints, which only the derive reads', async () => {
+		const log: string[] = []
+		let minted = 0
+
+		const app = new Elysia()
+			.decorate('pool', {
+				get tx() {
+					return disposable(log, `tx-${++minted}`)
+				}
+			})
+			.derive(({ pool }: any) => ({ tx: pool.tx }))
+			.get('/', ({ tx }: any) => tx.name)
+
+		await requests(app, (i) => `tx-${i + 1}`)
+
+		expect(minted).toBe(3)
+		expect(log).toEqual(['tx-1', 'tx-2', 'tx-3'])
+	})
+
+	it('does not dispose a decorator member the table held behind a getter', async () => {
+		const log: string[] = []
+		let minted = 0
+
+		// the context copies each member once; that copy is the shared one
+		const app = new Elysia()
+			.decorate(() => ({
+				get conn() {
+					return disposable(log, `conn-${++minted}`)
+				}
+			}))
+			.derive(({ conn }: any) => ({ alias: conn }))
+			.get('/', ({ alias }: any) => alias.name)
+
+		const body = await app.handle('/').then((x) => x.text())
+		expect(body).toStartWith('conn-')
+		await requests(app, body)
+
+		expect(log).toEqual([])
+	})
+
+	// the identity scan's `for..in` never sees a symbol key
+	for (const viaPlugin of [false, true])
+		it(`does not dispose ${viaPlugin ? "a plugin's" : 'a'} decorator member under a symbol key`, async () => {
+			const log: string[] = []
+			const key = Symbol('client')
+			let minted = 0
+
+			const members = () => ({
+				get [key]() {
+					return disposable(log, `client-${++minted}`)
+				}
+			})
+
+			const base: Elysia<any, any, any, any, any, any, any, any> =
+				viaPlugin
+					? new Elysia().use(
+							new Elysia({ name: 'symbol-member' }).decorate(
+								members
+							)
+						)
+					: new Elysia().decorate(members)
+
+			const app = base
+				.derive((context: any) => ({ client: context[key] }))
+				.get('/', ({ client }: any) => client.name)
+
+			await requests(app, 'client-1')
+
+			expect(log).toEqual([])
+		})
+
+	it('does not dispose what an inherited getter returned when .use() copied it', async () => {
+		const log: string[] = []
+		const client = disposable(log, 'client')
+		let reads = 0
+
+		// an enumerable getter on a polluted Object.prototype: the copy reads
+		// it once, like any key `for..in` reaches
+		Object.defineProperty(Object.prototype, '__elysiaInheritedClient', {
+			get(this: { flag?: boolean }) {
+				if (this?.flag !== true) return
+
+				reads++
+				return client
+			},
+			enumerable: true,
+			configurable: true
+		})
+
+		try {
+			const plugin = new Elysia({ name: 'inherited-getter' }).decorate(
+				'config',
+				{ flag: true }
+			)
+
+			const app = new Elysia()
+				.use(plugin)
+				.derive(({ config }: any) => ({
+					client: config.__elysiaInheritedClient
+				}))
+				.get('/', ({ client }: any) => client.name)
+
+			expect(reads).toBe(1)
+			await requests(app, 'client')
+
+			expect(reads).toBe(1)
+			expect(log).toEqual([])
+		} finally {
+			delete (Object.prototype as any).__elysiaInheritedClient
+		}
+	})
+
+	it('does not dispose a member added to the exported context class', async () => {
+		const log: string[] = []
+		const app = new Elysia().decorate('pool', {})
+
+		// an enumerable member nothing marked: the `for..in` scan still sees it
+		createContext(app).prototype.inherited = disposable(log, 'inherited')
+
+		app.derive((context: any) => ({ client: context.inherited })).get(
+			'/',
+			({ client }: any) => client.name
+		)
+
+		await requests(app, 'inherited')
+
+		expect(log).toEqual([])
+	})
 })
 
 describe('drainDisposables', () => {
@@ -1047,5 +1868,32 @@ describe('derive dispose: AOT', () => {
 		await Bun.sleep(10)
 
 		expect(log).toEqual(['db'])
+	})
+
+	it('tells shared from introduced the same through a frozen handler manifest', async () => {
+		process.env.ELYSIA_AOT_BUILD = '1'
+		endValidatorCapture()
+		endHandlerCapture()
+
+		hiddenPoolApp([]).compile()
+
+		const handlers = endHandlerCapture()
+		registerManifest({
+			validators: materialise(endValidatorCapture()),
+			handlers: materialiseHandlers(handlers)
+		})
+
+		delete process.env.ELYSIA_AOT_BUILD
+
+		const log: string[] = []
+		const frozen = hiddenPoolApp(log)
+		frozen.compile()
+
+		expect(handlers).toHaveLength(1)
+		for (let i = 0; i < 2; i++)
+			expect(await frozen.handle('/').then((x) => x.text())).toBe('pool')
+		await Bun.sleep(10)
+
+		expect(log).toEqual(['tx', 'tx'])
 	})
 })

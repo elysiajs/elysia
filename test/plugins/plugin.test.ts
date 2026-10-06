@@ -56,15 +56,16 @@ describe('Plugin', () => {
 		}
 	})
 
-	it('preserves direct extension duplicates on first absorption', () => {
+	it('keeps setup and cleanup duplicates on first absorption, a wrap once per plugin', () => {
 		const duplicate = callbacks()
 		const plugin = registerCallbacks(
 			registerCallbacks(new Elysia(), duplicate),
 			duplicate
 		)
 
+		// one plugin's wrap installs once (Elysia 1)
 		const fresh = new Elysia().use(plugin)['~ext']!
-		expect(fresh.hoc).toEqual([duplicate.wrap, duplicate.wrap])
+		expect(fresh.hoc).toEqual([duplicate.wrap])
 		expect(fresh.setup).toEqual([duplicate.setup, duplicate.setup])
 		expect(fresh.cleanup).toEqual([duplicate.cleanup, duplicate.cleanup])
 
@@ -77,7 +78,7 @@ describe('Plugin', () => {
 		expect(seeded.cleanup).toEqual([seed.cleanup, duplicate.cleanup])
 
 		const empty = new Elysia().setup([]).cleanup([]).use(plugin)['~ext']!
-		expect(empty.hoc).toEqual([duplicate.wrap, duplicate.wrap])
+		expect(empty.hoc).toEqual([duplicate.wrap])
 		expect(empty.setup).toEqual([duplicate.setup])
 		expect(empty.cleanup).toEqual([duplicate.cleanup])
 	})

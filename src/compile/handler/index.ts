@@ -9,12 +9,12 @@ import { isBun } from '../../universal/constants'
 
 import { Capture, Compiled, aotDriftMessage, warnAotDrift } from '../aot'
 import { frozenRootOf } from '../../generation'
-import { resolveHandlerParams } from './params'
+import { isResponseParam, resolveHandlerParams } from './params'
 import { compileHandlerJit, createInlineHandler } from './jit'
 export { setCaptureHeaderShorthand } from './jit'
 export { releaseAnalysisCaches } from './descriptor'
 import { returnedErrorClasses } from '../../handler/utils'
-import { deriveModes } from './utils'
+import { deriveModes, joinDeriveEntries } from './utils'
 import { isAsyncFunction } from '../utils'
 import { describeRoute, routeDescriptors } from './descriptor'
 import { Reconstruct } from './reconstruct'
@@ -25,10 +25,10 @@ import {
 	compactBeforeHandleConflicts,
 	compactBeforeHandlePrefix,
 	compositionKeys,
-	eventProperties,
+	flattenChain,
+	flattenChainInfo,
 	flattenChainMemo,
 	flattenChainMemoReadonly,
-	fnOrigin,
 	fnv1a,
 	isCompactBeforeHandleOnly,
 	isNotEmpty,
@@ -57,7 +57,7 @@ function applyHook(
 	let hook: any
 
 	if (localHook && appHook)
-		hook = mergeHook(cloneHook(localHook) as any, appHook as any, true)
+		hook = mergeHook(cloneHook(localHook) as any, appHook as any)
 	else {
 		const base = localHook ? cloneHook(localHook as any) : appHook
 		if (!rootHook) return base as any
@@ -65,78 +65,9 @@ function applyHook(
 		hook = base ?? nullObject()
 	}
 
-	if (rootHook) mergeHook(hook, rootHook as any, true, true)
+	if (rootHook) mergeHook(hook, rootHook as any)
 
 	return hook
-}
-
-function collectHookOrigins(
-	hook: Partial<AnyLocalHook> | undefined,
-	into: Set<number> | undefined
-): Set<number> | undefined {
-	if (!hook) return into
-
-	for (const key in hook) {
-		if (!eventProperties.has(key)) continue
-
-		const v = (hook as any)[key]
-		if (!v) continue
-
-		if (Array.isArray(v))
-			for (const fn of v) {
-				const origin = fnOrigin.get(fn as Function)
-				if (origin !== undefined) (into ??= new Set()).add(origin)
-			}
-		else {
-			const origin = fnOrigin.get(v as Function)
-			if (origin !== undefined) (into ??= new Set()).add(origin)
-		}
-	}
-
-	return into
-}
-
-function dropHooksByOrigin(
-	hook: Partial<AppHook>,
-	skip: Set<number>
-): Partial<AppHook> {
-	let out = hook
-
-	for (const key in hook) {
-		if (!eventProperties.has(key)) continue
-
-		const v = (hook as any)[key]
-		if (!v) continue
-
-		if (Array.isArray(v)) {
-			let kept: Function[] | undefined
-
-			for (let i = 0; i < v.length; i++) {
-				const fn = v[i] as Function
-				const origin = fnOrigin.get(fn)
-				const keep = origin === undefined || !skip.has(origin)
-
-				if (kept) {
-					if (keep) kept.push(fn)
-				} else if (!keep) {
-					kept = v.slice(0, i) as Function[]
-				}
-			}
-
-			if (kept) {
-				if (out === hook) out = { ...hook }
-				;(out as any)[key] = kept
-			}
-		} else {
-			const origin = fnOrigin.get(v as Function)
-			if (origin !== undefined && skip.has(origin)) {
-				if (out === hook) out = { ...hook }
-				;(out as any)[key] = []
-			}
-		}
-	}
-
-	return out
 }
 
 function promoteDerive(hook: any) {
@@ -437,7 +368,7 @@ export function buildNativeStaticResponse(
 	// reach `compileHandler`, which throws it. A callback's error hooks count
 	const callback =
 		instance !== root
-			? callbackErrors(inheritedChain, root, resolve)
+			? callbackErrors(inheritedChain, appHook, root, resolve)
 			: undefined
 	if (
 		returnedErrorClasses({
@@ -482,26 +413,29 @@ export function composeRouteHook(
 		root
 	)
 
-	// Fold the route-local (macro-applied) `derive` into its OWN beforeHandle
-	// BEFORE merging with inherited chain hooks. Promoting only after the
-	// merge (compileHandler) hoists it in front of the chain's already-folded
-	// `.derive()` entries, so a macro's derive could not see plugin-derived
-	// values (elysiajs/elysia#1958). Clone first: `resolveLocalHook` memoizes
+	// Fold the macro `derive` into beforeHandle before merging with chain hooks
 	if (localHook && (localHook as any).derive !== undefined) {
 		localHook = cloneHook(localHook)
 		promoteDerive(localHook)
 	}
 
-	const flatAppHook = appHook
-		? flattenChainMemo(root, appHook as ChainNode, resolve)
-		: undefined
+	const own = flattenChainInfo(root, appHook as ChainNode, resolve)
+	let skip: ReadonlySet<number> | undefined
+	if (own?.installs && instance !== root) {
+		const outer = flattenChainInfo(root, inheritedChain, resolve)?.installs
+		if (outer && !outer.isDisjointFrom(own.installs)) skip = outer
+	}
 
-	// A hook reaches only the routes registered after it, a parent's after
-	// `.use()` included. The one exception, kept from Elysia 1: a `.group()`
-	// or `.guard()` callback's error hooks cover all its routes
+	const flatAppHook = flattenChainMemo(
+		root,
+		appHook as ChainNode,
+		resolve,
+		skip
+	)
+
 	const callback =
 		instance !== root
-			? callbackErrors(inheritedChain, root, resolve)
+			? callbackErrors(inheritedChain, appHook, root, resolve)
 			: undefined
 
 	const compactPrefix =
@@ -516,12 +450,9 @@ export function composeRouteHook(
 			? compactBeforeHandlePrefix(inheritedChain)
 			: undefined
 
-	let present = collectHookOrigins(localHook, undefined)
-	present = collectHookOrigins(flatAppHook as any, present)
-
 	if (
 		compactPrefix &&
-		!present?.size &&
+		!own?.named &&
 		!compactBeforeHandleConflicts(localHook as any) &&
 		!compactBeforeHandleConflicts(flatAppHook as any)
 	) {
@@ -533,7 +464,7 @@ export function composeRouteHook(
 	}
 
 	// `inherited` is readonly
-	let inherited =
+	const inherited =
 		instance !== root
 			? (flattenChainMemoReadonly(
 					root,
@@ -542,8 +473,13 @@ export function composeRouteHook(
 				) as Partial<AppHook> | undefined)
 			: undefined
 
-	if (inherited && (flatAppHook || localHook) && present?.size)
-		inherited = dropHooksByOrigin(inherited, present)
+	// derive or plain, per occurrence: one function may be both. Read
+	// before the merge, which may write into these lists
+	const deriveEntries = joinDeriveEntries([
+		inherited,
+		flatAppHook,
+		localHook as Partial<AppHook>
+	])
 
 	let hook = applyHook(
 		localHook,
@@ -552,6 +488,8 @@ export function composeRouteHook(
 			? (cloneHook(inherited as any) as Partial<AppHook>)
 			: undefined
 	)
+
+	if (deriveEntries) (hook as any)['~deriveEntries'] = deriveEntries
 
 	if (callback) {
 		hook ??= nullObject() as any
@@ -562,22 +500,52 @@ export function composeRouteHook(
 }
 
 /**
- * Error hooks of the `.group()`/`.guard()` callbacks a route came out of,
+ * Error hooks of the `.group()`/`.guard()` callbacks a route came out of
  * innermost first (see `ChainNode`)
  */
 function callbackErrors(
-	node: ChainNode | undefined,
+	start: ChainNode | undefined,
+	appHook: ChainNode | undefined,
 	root: AnyElysia,
 	resolve: ((node: ChainNode) => Partial<AppHook> | undefined) | undefined
-): Function[] | undefined {
+) {
 	let out: Function[] | undefined
+	// a callback's copy of a named plugin the route already has stays out
+	let outer: ReadonlySet<number> | undefined | null = null
 
-	for (; node && 'combine' in node; node = node.combine)
+	for (let node = start; node && 'combine' in node; node = node.combine)
 		if (node.callback) {
-			const error = flattenChainMemoReadonly(
-				root,
+			if (outer === null)
+				outer = flattenChainInfo(root, start, resolve)?.installs
+			// most callbacks have no error hook
+			if (
+				!flattenChainMemoReadonly(root, node.callback, resolve, outer)
+					?.error
+			)
+				continue
+
+			// every registration the route has inside the callback, a
+			// propagated copy as its original; the callback's own chain is not
+			// the route's
+			const has = new Set<ChainNode>()
+			const collect = (n: ChainNode) => {
+				has.add((n as { registration?: ChainNode }).registration ?? n)
+				return undefined
+			}
+			flattenChain(node.inner, collect)
+			flattenChain(appHook, collect)
+
+			const error = flattenChain(
 				node.callback,
-				resolve
+				(n) =>
+					has.has(
+						(n as { registration?: ChainNode }).registration ?? n
+					)
+						? undefined
+						: resolve
+							? resolve(n)
+							: (n as { added: Partial<AppHook> }).added,
+				outer
 			)?.error
 			if (error) out = ([] as Function[]).concat(error, out ?? [])
 		}
@@ -585,16 +553,10 @@ function callbackErrors(
 	return out
 }
 
-// `own` error hooks, then each callback one not among them
 const withCallbackErrors = (
 	own: Function | Function[] | undefined,
 	callback: Function[]
-) => {
-	const list = ([] as Function[]).concat(own ?? [])
-	for (const fn of callback) if (!list.includes(fn)) list.push(fn)
-
-	return list
-}
+) => ([] as Function[]).concat(own ?? [], callback)
 
 const shapeEvents = [
 	'parse',
@@ -820,6 +782,18 @@ export function routeShape(
 	return unsupported ? undefined : fnv1a(s)
 }
 
+// module level: an arrow built inside `compileHandler` would keep its whole
+// captured scope alive per route
+const throwsOnCall = (error: unknown) => () => {
+	throw error
+}
+
+const htmlBundleHandler = (method: string, path: string) => () => {
+	throw new Error(
+		`[Elysia] ${method} ${path} is an HTML bundle, only Bun's native router serves it`
+	)
+}
+
 const isBareArrow = /^(?:async\s*)?\(\s*\)\s*=>/
 const isSucroseOpaque = /arguments|eval|\[native code\]/
 
@@ -913,17 +887,9 @@ export function compileHandler(
 		handler instanceof Error ||
 		(typeof handler !== 'function' &&
 			errorClasses?.some((C) => handler instanceof (C as any)))
-	) {
-		const error = handler
-		handler = () => {
-			throw error
-		}
-	} else if (isHTMLBundle(handler))
-		handler = () => {
-			throw new Error(
-				`[Elysia] ${method} ${path} is an HTML bundle, only Bun's native router serves it`
-			)
-		}
+	)
+		handler = throwsOnCall(handler)
+	else if (isHTMLBundle(handler)) handler = htmlBundleHandler(method, path)
 
 	// macro `handler` wrappers, latest macro first: fold so it ends outermost
 	const wrappers = hook?.handler as Function[] | undefined
@@ -997,7 +963,9 @@ export function compileHandler(
 				parse: adapter.parse as any,
 				res: adapter.response as any,
 				hook: (hook ?? nullObject()) as any,
-				vali: reconstructed.a!.includes('va')
+				vali: reconstructed.a!.some(
+					(name) => name === 'va' || isResponseParam(name)
+				)
 					? buildValidator()
 					: undefined,
 				cookieConfig: reconstructed.a!.includes('cc')

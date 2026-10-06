@@ -5,13 +5,7 @@ import {
 	isBridgeNotInitialized
 } from '../compile/handler/frozen-validator'
 import { isBridgeLive } from '../type/bridge'
-import {
-	assignOwn,
-	deriveEntryFn,
-	isSocketQuiet,
-	nullObject,
-	type DeriveEntry
-} from '../utils'
+import { assignOwn, isSocketQuiet, nullObject } from '../utils'
 import { frozenRootOf } from '../generation'
 import { sucrose } from '../sucrose'
 import { parseQueryFromURL } from '../parse-query'
@@ -27,6 +21,7 @@ import {
 import {
 	deriveModes,
 	getQueryParseChannels,
+	joinDeriveEntries,
 	replaceDeriveContext
 } from '../compile/handler/utils'
 import {
@@ -79,7 +74,6 @@ import type { AnyElysia } from '../base'
 import type { Context } from '../context'
 import type {
 	AnyWSLocalHook,
-	WSValidatorLike,
 	ServerWebSocket,
 	WebSocketHandler,
 	WSOptions,
@@ -471,14 +465,10 @@ export function buildWSRoute(
 
 	if (live && captured) warnAotDrift('WS', route[1])
 
-	const responseValidator = validators.response as
-		| { [status: number]: WSValidatorLike }
-		| undefined
+	const responseValidator = validators.response
 
-	const defaultResponseValidator = responseValidator
-		? (responseValidator[200] ??
-			responseValidator[Object.keys(responseValidator)[0] as any])
-		: undefined
+	const defaultResponseValidator =
+		responseValidator?.get(200) ?? responseValidator?.values().next().value
 
 	const cookieIsOptional = !!(composed.cookie as any)?.['~optional']
 
@@ -513,22 +503,19 @@ export function buildWSRoute(
 		hook.beforeHandle as any
 	)
 
-	const deriveEntries = concatHooks(
-		(flatAppHook as any)['~deriveEntries'],
-		(hook as any)['~deriveEntries']
-	) as unknown as DeriveEntry[]
-
-	const deriveSet = deriveEntries.length
-		? new Set<Function>(deriveEntries.map(deriveEntryFn))
-		: undefined
-
 	const upgradeDeriveModes = deriveModes(
 		allBeforeHandles as unknown as Function[],
-		deriveEntries
+		joinDeriveEntries([flatAppHook, hook as Partial<AppHook>]) ??
+			concatHooks(
+				(flatAppHook as any)['~deriveEntries'],
+				(hook as any)['~deriveEntries']
+			)
 	)
 
+	// a derive runs at the upgrade only; a plain occurrence of the same
+	// function still runs per message
 	const messageBeforeHandles: readonly AnyFn[] = allBeforeHandles.filter(
-		(fn) => !deriveSet?.has(fn as Function)
+		(_, i) => upgradeDeriveModes?.[i] === undefined
 	)
 
 	const afterHandles = concatHooks(

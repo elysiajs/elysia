@@ -16,8 +16,16 @@ export const app = new Elysia()
 				400: 'Failure'
 			}
 		},
-		({ query }) => {
+		({ query, set }) => {
 			const mode = (query as Record<string, unknown>).mode
+			if (mode === 'named-400') {
+				set.status = 'Bad Request'
+				return { error: 'bad request', leak: 'secret' } as never
+			}
+			if (mode === 'named-invalid-400') {
+				set.status = 'Bad Request'
+				return { error: 400 } as never
+			}
 			if (mode === 'valid-400')
 				return status(400, { error: 'bad request' })
 			if (mode === 'invalid-400')

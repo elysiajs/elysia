@@ -14,6 +14,7 @@ import {
 	signCookieValues
 } from '../../cookie/utils'
 import { requestId } from '../../utils'
+import { StatusMap } from '../../constants'
 import { adoptErrorType, fallbackResponse } from '../../handler/error'
 import {
 	drainDisposables,
@@ -83,6 +84,7 @@ const handlerParams = (): Record<string, Resolver | undefined> =>
 	pq: () => parseQueryFromURL,
 	pe: () => ParseError,
 	es: () => ElysiaStatus,
+	sm: () => StatusMap,
 	rdc: () => replaceDeriveContext,
 	dsp: () => registerDeriveDisposable,
 	dds: () => drainDisposables,
@@ -134,6 +136,11 @@ const handlerParams = (): Record<string, Resolver | undefined> =>
 	cc: (c) => c.cookieConfig
 	})
 
+/**
+ * `vs<i>` / `vr<i>`: status and validator of the route's i-th declared response
+ */
+export const isResponseParam = (name: string) => /^v[rs]\d+$/.test(name)
+
 export function resolveHandlerParams(names: string[], c: HandlerParamContext) {
 	const length = names.length
 	if (!length) return []
@@ -142,13 +149,19 @@ export function resolveHandlerParams(names: string[], c: HandlerParamContext) {
 	const params = handlerParams()
 
 	for (let i = 0; i < length; i++) {
-		const resolve = params[names[i]!]
-		if (!resolve)
+		const name = names[i]!
+		// a response param missing its entry fails the replay instead of
+		// skipping validation: no resolver has its name
+		const entry =
+			isResponseParam(name) &&
+			[...((c.vali as any)?.response ?? [])][+name.slice(2)]
+		const resolve = params[name]
+		if (!entry && !resolve)
 			throw new Error(
-				`[elysia-aot]: Fail to reconstruct build, missing "${names[i]}" param`
+				`[elysia-aot]: Fail to reconstruct build, missing "${name}" param`
 			)
 
-		out[i] = resolve(c)
+		out[i] = entry ? entry[name[1] === 's' ? 0 : 1] : resolve!(c)
 	}
 
 	return out

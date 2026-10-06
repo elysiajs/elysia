@@ -17,7 +17,11 @@ import type {
 	MacroTypeLambda
 } from './types'
 
-export type DeriveEntry = Function | readonly [Function, 'mapDerive']
+// `beforeHandle` marks an occurrence of a derived function that runs as a
+// plain hook, so later derive occurrences of it keep their role
+export type DeriveEntry =
+	| Function
+	| readonly [Function, 'mapDerive' | 'beforeHandle']
 
 export const nullObject = () => Object.create(null)
 export const mapDeriveEntry = (fn: Function): DeriveEntry => [fn, 'mapDerive']
@@ -27,6 +31,40 @@ export const deriveEntryFn = (entry: DeriveEntry) =>
 
 export const isMapDeriveEntry = (entry: DeriveEntry) =>
 	Array.isArray(entry) && entry[1] === 'mapDerive'
+
+export const isPlainDeriveEntry = (entry: DeriveEntry) =>
+	Array.isArray(entry) && entry[1] === 'beforeHandle'
+
+/**
+ * `~deriveEntries` for `hooks` whose role per occurrence is `at` (an entry
+ * for a derive, undefined for a plain hook). `deriveModes` gives each
+ * function's entries to its occurrences in order, so a plain occurrence
+ * before a derive of the same function gets a placeholder
+ */
+export function occurrenceDeriveEntries(
+	hooks: readonly Function[],
+	at: readonly (DeriveEntry | undefined)[]
+): DeriveEntry[] {
+	const derived = new Set<Function>()
+	const entries: DeriveEntry[] = []
+
+	// backwards: a plain occurrence needs a placeholder only before a derive
+	for (let i = hooks.length; i--; ) {
+		const entry = at[i]
+		if (entry !== undefined) {
+			entries.push(entry)
+			derived.add(hooks[i]!)
+		} else if (derived.has(hooks[i]!))
+			entries.push([hooks[i]!, 'beforeHandle'])
+	}
+
+	// callers pass at least one entry
+	return entries.reverse()
+}
+
+/** Each function's derive entries, in occurrence order */
+export const deriveQueues = (entries: readonly DeriveEntry[] | undefined) =>
+	entries && Map.groupBy(entries, deriveEntryFn)
 
 export function isEmpty<T extends Object>(obj: T) {
 	for (const _ in obj) return false
@@ -65,6 +103,23 @@ export function fnv1a(str: string): number {
 	return hash >>> 0
 }
 
+/**
+ * 48-bit hash of a named plugin's key (fnv1a + 16 bits of a second hash): at
+ * 32 bits two plugins collide by ~77k and the second is dropped. 48 keeps
+ * `origin * 16 + slot` exact
+ */
+export function pluginHash(str: string): number {
+	let mix = 0x9e3779b9
+	const len = str.length
+
+	for (let i = 0; i < len; i++) {
+		mix = Math.imul(mix ^ str.charCodeAt(i), 0x5bd1e995)
+		mix ^= mix >>> 15
+	}
+
+	return (mix >>> 16) * 0x100000000 + fnv1a(str)
+}
+
 // keys whose members all apply; frozen so a plugin can't unsign cookies
 export const compositionKeys: readonly string[] = Object.freeze([
 	'allOf',
@@ -99,17 +154,6 @@ export function refTargets(
 
 	return (name) => targets[name] ?? []
 }
-
-/**
- * Maps each lifecycle/derive function to the hash of the named plugin it was
- * first registered on. Used by `.use()` to dedup absorbed hooks: if a fn's
- * origin is already in `parent.#apps`, the parent has already absorbed that
- * named plugin via another path and should skip re-adding the fn.
- *
- * Anonymous plugins (no name) don't tag their fns - there's no hash to dedup
- * by, so their fns always propagate.
- */
-export const fnOrigin = new WeakMap<Function, number>()
 
 // Macro-definition provenance: def → hash of the named plugin that registered
 // to prevent collisions
@@ -175,11 +219,19 @@ export type ChainNode =
 			propagated?: boolean
 			// Instance this node was registered on
 			owner?: object
+			// Hash of the named plugin this registration belongs to: the
+			// registering instance, else the first named plugin it passed
+			// through (Elysia 1 `checksum`)
+			origin?: number
+			// Node a propagated one copies: the registration itself
+			registration?: ChainNode
 	  }
 	| {
 			combine: ChainNode | undefined
 			over: ChainNode | undefined
 			callback?: ChainNode
+			// the route's chain inside `callback`, the parent's left out
+			inner?: ChainNode
 			refs: boolean
 	  }
 
@@ -309,15 +361,38 @@ export function compactBeforeHandlePrefix(start: ChainNode | undefined) {
 const flattenNodeStack: ChainNode[] = []
 const flattenPhaseStack: number[] = []
 
+// A chain entry installs one plugin's lifecycle event, as the pair
+// `origin * 16 + slot`; a slot is the event's index in `lifecycleEvents`
+// (Elysia 1 compares checksums per event array). `derive` lowers into
+// `beforeHandle` but is its own lifecycle; schemas never deduplicate
+const deriveSlot = 15
+
+const withLayer = (outer: ReadonlySet<number> | undefined, layer: number[]) =>
+	new Set([...(outer ?? []), ...layer])
+
+export interface ChainInfo {
+	// `(plugin, lifecycle)` pairs the chain installs
+	installs?: ReadonlySet<number>
+	// any registration belongs to a named plugin
+	named?: true
+}
+
 /**
  * Walk the chain tail-first into a fresh `Partial<AppHook>`
+ *
+ * Each instance chain a combine node links is one layer, outermost first.
+ * A named plugin's hook is skipped when an outer layer, or `skip`, already
+ * installed that plugin's same lifecycle event: it runs once, at its
+ * outermost position. Within a layer every registration stays
  *
  * Explicit-stack walk (no recursion) so it works uniformly for linear
  * chains and combine nodes without risking stack overflow on deep chains
  */
 export function flattenChain(
 	start: ChainNode | undefined,
-	resolveAdded?: (node: ChainNode) => Partial<AppHook> | undefined
+	resolveAdded?: (node: ChainNode) => Partial<AppHook> | undefined,
+	skip?: ReadonlySet<number>,
+	info?: ChainInfo
 ): Partial<AppHook> | undefined {
 	if (!start) return
 	const result = nullObject() as Partial<AppHook>
@@ -330,34 +405,88 @@ export function flattenChain(
 	nodes.push(start)
 	phases.push(0)
 
+	// installed by the outer layers, by the current one
+	let outer = skip
+	let layer: number[] | undefined
+	// derive entry of each `beforeHandle` occurrence, once one is a derive
+	let roles: (DeriveEntry | undefined)[] | undefined
+
 	while (nodes.length) {
 		const node = nodes.pop()!
 		const phase = phases.pop()!
 
+		// end of a layer: it is outer to the rest
+		if (phase === 2) {
+			if (layer?.length) {
+				outer = withLayer(outer, layer)
+				layer.length = 0
+			}
+
+			continue
+		}
+
 		if (phase === 1) {
+			// only a registration node gets here, never a combine one
+			const { origin, propagated, scope } = node as Extract<
+				ChainNode,
+				{ added: unknown }
+			>
+			if (info && origin !== undefined) info.named = true
+
 			const added = resolveAdded
 				? resolveAdded(node)
 				: (node as { added: Partial<AppHook> }).added
 
-			// hooks lifted out of a `.group()`/`.guard()` callback: its error
-			// hooks stay inside, also one a macro resolved here brings
-			const lifted =
-				(node as { propagated?: boolean }).propagated &&
-				(node as { owner?: { '~scopeChild'?: boolean } }).owner?.[
-					'~scopeChild'
+			const base =
+				origin !== undefined &&
+				(propagated || scope === 'plugin' || scope === 'global')
+					? origin * 16
+					: undefined
+
+			const derives = deriveQueues(
+				(added as { '~deriveEntries'?: DeriveEntry[] })?.[
+					'~deriveEntries'
 				]
+			)
 
 			if (added)
 				for (const key in added) {
 					const v = (added as any)[key]
-					if (v === undefined || v === null) continue
-					if (lifted && key === 'error') continue
+					// `~deriveEntries` is rebuilt per occurrence below
+					if (v == null || key === '~deriveEntries') continue
 
-					if (
-						eventProperties.has(key) ||
-						key === 'schemas' ||
-						key === '~deriveEntries'
-					) {
+					const slot = lifecycleEvents.indexOf(key)
+
+					if (key === 'beforeHandle') {
+						for (const fn of Array.isArray(v) ? v : [v]) {
+							const entry = derives?.get(fn)?.shift()
+
+							if (base !== undefined) {
+								const pair =
+									base +
+									(entry === undefined ? slot : deriveSlot)
+								if (outer?.has(pair)) continue
+								;(layer ??= []).push(pair)
+							}
+
+							const list = (result.beforeHandle ??=
+								[]) as Function[]
+							if (entry !== undefined)
+								(roles ??= [])[list.length] = entry
+							list.push(fn)
+						}
+
+						continue
+					}
+
+					if (base !== undefined && slot !== -1) {
+						if (outer?.has(base + slot)) continue
+						// no hook, no installation
+						if (!Array.isArray(v) || v.length)
+							(layer ??= []).push(base + slot)
+					}
+
+					if (slot !== -1 || key === 'schemas') {
 						const existing = (result as any)[key]
 
 						if (Array.isArray(v)) {
@@ -380,6 +509,8 @@ export function flattenChain(
 			}
 
 			if (node.over) {
+				nodes.push(node)
+				phases.push(2)
 				nodes.push(node.over)
 				phases.push(0)
 			}
@@ -393,6 +524,14 @@ export function flattenChain(
 			}
 		}
 	}
+
+	if (info) info.installs = layer?.length ? withLayer(outer, layer) : outer
+
+	if (roles)
+		(result as any)['~deriveEntries'] = occurrenceDeriveEntries(
+			result.beforeHandle as Function[],
+			roles
+		)
 
 	if (isNotEmpty(result)) return result
 }
@@ -411,10 +550,14 @@ export const invalidateMacroEpoch = () => {
 	macroTableEpoch++
 }
 
-const flattenChainMemos = new WeakMap<
-	object,
-	{ e: number; per: WeakMap<ChainNode, Partial<AppHook>> }
->()
+interface FlattenMemo {
+	e: number
+	per: WeakMap<ChainNode, Partial<AppHook>>
+	info: WeakMap<ChainNode, ChainInfo>
+	skipped?: WeakMap<ChainNode, WeakMap<object, Partial<AppHook>>>
+}
+
+const flattenChainMemos = new WeakMap<object, FlattenMemo>()
 
 /** Drop this root's flattened-chain memo. Recomputable on next compile. */
 export function clearFlattenChainMemo(root: object) {
@@ -423,38 +566,70 @@ export function clearFlattenChainMemo(root: object) {
 
 const emptyFlatten = Object.freeze(nullObject()) as Partial<AppHook>
 
-export function flattenChainMemoReadonly(
-	root: object,
-	start: ChainNode | undefined,
-	resolveAdded?: (node: ChainNode) => Partial<AppHook> | undefined
-): Partial<AppHook> | undefined {
-	if (!start) return
-
+function flattenMemoOf(root: object) {
 	let bucket = flattenChainMemos.get(root)
 	if (!bucket || bucket.e !== macroTableEpoch) {
-		bucket = { e: macroTableEpoch, per: new WeakMap() }
+		bucket = { e: macroTableEpoch, per: new WeakMap(), info: new WeakMap() }
 		flattenChainMemos.set(root, bucket)
 	}
 
-	const perRoot = bucket.per
+	return bucket
+}
 
-	let cached = perRoot.get(start)
-	if (cached === undefined) {
-		cached = flattenChain(start, resolveAdded) ?? emptyFlatten
-		perRoot.set(start, cached)
+/** What the chain installs, see {@link flattenChain} */
+export function flattenChainInfo(
+	root: object,
+	start: ChainNode | undefined,
+	resolveAdded?: (node: ChainNode) => Partial<AppHook> | undefined
+): ChainInfo | undefined {
+	if (!start) return
+
+	// the bucket from before resolving: a macro may move the epoch on
+	const bucket = flattenMemoOf(root)
+	flattenChainMemoReadonly(root, start, resolveAdded)
+
+	// none kept for a chain without a named plugin
+	return bucket.info.get(start)
+}
+
+export function flattenChainMemoReadonly(
+	root: object,
+	start: ChainNode | undefined,
+	resolveAdded?: (node: ChainNode) => Partial<AppHook> | undefined,
+	skip?: ReadonlySet<number>
+): Partial<AppHook> | undefined {
+	if (!start) return
+
+	const bucket = flattenMemoOf(root)
+
+	// a flatten that skips is memoized per skip set
+	let memo: WeakMap<object, Partial<AppHook>> = bucket.per
+	if (skip) {
+		const skipped = (bucket.skipped ??= new WeakMap())
+		memo = skipped.get(start)!
+		if (!memo) skipped.set(start, (memo = new WeakMap()))
 	}
 
-	if (cached === emptyFlatten) return
+	let cached = memo.get(skip ?? start)
+	if (cached === undefined) {
+		// what the chain itself installs, not a skipping flatten
+		const info: ChainInfo | undefined = skip ? undefined : {}
+		cached = flattenChain(start, resolveAdded, skip, info) ?? emptyFlatten
+		memo.set(skip ?? start, cached)
 
-	return cached
+		if (info?.named) bucket.info.set(start, info)
+	}
+
+	if (cached !== emptyFlatten) return cached
 }
 
 export function flattenChainMemo(
 	root: object,
 	start: ChainNode | undefined,
-	resolveAdded?: (node: ChainNode) => Partial<AppHook> | undefined
+	resolveAdded?: (node: ChainNode) => Partial<AppHook> | undefined,
+	skip?: ReadonlySet<number>
 ): Partial<AppHook> | undefined {
-	const cached = flattenChainMemoReadonly(root, start, resolveAdded)
+	const cached = flattenChainMemoReadonly(root, start, resolveAdded, skip)
 	if (cached) return cloneHook(cached)
 }
 
@@ -797,38 +972,6 @@ export function mergeArray<
 	return [a, b] as any
 }
 
-/**
- * Like {@link mergeArray} but drops entries from `a` that already appear in
- * `b` by reference. Always allocates fresh arrays - never mutates inputs.
- *
- * Used at the compile-time merge of a route's snapshotted `appHook` with the
- * root's current `rootHook`: the same fn can sit on both sides because
- * `.use()` propagates global/plugin-scoped hooks into the parent, while the
- * route's `appHook` was captured on the child and still holds the original.
- * The fn must run once, in `b`'s position.
- */
-function dedupedMergeArray<
-	A extends MaybeArray<unknown> | undefined,
-	B extends MaybeArray<unknown> | undefined
->(
-	a: A,
-	b: B,
-	reverse = false
-): (A extends unknown[] ? A : []) | (B extends unknown[] ? B : []) {
-	if (!a) return (Array.isArray(b) ? (b as unknown[]).slice() : b) as any
-	if (!b) return (Array.isArray(a) ? (a as unknown[]).slice() : a) as any
-
-	const aArr = (Array.isArray(a) ? a : [a]) as unknown[]
-	const bArr = (Array.isArray(b) ? b : [b]) as unknown[]
-
-	const seen = new Set(bArr)
-	const filtered: unknown[] = []
-	for (let i = 0; i < aArr.length; i++)
-		if (!seen.has(aArr[i])) filtered.push(aArr[i])
-
-	return (reverse ? bArr.concat(filtered) : filtered.concat(bArr)) as any
-}
-
 const hookSchemaKeys = [
 	'body',
 	'headers',
@@ -852,7 +995,8 @@ const hookEventKeys = [
 	'trace'
 ] as const
 
-export const eventProperties = new Set([
+// an event's index is its slot in `flattenChain`
+const lifecycleEvents = [
 	'start',
 	'stop',
 	'trace',
@@ -864,7 +1008,9 @@ export const eventProperties = new Set([
 	'mapResponse',
 	'afterResponse',
 	'error'
-])
+]
+
+export const eventProperties = new Set(lifecycleEvents)
 
 export function hookToGuard(
 	a: Partial<AppHook & Macro> & {
@@ -928,15 +1074,11 @@ export function coalesceSchemas(existing: any[], incoming: any[]) {
 
 export function mergeHook(
 	a: Partial<AppHook>,
-	b: Partial<AppHook> | undefined,
-	reverse = false,
-	dedup = false
+	b: Partial<AppHook> | undefined
 ): Partial<AppHook> {
 	if (!b) return a
 	// b is undefined but it's shorter this way
 	if (!a) return b
-
-	const merge = (dedup ? dedupedMergeArray : mergeArray) as typeof mergeArray
 
 	for (const key of hookSchemaKeys)
 		if (!a[key] && b[key]) a[key] = b[key] as any
@@ -945,15 +1087,15 @@ export function mergeHook(
 
 	for (const key of hookEventKeys)
 		if ((a as any)[key] || (b as any)[key])
-			(a as any)[key] = merge((a as any)[key], (b as any)[key], reverse)
+			(a as any)[key] = mergeArray((a as any)[key], (b as any)[key], true)
 
 	if (a.schemas || b.schemas)
-		a.schemas = mergeArray(a.schemas, b.schemas, reverse) as any
+		a.schemas = mergeArray(a.schemas, b.schemas, true) as any
 
 	const aDerive = (a as any)['~deriveEntries']
 	const bDerive = (b as any)['~deriveEntries']
 	if (aDerive || bDerive)
-		(a as any)['~deriveEntries'] = mergeArray(aDerive, bDerive, reverse)
+		(a as any)['~deriveEntries'] = mergeArray(aDerive, bDerive, true)
 
 	return a
 }
@@ -1157,18 +1299,6 @@ export function joinPath(base: string, path: string) {
 	return base + path
 }
 
-export function pushField<K extends keyof any>(
-	target: Record<K, unknown>,
-	key: K,
-	item: unknown
-) {
-	const v = target[key]
-	if (v) {
-		if (Array.isArray(v)) (target[key] as unknown[]).push(item)
-		else target[key] = [v, item]
-	} else target[key] = item
-}
-
 export const requestId = isBun
 	? Bun.randomUUIDv7
 	: crypto.randomUUID.bind(crypto)
@@ -1201,27 +1331,66 @@ export function isPlainObject(v: unknown): v is Record<string, unknown> {
 
 export function clonePlainDecorators<T extends Record<string, unknown>>(
 	source: T,
-	seen?: WeakMap<object, any>
+	seen = new WeakMap<object, any>()
 ): T {
-	if (seen !== undefined) {
-		const existing = seen.get(source)
-		if (existing) return existing
-	}
+	const existing = seen.get(source)
+	if (existing) return existing
 
-	const out: Record<string, unknown> = nullObject()
-	if (seen !== undefined) seen.set(source, out)
+	const out: Record<PropertyKey, unknown> = nullObject()
+	seen.set(source, out)
 
-	for (const key in source) {
-		const value = source[key]
+	// `for..in`: inherited keys included, one an earlier getter deletes skipped
+	for (const key in source) copyKey(source, out, key, seen)
 
-		if (isPlainObject(value)) {
-			if (seen === undefined) (seen = new WeakMap()).set(source, out)
+	// then the own keys it skips (symbol or non-enumerable), best effort: a
+	// getter that throws on one skips the key, not the `.use()`
+	const own = Reflect.ownKeys(source)
+	if (own.length !== Object.keys(source).length)
+		for (const key of own) {
+			const descriptor = Object.getOwnPropertyDescriptor(source, key)
+			if (
+				!descriptor ||
+				(descriptor.enumerable && typeof key === 'string')
+			)
+				continue
 
-			out[key] = clonePlainDecorators(value, seen)
-		} else out[key] = value
-	}
+			try {
+				copyKey(source, out, key, seen, descriptor)
+			} catch {}
+		}
+
+	if (!Object.isExtensible(source)) Object.preventExtensions(out)
 
 	return out as T
+}
+
+const copyKey = (
+	source: object,
+	out: Record<PropertyKey, unknown>,
+	key: PropertyKey,
+	seen: WeakMap<object, any>,
+	descriptor = Object.getOwnPropertyDescriptor(source, key)
+) => {
+	// a getter runs once, here: the copy keeps what it returned
+	let value = (source as any)[key]
+	if (isPlainObject(value)) value = clonePlainDecorators(value, seen)
+
+	// `out` has no prototype, so assigning a key defines it
+	// only a read-only, hidden or non-configurable need to be spelled out
+	if (
+		!descriptor ||
+		(descriptor.writable !== false &&
+			descriptor.enumerable &&
+			descriptor.configurable)
+	)
+		out[key] = value
+	else
+		Object.defineProperty(out, key, {
+			value,
+			writable: descriptor.writable ?? true,
+			enumerable: descriptor.enumerable,
+			configurable: descriptor.configurable
+		})
 }
 
 function prefix<T extends string, Models extends Record<string, AnySchema>>(
@@ -1306,27 +1475,68 @@ export const isDisposable = (value: any) => {
 const singletons = new WeakSet<object>()
 export const isSingleton = (value: object) => singletons.has(value)
 
-export const markSingletons = (
-	value: unknown,
-	depth = 4,
-	seen = new Set<object>()
-) => {
+function pushHeld(object: object, into: object[], seen: Set<object>) {
+	if (ArrayBuffer.isView(object)) return
+
+	let all = false
+	try {
+		all =
+			typeof object !== 'function' &&
+			object !== globalThis &&
+			!(object instanceof Error)
+	} catch {}
+
+	try {
+		const keys = all
+			? Reflect.ownKeys(object)
+			: [...Object.keys(object), ...Object.getOwnPropertySymbols(object)]
+
+		for (const key of keys) {
+			const descriptor = Object.getOwnPropertyDescriptor(object, key)
+			if (descriptor && 'value' in descriptor)
+				enqueue(descriptor.value, into, seen)
+		}
+	} catch {}
+}
+
+// mark and queue `value` once, however many paths reach it
+function enqueue(value: unknown, into: object[], seen: Set<object>) {
 	if (value == null) return
+
 	const kind = typeof value
 	if (kind !== 'object' && kind !== 'function') return
 
 	const object = value as object
 	if (seen.has(object)) return
+
 	seen.add(object)
 	singletons.add(object)
+	into.push(object)
+}
 
-	if (depth <= 0) return
+function markLevels(level: object[], depth: number, seen: Set<object>) {
+	while (level.length && depth > 0) {
+		const next: object[] = []
+		for (const object of level) pushHeld(object, next, seen)
 
-	for (const key of Object.keys(object)) {
-		const descriptor = Object.getOwnPropertyDescriptor(object, key)
-		if (descriptor && 'value' in descriptor)
-			markSingletons(descriptor.value, depth - 1, seen)
+		level = next
+		depth--
 	}
+}
+
+export const markSingletons = (value: unknown, depth = 4) => {
+	const seen = new Set<object>()
+	const level: object[] = []
+	enqueue(value, level, seen)
+	markLevels(level, depth, seen)
+}
+
+// `markSingletons` on each value `object` holds
+export const markPropertySingletons = (object: object) => {
+	const seen = new Set<object>()
+	const level: object[] = []
+	pushHeld(object, level, seen)
+	markLevels(level, 4, seen)
 }
 
 export const isSocketQuiet = (socket: {

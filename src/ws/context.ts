@@ -187,7 +187,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		const status = data instanceof ElysiaStatus ? data : undefined
 		const v: WSValidatorLike | undefined =
 			validators &&
-			(status ? validators[status.status] : defaultValidator)
+			(status ? validators.get(+status.status) : defaultValidator)
 		let value = status ? status.response : data
 
 		if (v) {

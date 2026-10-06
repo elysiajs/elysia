@@ -54,12 +54,13 @@ Breaking Change:
 - AOT plugin `transform` hook and the rspack loader are now synchronous
 - AOT: `compileToSource` / `captureArtifacts` drop the `register` option and always emit the self-registering manifest (the `export const validators` / `handlers` / `groups` / `groupOf` / default-export form is gone)
 - AOT: remove `CompiledProgramRegistration.bf` and the `Compiled.reconstruct` getter (the setter stays)
-- AOT manifest format is now 6: an artifact built before this change is rejected at startup with `[elysia-aot] Mismatch fingerprint`; rebuild it
+- AOT manifest format is now 7: an artifact built before this change is rejected at startup with `[elysia-aot] Mismatch fingerprint`; rebuild it
 - remove `ElysiaConfig.handler` (`handler.standardHostname` was ignored; the path is taken from the request URL)
 - `.mount()` no longer takes a `{ detail }` argument; a mounted route is always `detail: { hide: true }`
 - remove the `NonResolvableMacroKey` type
 - remove `fallbackRequestId` from `elysia/utils`; `requestId` is `Bun.randomUUIDv7` on Bun and `crypto.randomUUID` elsewhere
 - `WSCapability.accumulateOptions(target, routeOptions)` drops its unused `path` parameter
+- `WSResponseValidator` (`elysia/ws/types`) is now a `Map<number, WSValidatorLike>` keyed by numeric status instead of an object indexed by status
 - `app.handler()` drops its unused 4th `precomputedStatic` parameter: `handler(index, immediate?, route?, aliases?, table?)`
 - remove the `ElysiaFile#length` getter (never read); read `value.size` on Bun (`value` is the `BunFile`) or `(await stats).size` elsewhere
 - `pushField` from `elysia/utils` drops its unused 4th `defaultArray` parameter
@@ -121,6 +122,15 @@ Behavior Change:
 - synchronous Standard Schema validators no longer force async route emission
 - Bun native static-route `Response` objects are no longer retained on the base Elysia instance during router build
 - `.decorate()` values are not disposed on `stop()`, the app does not own values it was handed; release them with `.cleanup()`
+- a `.group()` / `.guard()` callback keeps its hooks, schemas and `derive` to the routes it produces: a `plugin` or `global` hook registered or `.use()`d inside no longer reaches the parent's later routes or sibling callbacks; only `request` hooks run app-wide. This matches 1.x, except that 1.x also let a callback's `mapResponse` reach the parent
+- a named plugin `.use()`d inside a `.group()` / `.guard()` callback is installed again by a later `.use()` outside it (its routes at that path, its hooks on later routes), as in 1.x; `app.has(plugin)` is `false` for a plugin used only inside a callback. Unlike 1.x, a named plugin's `request` hook runs once per app however many callbacks and `.use()` calls bring it (1.x added it again for each callback)
+- a named plugin's identity is its `name` plus its serialized `seed`: a falsy `seed` (`0`, `''`, `false`, `null`) is a seed, `{ name: 'a_1' }` is not `{ name: 'a', seed: 1 }`, and `seed: '1'` is not `seed: 1`. This matches 1.x except for `seed: ''`, which 1.x treated as no seed
+- named plugin identity is computed differently from earlier 2.0 builds: an app that mixes Elysia copies from before and after this change can install a shared named plugin twice; dedupe dependencies to one Elysia copy (or rebuild the ones that bundle their own)
+- a hook function registered more than once runs each time, as in 1.x: two macros (or a macro and the route) returning one function, or one `error` hook registered twice in a `.group()` / `.guard()` callback. Unlike 1.x, a callback `error` hook the route already has (registered before it) runs once, not again for the callback
+- `.wrap()` is deduplicated per plugin, as in 1.x: one wrap function registered by two named plugins wraps twice, while one plugin, or one unnamed plugin's wrap, reached through several `.use()` paths wraps once. Wraps are compared by function, where 1.x compared their source text
+- `.state(key, object)` on a key inherited from a plugin merges into that shared object, so the plugin and its other consumers see the merged keys (unchanged from 1.x: the store is shared state)
+- a named plugin's hooks run once per route at the position of its outermost `.use()`, as in 1.x: a named plugin `.use()`d by both an app and one of its plugins ran its hooks twice on routes inside that plugin's `.group()` / `.guard()` callbacks, and late on its other routes. An unnamed plugin `.use()`d at two levels runs its hooks at each, as in 1.x
+- a `.group()` / `.guard()` callback shares the parent's `decorate`, `state`, `model`, `headers` and `parser` tables instead of copying them: a write inside the callback reaches the parent at once and stays if the callback throws. 1.x shared `decorate`, `state` and `model` this way; sharing `headers` and `parser` too is new. Writing through a callback instance kept past its callback throws the same error as the app once the app is sealed (first request, `listen` or `compile`)
 
 Improvement:
 - `t.File({ type })` / `t.Files({ type })` content-detection failures now report the offending property path (`property: '/avatar'`, `/files/0`) instead of an empty path — the validated value is identity-walked only when a detection fails
@@ -134,6 +144,10 @@ Improvement:
 - generator / SSE streams enqueue synchronously, with a Promise only for a `Blob` chunk (−25% allocation, −6.5% server CPU per 10-event SSE request)
 - `listen()` loads the TypeBox graph asynchronously, overlapping async plugins, once the app has used `t` (time to first response −31% for a 100-schema-route app); apps that never touch `t` still do not load TypeBox
 - signed-cookie HMAC on Bun copies a keyed hasher per secret instead of re-keying per sign/verify (signed-cookie route −5%)
+- a `.group()` / `.guard()` callback no longer copies the parent's `model` / `decorate` / `state` tables: 1000 callbacks over 800 models build in 3 ms instead of 43 ms and retain 1.1 MB instead of 34 MB
+- a route whose handler reads `set`, and every route of an app that calls `.headers()`, retains 276 B after its first request instead of about 1 KB (its handler no longer keeps the compiler's scope alive)
+- an app whose named plugins reach routes through several paths compiles faster (a 4,000-route bench: 290 ms to 190 ms)
+- a route's response validators are bound per declared status when it compiles instead of kept in an object keyed by status, which JSC sizes to the largest status: −2.8 KB retained per route with a response schema, −5.4 KB with a `{ 200, 404 }` map or under a shared `{ 401, 403 }` guard, and −5 to −28 ns per request
 - [Type] `.macro()` definitions infer each macro's schema from the definition record instead of five reverse-mapped channels: ~8.7k fewer instantiations per macro (repo type benchmark −13%)
 - an `.error()` hook no longer disqualifies static-literal `GET` routes from Bun native static promotion: those routes are now promoted even when a global or route-local `.error()` hook exists, because no user code runs on a promoted route and the hook can therefore never fire for it. `afterResponse`, `mapResponse`, `parse`, `transform`, schemas, `trace` and every other hook still keep the route on the JS lane. Since Bun's native static table now serves more routes, be aware that a promoted route answers `HEAD` (200) and conditional `GET` (`If-None-Match` matching Bun's `etag` -> 304) natively, without reaching the JS lane or your `.error()` hook (see Known issue)
 
@@ -182,6 +196,13 @@ Bug fix:
 - `stop(true)` hung on a `setup()` that never settles; it now abandons it like a pending async plugin (a failed startup still waits for every started setup before cleanup). Until the abandoned setup settles, `listen()` on the same app throws, a late `.cleanup()` from it throws, and its late failure is reported with `console.error`
 - a static `file()` value (or an `ElysiaFile` subclass) was served as JSON `{"path":"…"}`, disclosing its absolute server path, when the route had an `afterHandle` / `mapResponse` hook and the file was not prepared at startup (any non-Bun runtime, or a route with a `response` schema); it is now served as the file
 - a static `status(code, value)` route with a string, number or boolean `value` was served as `application/octet-stream` on Bun whenever a hook wrote `set.headers` or a cookie; it now gets `text/plain;charset=utf-8` like the same value returned from a function
+- a named `set.status` (`set.status = 'Created'`) skipped response validation and redaction, so the body was sent with the fields its schema removes; a handler's response is now validated by the schema of the code it is sent with, on the JIT, `.compile()` and AOT replay (a response produced by an `.error()` hook is still not validated, as before)
+- a shared resource returned by a `derive` was disposed after every request when it sat in a `decorate` / `state` object under a symbol key or a non-enumerable property (of a plain object or a class instance), was a symbol-keyed decorator, was reached first through a deeper path, or was put there after registration; the tables are now marked again when the app is sealed and the walk covers those keys. Elysia never calls a getter to decide what is shared, so a root-level resource reached only through a getter is still disposed: hold it in a data property
+- a plugin's `decorate` values lost their symbol and non-enumerable keys, and their read-only / frozen state, in every app that `.use()`d the plugin; the per-app copy now keeps them (a plugin getter is still read once at `.use()`)
+- decorating a `Buffer`, typed array or `DataView` walked every byte, at `.decorate()` and again on the first request (a 1 MB `Buffer`: about 0.5 s and 250 MB); views are no longer walked, so a resource stored as a property of a view is not recognized as shared
+- a plain-object `decorate` value with its own `Symbol.toStringTag` lost its identity and `Symbol.dispose` each time a `.group()` / `.guard()` callback was absorbed
+- a failed router build left the app marked as built, so a retry answered 404 for every route
+- many `.group()` / `.guard()` callbacks that each `.use()` a plugin with many `global` hooks overflowed the stack at compile (`Maximum call stack size exceeded`); those hooks now stay inside each callback
 
 Chore:
 - declare the minimum supported Node.js version (`engines.node`) and test it in CI

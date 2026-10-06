@@ -2,7 +2,10 @@ import { isAsyncFunction } from '../utils'
 import {
 	assignOwn,
 	deriveEntryFn,
+	deriveQueues,
 	isMapDeriveEntry,
+	isPlainDeriveEntry,
+	occurrenceDeriveEntries,
 	type CompactBeforeHandleChunk,
 	type CompactBeforeHandlePrefix,
 	type DeriveEntry
@@ -267,35 +270,83 @@ export function deriveModes(
 	hooks: Function[],
 	entries?: readonly DeriveEntry[]
 ) {
-	let queues: Map<Function, boolean[]> | undefined
-	if (entries?.length) {
-		queues = new Map<Function, boolean[]>()
-
-		for (let i = 0; i < entries.length; i++) {
-			const entry = entries[i]
-			const fn = deriveEntryFn(entry)
-			const queue = queues.get(fn)
-			const mode = isMapDeriveEntry(entry)
-
-			if (queue) queue.push(mode)
-			else queues.set(fn, [mode])
-		}
-	}
+	const queues = deriveQueues(entries)
 	if (!queues) return
 
 	let found = false
 	const modes: (boolean | undefined)[] = Array(hooks.length)
 
 	for (let i = 0; i < hooks.length; i++) {
-		const fn = hooks[i]
-		const queue = queues.get(fn)
-		if (!queue?.length) continue
+		const entry = queues.get(hooks[i]!)?.shift()
+		// none left, or a plain occurrence ahead of this function's derive
+		if (entry === undefined || isPlainDeriveEntry(entry)) continue
 
+		modes[i] = isMapDeriveEntry(entry)
 		found = true
-		modes[i] = queue.shift()
 	}
 
 	return found ? modes : undefined
+}
+
+const deriveEntriesOf = (part: Partial<AppHook> | undefined) =>
+	(part as { '~deriveEntries'?: DeriveEntry[] } | undefined)?.[
+		'~deriveEntries'
+	]
+
+function sharesDerive(
+	part: Partial<AppHook> | undefined,
+	index: number,
+	parts: readonly (Partial<AppHook> | undefined)[]
+) {
+	const entries = deriveEntriesOf(part)
+	if (entries)
+		for (let i = 0; i < parts.length; i++) {
+			const other = parts[i]?.beforeHandle
+			if (i === index || !other) continue
+
+			for (let j = 0; j < entries.length; j++) {
+				const fn = deriveEntryFn(entries[j]!)
+				if (
+					Array.isArray(other)
+						? (other as Function[]).includes(fn)
+						: other === fn
+				)
+					return true
+			}
+		}
+
+	return false
+}
+
+/**
+ * `~deriveEntries` of the `beforeHandle` lists of `parts` joined in order,
+ * each occurrence keeping the role its own part gave it; undefined when
+ * their own entries joined already do
+ */
+export function joinDeriveEntries(
+	parts: readonly (Partial<AppHook> | undefined)[]
+): DeriveEntry[] | undefined {
+	if (!parts.some(sharesDerive)) return
+
+	const hooks: Function[] = []
+	let at: (DeriveEntry | undefined)[] | undefined
+
+	for (const part of parts) {
+		const value = part?.beforeHandle
+		if (!value) continue
+
+		const queues = deriveQueues(deriveEntriesOf(part))
+		for (const fn of toArray(value) as Function[]) {
+			const entry = queues?.get(fn)?.shift()
+			// a plain occurrence ahead of this function's derive has no role
+			if (entry !== undefined && !isPlainDeriveEntry(entry))
+				(at ??= [])[hooks.length] = entry
+
+			hooks.push(fn)
+		}
+	}
+
+	if (at) return occurrenceDeriveEntries(hooks, at)
 }
 
 export function mapBeforeHandle(

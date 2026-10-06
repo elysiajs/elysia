@@ -676,7 +676,7 @@ describe('Response Validator', () => {
 		expect(res.status).toBe(500)
 	})
 
-	// The response validator is keyed on the status (`va.response[set.status]`)
+	// The response validator is picked by the status (`set.status`)
 	// and a hook may still move it, so the schema cannot be chosen when the
 	// route is built — only per request. This is the case that rules out
 	// validating the literal once at build time.

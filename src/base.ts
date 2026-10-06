@@ -51,8 +51,7 @@ import {
 	coalesceSchemas,
 	createErrorEventHandler,
 	eventProperties,
-	fnOrigin,
-	fnv1a,
+	pluginHash,
 	getLoosePath,
 	guardNonPlainLeaves,
 	hookToGuard,
@@ -64,12 +63,12 @@ import {
 	joinPath,
 	macroOrigin,
 	markSingletons,
+	markPropertySingletons,
 	mapDeriveEntry,
 	mergeDeep,
 	mergeResponse,
 	nullObject,
 	pluginId,
-	pushField,
 	schemaProperties,
 	type ChainNode,
 	invalidateMacroEpoch,
@@ -170,6 +169,18 @@ import {
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
 const useNodesBuffer: ChainNode[] = []
+// instance -> registration -> named plugins it was propagated through
+const propagatedRegistrations = new WeakMap<
+	object,
+	WeakMap<ChainNode, number[]>
+>()
+// instance -> named plugins whose `request` hooks a callback lifted into it
+const liftedRequests = new WeakMap<object, Set<number>>()
+
+// a `hoc` entry's plugin: its registrant's hash, or an unnamed registration
+// whose plugin is set once, by the first named plugin it passes through
+type HocOrigin = number | { origin?: number } | undefined
+const hocOriginOf = (o: HocOrigin) => (typeof o === 'object' ? o.origin : o)
 const emptyHistory = Object.freeze([]) as readonly HistoryEntry[]
 
 let mutationEpoch = 0
@@ -211,6 +222,15 @@ const markStoredSingletons = (table: object | undefined, source: object) => {
 	for (const key in source)
 		markSingletons((table as Record<string, unknown>)[key])
 }
+
+// the `~ext` tables a group child shares with its parent, see `group()`
+const sharedTables = [
+	'decorator',
+	'store',
+	'headers',
+	'models',
+	'parser'
+] as const
 
 const canRegisterLoose = (path: string, isDynamic: boolean) =>
 	!isDynamic && (path.length === 0 || path.charCodeAt(path.length - 1) === 47)
@@ -352,8 +372,13 @@ export class Elysia<
 	declare '~Volatile': Volatile
 	declare '~Routes': Routes
 
+	// ! Don't tune
+	// #property always declare as inline slot, so the ctor can assign it
+	// to the inline slot and not spill into the butterfly
+	// only use # for private fields that are not accessed by any subclass, so the subclass can be monomorphic
+	// @see constructor comment for more details and test/memory/instance-footprint.test.ts
 	private ready?: Promise<void>
-	private _pending = 0
+	#pending = 0
 	private _error?: { error: unknown }
 
 	private hash?: number
@@ -373,6 +398,8 @@ export class Elysia<
 		models?: Record<keyof any, AnySchema>
 		parser?: Record<string, BodyHandler<any, any>>
 		hoc?: WrapFn<any>[]
+		// plugin each `hoc` entry belongs to, by index
+		hocOrigin?: HocOrigin[]
 		setup?: GracefulHandler<any>[]
 		cleanup?: GracefulHandler<any>[]
 		cleanupEpoch?: (
@@ -581,11 +608,14 @@ export class Elysia<
 					: undefined
 			) as BasePath
 
+			// name and seed as one unambiguous key ('a_1' is not 'a' + 1, a
+			// falsy seed is a seed, as in Elysia 1)
 			if (name)
-				this.hash = fnv1a(
-					seed
-						? `${name}_${typeof seed === 'object' ? JSON.stringify(seed, serializeMacroSeed) : serializeMacroSeed('', seed)}`
-						: name
+				this.hash = pluginHash(
+					JSON.stringify(
+						seed === undefined ? [name] : [name, seed],
+						serializeMacroSeed
+					)
 				)
 
 			if (adapter?.setup) this.#useFn(adapter.setup)
@@ -858,10 +888,18 @@ export class Elysia<
 				return this
 		}
 
-		this.#assertMutable(field === 'store' ? 'state' : 'decorate')
-		const ext = this.ext
-		const fresh = !ext[field]
-		const target = (ext[field] ??= nullObject()) as Record<string, unknown>
+		this.#assertTableMutable(field === 'store' ? 'state' : 'decorate')
+		const ext = this.#ext
+		// whether #table starts the table, rather than share a parent's
+		let fresh = true
+		for (
+			let app: AnyElysia | undefined = this as AnyElysia;
+			fresh && app;
+			app = app.scopeParent
+		)
+			fresh = !app['~ext']?.[field]
+
+		const target = this.#table(field)
 
 		switch (typeof value) {
 			case 'object':
@@ -1088,9 +1126,8 @@ export class Elysia<
 	}
 
 	headers(headers: Record<string, string>) {
-		this.#assertMutable('headers')
-		const ext = this.ext
-		ext.headers = Object.assign(ext.headers ?? nullObject(), headers)
+		this.#assertTableMutable('headers')
+		Object.assign(this.#table('headers'), headers)
 
 		return this
 	}
@@ -1109,8 +1146,7 @@ export class Elysia<
 
 		if (type === 'trace') this['~hasTrace'] = true
 
-		this.#pushChainNode(added, scope, this)
-		this.#tagOrigin(fn)
+		this.#pushChainNode(added, scope)
 
 		return this
 	}
@@ -1118,26 +1154,28 @@ export class Elysia<
 	#pushChainNode(
 		added: Partial<AppHook>,
 		scope: EventScope | undefined,
-		owner: object,
-		mayRef = true,
-		propagated?: true
+		// set for a propagated copy of `registration`, from `owner`'s chain
+		registration?: ChainNode,
+		origin?: number,
+		owner?: object
 	) {
 		const parent = this['~hookChain']
 		const refs =
 			(parent !== undefined && parent.refs) ||
-			(mayRef && Elysia.#hookHasString(added as Record<string, unknown>))
+			Elysia.#hookHasString(added as Record<string, unknown>)
 
-		this['~hookChain'] = propagated
-			? { added, parent, refs, scope, propagated, owner }
-			: { added, parent, refs, scope, owner }
-	}
-
-	#tagOrigin(value: unknown) {
-		if (this.hash === undefined) return
-
-		for (const fn of Array.isArray(value) ? value : [value])
-			if (typeof fn === 'function' && !fnOrigin.has(fn))
-				fnOrigin.set(fn, this.hash)
+		this['~hookChain'] = registration
+			? {
+					added,
+					parent,
+					refs,
+					scope,
+					propagated: true,
+					owner,
+					origin,
+					registration
+				}
+			: { added, parent, refs, scope, owner: this, origin: this.hash }
 	}
 
 	#onBranch(
@@ -1219,12 +1257,8 @@ export class Elysia<
 		Ephemeral,
 		Volatile
 	> {
-		this.#assertMutable('parser')
-		const ext = this.ext
-		const parsers = (ext.parser ??= nullObject() as Record<
-			string,
-			BodyHandler<any, any>
-		>)
+		this.#assertTableMutable('parser')
+		const parsers = this.#table('parser')
 		parsers[name] = fn
 
 		return this as any
@@ -1246,7 +1280,7 @@ export class Elysia<
 	 */
 	setup(handler: MaybeArray<GracefulHandler<this>>): this {
 		this.#assertMutable('setup')
-		const arr = (this.ext.setup ??= [])
+		const arr = (this.#ext.setup ??= [])
 		arr.push(...([] as GracefulHandler<any>[]).concat(handler))
 
 		return this
@@ -2417,9 +2451,15 @@ export class Elysia<
 				continue
 			}
 
-			if (node.scope !== 'global') {
+			if (
+				node.scope !== 'global' &&
+				(node.scope !== scope || node.propagated)
+			) {
 				node.scope = scope
 				node.propagated = false
+				// scope decides which hooks count as a plugin's installation,
+				// see `flattenChain`; drop every memo built on the old one
+				invalidateMacroEpoch()
 			}
 
 			node = node.parent
@@ -3455,11 +3495,6 @@ export class Elysia<
 		hook = snapshotHookSchemas(hook)
 		hookToGuard(hook as any)
 
-		for (const key in hook)
-			if (eventProperties.has(key)) this.#tagOrigin((hook as any)[key])
-
-		this.#tagOrigin(hook.derive)
-
 		this.#pushHook(hook as Partial<AppHook>, scope)
 
 		return this
@@ -3739,7 +3774,7 @@ export class Elysia<
 	>
 
 	group() {
-		this.#assertMutable('group')
+		this.#assertTableMutable('group')
 		const prefix = arguments[0] as string
 		const schemaOrRun = arguments[1] as
 			| Partial<AnyLocalHook>
@@ -3772,15 +3807,12 @@ export class Elysia<
 		const src = this['~ext']
 		if (src) {
 			const ext = (child['~ext'] ??= nullObject())
-			if (src.decorator)
-				ext.decorator = Object.assign(nullObject(), src.decorator)
-			if (src.store) ext.store = Object.assign(nullObject(), src.store)
-			if (src.headers)
-				ext.headers = Object.assign(nullObject(), src.headers)
-			if (src.models) ext.models = Object.assign(nullObject(), src.models)
+			// Shared, as in 1.x: the child writes straight into these
+			for (const field of sharedTables)
+				if (src[field])
+					(ext as Record<string, unknown>)[field] = src[field]
 
 			if (src.macro) ext.macro = Object.create(src.macro)
-			if (src.parser) ext.parser = Object.assign(nullObject(), src.parser)
 
 			if (src.capability) {
 				const cap = (ext.capability = nullObject())
@@ -3801,8 +3833,15 @@ export class Elysia<
 		return this
 	}
 
-	private get ext(): NonNullable<this['~ext']> {
+	get #ext(): NonNullable<this['~ext']> {
 		return (this['~ext'] ??= nullObject())
+	}
+
+	/** A group child starts or takes up its parent's table, see `group()` */
+	#table(field: (typeof sharedTables)[number]): Record<string, any> {
+		return (this.#ext[field] ??= this.scopeParent
+			? this.scopeParent.#table(field)
+			: nullObject())
 	}
 
 	['~resolvedCapability'](kind: 'trace'): TraceCapability | undefined
@@ -3841,7 +3880,7 @@ export class Elysia<
 	}
 
 	#ensureMacroTable(): NonNullable<NonNullable<this['~ext']>['macro']> {
-		const ext = this.ext
+		const ext = this.#ext
 		if (ext.macro) return ext.macro
 
 		const parent = this['~scopeChild'] ? this.scopeParent : undefined
@@ -3870,7 +3909,7 @@ export class Elysia<
 
 		if (hook.trace) this['~hasTrace'] = true
 
-		this.#pushChainNode(hook, scope, this)
+		this.#pushChainNode(hook, scope)
 
 		return this
 	}
@@ -4108,19 +4147,11 @@ export class Elysia<
 								? input[k]
 								: [input[k]]
 							: []
-					const added: any[] = []
-
-					for (const fn of incoming)
-						if (!existing.includes(fn) && !added.includes(fn))
-							added.push(fn)
-
+					// every occurrence runs (Elysia 1): two macros, or a macro and
+					// the route, may share one function
 					const at = insertions.get(k) ?? 0
-					input[k] = [
-						...existing.slice(0, at),
-						...added,
-						...existing.slice(at)
-					]
-					insertions.set(k, at + added.length)
+					input[k] = existing.toSpliced(at, 0, ...incoming)
+					insertions.set(k, at + incoming.length)
 				} else if (k in input) {
 					if (Array.isArray(input[k])) {
 						for (const item of Array.isArray(v) ? v : [v])
@@ -4391,7 +4422,7 @@ export class Elysia<
 
 	use(app: any): any {
 		if (!app) return this
-		this.#assertMutable('use')
+		this.#assertTableMutable('use')
 
 		if (typeof app === 'function') return this.#useFn(app)
 
@@ -4496,7 +4527,9 @@ export class Elysia<
 			;(addedByThisCall ??= new Set()).add(childKey)
 		}
 
-		if (app.childrenHash)
+		// a `.group()`/`.guard()` callback is a sandbox (Elysia 1): what it
+		// installed stays inside, a later `.use()` here installs it again
+		if (app.childrenHash && !app['~scopeChild'])
 			addedByThisCall = this.#absorbChildrenHash(app, addedByThisCall)
 
 		if (app['~ext']) this.#assertMacroUnique(app, addedByThisCall)
@@ -4590,6 +4623,7 @@ export class Elysia<
 	 * Keep the cold blocks in their own frames.
 	 */
 	#absorbExt(app: AnyElysia, addedByThisCall: Set<number> | undefined) {
+		const source = app['~ext']!
 		const {
 			decorator,
 			store,
@@ -4601,12 +4635,17 @@ export class Elysia<
 			setup,
 			cleanup,
 			capability
-		} = app['~ext']!
+		} = source
 
 		const ext: NonNullable<(typeof this)['~ext']> = (this['~ext'] ??=
 			nullObject())
 
-		if (decorator) {
+		if (app.scopeParent === this)
+			for (const field of sharedTables)
+				if (source[field])
+					(ext as Record<string, unknown>)[field] ??= source[field]
+
+		if (decorator && decorator !== ext.decorator) {
 			if (ext.decorator)
 				mergeDeep(
 					ext.decorator,
@@ -4622,18 +4661,18 @@ export class Elysia<
 			markStoredSingletons(ext.decorator, decorator)
 		}
 
-		if (store) {
+		if (store && store !== ext.store) {
 			if (ext.store) mergeDeep(ext.store, store)
 			else ext.store = Object.assign(nullObject(), store)
 
 			markStoredSingletons(ext.store, store)
 		}
 
-		if (headers)
+		if (headers && headers !== ext.headers)
 			ext.headers = Object.assign(ext.headers ?? nullObject(), headers)
-		if (models)
+		if (models && models !== ext.models)
 			ext.models = Object.assign(ext.models ?? nullObject(), models)
-		if (parser)
+		if (parser && parser !== ext.parser)
 			ext.parser = Object.assign(ext.parser ?? nullObject(), parser)
 
 		if (macro) {
@@ -4669,16 +4708,37 @@ export class Elysia<
 
 		if (hoc) {
 			const childrenHash = this.childrenHash!
-			ext.hoc = mergeExtCallbacks(
-				ext.hoc,
-				hoc.filter((fn) => {
-					const origin = fnOrigin.get(fn)!
-					return (
-						!childrenHash.has(origin) ||
-						addedByThisCall?.has(origin)
+			const target = (ext.hoc ??= [])
+			const origins = (ext.hocOrigin ??= [])
+
+			for (let i = 0; i < hoc.length; i++) {
+				const fn = hoc[i]
+
+				const registration = source.hocOrigin?.[i] ?? app.hash
+				const origin =
+					typeof registration === 'object'
+						? (registration.origin ??= app.hash)
+						: registration
+
+				// that plugin is installed here already
+				if (
+					origin !== undefined &&
+					childrenHash.has(origin) &&
+					!addedByThisCall?.has(origin)
+				)
+					continue
+
+				// one plugin's wrap is installed once, two plugins' each
+				if (
+					target.some(
+						(f, j) => f === fn && hocOriginOf(origins[j]) === origin
 					)
-				})
-			)
+				)
+					continue
+
+				origins.push(registration)
+				target.push(fn)
+			}
 		}
 		if (setup) ext.setup = mergeExtCallbacks(ext.setup, setup)
 		if (cleanup) ext.cleanup = mergeExtCallbacks(ext.cleanup, cleanup)
@@ -4730,12 +4790,6 @@ export class Elysia<
 		hookChain: ChainNode | undefined,
 		addedByThisCall: Set<number> | undefined
 	) {
-		let pluginEvents: Partial<AppHook> | undefined
-		let globalEvents: Partial<AppHook> | undefined
-
-		let pluginMayRef = false
-		let globalMayRef = false
-
 		const nodes = useNodesBuffer
 		nodes.length = 0
 		let current: ChainNode | undefined = hookChain
@@ -4750,112 +4804,88 @@ export class Elysia<
 			current = current.parent
 		}
 
+		const childrenHash = this.childrenHash
+		const scopeChild = app['~scopeChild']
+		let held = propagatedRegistrations.get(this)
+		const lifted = liftedRequests.get(this)
+		let lifting: Set<number> | undefined
+
+		// one node per registration, in order, each keeping its plugin
 		for (let i = nodes.length - 1; i >= 0; i--) {
-			const node = nodes[i] as {
-				added: Partial<AppHook>
-				scope?: EventScope
-				propagated?: boolean
+			const node = nodes[i] as Extract<ChainNode, { added: unknown }>
+			const scope = node.scope
+			if (scope === 'plugin' ? node.propagated : scope !== 'global')
+				continue
+
+			// a callback's hooks cover only the routes it produced (Elysia 1
+			// sandbox); `request` runs before routing, on the full chain
+			let source = node.added
+			if (scopeChild) {
+				const request = (source as Partial<AppHook>).request
+				if (!request) continue
+
+				source = nullObject()
+				;(source as Partial<AppHook>).request = request
 			}
-			const nodeScope = node.scope
-			if (nodeScope !== 'plugin' && nodeScope !== 'global') continue
 
-			if (nodeScope === 'plugin' && node.propagated) continue
+			// a registration without a named plugin takes the first one it
+			// passes through (Elysia 1 `injectChecksum`)
+			const origin = node.origin ?? app.hash
+			const registration = node.registration ?? node
+			let added = source
 
-			const isGlobal = nodeScope === 'global'
-			const added = node.added
+			let repeated = false
 
-			const keys = Object.keys(added)
-			for (let k = 0; k < keys.length; k++) {
-				const key = keys[k]
+			if (origin !== undefined) {
+				if (!held)
+					propagatedRegistrations.set(this, (held = new WeakMap()))
+				const through = held.get(registration)
 
-				if (key === 'schemas') {
-					const schemas = (added as any).schemas as any[] | undefined
-
-					if (!schemas) continue
-
-					const target = isGlobal
-						? (globalEvents ??= nullObject())
-						: (pluginEvents ??= nullObject())
-
-					if (isGlobal) globalMayRef = true
-					else pluginMayRef = true
-
-					for (const s of schemas)
-						((target as any).schemas ??= []).push(s)
-
-					continue
-				}
-
-				if (key === 'schema') continue
-
-				if (eventProperties.has(key)) {
-					// a callback's error hooks cover its own routes only (as in
-					// Elysia 1), never the parent's after it
-					if (key === 'error' && app['~scopeChild']) continue
-
-					const raw = (added as any)[key] as Function | Function[]
-
-					const many = Array.isArray(raw)
-					const count = many ? (raw as Function[]).length : 1
-
-					for (let f = 0; f < count; f++) {
-						const fn = many
-							? (raw as Function[])[f]
-							: (raw as Function)
-
-						const childrenHash = this.childrenHash
-						if (childrenHash !== undefined) {
-							const origin = fnOrigin.get(fn)
-							if (
-								origin !== undefined &&
-								childrenHash.has(origin) &&
-								!addedByThisCall?.has(origin)
-							)
-								continue
-						}
-
-						const target = isGlobal
-							? (globalEvents ??= nullObject())
-							: (pluginEvents ??= nullObject())
-
-						pushField(target, key, fn)
-					}
-
-					continue
-				}
-
-				if (key === '~deriveEntries') {
-					const entries = (added as any)[key] as unknown[] | undefined
-					if (!entries) continue
-
-					const target = isGlobal
-						? (globalEvents ??= nullObject())
-						: (pluginEvents ??= nullObject())
-
-					const list = ((target as any)[key] ??= [])
-					for (let j = 0; j < entries.length; j++)
-						list.push(entries[j])
-
-					continue
-				}
-
-				const target = isGlobal
-					? (globalEvents ??= nullObject())
-					: (pluginEvents ??= nullObject())
-
-				if (isGlobal) globalMayRef = true
-				else pluginMayRef = true
-				;(target as any)[key] = (added as any)[key]
+				if (!through) held.set(registration, [origin])
+				else if (through.includes(origin)) repeated = true
+				else through.push(origin)
 			}
+
+			const registrant = (registration as { origin?: number }).origin
+
+			if (repeated) {
+				const schemas = (source as { schemas?: unknown }).schemas
+				if (!schemas) continue
+
+				added = nullObject()
+				;(added as { schemas?: unknown }).schemas = schemas
+			} else if (
+				registrant !== undefined &&
+				childrenHash?.has(registrant) &&
+				!addedByThisCall?.has(registrant)
+			) {
+				added = nullObject()
+				for (const key in source)
+					if (key !== '~deriveEntries' && !eventProperties.has(key))
+						(added as any)[key] = (source as any)[key]
+			}
+
+			// a named plugin's `request` runs once per app: one a callback
+			// lifted here is not installed again by a later `.use()`
+			let dropRequest = false
+			if (origin !== undefined && 'request' in added)
+				if (lifted?.has(origin)) dropRequest = true
+				else if (scopeChild) (lifting ??= new Set(lifted)).add(origin)
+
+			if ('schema' in added || dropRequest) {
+				if (added === source)
+					added = Object.assign(nullObject(), source)
+				delete (added as any).schema
+				if (dropRequest) delete (added as any).request
+			}
+
+			if (isNotEmpty(added))
+				this.#pushChainNode(added, scope, registration, origin, app)
 		}
 
+		if (lifting) liftedRequests.set(this, lifting)
+
 		nodes.length = 0
-
-		if (globalEvents)
-			this.#pushChainNode(globalEvents, 'global', app, globalMayRef, true)
-
-		if (pluginEvents)
-			this.#pushChainNode(pluginEvents, 'plugin', app, pluginMayRef, true)
 	}
 
 	#emitChildRoutes(
@@ -4897,6 +4927,7 @@ export class Elysia<
 						combine: inheritedChain,
 						over: undefined,
 						callback,
+						inner: childChain,
 						refs: !!(inheritedChain?.refs || callback.refs)
 					}
 				}
@@ -4964,13 +4995,13 @@ export class Elysia<
 	}
 
 	get pending() {
-		return this._pending > 0
+		return this.#pending > 0
 	}
 
 	#useAsync(promise: Promise<any>): this {
 		if (!this.ready) this._error = undefined
 
-		this._pending++
+		this.#pending++
 
 		const base = this.ready ?? Promise.resolve()
 
@@ -5000,14 +5031,6 @@ export class Elysia<
 						console.error(err)
 					}
 
-				// This absorption is ready-chain-serialized and deterministic, so
-				// macros it lands are legitimate: patch them into every open #useFn
-				// snapshot so a pending sibling's diff doesn't blame them. Only keys
-				// whose def changed ACROSS this use() call are patched — anything a
-				// plugin registered earlier in its own body is already in `before`
-				// and stays blameable. A snapshot that disagrees with the pre-merge
-				// entry saw such a write; skip it so a same-origin overwrite can't
-				// erase the evidence.
 				if (before) {
 					const after = this['~ext']?.macro
 					if (after)
@@ -5022,7 +5045,7 @@ export class Elysia<
 				}
 			})
 			.finally(() => {
-				this._pending--
+				this.#pending--
 			})
 
 		const next: Promise<void> = resolved
@@ -5034,7 +5057,7 @@ export class Elysia<
 				}
 			)
 			.finally(() => {
-				if (this._pending > 0) return
+				if (this.#pending > 0) return
 				if (this.ready !== next) return
 
 				const previousCompiled = this.compiled
@@ -5043,7 +5066,7 @@ export class Elysia<
 				this.ready = undefined
 				this.compiled = undefined
 				this.fetchFn = undefined
-				this.routerBuilt = false
+				this.#routerBuilt = false
 				clearContextCache(this)
 
 				try {
@@ -5070,10 +5093,6 @@ export class Elysia<
 		if (this['~Prefix']) path = joinPath(this['~Prefix'], path)
 		else if (path && path.charCodeAt(0) !== 47) path = '/' + path
 
-		// Reject the 1.x (path, handler, hook) order: a function followed by hook
-		// data, including macro-only hooks (`{ auth: true }`) that would otherwise
-		// be served as the body. isPlainObject first: for..in over a function
-		// reifies its lazy name/length (+~115 B, ~3x slower per route)
 		if (
 			typeof hookOrFn === 'function' &&
 			isPlainObject(fn) &&
@@ -5124,7 +5143,7 @@ export class Elysia<
 					: [method, path, handler, this]) as unknown as InternalRoute
 		)
 
-		if (this.routerBuilt || this.compiled !== undefined)
+		if (this.#routerBuilt || this.compiled !== undefined)
 			this.#invalidateRouter()
 
 		return this
@@ -5140,10 +5159,23 @@ export class Elysia<
 		)
 	}
 
+	/**
+	 * `#assertMutable` for the tables a group child shares with its parents:
+	 * a child kept past its callback must not write into a sealed one
+	 */
+	#assertTableMutable(api: string) {
+		for (
+			let app: AnyElysia | undefined = this as AnyElysia;
+			app;
+			app = app.scopeParent
+		)
+			app.#assertMutable(api)
+	}
+
 	get #isCacheable() {
 		return (
 			this['~generation'] !== undefined &&
-			this.routerBuilt &&
+			this.#routerBuilt &&
 			!Capture.isCapturing()
 		)
 	}
@@ -5182,7 +5214,7 @@ export class Elysia<
 
 		if (source) (this.routeSources ??= [])[sequence] = source
 
-		if (this.routerBuilt || this.compiled !== undefined)
+		if (this.#routerBuilt || this.compiled !== undefined)
 			this.#invalidateRouter()
 	}
 
@@ -5193,7 +5225,7 @@ export class Elysia<
 		this.jitRoute = undefined
 		this.jitAliases = undefined
 		this.fetchFn = undefined
-		this.routerBuilt = false
+		this.#routerBuilt = false
 	}
 
 	model<const Name extends string, const Model extends AnySchema>(
@@ -5266,11 +5298,8 @@ export class Elysia<
 		name: string | Record<string, AnySchema> | Function,
 		model?: AnySchema
 	): AnyElysia {
-		this.#assertMutable('model')
-		const models = (this.ext.models ??= nullObject() as Record<
-			string,
-			AnySchema
-		>)
+		this.#assertTableMutable('model')
+		const models = this.#table('models')
 
 		switch (typeof name) {
 			case 'object':
@@ -5281,11 +5310,15 @@ export class Elysia<
 
 			case 'function': {
 				const remapped = name(models) as Record<string, AnySchema>
-				const next = nullObject() as Record<string, AnySchema>
+				// The same table back stays the table a group child shares
+				const next =
+					remapped === models
+						? models
+						: (nullObject() as Record<string, AnySchema>)
 				for (const key in remapped)
 					next[key] = toModel(key, remapped[key])
 
-				this.ext.models = next
+				this.#ext.models = next
 
 				return this
 			}
@@ -5301,7 +5334,9 @@ export class Elysia<
 	 * Registered reusable models (via `.model()`), keyed by name.
 	 */
 	get models(): Definitions['typebox'] {
-		return (this['~ext']?.models ?? nullObject()) as Definitions['typebox']
+		return (this['~ext']?.models ??
+			this.scopeParent?.models ??
+			nullObject()) as Definitions['typebox']
 	}
 
 	Ref<const Key extends keyof Definitions['typebox'] & string>(key: Key) {
@@ -6951,7 +6986,7 @@ export class Elysia<
 		if (this.compiled?.[index]) return this.compiled![index]
 
 		const indexedTable =
-			table ?? (this.routerBuilt ? this['~routeTable'] : undefined)
+			table ?? (this.#routerBuilt ? this['~routeTable'] : undefined)
 		const compiled = (this.compiled ??= new Array(
 			indexedTable?.length ?? this['~routes'].length
 		))
@@ -7306,9 +7341,9 @@ export class Elysia<
 				checkSlots(schemas[s] as any)
 	}
 
-	private routerBuilt = false
+	#routerBuilt = false
 	#buildRouter(seal = false) {
-		if (this.routerBuilt) {
+		if (this.#routerBuilt) {
 			if (seal && this['~generation'] === undefined)
 				this.#publishGeneration()
 
@@ -7353,8 +7388,8 @@ export class Elysia<
 				this['~router'] = previousRouter
 			}
 
-			this.routerBuilt = true
 			if (seal) this.#publishGeneration()
+			this.#routerBuilt = true
 
 			buildSucceeded = true
 		} catch (error) {
@@ -7428,9 +7463,13 @@ export class Elysia<
 		}
 
 		const ext = this['~ext']
-		if (ext?.hoc) extCallbackIndexes.delete(ext.hoc)
 		if (ext?.setup) extCallbackIndexes.delete(ext.setup)
 		if (ext?.cleanup) extCallbackIndexes.delete(ext.cleanup)
+
+		// What decorators and the store hold is shared, not a derive's to
+		// dispose: mark the final tables, whatever was put in them since
+		if (ext?.decorator) markPropertySingletons(ext.decorator)
+		if (ext?.store) markPropertySingletons(ext.store)
 	}
 
 	#buildRouterUnsafe() {
@@ -7749,7 +7788,7 @@ export class Elysia<
 	}
 
 	#buildFetch() {
-		this.#buildRouter(!this._pending)
+		this.#buildRouter(!this.#pending)
 
 		if (this.ready) return applyHoc(this, createFetchHandler(this))
 
@@ -7825,14 +7864,14 @@ export class Elysia<
 		) => MaybePromise<Response>
 	>(callback: WrapFn<T>): this {
 		this.#assertMutable('wrap')
-		if (this.fetchFn && !this._pending)
+		if (this.fetchFn && !this.#pending)
 			console.warn(
 				'[Elysia] .wrap() was called after the fetch handler was built'
 			)
 
-		const ext = this.ext
+		const ext = this.#ext
 		;(ext.hoc ??= []).push(callback)
-		this.#tagOrigin(callback)
+		;(ext.hocOrigin ??= []).push(this.hash ?? {})
 
 		return this
 	}
@@ -7859,7 +7898,7 @@ export class Elysia<
 			return this
 
 		this.#assertMutable('cleanup')
-		const arr = (this.ext.cleanup ??= [])
+		const arr = (this.#ext.cleanup ??= [])
 		arr.push(...([] as GracefulHandler<any>[]).concat(handler))
 
 		return this

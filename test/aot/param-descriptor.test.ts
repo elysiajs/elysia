@@ -74,4 +74,36 @@ describe('frozen handler parameter descriptors', () => {
 			/Fail to reconstruct build/
 		)
 	})
+
+	// `vs<i>` / `vr<i>` are linked from a template, which the scan above
+	// cannot see: they bind the i-th declared response status and validator
+	it('resolves response statuses and validators by position', () => {
+		const vali = {
+			response: new Map<number, unknown>([
+				[200, 'V200'],
+				[404, 'V404']
+			])
+		}
+
+		expect(
+			resolveHandlerParams(['vs0', 'vr0', 'vs1', 'vr1'], { vali } as any)
+		).toEqual([200, 'V200', 404, 'V404'])
+	})
+
+	// replaying with a missing validator would skip response validation and
+	// redaction, so the reconstruction fails instead
+	it('rejects a response param the validator does not declare', () => {
+		const vali = { response: new Map<number, unknown>([[200, 'V200']]) }
+
+		for (const [name, ctx] of [
+			['vr1', { vali }],
+			['vs1', { vali }],
+			['vr0', { vali: undefined }],
+			['vr0', { vali: {} }]
+		] as const)
+			expect(
+				() => resolveHandlerParams([name], ctx as any),
+				`${name} with ${JSON.stringify(ctx)}`
+			).toThrow(/Fail to reconstruct build, missing "v[rs][01]" param/)
+	})
 })

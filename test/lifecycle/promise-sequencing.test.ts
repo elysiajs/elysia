@@ -6,50 +6,14 @@ import { origin } from '../../src/adapter/origin'
 import { defaultAdapter } from '../../src/adapter/constants'
 import { trace } from '../../src/plugin/trace'
 import { Compiled } from '../../src/compile/aot'
-import {
-	endHandlerCapture,
-	endValidatorCapture
-} from '../../src/compile/aot-capture'
 import { mayReturnPromise } from '../../src/compile/utils'
 import { Validator } from '../../src/validator'
-import {
-	materialise,
-	materialiseHandlers,
-	registerManifest
-} from '../aot/_manifest'
+import { buildMode } from '../aot/_manifest'
 
 afterEach(() => {
 	Compiled.clear()
 	Validator.clear()
 })
-
-const buildMode = (mode: string, build: () => any) => {
-	if (mode === 'lazy') return build()
-	if (mode === 'eager') return build().compile()
-
-	const previous = process.env.ELYSIA_AOT_BUILD
-	try {
-		process.env.ELYSIA_AOT_BUILD = '1'
-		endHandlerCapture()
-		endValidatorCapture()
-		build().compile()
-		const handlers = endHandlerCapture()
-		const validators = endValidatorCapture()
-		expect(handlers.length).toBeGreaterThan(0)
-		delete process.env.ELYSIA_AOT_BUILD
-		Validator.clear()
-		registerManifest({
-			handlers: materialiseHandlers(handlers),
-			validators: materialise(validators)
-		})
-		return build().compile()
-	} finally {
-		if (previous === undefined) delete process.env.ELYSIA_AOT_BUILD
-		else process.env.ELYSIA_AOT_BUILD = previous
-		endHandlerCapture()
-		endValidatorCapture()
-	}
-}
 
 const callbacks: Record<string, (p: Promise<void>) => (...args: any[]) => any> =
 	{

@@ -298,13 +298,8 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 
 	const traceHandleOn = phaseOn('handle')
 
-	let responseValiAsync = false
-	if (vali?.response)
-		for (const code in vali.response)
-			if (isAsyncValidator(vali.response[code])) {
-				responseValiAsync = true
-				break
-			}
+	const responseValiAsync =
+		!!vali?.response && [...vali.response.values()].some(isAsyncValidator)
 
 	const handlerIsAsync =
 		isHandleFunction && isAsyncFunction(handler as Function)

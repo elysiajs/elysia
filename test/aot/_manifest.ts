@@ -13,6 +13,8 @@ import { Source, installReconstructImpl } from '../../src/compile/aot-emit'
 // Reconstruct in-process manifests through the same table as generated modules.
 installReconstructImpl()
 
+import { expect } from 'bun:test'
+import type { AnyElysia } from '../../src'
 import { CheckContext } from 'typebox/schema'
 import { buildCoercedFromPlan } from '../../src/type/coerce-plan'
 import { Guard } from 'typebox/guard'
@@ -157,6 +159,48 @@ export const compileFromFrozenHandler = async <
 		throw new Error(`frozen factory ran ${factoryCalls} times, expected 1`)
 
 	return app
+}
+
+/**
+ * lazy: compiled on first request; eager: `.compile()`; frozen: the code
+ * captured by an AOT build, replayed with its parameters resolved by name
+ */
+export const buildMode = <App extends AnyElysia>(
+	mode: string,
+	build: () => App
+): App => {
+	if (mode === 'lazy') return build()
+	if (mode === 'eager') return build().compile()
+
+	// loaded on call, keeping the capture module and the validator out of the
+	// bridge-free fixtures that import this file
+	const { endHandlerCapture, endValidatorCapture } =
+		require('../../src/compile/aot-capture') as typeof import('../../src/compile/aot-capture')
+	const { Validator } =
+		require('../../src/validator') as typeof import('../../src/validator')
+
+	const previous = process.env.ELYSIA_AOT_BUILD
+	try {
+		process.env.ELYSIA_AOT_BUILD = '1'
+		endHandlerCapture()
+		endValidatorCapture()
+		build().compile()
+		const handlers = endHandlerCapture()
+		const validators = endValidatorCapture()
+		expect(handlers.length).toBeGreaterThan(0)
+		delete process.env.ELYSIA_AOT_BUILD
+		Validator.clear()
+		registerManifest({
+			handlers: materialiseHandlers(handlers),
+			validators: materialise(validators)
+		})
+		return build().compile()
+	} finally {
+		if (previous === undefined) delete process.env.ELYSIA_AOT_BUILD
+		else process.env.ELYSIA_AOT_BUILD = previous
+		endHandlerCapture()
+		endValidatorCapture()
+	}
 }
 
 /** Materialise captured validators into the frozen manifest emitted by builds. */

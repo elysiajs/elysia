@@ -253,9 +253,8 @@ export interface WSValidatorLike {
 	Errors(data: unknown): any[]
 }
 
-export type WSResponseValidator =
-	| { [status: number]: WSValidatorLike }
-	| undefined
+/** keyed by numeric status */
+export type WSResponseValidator = Map<number, WSValidatorLike> | undefined
 
 /**
  * App-wide WebSocket server-tuning options, the Bun server-level

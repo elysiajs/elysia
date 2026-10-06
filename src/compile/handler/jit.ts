@@ -22,7 +22,7 @@ import {
 	ValidationError,
 	isProduction
 } from '../../error'
-import { isDynamicRegex, traceEventIndex } from '../../constants'
+import { isDynamicRegex, StatusMap, traceEventIndex } from '../../constants'
 import { fallbackResponse } from '../../handler/error'
 import {
 	drainDisposables,
@@ -342,6 +342,38 @@ export const createInlineHandler = (
 			)
 
 		return map(r, c.request, true)
+	}) as CompiledHandler
+
+const createInlineSetHandler = (
+	map: (value: unknown, ...rest: unknown[]) => unknown,
+	h: (context: Context) => unknown
+) =>
+	((c: Context) => {
+		const r = h(c)
+		if (r instanceof Error) throw r
+		if (typeof (r as any)?.then === 'function')
+			return Promise.resolve(r).then((v) =>
+				map(forwardError(v), c.set, c.request, true)
+			)
+
+		return map(r, c.set, c.request, true)
+	}) as CompiledHandler
+
+const createInlineDefaultHeaderHandler = (
+	map: (value: unknown, ...rest: unknown[]) => unknown,
+	h: (context: Context) => unknown
+) =>
+	((c: Context) => {
+		materializeSetHeaders(c.set)
+		const r = h(c)
+
+		if (r instanceof Error) throw r
+		if (typeof (r as any)?.then === 'function')
+			return Promise.resolve(r).then((v) =>
+				map(forwardError(v), c.set, c.request, true)
+			)
+
+		return map(r, c.set, c.request, true)
 	}) as CompiledHandler
 
 export interface CompileHandlerJitOptions {
@@ -1126,8 +1158,18 @@ export function compileHandlerJit(
 			}
 
 			if (hasResponseValidator) {
-				link(vali!, 'va')
 				link(ElysiaStatus, 'es')
+				link(StatusMap, 'sm')
+
+				let pick = ''
+				let i = 0
+				for (const [status, v] of vali!.response!) {
+					link(status, `vs${i}`)
+					link(v, `vr${i}`)
+					pick += `_st==vs${i}?vr${i}:`
+					i++
+				}
+				pick += 'undefined'
 
 				const encodeStatus = responseValiAsync
 					? `(_vr.mayReturnPromise?_vr.From(_r.response,'response',true):_vr.EncodeFrom(_r.response,'response'))`
@@ -1138,12 +1180,13 @@ export function compileHandlerJit(
 
 				code += plain(
 					`if(_r instanceof es){\n` +
-						`const _vr=va.response[_r.status]\n` +
+						`const _st=_r.status,_vr=${pick}\n` +
 						`if(_vr)_r.response=${responseValiAsync ? awaitValue(encodeStatus, arm) : encodeStatus}\n` +
 						`}else if(!(_r instanceof Response)` +
 						`&&!(_r instanceof ReadableStream)` +
 						`&&typeof _r?.next!=='function'){\n` +
-						`const _vr=va.response[c.set.status??200]\n` +
+						// a named status ('Created') validates as the code it is sent with
+						`const _sr=c.set.status??200,_st=typeof _sr==='string'?(sm[_sr]??_sr):_sr,_vr=${pick}\n` +
 						`if(_vr)_r=${responseValiAsync ? awaitValue(encodeBody, arm) : encodeBody}\n` +
 						`}\n`
 				)
@@ -1360,37 +1403,13 @@ export function compileHandlerJit(
 			(!isAsync &&
 				!syncErrorHook &&
 				(alias === 'rm,fe' || alias === 'msh,rm,fe'))
-		) {
-			const rmap = responseMap as any
-			const h = handler as any
-			let inlineHandler: CompiledHandler
-			if (responseMode === 'set-with-default-headers' && inference.set)
-				inlineHandler = ((c: Context) => {
-					materializeSetHeaders(c.set)
-					const r = h(c)
-
-					if (r instanceof Error) throw r
-					if (typeof (r as any)?.then === 'function')
-						return Promise.resolve(r).then((v) =>
-							rmap(forwardError(v), c.set, c.request, true)
-						)
-
-					return rmap(r, c.set, c.request, true)
-				}) as CompiledHandler
-			else
-				inlineHandler = ((c: Context) => {
-					const r = h(c)
-					if (r instanceof Error) throw r
-					if (typeof (r as any)?.then === 'function')
-						return Promise.resolve(r).then((v) =>
-							rmap(forwardError(v), c.set, c.request, true)
-						)
-
-					return rmap(r, c.set, c.request, true)
-				}) as CompiledHandler
-
-			return inlineHandler
-		}
+		)
+			return responseMode === 'set-with-default-headers' && inference.set
+				? createInlineDefaultHeaderHandler(
+						responseMap as any,
+						handler as any
+					)
+				: createInlineSetHandler(responseMap as any, handler as any)
 	}
 
 	// per route, hit or miss: a fresh isolate still needs `new Function`

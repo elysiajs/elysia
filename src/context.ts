@@ -4,7 +4,7 @@ import {
 	type SelectiveProblem,
 	type SelectiveStatus
 } from './error'
-import { isNotEmpty, nullObject, redirect } from './utils'
+import { isNotEmpty, markSingletons, nullObject, redirect } from './utils'
 
 import { defaultHeaders } from './adapter/default-headers'
 import type { AnyElysia } from './base'
@@ -44,6 +44,10 @@ const defer = {
 function buildDecorator(members: object) {
 	class Decorator {}
 	Object.assign(Decorator.prototype, members)
+	// a context inherits every member, so each is shared: the derive identity
+	// scan (`for..in`) never sees one under a symbol key
+	for (const key of Reflect.ownKeys(members))
+		markSingletons((members as Record<PropertyKey, unknown>)[key], 0)
 	Object.defineProperty(Decorator.prototype, 'defer', defer)
 	return Decorator
 }

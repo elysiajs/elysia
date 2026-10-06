@@ -12,6 +12,7 @@ import {
 } from './source'
 import type { JITProbeResult } from '../../compile/jit-probe'
 import { composeRouteHook, runIntrospect } from '../../compile/handler'
+import { isResponseParam } from '../../compile/handler/params'
 import {
 	isStandardSchema,
 	isResponseMap,
@@ -973,7 +974,9 @@ export async function generateCompiledArtifacts(
 
 		for (const handler of artifacts.handlers)
 			if (handler.alias)
-				for (const name of handler.alias.split(',')) aliases.add(name)
+				for (const name of handler.alias.split(','))
+					// a response param resolves through the route validator like `va`
+					aliases.add(isResponseParam(name) ? 'va' : name)
 
 		const history = typedApp['~routes']
 

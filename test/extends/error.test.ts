@@ -816,14 +816,11 @@ describe('hook registered after the route', () => {
 				'global /g/late': '418',
 				'global /outside': '500'
 			})
-			// the macro's other hooks keep their reach: only the error hook
-			// is held inside
+			// the macro's other hooks stay inside the callback too
 			expect(ran).toEqual([
 				'local /g/late',
 				'plugin /g/late',
-				'plugin /outside',
-				'global /g/late',
-				'global /outside'
+				'global /g/late'
 			])
 		})
 

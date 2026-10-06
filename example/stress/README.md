@@ -54,6 +54,7 @@ metric. Historical snapshots under `reference/` are diagnostic and non-gating.
 | `flatten-bench.ts`           | manual/experimental | Hook-chain flattening                       |
 | `lifecycle.ts`               | manual/experimental | Lifecycle plugin application                |
 | `query-scan.ts`              | manual/experimental | Query scanner comparison                    |
+| `retained-compiled-route.ts` | manual/experimental | Retained bytes per compiled route by build  |
 | `route-dynamic.ts`           | manual/experimental | Dynamic route registration/build            |
 | `route.ts`                   | manual/experimental | Static route registration                   |
 | `schema.ts`                  | manual/experimental | Large schema construction                   |

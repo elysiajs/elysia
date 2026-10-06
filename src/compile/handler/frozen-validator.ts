@@ -424,7 +424,7 @@ interface FrozenRouteValidatorShape {
 	query?: FrozenSlotValidator
 	params?: FrozenSlotValidator
 	cookie?: FrozenSlotValidator
-	response?: Record<number, FrozenSlotValidator>
+	response?: Map<number, FrozenSlotValidator>
 }
 
 export const REQUEST_SLOTS = [
@@ -516,7 +516,7 @@ export function buildFrozenRouteValidator(
 
 		const statuses = isResponseMap(resolved) ? resolved : { 200: resolved }
 
-		const responseOut: Record<number, FrozenSlotValidator> = {}
+		const responseOut = new Map<number, FrozenSlotValidator>()
 
 		for (const status in statuses) {
 			const raw = (statuses as Record<string, unknown>)[status]
@@ -526,8 +526,10 @@ export function buildFrozenRouteValidator(
 			if (!schema) return undefined
 
 			if (isStandardSchema(schema)) {
-				responseOut[status as unknown as number] =
+				responseOut.set(
+					+status,
 					new StandardValidator(schema as any) as any
+				)
 
 				continue
 			}
@@ -542,11 +544,9 @@ export function buildFrozenRouteValidator(
 			if (!frozen || !isBridgeFreeComplete(frozen, schema, schema))
 				return undefined
 
-			responseOut[status as unknown as number] = new FrozenSlotValidator(
-				frozen,
-				schema,
-				schema,
-				normalize
+			responseOut.set(
+				+status,
+				new FrozenSlotValidator(frozen, schema, schema, normalize)
 			)
 		}
 

@@ -45,7 +45,7 @@ export const upload = (
 	}
 }
 
-export const post = (path: string, body?: string | Record<string, any>) =>
+export const post = (path: string, body?: unknown) =>
 	typeof body === 'string'
 		? new Request(`http://localhost${path}`, {
 				method: 'POST',
@@ -57,15 +57,16 @@ export const post = (path: string, body?: string | Record<string, any>) =>
 			})
 		: new Request(`http://localhost${path}`, {
 				method: 'POST',
-				headers: body
-					? {
-							'Content-Type': 'application/json',
-							'Content-Length': String(
-								Buffer.byteLength(JSON.stringify(body))
-							)
-						}
-					: {},
-				body: body ? JSON.stringify(body) : body
+				headers:
+					body !== undefined
+						? {
+								'Content-Type': 'application/json',
+								'Content-Length': String(
+									Buffer.byteLength(JSON.stringify(body))
+								)
+							}
+						: {},
+				body: body !== undefined ? JSON.stringify(body) : body
 			})
 
 export const json = (body: Record<string, any> | any[]): RequestInit => ({

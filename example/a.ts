@@ -1,21 +1,15 @@
-import { Elysia } from '../src'
-import * as z from 'zod'
+import { Elysia, macroType, t, type MacroTypeLambda } from '../src'
 
-const app = new Elysia().post(
-	'/hello',
-	{
-		query: z.object({ number: z.coerce.number() }),
-		body: z.object({ number: z.coerce.number() })
-	},
-	() => {}
-)
+interface Role extends MacroTypeLambda {
+    output: Record<'role', this['input']>
+}
 
-type App = typeof app
-
-type Query = App['~Routes']['hello']['post']['query']
-// actual: { number: number; }
-// expected: { number: string; }
-
-type Body = App['~Routes']['hello']['post']['body']
-// actual: { number: number; }
-// expected: { number: string; }
+new Elysia()
+    .macro({
+        role: (role: 'admin' | 'member') => ({
+			$type: macroType<Role>(),
+            derive: () => ({ role })
+		})
+    })
+    .get('/admin', { role: 'admin' }, ({ role }) => role)
+    .get('/member', { role: 'member' }, ({ role }) => role)
