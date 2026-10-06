@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
-import { Elysia, t } from '../../src'
+import { Elysia, status, t } from '../../src'
 import { snapshotSchema, snapshotHookSchemas } from '../../src/schema-snapshot'
 import { json } from '../utils'
 
@@ -317,6 +317,26 @@ describe('schema snapshot helpers', () => {
 		expect((unsafe as any)['~kind']).toBeUndefined()
 	})
 
+	it('shares one container between equal status maps', () => {
+		// read-only + frozen alone already cuts most of the per-route cost, so
+		// only identity proves routes declaring the same map keep one container
+		const schema = t.String()
+		const other = t.String({ minLength: 1 })
+
+		const first = snapshotHookSchemas({
+			response: { 200: schema, 404: schema }
+		})!.response
+		const second = snapshotHookSchemas({
+			response: { 200: schema, 404: schema }
+		})!.response
+		const differs = snapshotHookSchemas({
+			response: { 200: schema, 404: other }
+		})!.response
+
+		expect(first).toBe(second)
+		expect(differs).not.toBe(first)
+	})
+
 	it('stops sharing while an AOT build captures, but still freezes', () => {
 		// an AOT build must see the same object graph it would have seen without
 		// the intern table — one snapshot per registration, in registration
@@ -329,9 +349,13 @@ describe('schema snapshot helpers', () => {
 		process.env.ELYSIA_AOT_BUILD = '1'
 		let a: unknown
 		let b: unknown
+		let mapA: unknown
+		let mapB: unknown
 		try {
 			a = snapshotHookSchemas({ body: one })!.body
 			b = snapshotHookSchemas({ body: two })!.body
+			mapA = snapshotHookSchemas({ response: { 200: one } })!.response
+			mapB = snapshotHookSchemas({ response: { 200: one } })!.response
 		} finally {
 			if (previous === undefined) delete process.env.ELYSIA_AOT_BUILD
 			else process.env.ELYSIA_AOT_BUILD = previous
@@ -339,6 +363,11 @@ describe('schema snapshot helpers', () => {
 
 		expect(a).not.toBe(b)
 		expect(Object.isFrozen(a as object)).toBe(true)
+
+		// equal status maps stop sharing their container too, and it still freezes
+		expect(mapA).not.toBe(mapB)
+		expect(Object.isFrozen(mapA as object)).toBe(true)
+		expect(Object.isFrozen(mapB as object)).toBe(true)
 	})
 
 	it('keeps .model() roots mutable so $id can still be stamped', () => {
@@ -466,5 +495,73 @@ describe('schema snapshot helpers', () => {
 			firstMetadata: 'a',
 			secondMetadata: 'b'
 		})
+	})
+})
+
+describe('a response status map shared between routes', () => {
+	it('validates each route against its own map', async () => {
+		const app = new Elysia()
+			.get(
+				'/a',
+				{ response: { 200: t.String(), 404: t.String() } },
+				() => 'a'
+			)
+			.get(
+				'/b',
+				{ response: { 200: t.String(), 404: t.String() } },
+				() => 'b'
+			)
+			// equal to `/a` but for the 200 schema, or one status
+			.get(
+				'/number',
+				{ response: { 200: t.Number(), 404: t.String() } },
+				() => 'c' as any
+			)
+			.get(
+				'/teapot',
+				{ response: { 200: t.String(), 418: t.String() } },
+				() => status(418, 1 as any)
+			)
+
+		expect((await app.handle('/a')).status).toBe(200)
+		expect((await app.handle('/b')).status).toBe(200)
+		expect((await app.handle('/number')).status).toBe(500)
+		expect((await app.handle('/teapot')).status).toBe(500)
+	})
+
+	it("resolves a model name against each app's own models", async () => {
+		const name = new Elysia()
+			.model({ User: t.Object({ name: t.String() }) })
+			.get('/', { response: { 200: 'User' } }, () => ({ name: 'a' }))
+		const id = new Elysia()
+			.model({ User: t.Object({ id: t.Number() }) })
+			.get(
+				'/',
+				{ response: { 200: 'User' } },
+				() => ({ name: 'a' }) as any
+			)
+
+		expect((await name.handle('/')).status).toBe(200)
+		expect((await id.handle('/')).status).toBe(500)
+	})
+
+	it('keeps a write through app.routes out of every route', async () => {
+		const app = new Elysia()
+			.get(
+				'/a',
+				{ response: { 200: t.String() } },
+				() => status(404, 'a') as any
+			)
+			.get(
+				'/b',
+				{ response: { 200: t.String() } },
+				() => status(404, 'b') as any
+			)
+
+		// how @elysiajs/openapi adds a status it read from `fromTypes`
+		;(app.routes[0]!.hooks.response as any)[404] = t.Number()
+
+		expect((await app.handle('/a')).status).toBe(404)
+		expect((await app.handle('/b')).status).toBe(404)
 	})
 })

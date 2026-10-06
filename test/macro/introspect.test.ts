@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'bun:test'
-import { Elysia, t } from '../../src'
+import { Elysia, status, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
 import { compileFromFrozenHandler } from '../aot/_manifest'
@@ -177,6 +177,85 @@ describe('Macro introspect', () => {
 
 		expect((await send('/loose')).status).toBe(200)
 		expect((await send('/strict')).status).toBe(422)
+	})
+
+	describe('adding a status to the response map', () => {
+		const add404 = {
+			introspect(hooks: any) {
+				hooks.response[404] = t.Number()
+			}
+		}
+
+		// `/sibling` declares the same map without the macro
+		const expectOwnRouteOnly = async (
+			app: Elysia<any, any, any, any, any, any, any, any>
+		) => {
+			expect((await app.handle('/number')).status).toBe(404)
+			expect((await app.handle('/string')).status).toBe(500)
+			expect((await app.handle('/sibling')).status).toBe(404)
+		}
+
+		it("changes only its route's own map", async () => {
+			const app = new Elysia()
+				.macro({ add404 })
+				.get(
+					'/number',
+					{ add404: true, response: { 200: t.String() } },
+					() => status(404, 1) as any
+				)
+				.get(
+					'/string',
+					{ add404: true, response: { 200: t.String() } },
+					() => status(404, 'a') as any
+				)
+				.get(
+					'/sibling',
+					{ response: { 200: t.String() } },
+					() => status(404, 'a') as any
+				)
+
+			await expectOwnRouteOnly(app)
+		})
+
+		it('changes a guard map for its route only', async () => {
+			const app = new Elysia()
+				.macro({ add404 })
+				.guard({ response: { 200: t.String() } }, (guard) =>
+					guard
+						.get(
+							'/number',
+							{ add404: true },
+							() => status(404, 1) as any
+						)
+						.get(
+							'/string',
+							{ add404: true },
+							() => status(404, 'a') as any
+						)
+						.get('/sibling', () => status(404, 'a') as any)
+				)
+
+			await expectOwnRouteOnly(app)
+		})
+
+		it('fills an empty map the route still owns', async () => {
+			// an empty map is not shared or frozen, so a macro that adds the
+			// first status keeps working as it did before maps were shared
+			const app = new Elysia()
+				.macro({
+					add200: {
+						introspect(hooks: any) {
+							hooks.response[200] = t.String()
+						}
+					}
+				})
+				.get('/', { add200: true, response: {} }, () => 'ok')
+
+			const response = await app.handle('/')
+			expect(response.status).toBe(200)
+			await expect(response.text()).resolves.toBe('ok')
+			expect(() => app.routes).not.toThrow()
+		})
 	})
 
 	it('sees a macro listed later on a WebSocket route', async () => {

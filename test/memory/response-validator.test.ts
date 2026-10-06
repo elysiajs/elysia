@@ -55,6 +55,20 @@ for (const eager of [false, true])
 			).toBeLessThan(1500)
 		})
 
+		it('equal status maps share one container', async () => {
+			// ~5.8 KB with a `{ 200, 404 }` object per route, ~0.5 KB shared
+			expect(
+				await bytesPerRoute((app, paths) => {
+					for (const path of paths)
+						app.get(
+							path,
+							{ response: { 200: t.String(), 404: t.String() } },
+							() => 'hi'
+						)
+				}, eager)
+			).toBeLessThan(2000)
+		})
+
 		it('a shared status map guard keeps no status-indexed object per route', async () => {
 			// ~6 KB with a `{ 200, 401, 403 }` object per route, ~0.6 KB without
 			expect(

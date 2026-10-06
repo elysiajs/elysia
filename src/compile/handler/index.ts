@@ -32,6 +32,7 @@ import {
 	fnv1a,
 	isCompactBeforeHandleOnly,
 	isNotEmpty,
+	isRecordNumber,
 	macroEpoch,
 	mergeHook,
 	nullObject,
@@ -97,6 +98,10 @@ function promoteDerive(hook: any) {
 export function runIntrospect(hook: any) {
 	const introspects = hook?.['~introspect']
 	if (!introspects) return
+
+	// the status map may be shared, so an introspect rewrites a copy
+	if (hook.response && isRecordNumber(hook.response))
+		hook.response = { ...hook.response }
 
 	for (let i = 0; i < introspects.length; i++) introspects[i](hook)
 

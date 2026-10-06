@@ -367,10 +367,42 @@ function snapshotSlots(target: Record<string, any>, intern: boolean) {
 			!('~standard' in response) &&
 			isStatusMap(response)
 		) {
-			const next: Record<string, any> = {}
-			for (const status in response)
-				next[status] = internSchema(response[status], intern)
-			target.response = next
+			let next: Record<string, any> = {}
+			const state: FingerprintState = { bail: false }
+			let key = 'M'
+
+			for (const status in response) {
+				const schema = internSchema(response[status], intern)
+
+				Object.defineProperty(next, status, {
+					value: schema,
+					enumerable: true
+				})
+				key += status.length + ':' + status + byRefKey(schema, state)
+			}
+
+			if (key === 'M') target.response = next
+			else {
+				if (intern && !state.bail) {
+					const shared = interned.get(key)
+
+					if (shared === undefined) {
+						if (interned.size >= INTERN_LIMIT)
+							evictOldestHalf(interned)
+
+						interned.set(key, next)
+					} else {
+						if (interned.size >= INTERN_LIMIT) {
+							interned.delete(key)
+							interned.set(key, shared)
+						}
+
+						next = shared
+					}
+				}
+
+				target.response = Object.freeze(next)
+			}
 		} else target.response = internSchema(response, intern)
 	}
 }

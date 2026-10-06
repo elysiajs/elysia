@@ -673,8 +673,11 @@ export class Elysia<
 						)
 					}
 
-				if (merged?.response && !isRecordNumber(merged.response))
-					merged.response = { 200: merged.response }
+				// a status map may be shared with other routes
+				if (merged?.response)
+					merged.response = isRecordNumber(merged.response)
+						? { ...merged.response }
+						: { 200: merged.response }
 
 				return {
 					method,

@@ -941,13 +941,13 @@ export type MacroProperty<
 	/**
 	 * Type-level route metadata surfaced on the route's Eden type
 	 * (`CreateEdenResponse['meta']`). Reserved key like `seed`/`detail`/
-	 * `introspect` — stripped at runtime, never lands on route hooks
+	 * `introspect` stripped at runtime, never lands on route hooks
 	 */
 	meta?: unknown
 	/**
 	 * Phantom {@link MacroTypeLambda} computing per call site context from
 	 * the route's literal hook value. Reserved key like `seed`/`meta`/
-	 * `introspect` — set it with `macroType<Lambda>()`; stripped at runtime
+	 * `introspect` set it with `macroType<Lambda>()`; stripped at runtime
 	 */
 	$type?: MacroTypeLambda
 	/**
@@ -956,7 +956,9 @@ export type MacroProperty<
 	 * on the route's final hooks: its own, the ones every macro added and
 	 * the ones it inherits from hooks registered before it. A WebSocket
 	 * route hands over its own hooks only. Applied by
-	 * a guard, it sees the guard's hooks once instead of each route's
+	 * a guard, it sees the guard's hooks once instead of each route's.
+	 * A `schema: 'merge'` guard's response map
+	 * (`hooks.schemas[i].response`) is read-only
 	 *
 	 * @param option
 	 */
