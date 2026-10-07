@@ -128,6 +128,43 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 		})
 	})
 
+	// A lazy static slot holds an encoded index that `~dispatch` resolves
+	// through the JIT state: the release may only drop that state once no
+	// slot still needs it, and every route must keep serving afterwards
+	it('releases the JIT state once every lazy static route is hit and keeps serving', async () => {
+		await withEnv({ NODE_ENV: 'production' }, async () => {
+			const app: any = new Elysia()
+				.get('/', () => 'root')
+				.get('/dir/', () => 'dir')
+				.all('/any', () => 'any')
+			void app.fetch
+
+			expect(typeof app['~map'].GET['/']).toBe('number')
+			expect(typeof app['~map']['*']['/any']).toBe('number')
+
+			expect((await app.handle('/')).status).toBe(200)
+			expect((await app.handle('/dir')).status).toBe(200)
+			// `/any` is still an index: the table it resolves through stays
+			expect(app.jitTable).toBeDefined()
+
+			expect((await app.handle('/any', { method: 'POST' })).status).toBe(
+				200
+			)
+			expect(app.jitTable).toBeUndefined()
+			expect(app.jitAliases).toBeUndefined()
+
+			for (const method of ['GET', '*'])
+				for (const path in app['~map'][method])
+					expect(typeof app['~map'][method][path]).toBe('function')
+
+			await expect((await app.handle('/')).text()).resolves.toBe('root')
+			await expect((await app.handle('/dir/')).text()).resolves.toBe(
+				'dir'
+			)
+			await expect((await app.handle('/any')).text()).resolves.toBe('any')
+		})
+	})
+
 	it('keeps the JIT program alive until the LAST cold route compiles', async () => {
 		await withEnv({ NODE_ENV: 'production' }, async () => {
 			registerProbeManifest()

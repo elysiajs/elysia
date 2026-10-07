@@ -206,7 +206,7 @@ function findRoute(
 	}
 
 	const methodMap = map[method]
-	let handler: CompiledHandler | undefined
+	let handler: CompiledHandler | number | undefined
 
 	// wait until next version of Bun update WebKit
 	// @see https://bugs.webkit.org/show_bug.cgi?id=323839
@@ -230,7 +230,10 @@ function findRoute(
 
 	if (handler)
 		return dispatchResult(
-			handler(context),
+			// a number is a lazy route's encoded index, see `~map`
+			typeof handler === 'number'
+				? app['~dispatch'](~handler, context)
+				: handler(context),
 			context,
 			handleError,
 			afterResponse
@@ -242,10 +245,8 @@ function findRoute(
 		context.params =
 			path.indexOf('%') === -1 ? found.params : decodeParams(found.params)
 
-		// a number store is a lazy route's index
 		const store = found.store
-		const dynamic =
-			typeof store === 'number' ? app['compiled']?.[store] : store
+		const dynamic = typeof store === 'number' ? undefined : store
 
 		return dispatchResult(
 			dynamic

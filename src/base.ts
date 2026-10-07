@@ -521,8 +521,13 @@ export class Elysia<
 
 	// a number is a lazy route's index, see `~dispatch`
 	declare '~router'?: Memoirist<CompiledHandler | number>
+	// a number is a lazy route's encoded index `~index`, see `~dispatch`;
+	// WS handlers are built eagerly
 	declare '~map'?: {
-		[method: string]: { [path: string]: CompiledHandler } | undefined
+		[method: string]:
+			| { [path: string]: CompiledHandler | number }
+			| undefined
+		WS?: { [path: string]: CompiledHandler }
 	}
 
 	declare '~routeTable'?: RouteTable
@@ -623,8 +628,9 @@ export class Elysia<
 
 	/**
 	 * Every registered route with its merged hooks.
-	 * Development shares a frozen cache. Production rebuilds the list so its
-	 * metadata can be released after startup.
+	 * Development shares a frozen cache.
+	 * Production rebuilds the list on every read
+	 * so its metadata can be released after startup.
 	 */
 	get routes() {
 		const generation = this['~generation']
@@ -7440,11 +7446,13 @@ export class Elysia<
 						RouteFlag.JITCold | RouteFlag.JITSatisfied
 					)
 					const flags = table.flags[i]
+					// Bun serves an HTML bundle natively, it never reaches `~dispatch`
 					if (
 						satisfied ||
 						(flags & (RouteFlag.WS | RouteFlag.ExactDuplicate)) !==
 							0 ||
-						compiled?.[i] !== undefined
+						compiled?.[i] !== undefined ||
+						isHTMLBundle(table.handler[i])
 					)
 						continue
 
@@ -7458,10 +7466,16 @@ export class Elysia<
 
 			clearHandlerAnalysisCaches(this)
 			clearFlattenChainMemo(this)
-
-			if (!this['~ext']?.macro && !this['~scopeChildren'])
-				this.declaredRoutes = undefined
 		}
+
+		// readers rematerialize the rows from the route table; a macro or
+		// scope-child app's table holds resolved hooks, not the declared ones
+		if (
+			!this['~ext']?.macro &&
+			!this['~scopeChildren'] &&
+			!Capture.isAotBuildEnv()
+		)
+			this.declaredRoutes = undefined
 
 		const ext = this['~ext']
 		if (ext?.setup) extCallbackIndexes.delete(ext.setup)
@@ -7691,6 +7705,13 @@ export class Elysia<
 				continue
 			}
 
+			// `~dispatch` compiles a lazy route on its first hit
+			const lazy = !precompile && !this.compiled?.[i]
+			if (lazy) {
+				this.compiled ??= new Array(length)
+				this.jitTable = table
+			}
+
 			const isDynamic = (routeFlags & RouteFlag.Dynamic) !== 0
 			const needsEncode = (routeFlags & RouteFlag.Encode) !== 0
 			const registerLoose =
@@ -7699,15 +7720,12 @@ export class Elysia<
 			if (!isDynamic && !needsEncode && !registerLoose) {
 				const map = (methods[routeMethod] ??= nullObject() as any)
 
-				const handler = this.handler(
-					i,
-					precompile,
-					undefined,
-					undefined,
-					table
-				)
-
-				map[routePath] = handler
+				// A lazy route stores its encoded index `~i`, not a per-route
+				// thunk: negative, so index 0 stays truthy for findRoute's lookups.
+				// `~dispatch` swaps in the compiled handler on first hit
+				map[routePath] = lazy
+					? ~i
+					: this.handler(i, precompile, undefined, undefined, table)
 
 				continue
 			}
@@ -7732,36 +7750,21 @@ export class Elysia<
 				// A lazy route stores its index, not a per-route thunk. The JIT
 				// handler is never re-added: `add` overwrites a slot that a
 				// colliding later route may own (`/a/:b?` vs `/a/:c`)
-				let store: CompiledHandler | number
-				if (precompile || this.compiled?.[i])
-					store = this.handler(
-						i,
-						precompile,
-						undefined,
-						undefined,
-						table
-					)
-				else {
-					this.compiled ??= new Array(length)
-					this.jitTable = table
-					store = i
-				}
+				const store = lazy
+					? i
+					: this.handler(i, precompile, undefined, undefined, table)
 
 				for (let p = 0; p < paths.length; p++)
 					router.add(routeMethod, paths[p], store)
 			} else {
 				const map = (methods[routeMethod] ??= nullObject() as any)
 
-				const handler = this.handler(
-					i,
-					precompile,
-					undefined,
-					{
-						method: routeMethod,
-						paths
-					},
-					table
-				)
+				// encoded index as above; `~dispatch` rewrites every alias key
+				if (lazy)
+					(this.jitAliases ??= [])[i] = { method: routeMethod, paths }
+				const handler = lazy
+					? ~i
+					: this.handler(i, precompile, undefined, undefined, table)
 
 				for (let p = 0; p < paths.length; p++) map[paths[p]] = handler
 			}

@@ -219,7 +219,22 @@ export function collectHTMLBundleRoutes(
 	let dynamic: Set<string> | undefined
 	let bundles: [method: string, path: string, bundle: unknown][] | undefined
 
-	for (const route of app['~routes']) {
+	// once sealed, `~routes` would rematerialize the rows released at publish:
+	// scan the table, and build transient rows only when a bundle exists
+	const table = app['~generation']?.routeTable
+	if (
+		table &&
+		!table.handler.some(
+			(h, i) => isNativeStaticMethod(table.method[i]) && isHTMLBundle(h)
+		)
+	)
+		return routes
+
+	const declared = table
+		? table.method.map((_, i) => routeRow(table, i))
+		: app['~routes']
+
+	for (const route of declared) {
 		const [method, path, handler] = route
 		if (!isNativeStaticMethod(method) || !isHTMLBundle(handler)) continue
 
@@ -242,7 +257,7 @@ export function collectHTMLBundleRoutes(
 	const strictPath = app['~config']?.strictPath === true
 	const handoffs: [key: string, method: string][] = []
 
-	for (const [method, path, handler] of app['~routes']) {
+	for (const [method, path, handler] of declared) {
 		if (isHTMLBundle(handler)) continue
 
 		const targets =

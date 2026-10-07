@@ -85,6 +85,97 @@ describe('JIT route aliases', () => {
 	})
 })
 
+// A lazy static route's `~map` slot holds its encoded index `~i` until the
+// first hit compiles it (no per-route closure). The encoding and the swap are
+// what these pin: a raw index 0 is falsy and would 404 the first route, and an
+// alias key left holding the index would dispatch through the slow path forever
+describe('lazy static routes', () => {
+	const lanes = (app: any) => {
+		const values: unknown[] = []
+		for (const method in app['~map'])
+			if (method !== 'WS')
+				for (const path in app['~map'][method])
+					values.push(app['~map'][method][path])
+
+		return values
+	}
+
+	it('serves the route at index 0', async () => {
+		const app = new Elysia().get('/', () => 'root').get('/a', () => 'a')
+		void app.fetch
+
+		const map = (app as any)['~map'].GET
+		expect(typeof map['/']).toBe('number')
+
+		await expect((await app.handle('/')).text()).resolves.toBe('root')
+		expect(typeof map['/']).toBe('function')
+		await expect((await app.handle('/')).text()).resolves.toBe('root')
+	})
+
+	it('a first hit on one alias compiles every alias key', async () => {
+		const app = new Elysia()
+			.get('/dir/', () => 'dir')
+			.get('/café', () => 'coffee')
+		void app.fetch
+
+		const map = (app as any)['~map'].GET
+		for (const key of ['/dir/', '/dir', '/café', '/caf%C3%A9'])
+			expect(typeof map[key]).toBe('number')
+
+		// recorded at build: without it `~dispatch` rescans the whole route
+		// table on every first hit (quadratic warm-up)
+		expect((app as any).jitAliases).toEqual([
+			{ method: 'GET', paths: ['/dir/', '/dir'] },
+			{ method: 'GET', paths: ['/café', '/caf%C3%A9'] }
+		])
+
+		await expect((await app.handle('/dir')).text()).resolves.toBe('dir')
+		await expect((await app.handle('/caf%C3%A9')).text()).resolves.toBe(
+			'coffee'
+		)
+
+		expect(typeof map['/dir/']).toBe('function')
+		expect(map['/dir']).toBe(map['/dir/'])
+		expect(typeof map['/café']).toBe('function')
+		expect(map['/caf%C3%A9']).toBe(map['/café'])
+
+		await expect((await app.handle('/dir/')).text()).resolves.toBe('dir')
+	})
+
+	it('serves a lazy .all() route from the any-method lane', async () => {
+		const app = new Elysia().all('/any', ({ request }) => request.method)
+		void app.fetch
+
+		const map = (app as any)['~map']['*']
+		expect(typeof map['/any']).toBe('number')
+
+		await expect(
+			(await app.handle('/any', { method: 'POST' })).text()
+		).resolves.toBe('POST')
+		expect(typeof map['/any']).toBe('function')
+		await expect((await app.handle('/any')).text()).resolves.toBe('GET')
+	})
+
+	it('compile() after a lazy build leaves only compiled handlers', async () => {
+		const app = new Elysia()
+			.get('/', () => 'root')
+			.get('/dir/', () => 'dir')
+			.all('/any', () => 'any')
+		void app.fetch
+
+		expect(lanes(app).some((v) => typeof v === 'number')).toBe(true)
+
+		app.compile()
+
+		const values = lanes(app)
+		expect(values.length).toBeGreaterThan(0)
+		for (const value of values) expect(typeof value).toBe('function')
+
+		await expect((await app.handle('/dir')).text()).resolves.toBe('dir')
+		await expect((await app.handle('/any')).text()).resolves.toBe('any')
+	})
+})
+
 describe('per-route hook composition', () => {
 	it('shared-guard derive state does not bleed across two identical routes', async () => {
 		let counter = 0

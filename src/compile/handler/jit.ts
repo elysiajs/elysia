@@ -1328,12 +1328,14 @@ export function compileHandlerJit(
 		} else body += endTrace('error') + freThenSchedule('e')
 
 		const hookThrew = `catch(_ee){${freThenSchedule('_ee').trimEnd()}}}\n`
+		// a sync-first route hoists its error hooks too: JSC compiles a catch
+		// clause in time quadratic in its size
+		const syncFirst = typeof asyncMode === 'object' && !asyncMode.async
 
-		if (syncErrorHook) {
-			// `_ce` is hoisted out of `route`, so it cannot see `route`'s `_as`
-			// cache and declares its own
-			factoryHelpers += `function _ce(e,c){${abortOn ? 'let _as\n' : ''}try{\n${body}}${hookThrew}`
-			code += `}catch(e){return _ce(e,c)}\n`
+		if (syncErrorHook || syncFirst) {
+			const live = syncFirst ? (asyncMode as TailMode).live : ''
+			factoryHelpers += `function _ce(e,c${live}){${abortOn ? 'let _as\n' : ''}try{\n${body}}${hookThrew}`
+			code += `}catch(e){return _ce(e,c${live})}\n`
 		} else code += `}catch(e){try{\n${body}}${hookThrew}`
 	} else
 		code += catchSchedule

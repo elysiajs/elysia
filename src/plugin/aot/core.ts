@@ -917,17 +917,25 @@ export async function generateCompiledArtifacts(
 			)
 
 		_importedEntries.add(entryReal)
-		const mod = (await import(entry)) as {
-			app?: unknown
-			default?: unknown
+		const mod = (await import(entry)) as Record<string, unknown>
+		const isApp = (value: unknown) =>
+			typeof (value as { compile?: unknown } | undefined)?.compile ===
+			'function'
+
+		let app = isApp(mod.app) ? mod.app : mod.default
+
+		if (!isApp(app)) {
+			const names = Object.keys(mod).filter((name) => isApp(mod[name]))
+
+			if (new Set(names.map((name) => mod[name])).size > 1)
+				throw new Error(
+					`[elysia-aot] "${entry}" exports multiple Elysia apps (${names.join(', ')}). Export the one to compile as \`app\` or default`
+				)
+
+			app = names[0] ? mod[names[0]] : undefined
 		}
 
-		const app = mod.app ?? mod.default
-
-		if (
-			!app ||
-			typeof (app as { compile?: unknown }).compile !== 'function'
-		)
+		if (!isApp(app))
 			throw new Error(`[elysia-aot] "${entry}" must export an Elysia app`)
 
 		const typedApp = app as Parameters<typeof captureArtifacts>[0]

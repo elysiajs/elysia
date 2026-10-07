@@ -233,6 +233,34 @@ describe('AOT plugin', () => {
 		}
 	})
 
+	it('generateCompiledArtifacts finds an app exported under a custom name', async () => {
+		const { generateCompiledArtifacts } =
+			await import('../../src/plugin/aot/core')
+
+		const { source } = await generateCompiledArtifacts(
+			resolve(import.meta.dir, 'fixtures/named-export-app.ts'),
+			{ registerFrom: REGISTER_FROM }
+		)
+
+		expect(source).toContain('Compiled.register((() => {')
+		expect(source).toContain('"/named"')
+	})
+
+	it('generateCompiledArtifacts rejects an entry exporting several Elysia apps with no app/default', async () => {
+		const { generateCompiledArtifacts } =
+			await import('../../src/plugin/aot/core')
+
+		const error = await generateCompiledArtifacts(
+			resolve(import.meta.dir, 'fixtures/ambiguous-export-app.ts'),
+			{ registerFrom: REGISTER_FROM }
+		).catch((e: Error) => e)
+
+		expect(error).toBeInstanceOf(Error)
+		expect((error as Error).message).toContain(
+			'exports multiple Elysia apps (a, b)'
+		)
+	})
+
 	it('Bun.build inlines the manifest + injects the autoload import', async () => {
 		const { aot } = await import('../../src/plugin/aot/bun')
 

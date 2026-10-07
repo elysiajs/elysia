@@ -388,23 +388,29 @@ const emitted: string[] = []
 
 // A hand-off passes route locals into the tail; each must be declared at that
 // point of the sync route, or the hand-off throws a ReferenceError (e.g. `_r`
-// in its TDZ at a transform) instead of reaching the tail
+// in its TDZ at a transform) instead of reaching the tail. The error hooks run
+// in the hoisted `_ce`, which the route hands its locals to as parameters
 const expectDeclaredHandoffs = (code: string) => {
-	const route = code.slice(code.indexOf('function route(c){'))
+	const scopes = [code.slice(code.indexOf('function route(c){'))]
+	const ce = code.indexOf('function _ce(')
+	if (ce !== -1) scopes.push(code.slice(ce, code.indexOf('}catch(_ee){', ce)))
 	let handoffs = 0
 
-	for (const match of route.matchAll(/return _t\(c,\d+,\w+,([^)]*)\)/g)) {
-		handoffs++
-		const before = route.slice(0, match.index)
-		for (const local of match[1]!.split(','))
-			if (local !== 'undefined')
-				expect({
-					local,
-					declared: new RegExp(
-						`let (?:[\\w$]+(?:=[^,\\n]*)?,)*${local}\\b|catch\\(${local}\\)`
-					).test(before)
-				}).toEqual({ local, declared: true })
-	}
+	for (const scope of scopes)
+		for (const match of scope.matchAll(
+			/return (?:_t\(c,\d+,\w+,|_ce\(e,c,?)([^)]*)\)/g
+		)) {
+			if (match[0].startsWith('return _t(')) handoffs++
+			const before = scope.slice(0, match.index)
+			for (const local of match[1]!.split(','))
+				if (local && local !== 'undefined')
+					expect({
+						local,
+						declared: new RegExp(
+							`let (?:[\\w$]+(?:=[^,\\n]*)?,)*${local}\\b|catch\\(${local}\\)|^function _ce\\((?:[\\w$]+,)*${local}\\b`
+						).test(before)
+					}).toEqual({ local, declared: true })
+		}
 
 	return handoffs
 }

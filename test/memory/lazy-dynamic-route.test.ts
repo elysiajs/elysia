@@ -58,3 +58,27 @@ describe('lazy dynamic route memory', () => {
 		expect(lazy - compiled).toBeLessThan(0.5)
 	})
 })
+
+describe('lazy static route memory', () => {
+	// The first request builds the router. A lazy static route is stored as
+	// its encoded index, so that build must not allocate a dispatch thunk per
+	// route before any of them is hit (~80 B each, 8 MB at 100k routes)
+	it('the router build allocates no per-route closure', async () => {
+		// warm the build and dispatch code paths on a throwaway app
+		const warm = new Elysia().get('/w0', () => 'ok').get('/w1', () => 'ok')
+		keep.push(warm)
+		await warm.handle('/w0')
+
+		const app = new Elysia()
+		for (let i = 0; i < N; i++) app.get(`/s${i}`, () => 'ok')
+		keep.push(app)
+
+		const before = cells()
+		const res = await app.handle('/s0')
+		const after = cells()
+
+		expect(res.status).toBe(200)
+		// a thunk per route makes this ~2N (Function + JSLexicalEnvironment)
+		expect(after - before).toBeLessThan(N / 10)
+	})
+})

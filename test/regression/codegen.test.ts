@@ -8,6 +8,7 @@ import {
 	endValidatorCapture
 } from '../../src/compile/aot-capture'
 import { compileHandler } from '../../src/compile/handler'
+import { setOnEmit } from '../../src/compile/handler/jit'
 import { suspendsOnThenables } from '../utils'
 import {
 	aotReconstructHandle,
@@ -451,10 +452,6 @@ describe('request abort short-circuits lifecycle hooks', () => {
 // bounded by the nesting the compiler emits.
 describe('thousands of hooks of one kind', () => {
 	const N = 5000
-	// The first thrown request costs O(hooks²) on the error path regardless of
-	// nesting, so stay just past the ~2,500-hook overflow; `transform` covers
-	// the same emitter at `N`
-	const errorN = 3000
 
 	for (const lane of [jitHandle, precompileHandle, aotReconstructHandle]) {
 		for (const kind of [
@@ -491,31 +488,53 @@ describe('thousands of hooks of one kind', () => {
 			})
 
 		// The last hook answers with the message, so a route that failed to
-		// compile (and ran the hooks against the compile error) can't pass
-		it(`runs ${errorN} error hooks (${lane.id})`, async () => {
+		// compile (and ran the hooks against the compile error) can't pass. A
+		// hook that may return makes the route sync-first, and JSC compiles a
+		// catch clause in time quadratic in its size: the route's catch only
+		// hands the error to the hooks, which compile in a function of their own
+		it(`runs ${N} error hooks (${lane.id})`, async () => {
 			let count = 0
+			const emitted: string[] = []
+			setOnEmit((code) => emitted.push(code))
 
-			const instance = await lane.make((app) => {
-				for (let i = 0; i < errorN; i++)
-					app.error(({ error }) => {
-						count++
+			const instance = await lane
+				.make((app) => {
+					for (let i = 0; i < N; i++)
+						app.error(({ error }) => {
+							count++
 
-						if (i === errorN - 1) return (error as Error).message
+							if (i === N - 1) return (error as Error).message
+						})
+
+					return app.get('/', () => {
+						throw new Error('boom')
 					})
-
-				return app.get('/', () => {
-					throw new Error('boom')
 				})
-			})
+				.finally(() => setOnEmit(undefined))
 
 			try {
+				expect(emitted.length).toBeGreaterThan(0)
+				for (const code of emitted) {
+					const route = code.slice(code.indexOf('function route(c){'))
+
+					expect({
+						syncFirst: code.includes('async function _t('),
+						delegates: route.includes('}catch(e){return _ce(e,c)}'),
+						hooksInRoute: /\ber\[/.test(route)
+					}).toEqual({
+						syncFirst: true,
+						delegates: true,
+						hooksInRoute: false
+					})
+				}
+
 				count = 0
 				const res = await instance.handle(
 					new Request('http://localhost/')
 				)
 
 				expect(await res.text()).toBe('boom')
-				expect(count).toBe(errorN)
+				expect(count).toBe(N)
 			} finally {
 				await instance.dispose()
 			}

@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia } from '../../src'
 
 /**
- * Plan 007 — after a production seal, a fast-path (non-macro) app releases its
+ * Plan 007 — after a seal (any env), a fast-path (non-macro) app releases its
  * `declaredRoutes` tuple array because the same metadata is held columnar in
  * `~routeTable`. Every consumer rematerializes the array on demand from the
  * table. WHY these tests exist: the release is a pure memory optimization and
@@ -159,6 +159,7 @@ describe('plan 007 — declaredRoutes release + rematerialize', () => {
 			expect((app as any)['~ext']?.macro).toBeDefined()
 
 			void app.fetch
+			expect((app as any).declaredRoutes).toBeDefined()
 
 			// The macro hook still runs and introspection resolves it.
 			expect((await app.handle('/m')).status).toBe(200)
@@ -170,8 +171,10 @@ describe('plan 007 — declaredRoutes release + rematerialize', () => {
 		})
 	})
 
-	it('dev mode does not release: introspection identical before/after seal', async () => {
-		// No NODE_ENV=production → publish-time release block does not run.
+	// A dev server holds as many routes as production; the rows are the one
+	// copy of route metadata the table already covers
+	it('dev mode releases on seal: introspection identical, rows rematerialize on demand', async () => {
+		// No NODE_ENV=production
 		const app = new Elysia().get('/x', () => 'x').get('/y', () => 'y')
 
 		const before = app.routes.map((r) => r.path)
@@ -179,8 +182,39 @@ describe('plan 007 — declaredRoutes release + rematerialize', () => {
 
 		void app.fetch
 
+		// released at publish, before any getter can rematerialize it
+		expect((app as any).declaredRoutes).toBeUndefined()
+
 		expect(app.routes.map((r) => r.path)).toEqual(before)
 		expect(app.history.map((h) => h.path)).toEqual(beforeHistory)
+		// introspection rebuilt the rows from the route table
+		expect((app as any).declaredRoutes).toHaveLength(2)
 		expect((await app.handle('/x')).status).toBe(200)
 	})
+
+	// `.listen()` collects Bun's native routes right after the seal. Reading
+	// `~routes` there would rematerialize the rows it just released, so a Bun
+	// server would never keep the saving
+	it.each(['production', 'development'])(
+		'.listen() keeps the rows released after serving a request (%s)',
+		async (NODE_ENV) => {
+			await withEnv({ NODE_ENV }, async () => {
+				const app = new Elysia()
+					.get('/a', () => 'a')
+					.get('/b', () => 'b')
+				app.listen(0)
+
+				try {
+					const res = await fetch(
+						`http://localhost:${app.server!.port}/a`
+					)
+					await expect(res.text()).resolves.toBe('a')
+
+					expect((app as any).declaredRoutes).toBeUndefined()
+				} finally {
+					await app.stop()
+				}
+			})
+		}
+	)
 })

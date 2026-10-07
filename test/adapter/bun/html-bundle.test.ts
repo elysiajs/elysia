@@ -198,4 +198,99 @@ describe('Bun HTML import route', () => {
 			await app.stop(true)
 		}
 	})
+
+	// Only a GET/POST/PUT/DELETE/PATCH row can be a native bundle. Any other
+	// handler object (here `.all()`) is the user's, and reading its `index`
+	// may run arbitrary code
+	it('does not probe a non-native-method handler object for a bundle', async () => {
+		let touched = 0
+		const handler = {
+			get index() {
+				touched++
+				throw new Error('index read')
+			}
+		}
+
+		const app = new Elysia()
+			.get('/', () => 'ok')
+			.all('/any', handler as any)
+		app.listen(0)
+
+		try {
+			const res = await fetch(`http://localhost:${app.server!.port}/`)
+			expect(await res.text()).toBe('ok')
+			expect(touched).toBe(0)
+		} finally {
+			await app.stop(true)
+		}
+	})
+
+	// `.listen()` collects the bundles right after the seal: reading
+	// `~routes` there would rematerialize the route rows released at publish
+	it.each(['production', 'development'])(
+		'keeps the route rows released after serving with bundles (%s)',
+		async (NODE_ENV) => {
+			const previous = process.env.NODE_ENV
+			process.env.NODE_ENV = NODE_ENV
+
+			const app = new Elysia()
+				.get('/', index)
+				.get('/u/:id', index)
+				.get('/api', () => 'api')
+			app.listen(0)
+
+			try {
+				const base = `http://localhost:${app.server!.port}`
+				expect(await (await fetch(`${base}/api`)).text()).toBe('api')
+				expect(await (await fetch(`${base}/u/1`)).text()).toContain(
+					'id="fixture"'
+				)
+
+				expect((app as any).declaredRoutes).toBeUndefined()
+			} finally {
+				await app.stop(true)
+
+				if (previous === undefined) delete process.env.NODE_ENV
+				else process.env.NODE_ENV = previous
+			}
+		}
+	)
+
+	// Bun serves a bundle natively, so it never compiles on the JS lane. A
+	// production countdown waiting on it would never release the JIT state
+	// (staging, analysis caches, the AOT program)
+	it.each([
+		['static', '/page', '/page'],
+		['dynamic', '/spa/*', '/spa/x']
+	])(
+		'releases the JIT state once every JS route served (%s bundle)',
+		async (_, route, url) => {
+			const previous = process.env.NODE_ENV
+			process.env.NODE_ENV = 'production'
+
+			const app = new Elysia()
+				.get(route, index)
+				.get('/api', () => 'api')
+				.get('/u/:id', ({ params }) => params.id)
+			app.listen(0)
+
+			try {
+				const base = `http://localhost:${app.server!.port}`
+				expect(await (await fetch(`${base}/api`)).text()).toBe('api')
+				expect(await (await fetch(`${base}/u/1`)).text()).toBe('1')
+
+				expect((app as any).jitColdRemaining).toBeUndefined()
+				expect((app as any).jitTable).toBeUndefined()
+
+				const page = await fetch(`${base}${url}`)
+				expect(page.status).toBe(200)
+				expect(await page.text()).toContain('id="fixture"')
+			} finally {
+				await app.stop(true)
+
+				if (previous === undefined) delete process.env.NODE_ENV
+				else process.env.NODE_ENV = previous
+			}
+		}
+	)
 })

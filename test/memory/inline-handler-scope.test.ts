@@ -8,9 +8,10 @@ const N = 2000
 // every app stays reachable, so none is collected inside another's census
 const keep: Elysia[] = []
 
-// A first hit swaps the route's lazy entry for its compiled handler, one
-// scope for one. Counted as the slope over a second batch of hits on the same
-// app, so garbage from an earlier test cannot land between the two counts
+// A lazy route's map slot is an index, so a first hit adds exactly the
+// compiled handler's own scope: 1 per route for a function handler. Counted
+// as the slope over a second batch of hits on the same app, so garbage from
+// an earlier test cannot land between the two counts
 const scopesPerHit = async (app: Elysia, status = 200) => {
 	keep.push(app)
 
@@ -42,8 +43,8 @@ describe('inline handler memory', () => {
 				return 'hi'
 			})
 
-		// a retained compiler scope makes this 1
-		expect(await scopesPerHit(app)).toBeLessThan(0.5)
+		// a retained compiler scope makes this 2 or more
+		expect(await scopesPerHit(app)).toBeLessThan(1.5)
 	})
 
 	// default headers send every function route down the same inline path
@@ -51,17 +52,18 @@ describe('inline handler memory', () => {
 		const app = new Elysia().headers({ 'x-powered-by': 'Elysia' })
 		for (let i = 0; i < 2 * N; i++) app.get(`/r${i}`, () => 'hi')
 
-		expect(await scopesPerHit(app)).toBeLessThan(0.5)
+		expect(await scopesPerHit(app)).toBeLessThan(1.5)
 	})
 
 	// `compileHandler` wraps a static Error or an HTML bundle in a thrower
-	// whose own scope is 1 per route. Built inside `compileHandler`, it also
-	// keeps `compileHandler`'s scopes alive: 3 or 4
+	// whose own scope is 1 per route, on top of the compiled handler's: 2.
+	// Built inside `compileHandler`, it also keeps `compileHandler`'s scopes
+	// alive: 4 or 5
 	it('a static Error route does not retain the compiler scope', async () => {
 		const app = new Elysia()
 		for (let i = 0; i < 2 * N; i++) app.get(`/r${i}`, new Error('boom'))
 
-		expect(await scopesPerHit(app, 500)).toBeLessThan(1.5)
+		expect(await scopesPerHit(app, 500)).toBeLessThan(2.5)
 	})
 
 	it('an HTML bundle route does not retain the compiler scope', async () => {
@@ -69,6 +71,6 @@ describe('inline handler memory', () => {
 		for (let i = 0; i < 2 * N; i++)
 			app.get(`/r${i}`, { index: './index.html', files: [] })
 
-		expect(await scopesPerHit(app, 500)).toBeLessThan(1.5)
+		expect(await scopesPerHit(app, 500)).toBeLessThan(2.5)
 	})
 })
