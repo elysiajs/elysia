@@ -164,57 +164,69 @@ function findRoute(
 	const path = context.path
 	const method = request.method
 
-	if (hasWS && method === 'GET') {
-		const handler = map['WS']?.[path]
-		const found =
-			handler === undefined && hasDynamicWS
-				? router?.find('WS', path)
-				: undefined
+	// `map['WS']` is read before `method` is compared: without WS routes JSC
+	// compiles this never-taken branch to a bare exit, see `methodMap` below
+	if (hasWS) {
+		const wsMap = map['WS']
 
-		if (handler !== undefined || found) {
-			const upgrade = request.headers.get('upgrade')
-			if (upgrade && upgrade.toLowerCase() === 'websocket') {
-				if (handler)
+		if (method === 'GET') {
+			// '/' by id, see `methodMap` below
+			const handler =
+				path.length === 1 && path === '/' ? wsMap?.['/'] : wsMap?.[path]
+			const found =
+				handler === undefined && hasDynamicWS
+					? router?.find('WS', path)
+					: undefined
+
+			if (handler !== undefined || found) {
+				const upgrade = request.headers.get('upgrade')
+				if (upgrade && upgrade.toLowerCase() === 'websocket') {
+					if (handler)
+						return dispatchResult(
+							handler(context),
+							context,
+							handleError,
+							afterResponse
+						)
+
+					context.params =
+						path.indexOf('%') === -1
+							? found!.params
+							: decodeParams(found!.params)
+
 					return dispatchResult(
-						handler(context),
+						(found!.store as CompiledHandler)(context),
 						context,
 						handleError,
 						afterResponse
 					)
-
-				context.params =
-					path.indexOf('%') === -1
-						? found!.params
-						: decodeParams(found!.params)
-
-				return dispatchResult(
-					(found!.store as CompiledHandler)(context),
-					context,
-					handleError,
-					afterResponse
-				)
+				}
 			}
 		}
 	}
 
 	const methodMap = map[method]
-	let handler: CompiledHandler | undefined = methodMap?.[path]
+	let handler: CompiledHandler | undefined
 
-	if (!handler) {
-		if (
-			!strictPath &&
-			path.length > 1 &&
-			path.charCodeAt(path.length - 1) === 47
-		) {
-			const loose = path.slice(0, -1)
-			handler = methodMap?.[loose]
+	// wait until next version of Bun update WebKit
+	// @see https://bugs.webkit.org/show_bug.cgi?id=323839
+	if (path.length > 1) {
+		handler = methodMap?.[path]
 
-			if (!handler) {
-				const anyMap = map['*']
-				handler = anyMap?.[path] ?? anyMap?.[loose]
-			}
-		} else handler = map['*']?.[path]
-	}
+		if (!handler) {
+			if (!strictPath && path.charCodeAt(path.length - 1) === 47) {
+				const loose = path.slice(0, -1)
+				// `//` leaves '/': a 1-char `loose` gets its own site too
+				handler =
+					loose.length > 1 ? methodMap?.[loose] : methodMap?.[path[0]]
+
+				if (!handler) {
+					const anyMap = map['*']
+					handler = anyMap?.[path] ?? anyMap?.[loose]
+				}
+			} else handler = map['*']?.[path]
+		}
+	} else handler = methodMap?.[context.path] || map['*']?.[path]
 
 	if (handler)
 		return dispatchResult(
