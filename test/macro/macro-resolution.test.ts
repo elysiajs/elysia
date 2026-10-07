@@ -255,11 +255,30 @@ describe('Macro resolution isolation', () => {
 		app.stop()
 	})
 
-	it('points unnamed-factory collisions at plugin naming', () => {
+	it('rejects a macro redefined by another unnamed factory instance', () => {
 		const factory = () =>
 			new Elysia().macro({ auth: { beforeHandle: () => {} } })
 
-		expect(() => new Elysia().use(factory()).use(factory())).toThrowError
+		expect(() => new Elysia().use(factory()).use(factory())).toThrow(
+			/Macro "auth" can be only define once/
+		)
+	})
+
+	// what a caught collision installed is rolled back: `.has()` must not
+	// report a plugin whose macros and hooks never applied, nor dedup it
+	it('forgets a named plugin whose macro collision is caught', async () => {
+		const descendant = new Elysia({ name: 'descendant' })
+		const plugin = new Elysia({ name: 'plugin' })
+			.use(descendant)
+			.macro({ auth: { beforeHandle: () => {} } })
+		const app = new Elysia().macro({ auth: { beforeHandle: () => {} } })
+
+		expect(() => app.use(plugin)).toThrow(/Macro "auth"/)
+		expect(app.has(plugin)).toBe(false)
+		expect(app.has(descendant)).toBe(false)
+
+		app.use(new Elysia({ name: 'plugin' }).get('/again', () => 'again'))
+		expect(await (await app.handle('/again')).text()).toBe('again')
 	})
 
 	it('registers no routes from a plugin whose macro collision is caught', async () => {

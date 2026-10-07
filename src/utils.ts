@@ -91,8 +91,8 @@ export function evictOldestHalf(cache: Map<any, any>) {
 	for (const entry of keep) cache.set(entry[0], entry[1])
 }
 
-export function fnv1a(str: string): number {
-	let hash = FNV_OFFSET_BASIS
+// from a previous result, it continues it: fnv1a(b, fnv1a(a)) is fnv1a(a + b)
+export function fnv1a(str: string, hash = FNV_OFFSET_BASIS): number {
 	const len = str.length
 
 	for (let i = 0; i < len; i++) {
@@ -161,27 +161,24 @@ export function refTargets(
 export const macroOrigin = new WeakMap<object | Function, number>()
 
 /**
- * Id of `ref` in the registry at `globalThis[key]`, `next` being the last id
- * handed out. Weak so it doesn't retain `ref`, realm-wide so every installed
- * Elysia copy agrees
+ * Id of `ref` in the registry at `globalThis['~elysiaSeedIds']`, `next` being
+ * the last id handed out. Weak so it doesn't retain `ref`, realm-wide so every
+ * installed Elysia copy agrees
  */
-function realmId(key: '~elysiaPluginIds' | '~elysiaSeedIds', ref: WeakKey) {
+function realmId(ref: WeakKey) {
 	const realm = globalThis as {
-		[k in typeof key]?: { ids: WeakMap<WeakKey, number>; next: number }
+		'~elysiaSeedIds'?: { ids: WeakMap<WeakKey, number>; next: number }
 	}
-	const registry = (realm[key] ??= { ids: new WeakMap(), next: 0 })
+	const registry = (realm['~elysiaSeedIds'] ??= {
+		ids: new WeakMap(),
+		next: 0
+	})
 
 	let id = registry.ids.get(ref)
 	if (id === undefined) registry.ids.set(ref, (id = ++registry.next))
 
 	return id
 }
-
-/**
- * Id of an unnamed plugin in `childrenHash`, negative so it never collides
- * with a named plugin's unsigned hash
- */
-export const pluginId = (plugin: object) => -realmId('~elysiaPluginIds', plugin)
 
 /**
  * Linked-list representation of the scope/global hook chain of a route
@@ -1428,7 +1425,7 @@ prefix.capitalize = function prefixModelsCapitalize<
 export function serializeMacroSeed(_key: string, value: unknown) {
 	switch (typeof value) {
 		case 'function':
-			return '\0ref:' + realmId('~elysiaSeedIds', value)
+			return '\0ref:' + realmId(value)
 
 		case 'bigint':
 			return '\0bigint:' + (value as bigint).toString()
@@ -1438,7 +1435,7 @@ export function serializeMacroSeed(_key: string, value: unknown) {
 			const key = Symbol.keyFor(value as symbol)
 
 			return key === undefined
-				? '\0ref:' + realmId('~elysiaSeedIds', value as symbol)
+				? '\0ref:' + realmId(value as symbol)
 				: '\0symfor:' + key
 		}
 

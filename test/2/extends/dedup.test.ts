@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'bun:test'
-import { existsSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import { Elysia } from '../../../src'
 
 describe('plugin deduplication', () => {
@@ -351,22 +349,6 @@ describe('.has()', () => {
 		expect(app.has(new Elysia({ name: 'plugin', seed: 'b' }))).toBe(false)
 	})
 
-	it('finds unnamed plugins by reference', () => {
-		const plugin = new Elysia()
-		const app = new Elysia().use(plugin)
-
-		expect(app.has(plugin)).toBe(true)
-		expect(app.has(new Elysia())).toBe(false)
-	})
-
-	it('finds transitive unnamed plugins', () => {
-		const plugin = new Elysia()
-		const parent = new Elysia({ name: 'parent' }).use(plugin)
-		const app = new Elysia().use(parent)
-
-		expect(app.has(plugin)).toBe(true)
-	})
-
 	it('returns false for an unregistered plugin', () => {
 		const app = new Elysia()
 
@@ -375,7 +357,7 @@ describe('.has()', () => {
 	})
 
 	it('reflects plugins registered later', () => {
-		const plugin = new Elysia()
+		const plugin = new Elysia({ name: 'plugin' })
 		const app = new Elysia()
 
 		expect(app.has(plugin)).toBe(false)
@@ -383,56 +365,19 @@ describe('.has()', () => {
 		expect(app.has(plugin)).toBe(true)
 	})
 
-	// unnamed plugin ids live in a realm-wide registry, membership must not
-	it('scopes unnamed plugins to the app that used them', () => {
+	// only a named plugin has an identity: an unnamed one is installed every
+	// time it is used, and `.has()` can't tell it was
+	it('does not track unnamed plugins', async () => {
+		let requests = 0
 		const plugin = new Elysia()
-		const app = new Elysia().use(new Elysia().use(plugin))
+			.request(() => {
+				requests++
+			})
+			.get('/', () => 'ok')
+		const app = new Elysia().use(plugin).use(plugin)
 
-		expect(app.has(plugin)).toBe(true)
-		expect(new Elysia().use(new Elysia()).has(plugin)).toBe(false)
-	})
-
-	// nothing may be written onto the plugin instance
-	it('finds frozen unnamed plugins', async () => {
-		const plugin = new Elysia().decorate('frozen', 'ok')
-		Object.freeze(plugin)
-		const app = new Elysia()
-
-		expect(app.has(plugin)).toBe(false)
-		app.use(plugin).get('/', ({ frozen }) => frozen)
-		expect(app.has(plugin)).toBe(true)
 		expect(await (await app.handle('/')).text()).toBe('ok')
-	})
-
-	// an older Elysia copy stores unnamed plugin instances in childrenHash
-	it('finds unnamed plugins absorbed from an older copy', () => {
-		const plugin = new Elysia()
-		const legacy = new Elysia({ name: 'legacy' })
-		;(legacy as any).childrenHash = new Set([plugin])
-
-		const app = new Elysia().use(legacy)
-
-		expect(app.has(plugin)).toBe(true)
-		expect(app.has(legacy)).toBe(true)
-	})
-
-	// a plugin package may resolve its own Elysia copy. dist is that copy: a
-	// `?query` import re-runs only the entry, not the module graph
-	it('agrees on unnamed plugin ids across Elysia copies', async () => {
-		const dist = resolve(import.meta.dir, '../../../dist')
-		const utils = resolve(dist, 'utils.mjs')
-		// a dist older than the realm-wide id registry tests nothing
-		if (
-			!existsSync(utils) ||
-			!readFileSync(utils, 'utf8').includes('~elysiaPluginIds')
-		)
-			throw new Error('dist is missing or stale, run `bun run build`')
-
-		const { Elysia: Copy } = await import(resolve(dist, 'index.mjs'))
-		const plugin = new Copy()
-		const app = new Elysia().use(new Copy().use(plugin))
-
-		expect(Copy).not.toBe(Elysia)
-		expect(app.has(plugin)).toBe(true)
+		expect(requests).toBe(2)
+		expect(app.has(plugin)).toBe(false)
 	})
 })

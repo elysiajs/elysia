@@ -68,7 +68,6 @@ import {
 	mergeDeep,
 	mergeResponse,
 	nullObject,
-	pluginId,
 	schemaProperties,
 	type ChainNode,
 	invalidateMacroEpoch,
@@ -4447,8 +4446,9 @@ export class Elysia<
 		return this
 	}
 
+	// only a named plugin has an identity to look up
 	has(plugin: AnyElysia) {
-		return this.childrenHash?.has(plugin.hash ?? pluginId(plugin)) ?? false
+		return this.childrenHash?.has(plugin.hash!) ?? false
 	}
 
 	#useFn(app: (app: any) => unknown): any {
@@ -4521,13 +4521,13 @@ export class Elysia<
 		if (app['~introspect'] || config?.introspect) this['~introspect'] = true
 
 		const name = config?.name
-		const childKey = name ? app.hash! : pluginId(app)
-		const exists = this.childrenHash?.has(childKey)
-		if (name && exists) return
-		if (!exists) {
+		if (name) {
+			const hash = app.hash!
+			if (this.childrenHash?.has(hash)) return
+
 			this.childrenHash ??= new Set()
-			this.childrenHash.add(childKey)
-			;(addedByThisCall ??= new Set()).add(childKey)
+			this.childrenHash.add(hash)
+			;(addedByThisCall ??= new Set()).add(hash)
 		}
 
 		// a `.group()`/`.guard()` callback is a sandbox (Elysia 1): what it
@@ -4563,11 +4563,9 @@ export class Elysia<
 		app: AnyElysia,
 		addedByThisCall: Set<number> | undefined
 	) {
-		const childrenHash = this.childrenHash!
+		const childrenHash = (this.childrenHash ??= new Set())
 
-		// an older Elysia copy may hold unnamed plugin instances
-		for (let h of app.childrenHash as Set<number | object>) {
-			if (typeof h === 'object') h = pluginId(h)
+		for (const h of app.childrenHash!) {
 			if (childrenHash.has(h)) continue
 
 			childrenHash.add(h)
@@ -4710,7 +4708,7 @@ export class Elysia<
 		}
 
 		if (hoc) {
-			const childrenHash = this.childrenHash!
+			const childrenHash = this.childrenHash
 			const target = (ext.hoc ??= [])
 			const origins = (ext.hocOrigin ??= [])
 
@@ -4726,7 +4724,7 @@ export class Elysia<
 				// that plugin is installed here already
 				if (
 					origin !== undefined &&
-					childrenHash.has(origin) &&
+					childrenHash?.has(origin) &&
 					!addedByThisCall?.has(origin)
 				)
 					continue

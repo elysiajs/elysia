@@ -627,43 +627,51 @@ export function routeShape(
 	// polluted Object / Array prototype
 	for (const _ in []) return
 
-	const shape = (v: any, at = '') => {
+	// fnv1a of the canonical sequence, hashed as it is produced, never built
+	let hash: number | undefined
+	const feed = (s: string) => {
+		hash = fnv1a(s, hash)
+	}
+
+	const quote = (s: string) => feed(JSON.stringify(s))
+
+	const shape = (v: any, at = ''): void => {
 		switch (typeof v) {
 			case 'string':
-				return JSON.stringify(v)
+				return quote(v)
 
 			case 'number':
-				return 'n' + (Object.is(v, -0) ? '-0' : v)
+				return feed('n' + (Object.is(v, -0) ? '-0' : v))
 
 			case 'bigint':
-				return 'b' + v
+				return feed('b' + v)
 
 			case 'boolean':
-				return v ? 'T' : 'F'
+				return feed(v ? 'T' : 'F')
 
 			case 'undefined':
-				return 'U'
+				return feed('U')
 
 			case 'function':
-				if (ids.has(v)) return '#' + ids.get(v)
+				if (ids.has(v)) return feed('#' + ids.get(v))
 				ids.set(v, ids.size)
-				return isAsyncFunction(v) ? 'fa' : 'fs'
+				return feed(isAsyncFunction(v) ? 'fa' : 'fs')
 
 			case 'symbol':
 				unsupported = true
-				return ''
+				return
 		}
 
-		if (v === null) return 'N'
-		if ('~standard' in v) return 'S'
+		if (v === null) return feed('N')
+		if ('~standard' in v) return feed('S')
 
 		if (visiting.has(v)) {
 			unsupported = true
-			return ''
+			return
 		}
 
 		// Elysia builders keep `~kind` on a shared prototype
-		let tag = ''
+		let kind: PropertyDescriptor | undefined
 		const list = Array.isArray(v)
 		const proto = Object.getPrototypeOf(v)
 		if (
@@ -671,8 +679,7 @@ export function routeShape(
 				? proto !== Array.prototype
 				: proto !== null && proto !== Object.prototype
 		) {
-			const kind =
-				proto && Object.getOwnPropertyDescriptor(proto, '~kind')
+			kind = proto && Object.getOwnPropertyDescriptor(proto, '~kind')
 
 			if (
 				!kind ||
@@ -681,18 +688,19 @@ export function routeShape(
 				Object.getPrototypeOf(proto) !== Object.prototype
 			) {
 				unsupported = true
-				return ''
+				return
 			}
-
-			tag = shape(kind.value)
 		}
+
+		// the tag follows the bracket
+		feed(list ? '[' : '{')
+		if (kind) shape(kind.value)
 
 		visiting.add(v)
 
 		const map = at === 'response' && isResponseMap(v)
 		const deferred = v['~kind'] === 'Deferred'
 
-		let s = (list ? '[' : '{') + tag
 		for (const k of Reflect.ownKeys(v)) {
 			const d = Object.getOwnPropertyDescriptor(v, k)!
 			if (typeof k === 'symbol' || !('value' in d)) {
@@ -702,89 +710,100 @@ export function routeShape(
 
 			const value = d.value
 			if (k === '$ref' && typeof value === 'string') addRef(value, at)
-			s += ',' + (d.enumerable ? '' : '!') + JSON.stringify(k) + ':'
+			feed(d.enumerable ? ',' : ',!')
+			quote(k)
+			feed(':')
 
-			if (map) s += named(value)
+			if (map) named(value)
 			else if (k === 'config' && isCookieAt(at))
-				s += shape([value?.sign, !!value?.secrets])
+				shape([value?.sign, !!value?.secrets])
 			// secret never enters shape
 			else if (
 				k === 'secrets' &&
 				(typeof value === 'string' || Array.isArray(value))
 			)
-				s += shape(!!value)
-			else s += shape(value, childAt(at, k as string, value, deferred))
+				shape(!!value)
+			else shape(value, childAt(at, k as string, value, deferred))
 		}
 
 		visiting.delete(v)
 
-		return s + (list ? ']' : '}')
+		feed(list ? ']' : '}')
 	}
 
 	// a string is a model name
 	const named = (v: unknown, at?: string) => {
 		if (typeof v === 'string') addRef(v, at)
-		return shape(v, at)
+		shape(v, at)
 	}
 
-	let s =
-		typeof handler === 'function' || handler == null
-			? shape(handler)
-			: handler instanceof Response
+	if (typeof handler === 'function' || handler == null) shape(handler)
+	else
+		feed(
+			handler instanceof Response
 				? 'R'
 				: handler instanceof Promise
 					? 'P'
 					: typeof handler === 'object'
 						? 'O'
 						: 'V'
+		)
 
 	for (const event of shapeEvents) {
-		s += '|'
+		feed('|')
 
 		const fns = (hook as any)?.[event]
-		if (fns)
-			for (const fn of Array.isArray(fns) ? fns : [fns]) s += shape(fn)
+		if (fns) for (const fn of Array.isArray(fns) ? fns : [fns]) shape(fn)
 	}
 
 	const bf = hook?.beforeHandle as Function | Function[] | undefined
-	s +=
+	feed(
 		'|' +
-		JSON.stringify(
-			bf &&
-				deriveModes(
-					Array.isArray(bf) ? bf : [bf],
-					(hook as any)['~deriveEntries']
-				)
-		)
+			JSON.stringify(
+				bf &&
+					deriveModes(
+						Array.isArray(bf) ? bf : [bf],
+						(hook as any)['~deriveEntries']
+					)
+			)
+	)
 
 	for (const from of [hook, ...((hook as any)?.schemas || [])])
-		for (const slot of shapeSlots) s += '|' + named(from?.[slot], slot)
+		for (const slot of shapeSlots) {
+			feed('|')
+			named(from?.[slot], slot)
+		}
 
-	// reference models, a cookie counts every schema a name may resolve to
+	// reference models, a cookie counts every schema a name may resolve to.
+	// `refs` grows while walked: a model may name another
 	let targets: ReturnType<typeof refTargets> | undefined
 	for (const [ref, at] of refs)
 		for (const target of at
 			? (targets ??= refTargets([], models))(ref)
-			: [models?.[ref]])
-			s += '|' + JSON.stringify(ref) + shape(target, at)
+			: [models?.[ref]]) {
+			feed('|')
+			quote(ref)
+			shape(target, at)
+		}
 
-	s +=
+	feed(
 		'|' +
-		JSON.stringify([
-			config?.cookie?.sign,
-			config?.cookie?.verify,
-			config?.normalize,
-			!!config?.allowUnsafeValidationDetails,
-			config?.abortSignal !== false,
-			isNotEmpty(frozenRoot['~ext']?.headers),
-			// not `compact`: captured code works either way
-			!!(config?.adapter ?? defaultAdapter).response
-				.supportsDefaultHeaderSink,
-			!!returnedErrorClasses(hook as any)
-		]) +
-		shape(config?.sanitize)
+			JSON.stringify([
+				config?.cookie?.sign,
+				config?.cookie?.verify,
+				config?.normalize,
+				!!config?.allowUnsafeValidationDetails,
+				config?.abortSignal !== false,
+				isNotEmpty(frozenRoot['~ext']?.headers),
+				// not `compact`: captured code works either way
+				!!(config?.adapter ?? defaultAdapter).response
+					.supportsDefaultHeaderSink,
+				!!returnedErrorClasses(hook as any)
+			])
+	)
+	shape(config?.sanitize)
 
-	return unsupported ? undefined : fnv1a(s)
+	return unsupported ? undefined : hash
 }
 
 // module level: an arrow built inside `compileHandler` would keep its whole
