@@ -363,7 +363,6 @@ export function mapBeforeHandle(
 	const tail = asyncTail(mode)
 
 	let code = ''
-	let depth = 0
 	let needsEs = false
 
 	for (let i = 0; i < hooks.length; i++) {
@@ -374,10 +373,7 @@ export function mapBeforeHandle(
 				: undefined
 
 		if (tail) code += tailStage(tail, guard)
-		else if (guard) {
-			code += `if(${guard}){\n`
-			depth++
-		}
+		else if (guard) code += `if(${guard}){\n`
 
 		const t = traceChild(report, fn)
 		code += t.begin
@@ -413,10 +409,9 @@ export function mapBeforeHandle(
 		} else code += 'if(tmp!==undefined)_r=tmp\n'
 
 		code += t.end('tmp')
-		if (tail) code += '}\n'
+		if (tail || guard) code += '}\n'
 	}
 
-	code += '}'.repeat(depth)
 	if (needsEs) link(ElysiaStatus, 'es')
 
 	return code
@@ -487,7 +482,6 @@ export function mapChainHook(
 	const hooks = toArray(_hooks)
 	const tail = asyncTail(mode)
 	let code = ''
-	let depth = 0
 
 	for (let i = 0; i < hooks.length; i++) {
 		const fn = hooks[i]
@@ -497,19 +491,15 @@ export function mapChainHook(
 				: undefined
 
 		if (tail) code += tailStage(tail, guard)
-		else if (guard) {
-			code += `if(${guard}){\n`
-			depth++
-		}
+		else if (guard) code += `if(${guard}){\n`
 
 		const t = traceChild(report, fn)
 		code += t.begin
 		code += awaitSite(`${prefix}${at(i)}(c)`, fn, mode, 'tmp', arm)
 		code += t.end('tmp')
-		if (tail) code += '}\n'
+		if (tail || guard) code += '}\n'
 	}
 
-	code += '}'.repeat(depth)
 	code += tailPlain(mode, `if(tmp!==undefined)_r=c.responseValue=tmp\n`)
 	return code
 }
@@ -566,20 +556,15 @@ function map<Event extends AppEvent, T extends unknown[] = []>(
 	) {
 		if (Array.isArray(event)) {
 			let code = ''
-			let depth = 0
 
 			for (let i = 0; i < event.length; i++) {
 				const guard = i > 0 && abortGuard ? `!${abortGuard}` : undefined
 				if (tail) code += tailStage(tail, guard)
-				else if (guard) {
-					code += `if(${guard}){\n`
-					depth++
-				}
+				else if (guard) code += `if(${guard}){\n`
 				code += map(i, event[i], rest as T)
-				if (tail) code += '}\n'
+				if (tail || guard) code += '}\n'
 			}
 
-			code += '}'.repeat(depth)
 			return code
 		} else if (tail)
 			return tailStage(tail) + map(undefined, event, rest as T) + '}\n'

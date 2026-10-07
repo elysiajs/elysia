@@ -10,6 +10,11 @@ import {
 import { compileHandler } from '../../src/compile/handler'
 import { suspendsOnThenables } from '../utils'
 import {
+	aotReconstructHandle,
+	jitHandle,
+	precompileHandle
+} from '../differential/lanes'
+import {
 	materialise,
 	materialiseHandlers,
 	registerManifest
@@ -438,4 +443,112 @@ describe('request abort short-circuits lifecycle hooks', () => {
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('')
 	})
+})
+
+// Each hook used to open one more nested block in the compiled route, so a few
+// thousand hooks of one kind (reachable by accumulating plugin-scoped hooks)
+// overflowed the parser and every request 500'd. Hook count must not be
+// bounded by the nesting the compiler emits.
+describe('thousands of hooks of one kind', () => {
+	const N = 5000
+	// The first thrown request costs O(hooks²) on the error path regardless of
+	// nesting, so stay just past the ~2,500-hook overflow; `transform` covers
+	// the same emitter at `N`
+	const errorN = 3000
+
+	for (const lane of [jitHandle, precompileHandle, aotReconstructHandle]) {
+		for (const kind of [
+			'beforeHandle',
+			'afterHandle',
+			'mapResponse',
+			'transform',
+			'derive'
+		] as const)
+			it(`runs ${N} ${kind} hooks (${lane.id})`, async () => {
+				let count = 0
+
+				const instance = await lane.make((app) => {
+					for (let i = 0; i < N; i++)
+						(app as any)[kind](() => {
+							count++
+						})
+
+					return app.get('/', () => 'ok')
+				})
+
+				try {
+					count = 0
+					const res = await instance.handle(
+						new Request('http://localhost/')
+					)
+
+					expect(res.status).toBe(200)
+					expect(await res.text()).toBe('ok')
+					expect(count).toBe(N)
+				} finally {
+					await instance.dispose()
+				}
+			})
+
+		// The last hook answers with the message, so a route that failed to
+		// compile (and ran the hooks against the compile error) can't pass
+		it(`runs ${errorN} error hooks (${lane.id})`, async () => {
+			let count = 0
+
+			const instance = await lane.make((app) => {
+				for (let i = 0; i < errorN; i++)
+					app.error(({ error }) => {
+						count++
+
+						if (i === errorN - 1) return (error as Error).message
+					})
+
+				return app.get('/', () => {
+					throw new Error('boom')
+				})
+			})
+
+			try {
+				count = 0
+				const res = await instance.handle(
+					new Request('http://localhost/')
+				)
+
+				expect(await res.text()).toBe('boom')
+				expect(count).toBe(errorN)
+			} finally {
+				await instance.dispose()
+			}
+		})
+
+		// Closing each guard right after its hook must still stop every later
+		// hook of that kind once one of them answers
+		for (const kind of ['beforeHandle', 'afterHandle'] as const)
+			it(`stops ${N} ${kind} hooks at the one that answers (${lane.id})`, async () => {
+				let count = 0
+
+				const instance = await lane.make((app) => {
+					for (let i = 0; i < N; i++)
+						(app as any)[kind](() => {
+							count++
+
+							if (i === N / 2) return 'stop'
+						})
+
+					return app.get('/', () => 'ok')
+				})
+
+				try {
+					count = 0
+					const res = await instance.handle(
+						new Request('http://localhost/')
+					)
+
+					expect(await res.text()).toBe('stop')
+					expect(count).toBe(N / 2 + 1)
+				} finally {
+					await instance.dispose()
+				}
+			})
+	}
 })
