@@ -87,9 +87,18 @@ export const traceEvents = /*#__PURE__*/ [
 	'afterResponse',
 	'error'
 ] as const
-export const traceEventIndex: Record<TraceEvent, number> = Object.fromEntries(
-	traceEvents.map((event, index) => [event, index])
-) as any
+
+export const traceEventIndex: Record<TraceEvent, number> = {
+	request: 0,
+	parse: 1,
+	transform: 2,
+	beforeHandle: 3,
+	handle: 4,
+	afterHandle: 5,
+	mapResponse: 6,
+	afterResponse: 7,
+	error: 8
+}
 export type TraceEvent = (typeof traceEvents)[number]
 
 export const StatusMapBack = mapBack(StatusMap)

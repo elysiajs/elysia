@@ -257,14 +257,6 @@ const toModel = (key: string, value: AnySchema) => {
 	return value
 }
 
-// Runtime hook keys plus legacy Swagger metadata.
-const hookKeys = new Set([
-	...schemaProperties,
-	...eventProperties,
-	'detail',
-	'tags'
-])
-
 // Any other value would register as local: a 1.x `'scoped'` auth hook or
 // guard silently stops guarding the parent
 const assertScope = (scope: unknown) => {
@@ -279,8 +271,16 @@ const assertScope = (scope: unknown) => {
 		)
 }
 
+// Runtime hook keys plus legacy Swagger metadata.
 const hasHookKeys = (value: object) => {
-	for (const key in value) if (hookKeys.has(key)) return true
+	for (const key in value)
+		if (
+			schemaProperties.has(key) ||
+			eventProperties.has(key) ||
+			key === 'detail' ||
+			key === 'tags'
+		)
+			return true
 
 	return false
 }

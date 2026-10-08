@@ -530,10 +530,11 @@ export const mapError = /*#__PURE__*/ map<
 >((i, fn, [map, link, mapResponse, schedule, sign, mode, arm]) => {
 	link(mapResponse, 'rm')
 	link(adoptErrorType, 'aet')
+	link(ElysiaStatus, 'es')
 	return (
 		awaitSite(`er${at(i)}(c)`, fn, mode, '_r', arm) +
 		`if(_r!==undefined){\n` +
-		`if(_r instanceof Response)c.set.status=_r.status\n` +
+		`if(_r instanceof es||_r instanceof Response)c.set.status=_r.status\n` +
 		`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
 		schedule +
 		sign +

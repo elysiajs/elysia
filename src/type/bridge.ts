@@ -59,12 +59,14 @@ function ensure() {
 	return live
 }
 
+/*#__NO_SIDE_EFFECTS__*/
 function stub(name: keyof TypeboxModule) {
 	return function (...args: unknown[]) {
 		return (ensure()[name] as Function)(...args)
 	} as any
 }
 
+/*#__NO_SIDE_EFFECTS__*/
 function stubClass(name: keyof TypeboxModule) {
 	return class {
 		constructor(...args: unknown[]) {

@@ -26,7 +26,8 @@ await build({
 	unbundle: true,
 	// keep literal `require('typebox/*')` so user bundlers can embed TypeBox
 	// the polyfill would add a static `node:module` import instead
-	outputOptions: { polyfillRequire: false },
+	// JSDoc ships in .d.ts; runtime JS doesn't need it
+	outputOptions: { polyfillRequire: false, comments: { jsdoc: false } },
 	plugins: [
 		{
 			name: 'lazy-shim-extension',
