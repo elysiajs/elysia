@@ -215,6 +215,8 @@ describe('WebSocket connection', () => {
 	it('pass ElysiaWS to ping/pong', async () => {
 		const raws: Record<string, unknown> = {}
 		const ids: Record<string, unknown> = {}
+		const pinged = Promise.withResolvers<void>()
+		const ponged = Promise.withResolvers<void>()
 
 		const app = new Elysia()
 			.ws('/', {
@@ -225,10 +227,12 @@ describe('WebSocket connection', () => {
 				ping(ws) {
 					raws.ping = ws.raw
 					ids.ping = ws.id
+					pinged.resolve()
 				},
 				pong(ws) {
 					raws.pong = ws.raw
 					ids.pong = ws.id
+					ponged.resolve()
 				},
 				message() {}
 			})
@@ -251,7 +255,7 @@ describe('WebSocket connection', () => {
 			)
 		})
 
-		await Bun.sleep(3)
+		await Promise.all([pinged.promise, ponged.promise])
 
 		expect(raws.open).toBeDefined()
 		expect(raws.ping).toBe(raws.open)
