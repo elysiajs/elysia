@@ -3,6 +3,7 @@ import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { websocket } from '../../src/plugin/websocket'
 import { autoHead } from '../../src/plugin/auto-head'
+import { WebStandardAdapter } from '../../src/adapter/web-standard'
 import { newWebsocket, wsOpen, wsMessage, wsClosed } from '../ws/utils'
 
 describe('Macro resolution isolation', () => {
@@ -896,6 +897,75 @@ describe('Scoped macro resolution across registrations', () => {
 		expect(
 			(await app.handle(new Request('http://localhost/out'))).status
 		).toBe(401)
+	})
+
+	// a group child inherits the adapter, and the adapter's setup runs inside
+	// the child's constructor: a guard it adds there belongs to the group, so
+	// the group's macro override must win over the root definition, as it
+	// does for a guard added in the group callback
+	it('a guard added by an inherited adapter setup honors the group override', async () => {
+		const adapter = {
+			...WebStandardAdapter,
+			setup(app: any) {
+				if (app['~config']?.prefix === '/g')
+					app.guard({ mark: true } as any)
+
+				return app
+			}
+		}
+
+		const app = new Elysia({ adapter })
+			.macro({ mark: () => ({ beforeHandle: () => 'ROOT' }) })
+			.group('/g', (g: any) =>
+				g
+					.macro({ mark: () => ({ beforeHandle: () => 'CHILD' }) })
+					.get('/', () => 'HANDLER')
+			)
+
+		expect(
+			await (await app.handle(new Request('http://localhost/g/'))).text()
+		).toBe('CHILD')
+	})
+
+	// the group child is a scope child from construction, but a plugin built
+	// inside that construction (in the adapter setup) is an ordinary plugin:
+	// its plugin-scoped hook and its macro reach the group's routes. Were it
+	// a scope child, the group would keep only its `request` hooks and none
+	// of its macros
+	it('a plugin built in an inherited adapter setup is not a scope child', async () => {
+		let hook = 0
+		let macro = 0
+
+		const adapter = {
+			...WebStandardAdapter,
+			setup(app: any) {
+				if (app['~config']?.prefix === '/g')
+					app.use(
+						new Elysia({ as: 'plugin' })
+							.macro({
+								tagged: {
+									beforeHandle() {
+										macro++
+									}
+								}
+							})
+							.beforeHandle(() => {
+								hook++
+							})
+					)
+
+				return app
+			}
+		}
+
+		const app = new Elysia({ adapter }).group('/g', (g: any) =>
+			g.get('/', { tagged: true } as any, () => 'ok')
+		)
+
+		const res = await app.handle(new Request('http://localhost/g/'))
+		expect(await res.text()).toBe('ok')
+		expect(hook).toBe(1)
+		expect(macro).toBe(1)
 	})
 })
 

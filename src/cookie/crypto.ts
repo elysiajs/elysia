@@ -23,7 +23,7 @@ interface BunKeyedHasher {
 type BunCryptoHasher = new (algorithm: 'sha256', key: string) => BunKeyedHasher
 
 // Materialising `node:crypto` costs ~565 KB / 5.2k objects of native module
-// surface at import. Resolve it on demand: under Bun the keyed-hasher probe
+// surface at import. Resolve it on demand: under Bun the keyed-hasher check
 // below settles the provider without it, so it is never touched.
 let _nodeCrypto: NodeCrypto | undefined
 
@@ -48,19 +48,7 @@ const bunCryptoHasher = (() => {
 	)
 		return undefined
 
-	try {
-		return (
-			new hasher('sha256', 'elysia')
-				.update('probe')
-				// make sure the hasher work as expected
-				.digest('base64') ===
-				'bzs6y9cVmkYub8fplSKaOuuqMqJlDwhMypFT/jSdCEk='
-				? hasher
-				: undefined
-		)
-	} catch {
-		return undefined
-	}
+	return hasher
 })()
 
 export const hmacProvider: 'bun' | 'node' | 'subtle' = bunCryptoHasher
@@ -80,8 +68,24 @@ function coerceValue(val: unknown) {
 
 // Keying HMAC is most of its cost; copy a keyed hasher instead
 const bunHasherCache = new Map<string, BunKeyedHasher>()
+let bunHasherVerified = false
 
-export const signCookieBun = (val: string, secret: string) => {
+export function signCookieBun(val: string, secret: string) {
+	// A hasher that ignores its key is a plain SHA-256: anyone could forge it
+	if (!bunHasherVerified) {
+		if (
+			new bunCryptoHasher!('sha256', 'elysia')
+				.update('probe')
+				.digest('base64') !==
+			'bzs6y9cVmkYub8fplSKaOuuqMqJlDwhMypFT/jSdCEk='
+		)
+			throw new Error(
+				'Bun.CryptoHasher failed the HMAC self-test, refusing to sign or verify cookies'
+			)
+
+		bunHasherVerified = true
+	}
+
 	let keyed = bunHasherCache.get(secret)
 	if (!keyed) {
 		if (bunHasherCache.size >= 256) evictOldestHalf(bunHasherCache)

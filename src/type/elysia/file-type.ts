@@ -45,7 +45,6 @@ export async function fileType(
 	if (!file) return false
 
 	const types = typeof type === 'string' ? [type] : type
-
 	if (!matchesAnyFileType(file.type, types)) return false
 
 	if (!fileTypeDetectors) {

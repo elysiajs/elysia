@@ -36,8 +36,8 @@ const values = [
 
 describe('cookie HMAC provider selection', () => {
 	it('auto-selects the Bun provider under Bun (no flag, no config)', () => {
-		// This suite runs under Bun with a keyed CryptoHasher that passed the
-		// module-init parity probe — the selector must have picked it.
+		// This suite runs under Bun with a keyed CryptoHasher (it has `copy`)
+		// — the selector must have picked it.
 		expect(typeof Bun.CryptoHasher).toBe('function')
 		expect(hmacProvider).toBe('bun')
 		expect(hasSyncHmac).toBe(true)
@@ -162,5 +162,92 @@ describe('cookie HMAC provider selection', () => {
 		expect(source).toMatch(
 			/import \{[^}]*\bconstantTimeEqual\b[^}]*\} from '\.\.\/utils'/
 		)
+	})
+})
+
+// The provider is module state: each case installs a stand-in
+// `Bun.CryptoHasher` before importing it, in its own process
+const observe = (stub: string, run: string) => {
+	const src = join(import.meta.dir, '../../src')
+	const child = Bun.spawnSync(
+		[
+			process.execPath,
+			'-e',
+			`const Real = Bun.CryptoHasher\n${stub}\n` +
+				`const crypto = await import(${JSON.stringify(join(src, 'cookie/crypto.ts'))})\n` +
+				`const { Elysia } = await import(${JSON.stringify(join(src, 'index.ts'))})\n${run}`
+		],
+		{ stdout: 'pipe', stderr: 'pipe' }
+	)
+
+	expect(child.stderr.toString()).toBe('')
+	expect(child.exitCode).toBe(0)
+
+	return JSON.parse(child.stdout.toString())
+}
+
+describe('cookie HMAC self-test', () => {
+	// An app that never signs a cookie shouldn't touch Bun's crypto at import
+	it('runs once, on the first signature, not at import', () => {
+		const result = observe(
+			`const keys = []\n` +
+				`Bun.CryptoHasher = class extends Real {\n` +
+				`	constructor(algorithm, key) { keys.push(key); super(algorithm, key) }\n` +
+				`}`,
+			`const afterImport = [...keys]\n` +
+				`const signed = crypto.signCookieSync('value', 'first')\n` +
+				`const afterFirst = [...keys]\n` +
+				`crypto.signCookieSync('value', 'second')\n` +
+				`console.log(JSON.stringify({ provider: crypto.hmacProvider, afterImport, afterFirst, afterSecond: keys, signed }))`
+		)
+
+		expect(result).toEqual({
+			provider: 'bun',
+			afterImport: [],
+			// the probe key, before the caller's
+			afterFirst: ['elysia', 'first'],
+			afterSecond: ['elysia', 'first', 'second'],
+			signed: `value.${createHmac('sha256', 'first')
+				.update('value')
+				.digest('base64')
+				.replace(/=+$/g, '')}`
+		})
+	})
+
+	// A hasher that ignores its key is a plain SHA-256: anyone can compute the
+	// "signature", so it must never sign or verify, even though it was selected
+	it('fails closed when Bun.CryptoHasher ignores the key', () => {
+		const result = observe(
+			`Bun.CryptoHasher = class extends Real {\n` +
+				`	constructor(algorithm) { super(algorithm) }\n` +
+				`}`,
+			`const forged = 'admin.' + new Real('sha256').update('admin').digest('base64').replace(/=+$/, '')\n` +
+				`const attempt = (run) => { try { return { returned: run() } } catch (error) { return { threw: error.message } } }\n` +
+				`const settle = (promise) => promise.then((returned) => ({ returned }), (error) => ({ threw: error.message }))\n` +
+				`const app = new Elysia({ cookie: { secrets: 'secret', sign: ['session'] } })\n` +
+				`	.get('/', ({ cookie }) => cookie.session.value ?? 'anonymous')\n` +
+				`const res = await app.handle(new Request('http://localhost/', { headers: { cookie: 'session=' + forged } }))\n` +
+				`console.log(JSON.stringify({\n` +
+				`	provider: crypto.hmacProvider,\n` +
+				`	sign: attempt(() => crypto.signCookieSync('admin', 'secret')),\n` +
+				`	signAgain: attempt(() => crypto.signCookieSync('admin', 'secret')),\n` +
+				`	verify: attempt(() => crypto.unsignCookieSync(forged, 'secret')),\n` +
+				`	signAsync: await settle(crypto.signCookie('admin', 'secret')),\n` +
+				`	verifyAsync: await settle(crypto.unsignCookie(forged, 'secret')),\n` +
+				`	app: { status: res.status, authenticated: (await res.text()) === 'admin' }\n` +
+				`}))`
+		)
+
+		const failed = { threw: expect.stringContaining('HMAC self-test') }
+
+		expect(result).toEqual({
+			provider: 'bun',
+			sign: failed,
+			signAgain: failed,
+			verify: failed,
+			signAsync: failed,
+			verifyAsync: failed,
+			app: { status: 500, authenticated: false }
+		})
 	})
 })

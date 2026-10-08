@@ -706,8 +706,10 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 		expect(proc.exitCode, proc.stderr.toString()).toBe(0)
 		const result = JSON.parse(proc.stdout.toString())
 		expect(result.live).toBe(false)
+		// a cold bridge fails the router build instead of serving a 500 per request
+		expect(result.startup).toContain("Typebox module isn't initialized")
 		expect(result.duplicate).toBe(result.ordinary)
-		expect(result.duplicate).toBe(500)
+		expect(result.duplicate).toStartWith("Typebox module isn't initialized")
 		expect(result.duplicateLookups).toBeGreaterThan(0)
 		expect(result.duplicateLookups).toBe(result.ordinaryLookups)
 	})

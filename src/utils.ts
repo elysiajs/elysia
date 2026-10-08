@@ -108,7 +108,7 @@ export function fnv1a(str: string, hash = FNV_OFFSET_BASIS): number {
  * 32 bits two plugins collide by ~77k and the second is dropped. 48 keeps
  * `origin * 16 + slot` exact
  */
-export function pluginHash(str: string): number {
+export function pluginHash(str: string) {
 	let mix = 0x9e3779b9
 	const len = str.length
 
@@ -214,7 +214,7 @@ export type ChainNode =
 			scope?: EventScope
 			// True if this node was created by `#use`
 			propagated?: boolean
-			// Instance this node was registered on
+			// Instance registered on, only if a scope child (local macros): others pin the plugin
 			owner?: object
 			// Hash of the named plugin this registration belongs to: the
 			// registering instance, else the first named plugin it passed
@@ -355,9 +355,6 @@ export function compactBeforeHandlePrefix(start: ChainNode | undefined) {
 	return prefix.length ? prefix : undefined
 }
 
-const flattenNodeStack: ChainNode[] = []
-const flattenPhaseStack: number[] = []
-
 // A chain entry installs one plugin's lifecycle event, as the pair
 // `origin * 16 + slot`; a slot is the event's index in `lifecycleEvents`
 // (Elysia 1 compares checksums per event array). `derive` lowers into
@@ -394,13 +391,9 @@ export function flattenChain(
 	if (!start) return
 	const result = nullObject() as Partial<AppHook>
 
-	const nodes = flattenNodeStack
-	const phases = flattenPhaseStack
-
-	nodes.length = 0
-	phases.length = 0
-	nodes.push(start)
-	phases.push(0)
+	// local: a shared stack keeps the capacity of the longest chain walked
+	const nodes: ChainNode[] = [start]
+	const phases: number[] = [0]
 
 	// installed by the outer layers, by the current one
 	let outer = skip

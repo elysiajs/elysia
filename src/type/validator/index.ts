@@ -763,11 +763,11 @@ export class TypeBoxValidator<
 				)
 
 			if (
-				!getExactMirror() &&
 				!frozen?.m &&
 				!schemaHasDangerousProperties(this.schema) &&
 				options?.normalize !== false &&
-				options?.normalize !== 'typebox'
+				options?.normalize !== 'typebox' &&
+				!getExactMirror()
 			) {
 				// A named implementation or sanitize is a hard requirement,
 				// `normalize: true` only asks for normalization

@@ -50,4 +50,39 @@ describe('plugin retention', () => {
 			.handle(new Request('http://localhost/'))
 		expect(await res.text()).toBe('38')
 	})
+
+	// the app's chain links each plugin's hook registration; recording the
+	// registering instance there (read only for a group/guard child's local
+	// macros) would keep every hook-only plugin whole for the app's lifetime
+	it('does not retain unnamed plugins that registered hooks', async () => {
+		const app = new Elysia()
+		const refs: WeakRef<object>[] = []
+		let calls = 0
+
+		useHookPlugins(app, refs, () => {
+			calls++
+		})
+
+		expect(await liveAfterGC(refs)).toBe(0)
+
+		// the hooks still applied, every one of them
+		const res = await app
+			.get('/', () => 'ok')
+			.handle(new Request('http://localhost/'))
+		expect(await res.text()).toBe('ok')
+		expect(calls).toBe(PLUGINS)
+	})
 })
+
+function useHookPlugins(
+	app: Elysia,
+	refs: WeakRef<object>[],
+	hook: () => void
+) {
+	for (let i = 0; i < PLUGINS; i++) {
+		const plugin = new Elysia({ as: 'plugin' }).beforeHandle(hook)
+
+		app.use(plugin)
+		refs.push(new WeakRef(plugin))
+	}
+}

@@ -69,7 +69,7 @@ import { resolvedTraceOf, traceCapabilityRequired } from '../../generation'
 import { Capture } from '../aot'
 import { JITProbe } from '../jit-probe'
 
-import { requestId, evictOldestHalf } from '../../utils'
+import { requestId, evictOldestHalf, fnv1a } from '../../utils'
 
 import type { Link } from './utils'
 import type { Context } from '../../context'
@@ -87,8 +87,12 @@ const awaitValue = (value: string, arm = '') =>
  * @internal one factory per emitted source, each route calls it for its own
  * closure. JSC stops sharing code between identical `new Function` sources
  * once its source cache churns, so without this every route links a copy
+ *
+ * Keyed by the source's hash, not a second copy of the source: a hit runs
+ * only if the factory's own text is that source, so a collision compiles
+ * fresh instead of running another route's code
  */
-export const factoryCache = new Map<string, Function>()
+export const factoryCache = new Map<number, Function>()
 export const FACTORY_CACHE_LIMIT = 256
 
 let captureHeaderShorthand: boolean | undefined
@@ -1417,9 +1421,14 @@ export function compileHandlerJit(
 	// per route, hit or miss: a fresh isolate still needs `new Function`
 	JITProbe.record('handler:new-function')
 
-	const key = fullAlias + '\n' + code
+	const key = fnv1a(code, fnv1a(fullAlias + '\n'))
 	let factory = factoryCache.get(key)
-	if (!factory) {
+	if (
+		!factory ||
+		// how `new Function` prints, per spec
+		String(factory) !==
+			`function anonymous(h,${fullAlias}\n) {\nreturn ${code}\n}`
+	) {
 		if (factoryCache.size >= FACTORY_CACHE_LIMIT)
 			evictOldestHalf(factoryCache)
 

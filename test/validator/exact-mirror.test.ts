@@ -333,3 +333,69 @@ describe('Exact Mirror', () => {
 		await expect(response.json()).resolves.toEqual({ foo: 1 })
 	})
 })
+
+// An app without schemas shouldn't pay for loading exact-mirror. Whether it
+// loaded is module state, so each case runs in a child process
+describe('lazy exact-mirror resolution', () => {
+	const observe = (run: string) => {
+		const src = resolve(import.meta.dir, '../../src')
+		const script =
+			`const { Elysia, t } = await import(${JSON.stringify(resolve(src, 'index.ts'))})\n` +
+			`const { TypeBoxValidator } = await import(${JSON.stringify(resolve(src, 'type/validator/index.ts'))})\n` +
+			`const { getExactMirror, setExactMirror } = await import(${JSON.stringify(resolve(src, 'type/validator/exact-mirror.ts'))})\n` +
+			`const loaded = () => require.resolve('exact-mirror', { paths: [${JSON.stringify(src)}] }) in require.cache\n` +
+			run
+
+		const child = spawnSync(process.execPath, ['-e', script], {
+			encoding: 'utf8'
+		})
+
+		expect(child.stderr).toBe('')
+		expect(child.status).toBe(0)
+
+		return JSON.parse(child.stdout)
+	}
+
+	it('loads on the first validator that normalizes, not at import', () => {
+		expect(
+			observe(
+				`const afterImport = loaded()\n` +
+					`const app = new Elysia().get('/', () => 'ok')\n` +
+					`await app.handle(new Request('http://localhost/'))\n` +
+					`const afterRequest = loaded()\n` +
+					`new TypeBoxValidator(t.Object({ a: t.String() }))\n` +
+					`console.log(JSON.stringify({ afterImport, afterRequest, afterValidator: loaded(), mirror: typeof getExactMirror() }))`
+			)
+		).toEqual({
+			afterImport: false,
+			afterRequest: false,
+			afterValidator: true,
+			mirror: 'function'
+		})
+	})
+
+	it('is not loaded by validators that opt out of it', () => {
+		expect(
+			observe(
+				`new TypeBoxValidator(t.Object({ a: t.String() }), { normalize: false })\n` +
+					`new TypeBoxValidator(t.Object({ b: t.String() }), { normalize: 'typebox' })\n` +
+					`console.log(JSON.stringify({ loaded: loaded() }))`
+			)
+		).toEqual({ loaded: false })
+	})
+
+	// setupTypebox({ exactMirror }) and runtimes that can't load it register
+	// before first use: that registration wins, the package is never resolved
+	it('keeps a registration made before first use', () => {
+		expect(
+			observe(
+				`setExactMirror(undefined)\n` +
+					`new TypeBoxValidator(t.Object({ a: t.String() }))\n` +
+					`let required = false\n` +
+					`try { new TypeBoxValidator(t.Object({ b: t.String() }), { normalize: 'exactMirror' }) }\n` +
+					`catch (error) { required = error.message.includes('exact-mirror is required') }\n` +
+					`console.log(JSON.stringify({ mirror: typeof getExactMirror(), loaded: loaded(), required }))`
+			)
+		).toEqual({ mirror: 'undefined', loaded: false, required: true })
+	})
+})

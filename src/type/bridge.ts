@@ -53,7 +53,7 @@ let live: TypeboxModule | undefined
 function ensure() {
 	if (!live)
 		throw new Error(
-			"Typebox module isn't initialized yet. Import `t` from 'elysia' so the TypeBox bridge can register before TypeBox schemas are used."
+			"Typebox module isn't initialized. Call `setupTypebox` from 'elysia' before the app handles requests: 'elysia/base' skips the automatic registration, and a bundler drops it when `t` is never read."
 		)
 
 	return live

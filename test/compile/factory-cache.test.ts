@@ -61,11 +61,52 @@ describe('JIT route factory cache', () => {
 			expect(factoryCache.size).toBeLessThanOrEqual(FACTORY_CACHE_LIMIT)
 		}
 
-		const keys = [...factoryCache.keys()]
-		expect(keys.length).toBe((FACTORY_CACHE_LIMIT >> 1) + 1)
-		expect(keys.some((k) => k.includes('"/r0/:id"'))).toBe(false)
+		const sources = [...factoryCache.values()].map(String)
+		expect(sources.length).toBe((FACTORY_CACHE_LIMIT >> 1) + 1)
+		expect(sources.some((s) => s.includes('"/r0/:id"'))).toBe(false)
 		expect(
-			keys.some((k) => k.includes(`"/r${FACTORY_CACHE_LIMIT}/:id"`))
+			sources.some((s) => s.includes(`"/r${FACTORY_CACHE_LIMIT}/:id"`))
 		).toBe(true)
+	})
+
+	// the cache is keyed by a hash of the source: a factory found under it
+	// may have compiled another source, and calling it would run another
+	// route's handler, hooks and validators for this one
+	it('never runs a factory that did not compile the route source', async () => {
+		const app = () =>
+			new Elysia()
+				.beforeHandle(() => {})
+				.get('/', ({ query }) => `own:${query.q}`)
+
+		factoryCache.clear()
+		expect(
+			await (
+				await app().handle(new Request('http://localhost/?q=1'))
+			).text()
+		).toBe('own:1')
+		// premise: one route, one factory, so its hash is the only key
+		expect(factoryCache.size).toBe(1)
+		const [[key, factory]] = factoryCache
+
+		// premise: the same source is a verified hit, not compiled again
+		expect(
+			await (
+				await app().handle(new Request('http://localhost/?q=3'))
+			).text()
+		).toBe('own:3')
+		expect(factoryCache.get(key)).toBe(factory)
+
+		let decoyCalls = 0
+		factoryCache.set(key, () => {
+			decoyCalls++
+			return () => new Response('decoy')
+		})
+
+		expect(
+			await (
+				await app().handle(new Request('http://localhost/?q=2'))
+			).text()
+		).toBe('own:2')
+		expect(decoyCalls).toBe(0)
 	})
 })

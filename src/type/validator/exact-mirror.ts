@@ -3,21 +3,32 @@ import { requireExactMirror } from './exact-mirror-require'
 
 export type CreateMirror = (schema: any, options?: any) => any
 
+// Resolved on first use, an app without schemas never loads the package
 let exactMirror: CreateMirror | undefined
-try {
-	const module =
-		requireExactMirror() ??
-		syncRequire(import.meta, import.meta.url)?.('exact-mirror')
-	const mirror = module?.default ?? module
+let resolved = false
 
-	exactMirror = typeof mirror === 'function' ? mirror : undefined
-} catch {}
+export const getExactMirror = () => {
+	if (resolved) return exactMirror
+	resolved = true
 
-export const getExactMirror = () => exactMirror
+	try {
+		const module =
+			requireExactMirror() ??
+			syncRequire(import.meta, import.meta.url)?.('exact-mirror')
+		const mirror = module?.default ?? module
+
+		if (typeof mirror === 'function') exactMirror = mirror
+	} catch {}
+
+	return exactMirror
+}
 
 // Internal registration hook for non-Node runtimes and tests.
-export const setExactMirror = (mirror: CreateMirror | undefined) =>
-	(exactMirror = mirror)
+export const setExactMirror = (mirror: CreateMirror | undefined) => {
+	resolved = true
+
+	return (exactMirror = mirror)
+}
 
 export const exactMirrorRequired = () =>
 	new Error(

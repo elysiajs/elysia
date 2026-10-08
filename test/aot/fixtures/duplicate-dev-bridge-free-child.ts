@@ -17,7 +17,12 @@ const app = new Elysia()
 	.get('/duplicate', { query } as any, () => ({ route: 'winner' }))
 	.get('/ordinary', { query } as any, () => 'ordinary')
 
-void app.fetch
+let startup = ''
+try {
+	void app.fetch
+} catch (error) {
+	startup = (error as Error).message
+}
 
 const Context = createContext(app as any)
 const original = Compiled.getValidator
@@ -27,8 +32,17 @@ Compiled.getValidator = ((...args: Parameters<typeof original>) => {
 	return original.apply(Compiled, args)
 }) as typeof original
 
-const invoke = (index: number, path: string) =>
-	app.handler(index)(new Context(new Request(`http://localhost${path}`)))
+const invoke = async (index: number, path: string) => {
+	try {
+		return (
+			await app.handler(index)(
+				new Context(new Request(`http://localhost${path}`))
+			)
+		).status
+	} catch (error) {
+		return ((error as Error).cause as Error).message
+	}
+}
 
 const beforeDuplicate = validatorLookups
 const duplicate = await invoke(0, '/duplicate?name=elysia')
@@ -41,8 +55,9 @@ const ordinaryLookups = validatorLookups - beforeOrdinary
 console.log(
 	JSON.stringify({
 		live: isBridgeLive(),
-		duplicate: duplicate.status,
-		ordinary: ordinary.status,
+		startup,
+		duplicate,
+		ordinary,
 		duplicateLookups,
 		ordinaryLookups
 	})

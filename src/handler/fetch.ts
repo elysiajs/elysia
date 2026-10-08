@@ -272,7 +272,17 @@ export function createFetchHandler(
 	const strictPath = !!app['~config']?.strictPath
 
 	const hook = flattenChain(app['~hookChain'])
-	const hasError = !!hook?.error
+	// read once: a closure capturing `hook` keeps the whole root chain alive
+	const errorHooks = hook?.error
+	const requestHooks = hook?.request
+	const afterResponseHooks = hook?.afterResponse
+	const mapResponseHooks = hook?.mapResponse as
+		| ((context: Context) => unknown)[]
+		| undefined
+	const traceHandlers = hook?.trace as
+		| ((context: any) => unknown)[]
+		| undefined
+	const hasError = !!errorHooks
 
 	const abortSignal = app['~config']?.abortSignal !== false
 	const watchPath = !isProduction()
@@ -377,28 +387,21 @@ export function createFetchHandler(
 		return run(0)
 	}
 
-	const mapResponseHooks = hook?.mapResponse as
-		| ((context: Context) => unknown)[]
-		| undefined
 	const mapResponse = mapResponseHooks?.length
 		? mapWithHooks.bind(null, mapResponseHooks)
 		: plainMap
 
 	const allowUnsafe = app['~config']?.allowUnsafeValidationDetails
 	const handleError = createErrorHandler(
-		hook?.error,
+		errorHooks,
 		mapResponse as any,
 		allowUnsafe
 	)
 
 	const handleRouteError =
-		hook?.error || mapResponseHooks?.length
+		errorHooks || mapResponseHooks?.length
 			? createErrorHandler(undefined, plainMap as any, allowUnsafe)
 			: handleError
-
-	const traceHandlers = hook?.trace as
-		| ((context: any) => unknown)[]
-		| undefined
 
 	const hasTrace = !!traceHandlers?.length
 
@@ -429,7 +432,7 @@ export function createFetchHandler(
 		afterResponses:
 			| AppHook['afterResponse']
 			| null
-			| undefined = hook?.afterResponse
+			| undefined = afterResponseHooks
 	) => {
 		if ((context as any)._arf) return
 
@@ -593,7 +596,7 @@ export function createFetchHandler(
 	}
 
 	if (traceRequestPhase) {
-		const onRequests = hook?.request ?? []
+		const onRequests = requestHooks ?? []
 
 		return async (
 			request: Request,
@@ -703,8 +706,8 @@ export function createFetchHandler(
 		}
 	}
 
-	if (hook?.request) {
-		const onRequests = hook.request
+	if (requestHooks) {
+		const onRequests = requestHooks
 
 		if (hasAsync(onRequests))
 			return async (

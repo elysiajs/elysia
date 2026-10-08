@@ -1,11 +1,15 @@
-const mapBack = /*#__PURE__*/ <const T extends Record<string, number>>(
+/*#__PURE__*/
+function mapBack<const T extends Record<string, number>>(
 	map: T
 ): {
 	[K in keyof T as T[K]]: K
-} =>
-	Object.fromEntries(
-		Object.entries(map).map(([key, value]) => [value, key])
-	) as any
+} {
+	const keys = Object.keys(map)
+	const result: Record<number, string> = {}
+	for (let i = 0; i < keys.length; i++) result[map[keys[i]]] = keys[i]
+
+	return result as any
+}
 
 export const StatusMap = /*#__PURE__*/ {
 	Continue: 100,

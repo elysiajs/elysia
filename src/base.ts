@@ -75,7 +75,7 @@ import {
 	throwLifecycleErrors
 } from './utils'
 
-import { Ref as tRef, warmTypebox } from './type/bridge'
+import { Ref as tRef, isBridgeLive, warmTypebox } from './type/bridge'
 import { snapshotHookSchemas, snapshotSchema } from './schema-snapshot'
 
 import type { TRef, TSchema } from 'typebox'
@@ -557,6 +557,10 @@ export class Elysia<
 	declare '~scopeChild'?: boolean
 	declare '~scopeChildren'?: AnyElysia[]
 
+	// `group()` marks its child here: the adapter's setup runs in the constructor
+	// eslint-disable-next-line sonarjs/public-static-readonly -- private, written per group child
+	static #nextScopeChild: true | undefined
+
 	constructor(config?: ElysiaConfig<BasePath, Scope>) {
 		/**
 		 * ! Don't tune
@@ -582,6 +586,9 @@ export class Elysia<
 		 * Est. overflow 37 -> 21 = butterfly 64 -> 32 slots = 738B -> 450B;
 		 * reusing the app as its program identity brings the current cell to ~386B.
 		 **/
+		// read before any store: a throwing prototype setter can't leak it to the next instance
+		const scopeChild = Elysia.#nextScopeChild
+		Elysia.#nextScopeChild = undefined
 		this['~config'] = config
 		this['~ext'] = undefined
 		this['~hookChain'] = undefined
@@ -598,7 +605,7 @@ export class Elysia<
 		this['~compilerSession'] = undefined
 		this['~generation'] = undefined
 		this['~introspect'] = undefined
-		this['~scopeChild'] = undefined
+		this['~scopeChild'] = scopeChild
 		this['~scopeChildren'] = undefined
 
 		if (config) {
@@ -1183,7 +1190,14 @@ export class Elysia<
 					origin,
 					registration
 				}
-			: { added, parent, refs, scope, owner: this, origin: this.hash }
+			: {
+					added,
+					parent,
+					refs,
+					scope,
+					owner: this['~scopeChild'] ? this : undefined,
+					origin: this.hash
+				}
 	}
 
 	#onBranch(
@@ -3796,7 +3810,7 @@ export class Elysia<
 			group: AnyElysia
 		) => AnyElysia
 
-		const child = new Elysia(
+		const config =
 			this['~config'] || prefix
 				? {
 						...this['~config'],
@@ -3806,9 +3820,11 @@ export class Elysia<
 						prefix
 					}
 				: undefined
-		) as AnyElysia
 
-		child['~scopeChild'] = true
+		// nothing may run between the flag and the constructor reading it
+		Elysia.#nextScopeChild = true
+		const child = new Elysia(config) as AnyElysia
+
 		child.scopeParent = this as unknown as AnyElysia
 		;(this['~scopeChildren'] ??= []).push(child)
 
@@ -4887,7 +4903,13 @@ export class Elysia<
 			}
 
 			if (isNotEmpty(added))
-				this.#pushChainNode(added, scope, registration, origin, app)
+				this.#pushChainNode(
+					added,
+					scope,
+					registration,
+					origin,
+					scopeChild ? app : undefined
+				)
 		}
 
 		if (lifting) liftedRequests.set(this, lifting)
@@ -7540,9 +7562,6 @@ export class Elysia<
 					this.#assertRouteModelRefs(routeRow(table, i), method[i])
 			}
 
-		// Warm TypeBox now so the first validated request doesn't load it; skipped
-		// when no route uses TypeBox. May over-warm: closer overrides are ignored
-		// to avoid a full hook merge at build
 		let hasTypeBoxSchema = false
 		if (length) {
 			const models = this['~ext']?.models as
@@ -7588,14 +7607,8 @@ export class Elysia<
 				}
 		}
 
-		if (hasTypeBoxSchema)
-			try {
-				warmTypebox()
-			} catch {
-				// Warm-up must not add a new failure path.
-			}
-
 		let markDuplicates = false
+		let eager = false
 
 		if (length) {
 			const programId = this['~programId']
@@ -7613,6 +7626,14 @@ export class Elysia<
 				(precompile !== true &&
 					isProduction() &&
 					!Capture.isAotBuildEnv())
+
+			if (hasTypeBoxSchema)
+				try {
+					warmTypebox()
+				} catch {
+					if (!isBridgeLive() && !Compiled.hasProgram(programId))
+						eager = markDuplicates = true
+				}
 		}
 
 		const isLoose = this['~config']?.strictPath !== true
@@ -7705,8 +7726,12 @@ export class Elysia<
 				continue
 			}
 
-			// `~dispatch` compiles a lazy route on its first hit
-			const lazy = !precompile && !this.compiled?.[i]
+			// `~dispatch` compiles lazy route on first hit so
+			// displaced duplicate is never hit
+			const lazy =
+				(eager
+					? (routeFlags & RouteFlag.ExactDuplicate) !== 0
+					: !precompile) && !this.compiled?.[i]
 			if (lazy) {
 				this.compiled ??= new Array(length)
 				this.jitTable = table
@@ -7720,12 +7745,9 @@ export class Elysia<
 			if (!isDynamic && !needsEncode && !registerLoose) {
 				const map = (methods[routeMethod] ??= nullObject() as any)
 
-				// A lazy route stores its encoded index `~i`, not a per-route
-				// thunk: negative, so index 0 stays truthy for findRoute's lookups.
-				// `~dispatch` swaps in the compiled handler on first hit
 				map[routePath] = lazy
 					? ~i
-					: this.handler(i, precompile, undefined, undefined, table)
+					: this.handler(i, true, undefined, undefined, table)
 
 				continue
 			}
@@ -7738,33 +7760,27 @@ export class Elysia<
 			)
 
 			if (isDynamic) {
-				// A `:param` / `*` HTML bundle is served by Bun's router; a request
-				// reaching fetch under it was handed off to a more specific route,
-				// which must win here too (see `collectHTMLBundleRoutes`)
 				if (isHTMLBundle(table.handler[i])) continue
 
 				const router = (this['~router'] ??= new Memoirist({
 					loosePath: isLoose
 				}))
 
-				// A lazy route stores its index, not a per-route thunk. The JIT
-				// handler is never re-added: `add` overwrites a slot that a
-				// colliding later route may own (`/a/:b?` vs `/a/:c`)
 				const store = lazy
 					? i
-					: this.handler(i, precompile, undefined, undefined, table)
+					: this.handler(i, true, undefined, undefined, table)
 
 				for (let p = 0; p < paths.length; p++)
 					router.add(routeMethod, paths[p], store)
 			} else {
 				const map = (methods[routeMethod] ??= nullObject() as any)
 
-				// encoded index as above; `~dispatch` rewrites every alias key
 				if (lazy)
 					(this.jitAliases ??= [])[i] = { method: routeMethod, paths }
+
 				const handler = lazy
 					? ~i
-					: this.handler(i, precompile, undefined, undefined, table)
+					: this.handler(i, true, undefined, undefined, table)
 
 				for (let p = 0; p < paths.length; p++) map[paths[p]] = handler
 			}
