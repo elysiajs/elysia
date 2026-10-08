@@ -843,4 +843,206 @@ describe('WebSocket sync dispatch path', () => {
 		await wsClosed(ws)
 		app.stop()
 	})
+
+	// HTTP assimilates any thenable a handler or hook returns; a value that
+	// only looks like one (a `then` that is not callable) is a payload
+	it('awaits a hand-written thenable from the handler on the hook-free lane', async () => {
+		const app = new Elysia()
+			.use(websocket()).ws('/ws', {
+				message: () => ({
+					then(resolve: (value: string) => void) {
+						resolve('from-thenable')
+					}
+				})
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+		ws.send('x')
+		expect((await message).data).toBe('from-thenable')
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('awaits a hand-written thenable from the handler and from a hook on the full lane', async () => {
+		const thenable = (value: unknown) => ({
+			then(resolve: (value: unknown) => void) {
+				resolve(value)
+			}
+		})
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/handler', {
+				transform() {},
+				message: () => thenable('from-handler')
+			})
+			// resolves to nothing: the hook must not short-circuit
+			.ws('/hook-passes', {
+				beforeHandle: () => thenable(undefined),
+				message: () => 'from-handler'
+			})
+			// answers per message only: at the upgrade `body` is empty
+			.ws('/hook-answers', {
+				beforeHandle: ({ body }: any) =>
+					body ? thenable('from-hook') : undefined,
+				message: () => 'never'
+			})
+			.listen(0)
+
+		for (const [path, expected] of [
+			['/handler', 'from-handler'],
+			['/hook-passes', 'from-handler'],
+			['/hook-answers', 'from-hook']
+		]) {
+			const ws = newWebsocket(app.server!, path)
+			await wsOpen(ws)
+
+			const message = wsMessage(ws)
+			ws.send('x')
+			expect((await message).data).toBe(expected)
+
+			await wsClosed(ws)
+		}
+
+		app.stop()
+	})
+
+	it('serializes an object whose `then` is not callable as JSON', async () => {
+		const app = new Elysia()
+			.use(websocket()).ws('/ws', {
+				message: () => ({ then: 'not-a-function', v: 1 })
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+		ws.send('x')
+		expect((await message).data).toBe('{"then":"not-a-function","v":1}')
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	// a custom iterator may hand back any thenable from next() or return(),
+	// as HTTP's stream pull accepts: each is awaited, not read as a step
+	it("assimilates a thenable from a custom iterator's next and return", async () => {
+		const log: string[] = []
+		const thenable = (value: unknown) => ({
+			then(resolve: (value: unknown) => void) {
+				log.push('then')
+				resolve(value)
+			}
+		})
+		const app = new Elysia()
+			.use(websocket()).ws('/ws', {
+				message() {
+					let n = 0
+
+					return {
+						next() {
+							log.push(`next${++n}`)
+							if (n > 3) return { done: true, value: undefined }
+
+							return n <= 2
+								? thenable({ done: false, value: `chunk-${n}` })
+								: thenable({ done: true, value: undefined })
+						},
+						return() {
+							log.push('return')
+
+							return thenable({ done: true, value: undefined })
+						},
+						[Symbol.asyncIterator]() {
+							return this
+						}
+					}
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		const frames: unknown[] = []
+		ws.addEventListener('message', (event) => frames.push(event.data))
+		ws.send('x')
+		await Bun.sleep(20)
+
+		expect(frames).toEqual(['chunk-1', 'chunk-2'])
+		expect(log).toEqual([
+			'next1',
+			'then',
+			'next2',
+			'then',
+			'next3',
+			'then',
+			'return',
+			'then'
+		])
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	// a native Promise is awaited even when an own `then` shadows the
+	// method: `await` settles it regardless, so it is never read as a step
+	it('awaits a native Promise from a custom iterator despite a shadowed then', async () => {
+		const shadowed = (value: unknown) => {
+			const promise = Promise.resolve(value)
+			Object.defineProperty(promise, 'then', { value: 'shadow' })
+
+			return promise
+		}
+		let nextCalls = 0
+		let returnCalls = 0
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws', {
+				message() {
+					return {
+						next() {
+							if (++nextCalls > 3)
+								return { done: true, value: undefined }
+
+							return shadowed(
+								nextCalls <= 2
+									? { done: false, value: `chunk-${nextCalls}` }
+									: { done: true, value: undefined }
+							)
+						},
+						return() {
+							returnCalls++
+
+							return shadowed({ done: true, value: undefined })
+						},
+						[Symbol.asyncIterator]() {
+							return this
+						}
+					}
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		const frames: unknown[] = []
+		ws.addEventListener('message', (event) => frames.push(event.data))
+		ws.send('x')
+		await Bun.sleep(20)
+
+		expect(frames).toEqual(['chunk-1', 'chunk-2'])
+		// two yields and the done step: one next() each
+		expect(nextCalls).toBe(3)
+		expect(returnCalls).toBe(1)
+
+		await wsClosed(ws)
+		app.stop()
+	})
 })

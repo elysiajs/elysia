@@ -277,6 +277,16 @@ export function mapCompactResponse(
 			)
 
 		case 'Object':
+			// @ts-expect-error
+			if (typeof response?.next === 'function')
+				return handleStream(
+					response as any,
+					undefined,
+					request,
+					undefined,
+					owned
+				) as any
+
 			return Response.json(response)
 
 		case 'Number':

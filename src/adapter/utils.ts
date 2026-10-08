@@ -261,7 +261,13 @@ export function createStreamHandler({
 			typedSSE ? undefined : (generator as Generator).next?.()
 		) as IteratorResult<unknown> | undefined
 
-		if (init instanceof Promise) init = await init
+		// a native Promise first (an own `then` may shadow its method), then
+		// any thenable a custom iterator hands back, as the later pulls do
+		if (
+			init instanceof Promise ||
+			typeof (init as any)?.then === 'function'
+		)
+			init = await init
 
 		const sign = (set as { '~sign'?: Function } | undefined)?.['~sign']
 		if (sign)

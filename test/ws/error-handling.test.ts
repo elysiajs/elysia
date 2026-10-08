@@ -591,3 +591,274 @@ describe('WebSocket error hook registered after the route', () => {
 		}
 	})
 })
+
+// an error hook's status reaches mapResponse through `set.status`, as on
+// HTTP; the connection's `set` is shared by every message, so it must land
+// on the error frame alone, never on the next or a concurrent message
+describe('WebSocket message error status in mapResponse', () => {
+	it('shows the status and error to mapResponse for that frame only', async () => {
+		const seen: [string, unknown, boolean][] = []
+		const mapResponse = (ws: any) => {
+			seen.push([String(ws.body), ws.set.status, 'error' in ws])
+		}
+		const app = new Elysia()
+			.use(websocket())
+			.get(
+				'/h',
+				{ error: () => status(418, 'tea'), mapResponse },
+				() => {
+					throw new Error('x')
+				}
+			)
+			.ws('/ws', {
+				error: () => status(418, 'tea'),
+				mapResponse,
+				async message(_ws, body: any) {
+					if (body === 'boom') throw new Error('x')
+					if (body === 'slow') await Bun.sleep(30)
+
+					return `ok:${body}`
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		try {
+			ws.send('boom')
+			expect((await wsMessage(ws)).data).toBe(
+				'{"status":418,"error":"tea"}'
+			)
+
+			ws.send('fine')
+			expect((await wsMessage(ws)).data).toBe('ok:fine')
+
+			// `boom` answers while `slow` is still in flight
+			ws.send('slow')
+			ws.send('boom')
+			expect((await wsMessage(ws)).data).toBe(
+				'{"status":418,"error":"tea"}'
+			)
+			expect((await wsMessage(ws)).data).toBe('ok:slow')
+
+			const http = await app.handle(new Request('http://localhost/h'))
+			expect(http.status).toBe(418)
+
+			expect(seen).toEqual([
+				['boom', 418, true],
+				['fine', undefined, false],
+				['boom', 418, true],
+				['slow', undefined, false],
+				['undefined', 418, true]
+			])
+		} finally {
+			await wsClosed(ws)
+			app.stop()
+		}
+	})
+
+	// only the status is the error frame's own: `set.headers` and the cookie
+	// jar are connection state for every message hook, so a header the error
+	// hook or mapResponse writes is seen by the next frame, exactly as one a
+	// normal message handler writes. The status never leaks, neither to the
+	// next message nor to one answered while the hook is still parked
+	it("keeps an error hook's status on that frame, headers on the connection", async () => {
+		let release!: () => void
+		const gate = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		const errorFrames: [unknown, unknown][] = []
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws', {
+				async error({ set, error }: any) {
+					set.status = 418
+					set.headers['x-hook'] = '1'
+					if (error.message === 'slow') await gate
+
+					return 'handled'
+				},
+				mapResponse(context: any) {
+					if (!('error' in context)) return
+
+					context.set.headers['x-map'] = '1'
+					errorFrames.push([
+						context.set.status,
+						context.set.headers['x-hook']
+					])
+				},
+				message(ws: any, body: unknown) {
+					if (body === 'boom' || body === 'slow')
+						throw new Error(body as string)
+					if (body === 'tag') ws.set.headers['x-msg'] = '1'
+
+					return JSON.stringify({
+						status: ws.set.status,
+						msg: ws.set.headers['x-msg'],
+						hook: ws.set.headers['x-hook'],
+						map: ws.set.headers['x-map']
+					})
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		try {
+			// control: a normal handler's header write persists to later frames
+			ws.send('tag')
+			expect((await wsMessage(ws)).data).toBe('{"msg":"1"}')
+			ws.send('fine')
+			expect((await wsMessage(ws)).data).toBe('{"msg":"1"}')
+
+			ws.send('boom')
+			expect((await wsMessage(ws)).data).toBe('handled')
+
+			// the error frame's headers persist the same way, its status does not
+			ws.send('fine')
+			expect((await wsMessage(ws)).data).toBe(
+				'{"msg":"1","hook":"1","map":"1"}'
+			)
+
+			// `fine` answers while the `slow` hook holds its status
+			ws.send('slow')
+			ws.send('fine')
+			expect((await wsMessage(ws)).data).toBe(
+				'{"msg":"1","hook":"1","map":"1"}'
+			)
+			release()
+			expect((await wsMessage(ws)).data).toBe('handled')
+
+			expect(errorFrames).toEqual([
+				[418, '1'],
+				[418, '1']
+			])
+		} finally {
+			await wsClosed(ws)
+			app.stop()
+		}
+	})
+
+	// HTTP accepts a `Headers` instance as `set.headers`; the error frame
+	// shares the connection's container, so its entries reach the hooks
+	it('shows a Headers instance on the connection to the error frame', async () => {
+		const seen: unknown[] = []
+		const read = (headers: any) =>
+			headers instanceof Headers
+				? headers.get('x-base')
+				: headers?.['x-base']
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws', {
+				open(ws: any) {
+					ws.set.headers = new Headers({ 'x-base': 'base' })
+				},
+				error({ set }: any) {
+					seen.push(read(set.headers))
+
+					return 'handled'
+				},
+				mapResponse(context: any) {
+					if ('error' in context) seen.push(read(context.set.headers))
+				},
+				message() {
+					throw new Error('boom')
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		try {
+			ws.send('x')
+			expect((await wsMessage(ws)).data).toBe('handled')
+			expect(seen).toEqual(['base', 'base'])
+		} finally {
+			await wsClosed(ws)
+			app.stop()
+		}
+	})
+
+	// headers and the cookie jar forward to the connection's own `set`, not a
+	// snapshot of its containers: replacing `set.headers` in an error hook
+	// persists to the next frame, exactly as a message handler's replacement
+	it("persists an error hook's set.headers replacement to the next frame", async () => {
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws', {
+				error({ set }: any) {
+					set.headers = new Headers({ 'x-error': 'error' })
+
+					return 'handled'
+				},
+				message(ws: any, body: unknown) {
+					if (body === 'boom') throw new Error('boom')
+
+					return String(
+						ws.set.headers instanceof Headers
+							? ws.set.headers.get('x-error')
+							: ws.set.headers['x-error']
+					)
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		try {
+			ws.send('boom')
+			expect((await wsMessage(ws)).data).toBe('handled')
+
+			ws.send('fine')
+			expect((await wsMessage(ws)).data).toBe('error')
+		} finally {
+			await wsClosed(ws)
+			app.stop()
+		}
+	})
+
+	// a cookie first written in an error hook creates the connection's
+	// `set.cookie` through the Cookie object; the error frame's mapResponse
+	// must see it on `set.cookie`, and so must the next frame
+	it('shows a cookie the error hook creates to mapResponse and the next frame', async () => {
+		const seen: unknown[] = []
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws', {
+				error({ cookie }: any) {
+					cookie.sid.value = 'error'
+
+					return 'handled'
+				},
+				mapResponse(context: any) {
+					if ('error' in context)
+						seen.push(context.set.cookie?.sid?.value ?? null)
+				},
+				message(ws: any, body: unknown) {
+					if (body === 'boom') throw new Error('boom')
+
+					return String(ws.set.cookie?.sid?.value ?? null)
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		try {
+			ws.send('boom')
+			expect((await wsMessage(ws)).data).toBe('handled')
+			expect(seen).toEqual(['error'])
+
+			ws.send('fine')
+			expect((await wsMessage(ws)).data).toBe('error')
+		} finally {
+			await wsClosed(ws)
+			app.stop()
+		}
+	})
+})

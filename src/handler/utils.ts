@@ -132,6 +132,10 @@ export function registerDeriveDisposable(
 	if (isSingleton(value as object)) return
 
 	for (const key in scan) if (scan[key] === value) return
+	// `scan` cannot see an alias in the same result, nor a symbol key
+	const stack = (context['~dispose'] ??= [])
+	for (const release of stack) if (release.value === value) return
+
 	const disposable = value as Disposable & AsyncDisposable
 	const asyncDispose = disposable[Symbol.asyncDispose]
 	const dispose =
@@ -139,7 +143,9 @@ export function registerDeriveDisposable(
 			? asyncDispose
 			: disposable[Symbol.dispose]
 
-	;(context['~dispose'] ??= []).push(() => dispose.call(value))
+	const release = () => dispose.call(value)
+	release.value = value
+	stack.push(release)
 }
 
 export async function drainDisposables(context: any) {

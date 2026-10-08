@@ -178,3 +178,45 @@ describe('AOT WebSocket schemas', () => {
 		expect(frozenInvalid.length).toBeGreaterThan(0)
 	})
 })
+
+// a frozen (bridge-free) validator applies defaults through the same `From`
+// entry the live one does, so a sealed app answers like a JIT one
+describe('AOT WebSocket schema defaults', () => {
+	const buildDefaults = () =>
+		new Elysia().use(websocket()).ws('/ws', {
+			query: t.Object({ name: t.String({ default: 'anon' }) }),
+			body: t.Object({ n: t.Number({ default: 7 }) }),
+			message(ws: any, body: any) {
+				ws.send(`${ws.query.name}:${body.n}`)
+			}
+		})
+
+	it('frozen and JIT routes both fill a missing query and body key', async () => {
+		const { captured, handlers } = captureManifest(buildDefaults)
+		Validator.clear()
+		registerManifest({ validators: materialise(captured), handlers })
+
+		const frozenApp = buildDefaults().listen(0)
+		await Bun.sleep(0)
+		expect(
+			Compiled.hasValidator(
+				'WS',
+				'/ws',
+				'body',
+				(frozenApp as any)['~programId']
+			)
+		).toBe(true)
+		const frozen = await sendBody(frozenApp, '{}')
+		frozenApp.stop()
+
+		Compiled.clear()
+		Validator.clear()
+		const jitApp = buildDefaults().listen(0)
+		await Bun.sleep(0)
+		const jit = await sendBody(jitApp, '{}')
+		jitApp.stop()
+
+		expect(frozen).toBe('anon:7')
+		expect(jit).toBe('anon:7')
+	})
+})

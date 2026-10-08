@@ -146,7 +146,7 @@ describe('derive dispose', () => {
 		expect(log).toEqual(['shared'])
 	})
 
-	it('KNOWN GAP: mapDerive cannot dedupe an instance against itself', async () => {
+	it('disposes an instance a mapDerive exposes under two keys once', async () => {
 		const log: string[] = []
 		const shared = disposable(log, 'shared')
 
@@ -157,10 +157,42 @@ describe('derive dispose', () => {
 		await app.handle('/')
 		await drain()
 
-		// `mapDerive` registers against the PRE-swap context, which by
-		// definition holds neither key, so an instance exposed under two keys is
-		// released twice. Expose it once, or use `derive`
-		expect(log).toEqual(['shared', 'shared'])
+		// `mapDerive` scans the PRE-swap context, which holds neither key; a
+		// second release of a closed resource is a double free
+		expect(log).toEqual(['shared'])
+	})
+
+	it('disposes a symbol-keyed mapDerive value', async () => {
+		const marker = Symbol('marker')
+		const log: string[] = []
+
+		const app = new Elysia()
+			.mapDerive((context) => ({
+				...context,
+				[marker]: disposable(log, 'symbol')
+			}))
+			.get('/', (context: any) => context[marker].name)
+
+		// the handler receives it, so the request owns it
+		await requests(app, 'symbol')
+
+		expect(log).toEqual(['symbol', 'symbol', 'symbol'])
+	})
+
+	it('does not dispose twice a symbol-keyed value a mapDerive carries', async () => {
+		const marker = Symbol('marker')
+		const log: string[] = []
+
+		const app = new Elysia()
+			.derive(() => ({ [marker]: disposable(log, 'carried') }))
+			.mapDerive((context) => ({ ...context }))
+			.get('/', (context: any) => context[marker].name)
+
+		// the derive already recorded it; a spread carries it to the new
+		// context under the same symbol, which a `for..in` scan cannot see
+		await requests(app, 'carried')
+
+		expect(log).toEqual(['carried', 'carried', 'carried'])
 	})
 
 	it('reads each key once on the keyed path, registering what it assigns', () => {

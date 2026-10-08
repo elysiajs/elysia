@@ -387,7 +387,7 @@ export function mapBeforeHandle(
 				// the pre-swap context is the reference for "already there"
 				code +=
 					'if(tmp instanceof es)_r=tmp\n' +
-					"else if(tmp){if(typeof tmp==='object'||typeof tmp==='function'){const _pc=c;c=rdc(c,tmp);for(const _k of Object.keys(tmp))dsp(c,c[_k],_pc)}tmp=undefined}\n"
+					"else if(tmp){if(typeof tmp==='object'||typeof tmp==='function'){const _pc=c;c=rdc(c,tmp);for(const _k of Reflect.ownKeys(tmp))dsp(c,c[_k],_pc)}tmp=undefined}\n"
 			} else {
 				const keys = extractDeriveKeys(fn)
 				const keyed =

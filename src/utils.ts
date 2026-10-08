@@ -400,6 +400,8 @@ export function flattenChain(
 	let layer: number[] | undefined
 	// derive entry of each `beforeHandle` occurrence, once one is a derive
 	let roles: (DeriveEntry | undefined)[] | undefined
+	// narrowest wins, local > plugin > global like the inferred route type
+	let ranks: Record<string, number> | undefined
 
 	while (nodes.length) {
 		const node = nodes.pop()!
@@ -411,6 +413,9 @@ export function flattenChain(
 				outer = withLayer(outer, layer)
 				layer.length = 0
 			}
+
+			// an inner layer is closer to the route
+			ranks = undefined
 
 			continue
 		}
@@ -486,6 +491,21 @@ export function flattenChain(
 							else (result as any)[key] = v.slice()
 						} else if (existing) existing.push(v)
 						else (result as any)[key] = [v]
+					} else if (schemaProperties.has(key)) {
+						// a propagated `plugin` hook is the parent's own
+						const rank =
+							scope === 'global'
+								? 0
+								: scope === 'plugin' && !propagated
+									? 1
+									: 2
+
+						const held: Record<string, number> = (ranks ??=
+							nullObject())
+						if (rank < (held[key] ?? 0)) continue
+
+						held[key] = rank
+						;(result as any)[key] = v
 					} else (result as any)[key] = v
 				}
 

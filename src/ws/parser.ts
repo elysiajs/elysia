@@ -65,7 +65,7 @@ export function createMessageParser(
 
 		for (let i = next; i < parsers!.length; i++) {
 			let r = parsers![i](ws, value)
-			if (r instanceof Promise) r = await r
+			if (typeof (r as any)?.then === 'function') r = await r
 			if (r !== undefined) value = r
 		}
 
@@ -80,7 +80,8 @@ export function createMessageParser(
 
 		for (let i = 0; i < parsers.length; i++) {
 			const r = parsers[i](ws, value)
-			if (r instanceof Promise) return parseAsync(ws, r, value, i + 1)
+			if (typeof (r as any)?.then === 'function')
+				return parseAsync(ws, Promise.resolve(r), value, i + 1)
 			if (r !== undefined) value = r
 		}
 

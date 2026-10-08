@@ -83,7 +83,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 	) {
 		this.raw = raw
 
-		if (context)
+		if (context) {
 			for (const key in context) {
 				if (key === 'ws' || key === 'body') continue
 
@@ -99,6 +99,12 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 
 				;(this as any)[key] = context[key]
 			}
+
+			// `for..in` skips symbol keys, which a derive may return
+			for (const key of Object.getOwnPropertySymbols(context))
+				if (Object.prototype.propertyIsEnumerable.call(context, key))
+					(this as any)[key] = (context as any)[key]
+		}
 	}
 
 	get ws(): this {

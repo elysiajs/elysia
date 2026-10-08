@@ -558,11 +558,7 @@ describe('path encoding parity', () => {
 
 		try {
 			for (const path of [encoded, encoded + '/', '/ws/กข']) {
-				const { opened, frames } = await wsProbe(
-					app.server!,
-					path,
-					''
-				)
+				const { opened, frames } = await wsProbe(app.server!, path, '')
 
 				expect(opened).toBe(true)
 				expect(frames[0]).toBe('static')
@@ -657,5 +653,300 @@ describe('problem members are read once', () => {
 			title: 'Conflict',
 			status: 409
 		})
+	})
+})
+
+// the first mapResponse hook that answers wins on HTTP; WS must not feed
+// that answer into the next hook, or a plugin's mapper rewraps the route's
+describe('HTTP and WebSocket mapResponse chains', () => {
+	const m1 = ({ responseValue }: any) =>
+		typeof responseValue === 'string' ? `m1(${responseValue})` : undefined
+	const m2 = ({ responseValue }: any) =>
+		typeof responseValue === 'string' ? `m2(${responseValue})` : undefined
+	const mapResponse = [m1, m2]
+
+	it('stops at the first defined mapping on both transports', async () => {
+		const app = new Elysia()
+			.use(websocket())
+			.get('/h', { mapResponse }, () => 'v')
+			.get('/he', { mapResponse, error: () => 'handled' }, () => {
+				throw new Error('x')
+			})
+			.ws('/w', { mapResponse, message: () => 'v' })
+			.ws('/wg', {
+				mapResponse,
+				message: function* () {
+					yield 'a'
+					yield 'b'
+				}
+			})
+			.ws('/we', {
+				mapResponse,
+				error: () => 'handled',
+				message() {
+					throw new Error('x')
+				}
+			})
+			.listen(0)
+
+		const plain = await wsProbe(app.server!, '/w', 'go')
+		const generator = await wsProbe(app.server!, '/wg', 'go', 2)
+		const hook = await wsProbe(app.server!, '/we', 'go')
+		const http = await app.handle(new Request('http://localhost/h'))
+		const httpError = await app.handle(new Request('http://localhost/he'))
+		app.stop()
+
+		expect(await http.text()).toBe('m1(v)')
+		expect(await httpError.text()).toBe('m1(handled)')
+		expect(plain.frames).toEqual(['m1(v)'])
+		expect(generator.frames).toEqual(['m1(a)', 'm1(b)'])
+		expect(hook.frames).toEqual(['m1(handled)'])
+	})
+})
+
+// afterResponse runs exactly once on every exit on HTTP; a WS frame is the
+// unit the hook counts, so it runs once per frame whatever the exit, and only
+// after the answer or error frame has been sent
+describe('HTTP and WebSocket afterResponse on every exit', () => {
+	type Hooks = Record<string, unknown>
+	const cases: Record<string, (ws: boolean) => Hooks> = {
+		ok: () => ({}),
+		// answers per message only: at the upgrade `body` is empty
+		beforeHandleShort: () => ({
+			beforeHandle: ({ body }: any) => (body ? 'short' : undefined)
+		}),
+		parseFail: () => ({
+			parse() {
+				throw new Error('parse')
+			}
+		}),
+		validationFail: () => ({ body: t.Object({ n: t.Number() }) }),
+		throw: () => ({
+			handler() {
+				throw new Error('boom')
+			}
+		}),
+		reject: () => ({
+			async handler() {
+				throw new Error('boom')
+			}
+		}),
+		afterHandleThrow: () => ({
+			afterHandle() {
+				throw new Error('after')
+			}
+		}),
+		mapResponseThrow: () => ({
+			mapResponse() {
+				throw new Error('map')
+			}
+		})
+	}
+
+	it('runs afterResponse once per request and once per frame', async () => {
+		const after: Record<string, number> = {}
+		const afterHandle: Record<string, number> = {}
+		const bodies: Record<string, unknown> = {}
+		const count = (name: string) => (ws: any) => {
+			after[name] = (after[name] ?? 0) + 1
+			bodies[name] = ws.body
+			if (ws.raw) ws.send('after')
+		}
+
+		let app: any = new Elysia().use(websocket())
+		for (const [name, make] of Object.entries(cases)) {
+			const { handler = () => 'r', ...hooks } = make(false) as any
+			app = app
+				.post(
+					`/${name}`,
+					{
+						...hooks,
+						afterHandle:
+							hooks.afterHandle ??
+							(() =>
+								void (afterHandle[`h:${name}`] =
+									(afterHandle[`h:${name}`] ?? 0) + 1)),
+						afterResponse: count(`h:${name}`)
+					},
+					handler
+				)
+				.ws(`/${name}`, {
+					...hooks,
+					afterHandle:
+						hooks.afterHandle ??
+						(() =>
+							void (afterHandle[`w:${name}`] =
+								(afterHandle[`w:${name}`] ?? 0) + 1)),
+					afterResponse: count(`w:${name}`),
+					message: handler
+				})
+		}
+		app.listen(0)
+
+		const frames: Record<string, string[]> = {}
+		const expectedFrames: Record<string, number> = {
+			ok: 2,
+			beforeHandleShort: 2,
+			afterHandleThrow: 3
+		}
+		for (const name of Object.keys(cases))
+			frames[name] = (
+				await wsProbe(
+					app.server!,
+					`/${name}`,
+					'hi',
+					expectedFrames[name] ?? 2,
+					500
+				)
+			).frames
+
+		const statuses: Record<string, number> = {}
+		for (const name of Object.keys(cases)) {
+			if (name === 'parseFail') continue
+			const res = await app.handle(
+				new Request(`http://localhost/${name}`, {
+					method: 'POST',
+					body: 'hi'
+				})
+			)
+			statuses[name] = res.status
+		}
+		// afterResponse is scheduled after the HTTP response is handed back
+		await Bun.sleep(10)
+		app.stop()
+
+		const error = (status: number) =>
+			expect.stringContaining(`"status":${status}`)
+		expect(frames).toEqual({
+			ok: ['r', 'after'],
+			beforeHandleShort: ['short', 'after'],
+			parseFail: [error(500), 'after'],
+			validationFail: [error(422), 'after'],
+			throw: [error(500), 'after'],
+			reject: [error(500), 'after'],
+			afterHandleThrow: ['r', error(500), 'after'],
+			mapResponseThrow: [error(500), 'after']
+		})
+		expect(statuses).toEqual({
+			ok: 200,
+			beforeHandleShort: 200,
+			validationFail: 422,
+			throw: 500,
+			reject: 500,
+			afterHandleThrow: 500,
+			mapResponseThrow: 500
+		})
+
+		const once: Record<string, number> = {}
+		for (const name of Object.keys(cases)) {
+			if (name !== 'parseFail') once[`h:${name}`] = 1
+			once[`w:${name}`] = 1
+		}
+		expect(after).toEqual(once)
+
+		// a beforeHandle answer still reaches afterHandle, as on HTTP
+		expect(afterHandle['h:beforeHandleShort']).toBe(1)
+		expect(afterHandle['w:beforeHandleShort']).toBe(1)
+
+		// nothing was accepted as the body when parsing or validation failed
+		expect(bodies['w:parseFail']).toBeUndefined()
+		expect(bodies['w:validationFail']).toBeUndefined()
+		expect(bodies['w:throw']).toBe('hi')
+	})
+})
+
+// every HTTP answer from the upgrade lane finalizes as on HTTP: the route's
+// mapResponse runs, pending `set` state is kept, cookies are signed
+describe('HTTP and WebSocket upgrade answers', () => {
+	const seen: string[] = []
+	const kind = (value: unknown) =>
+		value instanceof Response ? 'Response' : typeof value
+	const mapResponse = ({ responseValue, set }: any) => {
+		seen.push(`${kind(responseValue)}:${set.status}`)
+		if (typeof responseValue === 'string') return `MAPPED:${responseValue}`
+	}
+	const cases: Record<string, Record<string, unknown>> = {
+		early: {
+			beforeHandle({ set }: any) {
+				set.headers['x-pending'] = '1'
+				return 'denied'
+			}
+		},
+		response: {
+			beforeHandle({ set }: any) {
+				set.headers['x-pending'] = '1'
+				return new Response('no', { status: 403 })
+			}
+		},
+		hookReturn: {
+			beforeHandle() {
+				throw new Error('x')
+			},
+			error: () => 'handled'
+		},
+		thrown: {
+			beforeHandle() {
+				throw new Error('x')
+			}
+		}
+	}
+
+	it('finalize a beforeHandle answer, an error hook answer and a thrown error alike', async () => {
+		let app: any = new Elysia().use(websocket())
+		for (const [name, hooks] of Object.entries(cases))
+			app = app
+				.get(`/${name}`, { ...hooks, mapResponse }, () => 'handler')
+				.ws(`/${name}`, { ...hooks, mapResponse, message() {} })
+
+		const answer = async (name: string, upgrade: boolean) => {
+			seen.length = 0
+			const res = await app.handle(
+				new Request(`http://localhost/${name}`, {
+					headers: upgrade ? { upgrade: 'websocket' } : {}
+				})
+			)
+
+			return {
+				status: res.status,
+				body: (await res.text()).slice(0, 12),
+				pending: res.headers.get('x-pending'),
+				seen: [...seen]
+			}
+		}
+
+		const http: Record<string, unknown> = {}
+		const ws: Record<string, unknown> = {}
+		for (const name of Object.keys(cases)) {
+			http[name] = await answer(name, false)
+			ws[name] = await answer(name, true)
+		}
+
+		expect(http).toEqual({
+			early: {
+				status: 200,
+				body: 'MAPPED:denie',
+				pending: '1',
+				seen: ['string:undefined']
+			},
+			response: {
+				status: 403,
+				body: 'no',
+				pending: '1',
+				seen: ['Response:undefined']
+			},
+			hookReturn: {
+				status: 500,
+				body: 'MAPPED:handl',
+				pending: null,
+				seen: ['string:500']
+			},
+			thrown: {
+				status: 500,
+				body: '{"type":"int',
+				pending: null,
+				seen: ['Response:500']
+			}
+		})
+		expect(ws).toEqual(http)
 	})
 })

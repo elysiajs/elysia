@@ -258,3 +258,176 @@ describe('WebSocket non-body schemas', () => {
 		app.stop()
 	})
 })
+
+// WS request channels validate through the same `From` entry HTTP uses:
+// a schema default or an optional root is honoured, not refused with a 422
+describe('WebSocket request schemas apply defaults like HTTP', () => {
+	const echo = async (app: any, path: string, payload = 'ping') => {
+		const ws = new WebSocket(
+			`ws://${app.server!.hostname}:${app.server!.port}${path}`
+		)
+		await wsOpen(ws)
+		const got = wsMessage(ws)
+		ws.send(payload)
+		const data = (await got).data
+		await wsClosed(ws)
+		return data
+	}
+
+	it('query: a default fills a missing key on HTTP and on the upgrade', async () => {
+		const query = t.Object({ name: t.String({ default: 'anon' }) })
+		const app = new Elysia()
+			.use(websocket())
+			.get('/h', { query }, ({ query }) => query.name)
+			.ws('/ws', {
+				query,
+				message({ ws, query }: any) {
+					ws.send(query.name)
+				}
+			})
+			.listen(0)
+
+		const http = await app.handle(new Request('http://localhost/h'))
+		expect(await http.text()).toBe('anon')
+		expect(await echo(app, '/ws')).toBe('anon')
+
+		app.stop()
+	})
+
+	it('headers: a default fills a missing header at upgrade', async () => {
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws', {
+				headers: t.Object({
+					'x-tenant': t.String({ default: 'public' })
+				}),
+				message({ ws, headers }: any) {
+					ws.send(headers['x-tenant'])
+				}
+			})
+			.listen(0)
+
+		expect(await echo(app, '/ws')).toBe('public')
+
+		app.stop()
+	})
+
+	it('params: a default fills a key the path does not carry', async () => {
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws/:id', {
+				params: t.Object({
+					id: t.String(),
+					sort: t.String({ default: 'asc' })
+				}),
+				message({ ws, params }: any) {
+					ws.send(`${params.id}:${params.sort}`)
+				}
+			})
+			.listen(0)
+
+		expect(await echo(app, '/ws/42')).toBe('42:asc')
+
+		app.stop()
+	})
+
+	it('cookie: a default fills a missing cookie at upgrade', async () => {
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws', {
+				cookie: t.Cookie({ theme: t.String({ default: 'light' }) }),
+				message({ ws, cookie }: any) {
+					ws.send(cookie.theme.value)
+				}
+			})
+			.listen(0)
+
+		expect(await echo(app, '/ws')).toBe('light')
+
+		app.stop()
+	})
+
+	it('body: a default fills a missing key of a message', async () => {
+		const body = t.Object({ n: t.Number({ default: 7 }) })
+		const app = new Elysia()
+			.use(websocket())
+			.post('/h', { body }, ({ body }) => String(body.n))
+			.ws('/ws', {
+				body,
+				message(ws, body: any) {
+					ws.send(String(body.n))
+				}
+			})
+			.listen(0)
+
+		const http = await app.handle(
+			new Request('http://localhost/h', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: '{}'
+			})
+		)
+		expect(await http.text()).toBe('7')
+		expect(await echo(app, '/ws', '{}')).toBe('7')
+
+		app.stop()
+	})
+
+	it('query: an optional root accepts an upgrade without a query string', async () => {
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws', {
+				query: t.Optional(t.Object({ name: t.String() })),
+				message({ ws, query }: any) {
+					ws.send(JSON.stringify(query))
+				}
+			})
+			.listen(0)
+
+		expect(await echo(app, '/ws')).toBe('{}')
+
+		app.stop()
+	})
+
+	it('query: still strips an undeclared key under normalize', async () => {
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws', {
+				query: t.Object({ name: t.String({ default: 'anon' }) }),
+				message({ ws, query }: any) {
+					ws.send(JSON.stringify(query))
+				}
+			})
+			.listen(0)
+
+		expect(await echo(app, '/ws?name=jane&extra=1')).toBe(
+			'{"name":"jane"}'
+		)
+
+		app.stop()
+	})
+
+	it('query: a default on one key does not rescue another missing key', async () => {
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws', {
+				query: t.Object({
+					name: t.String(),
+					page: t.Numeric({ default: 1 })
+				}),
+				message({ ws }: any) {
+					ws.send('ok')
+				}
+			})
+			.listen(0)
+
+		const upgradeResponse = await app.handle(
+			new Request('http://localhost/ws', {
+				headers: { upgrade: 'websocket' }
+			})
+		)
+		expect(upgradeResponse.status).toBe(422)
+
+		app.stop()
+	})
+})

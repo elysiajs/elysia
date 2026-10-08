@@ -1219,3 +1219,14 @@ import { Cookie } from '../../src/cookie/cookie'
 		)
 	}
 }
+
+// Stacked override guards: local beats a later plugin guard, matching the
+// runtime (test/core/guard-scope.test.ts "stacked override guard precedence")
+{
+	new Elysia()
+		.guard('local', { headers: t.Object({ a: t.String() }) })
+		.guard('plugin', { headers: t.Object({ b: t.String() }) })
+		.get('/', ({ headers }) => {
+			expectTypeOf<typeof headers>().toEqualTypeOf<{ a: string }>()
+		})
+}

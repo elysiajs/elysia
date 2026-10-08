@@ -1,5 +1,4 @@
 import { RouteValidator } from '../validator/route'
-import { StandardValidator } from '../validator'
 import {
 	buildFrozenRouteValidator,
 	isBridgeNotInitialized
@@ -65,7 +64,11 @@ import {
 	resolveStatus,
 	statusFallbackBody
 } from '../handler/error'
-import { finalizeRouteErrorOf } from '../handler/utils'
+import {
+	drainDisposables,
+	finalizeRouteErrorOf,
+	registerDeriveDisposable
+} from '../handler/utils'
 
 import { isBun } from '../universal/constants'
 import { mapResponse } from '../adapter/web-standard/handler'
@@ -104,17 +107,18 @@ function concatHooks(
 	return result ?? EMPTY_HOOKS
 }
 
+// the first hook that answers wins, as on HTTP
 async function applyMapResponse(
 	ws: ElysiaWS<any>,
 	value: unknown,
 	mapResponses: readonly AnyFn[]
 ): Promise<unknown> {
-	for (let i = 0; i < mapResponses.length; i++) {
-		;(ws as any).responseValue = value
+	;(ws as any).responseValue = value
 
+	for (let i = 0; i < mapResponses.length; i++) {
 		const r = mapResponses[i](ws)
-		const result = r instanceof Promise ? await r : r
-		if (result !== undefined) value = result
+		const result = typeof (r as any)?.then === 'function' ? await r : r
+		if (result !== undefined) return result
 	}
 
 	return value
@@ -156,9 +160,14 @@ export async function handleWSResponse(
 		const iter = value as Iterator<unknown> | AsyncIterator<unknown>
 		try {
 			while (true) {
-				const step = iter.next()
+				// a native Promise first, as HTTP's first step: an own `then`
+				// may shadow its method. Then any thenable a custom iterator
+				// hands back, as HTTP's later pulls
+				const step: any = iter.next()
 				const { value: yielded, done } =
-					step instanceof Promise ? await step : step
+					step instanceof Promise || typeof step?.then === 'function'
+						? await step
+						: step
 
 				if (done) return
 
@@ -191,7 +200,8 @@ export async function handleWSResponse(
 			if (typeof (iter as any).return === 'function')
 				try {
 					const r = (iter as any).return()
-					if (r instanceof Promise) await r
+					if (r instanceof Promise || typeof r?.then === 'function')
+						await r
 				} catch {}
 		}
 		return
@@ -349,16 +359,6 @@ function sendErrorFrame(ws: ElysiaWS<any>, error: unknown) {
 		},
 		() => {}
 	)
-}
-
-function validateChannel(
-	validator: any,
-	value: unknown,
-	type: 'body' | 'params' | 'query' | 'headers' | 'cookie'
-): unknown | Promise<unknown> {
-	return validator.hasCodec || validator instanceof StandardValidator
-		? validator.From(value, type)
-		: validator.EncodeFrom(value, type)
 }
 
 const wsOptions = [
@@ -580,21 +580,35 @@ export function buildWSRoute(
 
 	const parseMessage = createMessageParser(parseHooks as any)
 
+	// every HTTP answer from the upgrade lane ends as on HTTP: the route's
+	// mapResponse (first defined wins), signed cookies, then `set`
+	const finalizeUpgradeResponse = async (
+		response: unknown,
+		set: Context['set'],
+		context: Context
+	) => {
+		if (mapResponses.length) {
+			;(context as any).responseValue = response
+
+			for (let i = 0; i < mapResponses.length; i++) {
+				let r: unknown = mapResponses[i](context)
+				if (typeof (r as any)?.then === 'function') r = await r
+				if (r !== undefined) {
+					response = r
+					break
+				}
+			}
+		}
+
+		// a failed sign drops signed cookies and throws: a 500
+		if (signCookies) await signCookies(set)
+
+		return mapResponse(response, set, context.request)
+	}
+
 	const handleUpgradeError = createErrorHandler(
 		errorHandlers.length ? (errorHandlers as any) : undefined,
-		((response: unknown, set: Context['set'], context?: Context) => {
-			const map = () =>
-				mapResponse(
-					response,
-					set,
-					(context as { request?: Request } | undefined)?.request
-				)
-
-			// a failed sign drops signed cookies and throws to the fallback
-			const pending = signCookies?.(set)
-
-			return pending ? pending.then(map) : map()
-		}) as any,
+		finalizeUpgradeResponse as any,
 		frozenRootOf(app)['~config']?.allowUnsafeValidationDetails
 	)
 
@@ -607,29 +621,51 @@ export function buildWSRoute(
 		)
 			error.allowUnsafeValidationDetails = true
 
+		const shared = (ws as any).set
+		const set = (errCtx.set = {
+			get headers() {
+				return shared.headers
+			},
+			set headers(v) {
+				shared.headers = v
+			},
+			get cookie() {
+				return shared.cookie
+			},
+			set cookie(v) {
+				shared.cookie = v
+			},
+			status: shared.status
+		} as Context['set'])
+
 		for (let i = 0; i < errorHandlers.length; i++) {
 			let r: unknown
 			try {
 				r = errorHandlers[i](errCtx)
-				if (r instanceof Promise) r = await r
+				if (typeof (r as any)?.then === 'function') r = await r
 			} catch {
 				break
 			}
 
 			if (r !== undefined) {
-				// A hook that produced an untyped problem inherits the
-				// intercepted error's `type`, same as the HTTP handler
 				r = adoptErrorType(r, error)
 
+				// the status the answer carries, as on HTTP
+				if (r instanceof ElysiaStatus || r instanceof Response)
+					set.status = r.status
+				else if (set.status === undefined || set.status === 200)
+					set.status = 500
+
 				try {
-					await handleWSResponse(ws, r, mapResponses)
+					await handleWSResponse(errCtx, r, mapResponses)
 				} catch {}
 
 				return
 			}
 		}
 
-		sendErrorFrame(ws, error)
+		// settled before the caller's afterResponse runs
+		await sendErrorFrame(ws, error)
 	}
 
 	const bodyValidator = validators.body as any
@@ -675,7 +711,7 @@ export function buildWSRoute(
 			let decoded: unknown
 
 			try {
-				decoded = validateChannel(bodyValidator, message, 'body')
+				decoded = bodyValidator.From(message, 'body')
 			} catch (error) {
 				return onMessageValidationError(ws, error)
 			}
@@ -704,6 +740,13 @@ export function buildWSRoute(
 					(error) => handleError(ws, error)
 				)
 
+			// a foreign thenable is assimilated as on HTTP, never called raw
+			if (typeof (result as any)?.then === 'function')
+				return Promise.resolve(result).then(
+					(resolved) => finishMessageResult(ws, resolved),
+					(error) => handleError(ws, error)
+				)
+
 			return finishMessageResult(ws, result)
 		} catch (error) {
 			return handleError(ws, error)
@@ -716,32 +759,34 @@ export function buildWSRoute(
 
 			for (let i = 0; i < transforms.length; i++) {
 				const r = transforms[i](ws as any)
-				if (r instanceof Promise) await r
+				if (typeof (r as any)?.then === 'function') await r
 			}
+			// a beforeHandle answer skips the handler only: afterHandle still
+			// runs, as on HTTP
+			let response: unknown
 			for (let i = 0; i < messageBeforeHandles.length; i++) {
 				let r: unknown = messageBeforeHandles[i](ws as any)
-				if (r instanceof Promise) r = await r
+				if (typeof (r as any)?.then === 'function') r = await r
 				if (r !== undefined) {
-					await handleWSResponse(ws, r, mapResponses)
-					return
+					response = r
+					break
 				}
 			}
 
-			const result = (hook.message as AnyFn)(ws, message)
-			const resolved = result instanceof Promise ? await result : result
+			if (response === undefined) {
+				const result = (hook.message as AnyFn)(ws, message)
+				response =
+					typeof (result as any)?.then === 'function'
+						? await result
+						: result
+			}
 
-			if (resolved !== undefined)
-				await handleWSResponse(ws, resolved, mapResponses)
+			if (response !== undefined)
+				await handleWSResponse(ws, response, mapResponses)
 
 			for (let i = 0; i < afterHandles.length; i++) {
 				const r = afterHandles[i](ws as any)
-				if (r instanceof Promise) await r
-			}
-			for (let i = 0; i < afterResponses.length; i++) {
-				try {
-					const r = afterResponses[i](ws as any)
-					if (r instanceof Promise) await r
-				} catch {}
+				if (typeof (r as any)?.then === 'function') await r
 			}
 		} catch (error) {
 			await handleError(ws, error)
@@ -770,6 +815,38 @@ export function buildWSRoute(
 		}
 	}
 
+	async function dispatchMessageFull(
+		connection: ElysiaWS<any>,
+		rawMessage: string | Buffer
+	) {
+		const ws: ElysiaWS<any> = Object.create(connection)
+
+		try {
+			let message = parseMessage(ws as any, rawMessage)
+			if (message instanceof Promise) message = await message
+
+			if (bodyValidator) {
+				const decoded = bodyValidator.From(message, 'body')
+				message = decoded instanceof Promise ? await decoded : decoded
+			}
+
+			await runMessageFull(ws, message)
+		} catch (error) {
+			await handleError(ws, error)
+		} finally {
+			for (let i = 0; i < afterResponses.length; i++) {
+				try {
+					const r = afterResponses[i](ws as any)
+					if (typeof (r as any)?.then === 'function') await r
+				} catch {}
+			}
+		}
+	}
+
+	const dispatchMessage = afterResponses.length
+		? dispatchMessageFull
+		: dispatchMessageSync
+
 	function wrapLifecycle(fn: AnyFn | undefined, withBody: boolean) {
 		if (!fn) return
 
@@ -779,7 +856,9 @@ export function buildWSRoute(
 				if (withBody) ws.body = bodyArg as any
 				const result = withBody ? fn(ws, bodyArg) : fn(ws)
 				const resolved =
-					result instanceof Promise ? await result : result
+					typeof (result as any)?.then === 'function'
+						? await result
+						: result
 				await handleWSResponse(ws, resolved, mapResponses)
 			} catch (error) {
 				await handleError(ws, error)
@@ -801,7 +880,9 @@ export function buildWSRoute(
 					const fn = hook.close as AnyFn
 					const result = fn(ws, code, reason)
 					const resolved =
-						result instanceof Promise ? await result : result
+						typeof (result as any)?.then === 'function'
+							? await result
+							: result
 
 					await handleWSResponse(ws, resolved, mapResponses)
 				} catch (error) {
@@ -812,11 +893,11 @@ export function buildWSRoute(
 
 	const fetchHandler = async (context: Context) => {
 		const request = context.request
+		let upgraded = false
 
 		try {
 			if (validators.params) {
-				let r = validateChannel(
-					validators.params as any,
+				let r = (validators.params as any).From(
 					context.params ?? nullObject(),
 					'params'
 				)
@@ -833,7 +914,7 @@ export function buildWSRoute(
 				)
 
 				if (validators.query) {
-					r = validateChannel(validators.query, r, 'query')
+					r = validators.query.From(r, 'query')
 					if (r instanceof Promise) r = await r
 				}
 				;(context as any).query = r
@@ -845,7 +926,7 @@ export function buildWSRoute(
 					: Object.fromEntries(request.headers)
 
 				if (validators.headers) {
-					r = validateChannel(validators.headers, r, 'headers')
+					r = validators.headers.From(r, 'headers')
 					if (r instanceof Promise) r = await r
 				}
 				;(context as any).headers = r
@@ -854,18 +935,12 @@ export function buildWSRoute(
 			if (cookieConfig) {
 				const cookieHeader = request.headers.get('cookie')
 
-				// read/verify surface only: an accepted upgrade carries no
-				// response for `set.cookie` writes to ride on
 				if (validators.cookie) {
 					const raw = await parseCookieRaw(cookieHeader, cookieConfig)
 
 					let r: unknown = raw
 					if (!cookieIsOptional || Object.keys(raw).length) {
-						r = validateChannel(
-							validators.cookie as any,
-							raw,
-							'cookie'
-						)
+						r = (validators.cookie as any).From(raw, 'cookie')
 						if (r instanceof Promise) r = await r
 					}
 
@@ -875,8 +950,6 @@ export function buildWSRoute(
 						cookieConfig
 					)
 				} else if (!cookieConfig.hasSign) {
-					// unvalidated lanes mirror HTTP: defer decode/verification
-					// to first access instead of failing the upgrade eagerly
 					;(context as any).cookie = buildCookieJar(
 						(context as any).set,
 						parseCookieRawDeferred(cookieHeader, cookieConfig),
@@ -906,34 +979,50 @@ export function buildWSRoute(
 
 			for (let i = 0; i < transforms.length; i++) {
 				const r = transforms[i](context as any)
-				if (r instanceof Promise) await r
+				if (typeof (r as any)?.then === 'function') await r
 			}
 
 			for (let i = 0; i < allBeforeHandles.length; i++) {
 				const fn = allBeforeHandles[i]
 				let r: unknown = fn(context as any)
-				if (r instanceof Promise) r = await r
+				if (typeof (r as any)?.then === 'function') r = await r
 
 				const deriveMode = upgradeDeriveModes?.[i]
 
 				if (deriveMode !== undefined && !(r instanceof ElysiaStatus)) {
 					if (r && typeof r === 'object') {
-						if (deriveMode)
+						if (deriveMode) {
+							const previous = context
 							context = replaceDeriveContext(context, r)
-						else assignOwn(context as any, r)
+							for (const key of Reflect.ownKeys(r))
+								registerDeriveDisposable(
+									context,
+									(context as any)[key],
+									previous
+								)
+						} else if (Object.hasOwn(r, '__proto__')) {
+							for (const key of Object.keys(r))
+								registerDeriveDisposable(
+									context,
+									(r as any)[key]
+								)
+							assignOwn(context as any, r)
+						} else {
+							// read once, as on HTTP: the instance registered
+							// is the one the context exposes, each once
+							const own: any = Object.assign({}, r)
+							for (const key of Reflect.ownKeys(own)) {
+								registerDeriveDisposable(context, own[key])
+								;(context as any)[key] = own[key]
+							}
+						}
 					}
-				} else if (r !== undefined) {
-					if (r instanceof Response) return r
-
-					// a failed sign throws: a 500
-					if (signCookies) await signCookies((context as any).set)
-
-					return mapResponse(
+				} else if (r !== undefined)
+					return finalizeUpgradeResponse(
 						r,
 						(context as any).set,
-						(context as any).request
+						context
 					)
-				}
 			}
 
 			let upgradeHeaders: Record<string, string> | undefined
@@ -942,21 +1031,26 @@ export function buildWSRoute(
 					typeof hook.upgrade === 'function'
 						? hook.upgrade(context as any)
 						: hook.upgrade
-				const resolved = r instanceof Promise ? await r : r
+				const resolved =
+					typeof (r as any)?.then === 'function' ? await r : r
 				if (resolved && typeof resolved === 'object')
 					upgradeHeaders = resolved as Record<string, string>
 			}
 
 			const server = (app as any).server as Server | null
 			if (!server)
-				return problemResponse({
-					status: 500,
-					type: 'internal-server-error',
-					title: 'Internal Server Error',
-					detail: 'WebSocket upgrade requires a running server. Call .listen() first.'
-				})
+				return finalizeUpgradeResponse(
+					problemResponse({
+						status: 500,
+						type: 'internal-server-error',
+						title: 'Internal Server Error',
+						detail: 'WebSocket upgrade requires a running server. Call .listen() first.'
+					}),
+					(context as any).set,
+					context
+				)
 
-			const upgraded = server.upgrade(request, {
+			upgraded = server.upgrade(request, {
 				headers: upgradeHeaders,
 				data: {
 					id: undefined,
@@ -964,7 +1058,7 @@ export function buildWSRoute(
 					validator: responseValidator,
 					defaultValidator: defaultResponseValidator,
 					open: onOpen as any,
-					message: hook.message ? dispatchMessageSync : undefined,
+					message: hook.message ? dispatchMessage : undefined,
 					drain: onDrain as any,
 					close: onClose as any,
 					ping: onPing as any,
@@ -973,9 +1067,13 @@ export function buildWSRoute(
 			})
 
 			if (!upgraded)
-				return new Response('Expected a websocket connection', {
-					status: 400
-				})
+				return finalizeUpgradeResponse(
+					new Response('Expected a websocket connection', {
+						status: 400
+					}),
+					(context as any).set,
+					context
+				)
 		} catch (error) {
 			try {
 				return (await handleUpgradeError(
@@ -987,6 +1085,9 @@ export function buildWSRoute(
 					| Response
 					| Promise<Response>
 			}
+		} finally {
+			if (!upgraded && (context as any)['~dispose'])
+				void drainDisposables(context)
 		}
 	}
 
@@ -1104,8 +1205,15 @@ export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 			)
 		} catch {}
 	}
+
 	const releaseLifecycle = (ws: ServerWebSocket<WSConnectionData>) => {
-		if (!lifecycle?.closing && isSocketQuiet(ws)) {
+		if (!isSocketQuiet(ws)) return
+
+		// closed and nothing in flight: the connection's derive values go
+		const elysia = ws.data.elysia as { '~dispose'?: unknown } | undefined
+		if (elysia?.['~dispose']) void drainDisposables(elysia)
+
+		if (!lifecycle?.closing) {
 			delete (
 				ws.data as WSConnectionData & { '~lifecycleRun'?: unknown }
 			)['~lifecycleRun']

@@ -105,3 +105,139 @@ describe('Promise subclass response', () => {
 		expect(await response.json()).toEqual({ lane: 'set' })
 	})
 })
+
+describe('iterator-like object response', () => {
+	// A hand-written iterator (callable `next`, no Symbol.asyncIterator) is
+	// a stream, not data: the compact lane (route never touches `set`) must
+	// stream it exactly like the set lane does instead of serializing `{}`
+	const iterator = (onReturn?: () => void) => {
+		let i = 0
+
+		return {
+			next: () =>
+				i++ < 2
+					? { value: `c${i}`, done: false }
+					: { value: undefined, done: true },
+			return() {
+				onReturn?.()
+
+				return { value: undefined, done: true }
+			}
+		}
+	}
+
+	const app = new Elysia()
+		.get('/compact', () => iterator())
+		.get('/set', ({ set }) => {
+			set.headers['x-lane'] = 'set'
+
+			return iterator()
+		})
+		.get('/not-iterator', () => ({ next: 'not callable' }))
+		.get('/object', () => ({ name: 'Shiroko', id: 1 }))
+
+	it('streams it on the compact lane like the set lane', async () => {
+		const compact = await app.handle(
+			new Request('http://localhost/compact')
+		)
+		const set = await app.handle(new Request('http://localhost/set'))
+
+		expect(compact.headers.get('content-type')).toBe(
+			set.headers.get('content-type')
+		)
+		expect(await compact.text()).toBe('c1c2')
+		expect(await set.text()).toBe('c1c2')
+
+		const direct = await mapCompactResponse(iterator())
+		expect(await direct.text()).toBe('c1c2')
+	})
+
+	it('returns the iterator when the compact stream is cancelled', async () => {
+		let returned = 0
+		const response = await mapCompactResponse(iterator(() => returned++))
+
+		await response.body!.cancel()
+
+		expect(returned).toBe(1)
+	})
+
+	it('serializes an object whose `next` is not callable as JSON', async () => {
+		const response = await app.handle(
+			new Request('http://localhost/not-iterator')
+		)
+
+		expect(response.headers.get('content-type')).toStartWith(
+			'application/json'
+		)
+		expect(await response.text()).toBe('{"next":"not callable"}')
+	})
+
+	// a custom async iterator may answer `next()` with any thenable; later
+	// pulls already await one, but the first was awaited only when it was a
+	// native Promise, so the thenable itself was taken as the result: no
+	// `done`, no chunks, an empty body
+	const thenables = (first: (result: unknown) => unknown) => {
+		let i = 0
+		const step = () =>
+			i++ < 2
+				? { value: `c${i}`, done: false }
+				: { value: undefined, done: true }
+
+		return {
+			next: () =>
+				i === 0
+					? first(step())
+					: { then: (resolve: Function) => resolve(step()) }
+		}
+	}
+
+	it('awaits a foreign thenable from the first next()', async () => {
+		const app = new Elysia()
+			.get('/compact', () =>
+				thenables((result) => ({
+					then: (resolve: Function) => resolve(result)
+				}))
+			)
+			.get('/set', ({ set }) => {
+				set.headers['x-lane'] = 'set'
+
+				return thenables((result) => ({
+					then: (resolve: Function) => resolve(result)
+				}))
+			})
+
+		for (const path of ['/compact', '/set'])
+			expect(
+				await app
+					.handle(new Request(`http://localhost${path}`))
+					.then((x) => x.text())
+			).toBe('c1c2')
+	})
+
+	it('awaits a native Promise whose own `then` is shadowed', async () => {
+		// native first: an own non-callable `then` must not demote a real
+		// Promise to a plain result
+		const app = new Elysia().get('/', () =>
+			thenables((result) =>
+				Object.assign(Promise.resolve(result), { then: 'shadowed' })
+			)
+		)
+
+		expect(
+			await app
+				.handle(new Request('http://localhost/'))
+				.then((x) => x.text())
+		).toBe('c1c2')
+	})
+
+	it('keeps a plain object JSON response byte-identical', async () => {
+		const response = await app.handle(
+			new Request('http://localhost/object')
+		)
+
+		expect(response.headers.get('content-type')).toBe(
+			'application/json;charset=utf-8'
+		)
+		expect(await response.text()).toBe('{"name":"Shiroko","id":1}')
+	})
+})
