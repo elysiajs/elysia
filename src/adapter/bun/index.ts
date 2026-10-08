@@ -569,10 +569,16 @@ export const BunAdapter: ElysiaAdapter = {
 							},
 							validator: responseValidator,
 							ping(ws: ServerWebSocket<any>, data?: unknown) {
-								options.ping?.(ws as any, data)
+								options.ping?.(
+									new ElysiaWS(ws, context as any),
+									data
+								)
 							},
 							pong(ws: ServerWebSocket<any>, data?: unknown) {
-								options.pong?.(ws as any, data)
+								options.pong?.(
+									new ElysiaWS(ws, context as any),
+									data
+								)
 							},
 							open: async (ws: ServerWebSocket<any>) => {
 								try {
