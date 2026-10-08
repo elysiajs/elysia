@@ -211,4 +211,57 @@ describe('WebSocket connection', () => {
 		expect(pinged).toBe(true)
 		expect(ponged).toBe(true)
 	})
+
+	it('pass ElysiaWS to ping/pong', async () => {
+		const raws: Record<string, unknown> = {}
+		const ids: Record<string, unknown> = {}
+
+		const app = new Elysia()
+			.ws('/', {
+				open(ws) {
+					raws.open = ws.raw
+					ids.open = ws.id
+				},
+				ping(ws) {
+					raws.ping = ws.raw
+					ids.ping = ws.id
+				},
+				pong(ws) {
+					raws.pong = ws.raw
+					ids.pong = ws.id
+				},
+				message() {}
+			})
+			.listen(0)
+
+		const ws = new WebSocket(`ws://localhost:${app.server?.port}`)
+
+		await new Promise<void>((resolve) => {
+			ws.addEventListener(
+				'open',
+				() => {
+					ws.ping()
+					ws.pong()
+
+					resolve()
+				},
+				{
+					once: true
+				}
+			)
+		})
+
+		await Bun.sleep(3)
+
+		expect(raws.open).toBeDefined()
+		expect(raws.ping).toBe(raws.open)
+		expect(raws.pong).toBe(raws.open)
+
+		expect(ids.open).toBeString()
+		expect(ids.ping).toBe(ids.open)
+		expect(ids.pong).toBe(ids.open)
+
+		await wsClosed(ws)
+		app.stop()
+	})
 })
