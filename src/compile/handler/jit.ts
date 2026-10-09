@@ -119,6 +119,9 @@ export const setCaptureHeaderShorthand = (value: boolean | undefined) => {
 	captureHeaderShorthand = value
 }
 
+// An AOT capture follows its declared target, a live compile its runtime
+export const targetsBun = () => captureHeaderShorthand ?? isBun
+
 function builtinParser(
 	adapter: ElysiaAdapter['parse'],
 	parse: string,
@@ -465,7 +468,7 @@ export function compileHandlerJit(
 
 	// JSC only: V8 runs these routes faster on the plain `async` lane. An AOT
 	// capture follows its declared target, like the header shorthand
-	const tail = tailRoute && (asyncTailOn ?? captureHeaderShorthand ?? isBun)
+	const tail = tailRoute && (asyncTailOn ?? targetsBun())
 	const asyncMode: AsyncMode = tail
 		? // route-scope locals the sync route hands to its async tail
 			(tailPass ?? {

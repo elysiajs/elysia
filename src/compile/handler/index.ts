@@ -5,12 +5,11 @@ import { defaultAdapter } from '../../adapter/constants'
 import { mapResponse } from '../../adapter/web-standard/handler'
 import { ElysiaFile } from '../../universal/file'
 import { ElysiaStatus } from '../../error'
-import { isBun } from '../../universal/constants'
 
 import { Capture, Compiled, aotDriftMessage, warnAotDrift } from '../aot'
 import { frozenRootOf } from '../../generation'
 import { isResponseParam, resolveHandlerParams } from './params'
-import { compileHandlerJit, createInlineHandler } from './jit'
+import { compileHandlerJit, createInlineHandler, targetsBun } from './jit'
 export { setCaptureHeaderShorthand } from './jit'
 export { releaseAnalysisCaches } from './descriptor'
 import { returnedErrorClasses } from '../../handler/utils'
@@ -945,7 +944,7 @@ export function compileHandler(
 	if (
 		!isHandleFunction &&
 		!(handler instanceof Promise) &&
-		!(!isBun && handler instanceof ElysiaFile) &&
+		!(!targetsBun() && handler instanceof ElysiaFile) &&
 		!declaresResponse
 	) {
 		const rootHeaders = frozenRoot['~ext']?.headers

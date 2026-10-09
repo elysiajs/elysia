@@ -120,7 +120,8 @@ const materialiseHandlersForReplay = (
 
 export function replayStubbability(
 	app: AnyElysia,
-	handlers: CapturedHandler[]
+	handlers: CapturedHandler[],
+	target?: AotTarget
 ): JITProbeResult {
 	const previousCompiled = snapshotCompiled()
 	const previousAotBuild = env.ELYSIA_AOT_BUILD
@@ -128,6 +129,8 @@ export function replayStubbability(
 	if (previousAotBuild !== undefined) delete env.ELYSIA_AOT_BUILD
 
 	try {
+		// replay as the target runs, not as the build runtime
+		if (target !== undefined) setCaptureHeaderShorthand(target === 'bun')
 		Compiled.clear()
 
 		const fingerprint = createAotFingerprint()
@@ -163,6 +166,7 @@ export function replayStubbability(
 
 		return JITProbe.end()
 	} finally {
+		setCaptureHeaderShorthand(undefined)
 		restoreCompiled(previousCompiled)
 
 		Validator.clear()

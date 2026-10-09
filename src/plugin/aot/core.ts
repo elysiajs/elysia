@@ -482,7 +482,9 @@ export const STUB_SOURCES: Record<
 				`const e=()=>{throw new Error("[elysia-aot] handler compiler JIT was stripped (strip mode) but a route needed runtime compilation. Rebuild with strip:false.")}\n` +
 				`export function compileHandlerJit(){return e()}\n` +
 				`export function createInlineHandler(){return e()}\n` +
-				`export function setCaptureHeaderShorthand(){}\n`
+				`export function setCaptureHeaderShorthand(){}\n` +
+				// a stripped bundle never captures, so it targets the runtime
+				`export const targetsBun=()=>typeof Bun!=="undefined"\n`
 		},
 		{
 			// `describeRoute` (per-route descriptor) is only ever called on the
@@ -976,7 +978,11 @@ export async function generateCompiledArtifacts(
 			}
 
 		const artifacts = await captureArtifacts(typedApp, sourceOptions)
-		const report = replayStubbability(typedApp, artifacts.handlers)
+		const report = replayStubbability(
+			typedApp,
+			artifacts.handlers,
+			options?.target
+		)
 		const aliases = new Set<string>()
 
 		for (const handler of artifacts.handlers)
