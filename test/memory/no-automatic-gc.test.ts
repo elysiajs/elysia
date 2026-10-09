@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it } from 'bun:test'
-import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 
 import { Elysia, t } from '../../src'
+import { STUB_SOURCES } from '../../src/plugin/aot/core'
 import { compileToSource } from '../../src/plugin/aot/source'
 import { post, json } from '../utils'
 
@@ -59,9 +62,54 @@ describe('no automatic GC', () => {
 		expect(source).not.toContain('Bun.gc(')
 		expect(source).not.toContain('global.gc(')
 		expect(source).not.toContain('globalThis.gc(')
-		expect(plugin).not.toContain('Bun.gc(')
+
+		// the only GC in the plugin is the explicit `flushMemory()` stub
+		const memoryStub = STUB_SOURCES.sucrose[0]!.source
+		expect(plugin.split('Bun.gc(').length).toBe(2)
+		expect(plugin.split('globalThis.gc?.(').length).toBe(2)
 		expect(plugin).not.toContain('global.gc(')
+		expect(memoryStub).toContain('Bun.gc(')
+		expect(memoryStub).toContain('globalThis.gc?.(')
+		expect(memoryStub.match(/export function (\w+)/g)).toEqual([
+			'export function flushMemory'
+		])
 	})
+
+	// the stripped `flushMemory()` is the same explicit maintenance API as src/memory.ts
+	for (const isBun of [true, false])
+		it(`the stripped flushMemory() collects garbage (isBun: ${isBun})`, async () => {
+			const dir = mkdtempSync(join(tmpdir(), 'ely-memory-stub-'))
+			mkdirSync(join(dir, 'universal'))
+			writeFileSync(
+				join(dir, 'memory.ts'),
+				STUB_SOURCES.sucrose[0]!.source
+			)
+			writeFileSync(
+				join(dir, 'context.ts'),
+				'export function clearContextCache() {}\n'
+			)
+			writeFileSync(
+				join(dir, 'validator.ts'),
+				'export const Validator = { clear() {} }\n'
+			)
+			writeFileSync(
+				join(dir, 'universal/constants.ts'),
+				`export const isBun = ${isBun}\n`
+			)
+
+			let bunCalls = 0
+			let globalCalls = 0
+			Bun.gc = (() => bunCalls++) as typeof Bun.gc
+			globalThis.gc = () => globalCalls++
+
+			try {
+				const { flushMemory } = await import(join(dir, 'memory.ts'))
+				flushMemory()
+				expect([bunCalls, globalCalls]).toEqual(isBun ? [1, 0] : [0, 1])
+			} finally {
+				await rm(dir, { recursive: true, force: true })
+			}
+		})
 
 	it('the Bun runtime adapter does not import the opt-in memory helper', async () => {
 		const source = await readFile(

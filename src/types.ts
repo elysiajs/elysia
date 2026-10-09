@@ -139,14 +139,6 @@ export interface ElysiaConfig<
 	}
 
 	/**
-	 * Retain the metadata required by introspection tooling after sealing.
-	 * Plugins that provide introspection may enable this for their host.
-	 *
-	 * @default false
-	 */
-	introspect?: boolean
-
-	/**
 	 * If enabled, Elysia will attempt to coerce value to defined type on incoming and outgoing bodies.
 	 *
 	 * This allows for sending unknown or disallowed properties in the bodies. These will simply be filtered out instead of failing the request.

@@ -490,15 +490,11 @@ export const STUB_SOURCES: Record<
 			//
 			// it pulls in `sucrose`. Stub it alongside the JIT compiler so the sucrose
 			// analyzer stays tree-shakeable in strip mode
-			//
-			// The always-on export `routeDescriptors` is sucrose-free and
-			// re-implemented here so the non-JIT path keeps working.
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]handler[\\/]descriptor\.(m?js|ts)$/,
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] handler compiler JIT was stripped (strip mode) but a route needed runtime compilation. Rebuild with strip:false.")}\n` +
 				`export function describeRoute(){return e()}\n` +
-				`export function releaseAnalysisCaches(){}\n` +
-				`export const routeDescriptors=new WeakMap()\n`
+				`export function releaseAnalysisCaches(){}\n`
 		}
 	],
 	ws: [
@@ -561,10 +557,13 @@ export const STUB_SOURCES: Record<
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]memory\.(m?js|ts)$/,
 			source:
 				`import { clearContextCache } from './context'\n` +
+				`import { isBun } from './universal/constants'\n` +
 				`import { Validator } from './validator'\n` +
 				`export function flushMemory() {\n` +
 				`	clearContextCache()\n` +
 				`	Validator.clear()\n` +
+				`	if (isBun) Bun.gc()\n` +
+				`	else globalThis.gc?.()\n` +
 				`}\n`
 		}
 	],

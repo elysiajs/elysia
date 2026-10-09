@@ -1,34 +1,32 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it, spyOn } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { trace } from '../../src/plugin/trace'
-import {
-	routeDescriptors,
-	type RouteDescriptor
-} from '../../src/compile/handler/descriptor'
+import * as Descriptor from '../../src/compile/handler/descriptor'
 
-// A request compiles the route and publishes the facts used by code generation.
+// A request compiles the route and describes the facts used by code generation.
 
 const descriptorOf = async (
 	app: Elysia<any, any>,
-	key: string,
 	req: Request
-): Promise<RouteDescriptor> => {
-	await app.handle(req)
-	const map = routeDescriptors.get(app as any)
-	expect(map).toBeDefined()
-	const descriptor = map!.get(key)
-	expect(descriptor).toBeDefined()
-	return descriptor!
+): Promise<Descriptor.RouteDescriptor> => {
+	const spy = spyOn(Descriptor, 'describeRoute')
+	try {
+		await app.handle(req)
+		expect(spy).toHaveBeenCalledTimes(1)
+		return spy.mock.results[0]!.value.descriptor
+	} finally {
+		spy.mockRestore()
+	}
 }
 
 const get = (path: string) => new Request('http://localhost' + path)
 
 describe('route descriptor', () => {
 	it('classifies a bare static value handler', async () => {
-		const app = new Elysia({ introspect: true }).get('/s', 'hello')
+		const app = new Elysia().get('/s', 'hello')
 
-		const descriptor = await descriptorOf(app, 'GET /s', get('/s'))
+		const descriptor = await descriptorOf(app, get('/s'))
 
 		expect(descriptor).toEqual({
 			handlerKind: 'response',
@@ -63,9 +61,11 @@ describe('route descriptor', () => {
 	})
 
 	it('classifies a plain synchronous function handler', async () => {
-		const app = new Elysia({ introspect: true }).get('/f', () => 'hi')
+		const app = new Elysia().get('/f', function () {
+			return 'hi'
+		})
 
-		const descriptor = await descriptorOf(app, 'GET /f', get('/f'))
+		const descriptor = await descriptorOf(app, get('/f'))
 
 		expect(descriptor).toMatchObject({
 			handlerKind: 'function',
@@ -76,9 +76,11 @@ describe('route descriptor', () => {
 	})
 
 	it('classifies an async function handler', async () => {
-		const app = new Elysia({ introspect: true }).get('/a', async () => 'hi')
+		const app = new Elysia().get('/a', async function () {
+			return 'hi'
+		})
 
-		const descriptor = await descriptorOf(app, 'GET /a', get('/a'))
+		const descriptor = await descriptorOf(app, get('/a'))
 
 		expect(descriptor).toMatchObject({
 			handlerKind: 'function',
@@ -89,13 +91,13 @@ describe('route descriptor', () => {
 	})
 
 	it('marks a sync beforeHandle as present without forcing async', async () => {
-		const app = new Elysia({ introspect: true }).get(
+		const app = new Elysia().get(
 			'/bh',
 			{ beforeHandle: () => {} },
 			() => 'hi'
 		)
 
-		const descriptor = await descriptorOf(app, 'GET /bh', get('/bh'))
+		const descriptor = await descriptorOf(app, get('/bh'))
 
 		expect(descriptor).toMatchObject({
 			hasBeforeHandle: true,
@@ -105,13 +107,13 @@ describe('route descriptor', () => {
 	})
 
 	it('forces async through an async beforeHandle', async () => {
-		const app = new Elysia({ introspect: true }).get(
+		const app = new Elysia().get(
 			'/bha',
 			{ beforeHandle: async () => {} },
 			() => 'hi'
 		)
 
-		const descriptor = await descriptorOf(app, 'GET /bha', get('/bha'))
+		const descriptor = await descriptorOf(app, get('/bha'))
 
 		expect(descriptor).toMatchObject({
 			hasBeforeHandle: true,
@@ -123,7 +125,7 @@ describe('route descriptor', () => {
 	})
 
 	it('sees a validated body and forces async parse', async () => {
-		const app = new Elysia({ introspect: true }).post(
+		const app = new Elysia().post(
 			'/vb',
 			{ body: t.Object({ a: t.String() }) },
 			({ body }) => body
@@ -131,7 +133,6 @@ describe('route descriptor', () => {
 
 		const descriptor = await descriptorOf(
 			app,
-			'POST /vb',
 			new Request('http://localhost/vb', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
@@ -149,13 +150,13 @@ describe('route descriptor', () => {
 	})
 
 	it('sees a validated query', async () => {
-		const app = new Elysia({ introspect: true }).get(
+		const app = new Elysia().get(
 			'/vq',
 			{ query: t.Object({ a: t.String() }) },
 			({ query }) => query
 		)
 
-		const descriptor = await descriptorOf(app, 'GET /vq', get('/vq?a=1'))
+		const descriptor = await descriptorOf(app, get('/vq?a=1'))
 
 		expect(descriptor).toMatchObject({
 			hasBody: false,
@@ -165,7 +166,7 @@ describe('route descriptor', () => {
 	})
 
 	it('sees a validated cookie', async () => {
-		const app = new Elysia({ introspect: true }).get(
+		const app = new Elysia().get(
 			'/vc',
 			{ cookie: t.Object({ sid: t.String() }) },
 			({ cookie }) => cookie.sid.value
@@ -173,7 +174,6 @@ describe('route descriptor', () => {
 
 		const descriptor = await descriptorOf(
 			app,
-			'GET /vc',
 			new Request('http://localhost/vc', {
 				headers: { cookie: 'sid=1' }
 			})
@@ -185,7 +185,7 @@ describe('route descriptor', () => {
 	})
 
 	it('classifies a signed-cookie route', async () => {
-		const app = new Elysia({ introspect: true }).get(
+		const app = new Elysia().get(
 			'/sc',
 			{
 				cookie: t.Cookie(
@@ -198,7 +198,6 @@ describe('route descriptor', () => {
 
 		const descriptor = await descriptorOf(
 			app,
-			'GET /sc',
 			new Request('http://localhost/sc', {
 				headers: { cookie: 'sid=1' }
 			})
@@ -213,13 +212,13 @@ describe('route descriptor', () => {
 	})
 
 	it('classifies a traced route', async () => {
-		const app = new Elysia({ introspect: true })
+		const app = new Elysia()
 			.use(trace()).trace(({ onHandle }) => {
 				onHandle(() => {})
 			})
 			.get('/tr', () => 'hi')
 
-		const descriptor = await descriptorOf(app, 'GET /tr', get('/tr'))
+		const descriptor = await descriptorOf(app, get('/tr'))
 
 		expect(descriptor).toMatchObject({
 			hasTrace: true,
@@ -228,13 +227,13 @@ describe('route descriptor', () => {
 	})
 
 	it('classifies an afterResponse route (sync fast path)', async () => {
-		const app = new Elysia({ introspect: true }).get(
+		const app = new Elysia().get(
 			'/ar',
 			{ afterResponse: () => {} },
 			() => 'hi'
 		)
 
-		const descriptor = await descriptorOf(app, 'GET /ar', get('/ar'))
+		const descriptor = await descriptorOf(app, get('/ar'))
 
 		expect(descriptor).toMatchObject({
 			hasAfterResponse: true,
@@ -246,13 +245,13 @@ describe('route descriptor', () => {
 	})
 
 	it('classifies a mapResponse route', async () => {
-		const app = new Elysia({ introspect: true }).get(
+		const app = new Elysia().get(
 			'/mr',
 			{ mapResponse: (v: unknown) => v },
 			() => 'hi'
 		)
 
-		const descriptor = await descriptorOf(app, 'GET /mr', get('/mr'))
+		const descriptor = await descriptorOf(app, get('/mr'))
 
 		expect(descriptor).toMatchObject({
 			hasMapResponse: true,
@@ -266,15 +265,11 @@ describe('route descriptor', () => {
 			schema: 'merge',
 			query: t.Object({ b: t.String() })
 		})
-		const app = new Elysia({ introspect: true })
+		const app = new Elysia()
 			.use(guard)
 			.get('/std', { query: t.Object({ a: t.String() }) }, () => 'ok')
 
-		const descriptor = await descriptorOf(
-			app,
-			'GET /std',
-			get('/std?a=1&b=2')
-		)
+		const descriptor = await descriptorOf(app, get('/std?a=1&b=2'))
 
 		expect(descriptor).toMatchObject({
 			handlerKind: 'function',
@@ -285,7 +280,7 @@ describe('route descriptor', () => {
 	})
 
 	it('classifies a macro route', async () => {
-		const app = new Elysia({ introspect: true })
+		const app = new Elysia()
 			.macro({
 				hi: (enabled: boolean) => ({
 					beforeHandle() {
@@ -297,7 +292,7 @@ describe('route descriptor', () => {
 			})
 			.get('/mac', { hi: true } as any, () => 'ok')
 
-		const descriptor = await descriptorOf(app, 'GET /mac', get('/mac'))
+		const descriptor = await descriptorOf(app, get('/mac'))
 
 		expect(descriptor).toMatchObject({
 			handlerKind: 'function',
@@ -307,14 +302,33 @@ describe('route descriptor', () => {
 		})
 	})
 
-	it('re-exposes the same descriptor object across requests', async () => {
-		const app = new Elysia({ introspect: true }).get('/x', () => 'hi')
+	it('describes a route once, not per request', async () => {
+		const app = new Elysia().get('/x', function () {
+			return 'hi'
+		})
 
-		const first = await descriptorOf(app, 'GET /x', get('/x'))
-		const second = await descriptorOf(app, 'GET /x', get('/x'))
+		const spy = spyOn(Descriptor, 'describeRoute')
+		try {
+			await app.handle(get('/x'))
+			await app.handle(get('/x'))
 
-		// the descriptor is stored once at compile time and not rebuilt per
-		// request
-		expect(first).toBe(second)
+			expect(spy).toHaveBeenCalledTimes(1)
+		} finally {
+			spy.mockRestore()
+		}
+	})
+
+	it('never describes a bare context-free arrow (inline fast path)', async () => {
+		const app = new Elysia().get('/b', () => 'hi')
+
+		const spy = spyOn(Descriptor, 'describeRoute')
+		try {
+			const response = await app.handle(get('/b'))
+
+			expect(await response.text()).toBe('hi')
+			expect(spy).not.toHaveBeenCalled()
+		} finally {
+			spy.mockRestore()
+		}
 	})
 })

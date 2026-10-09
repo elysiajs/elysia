@@ -9,9 +9,10 @@ describe('t.UnionEnum options', () => {
 		expect((schema as any).default).toBe('c')
 	})
 
-	it('uses the first enum member when no default is provided', () => {
+	// a required field must stay required: no implicit first-member default
+	it('sets no default when none is provided', () => {
 		const schema = t.UnionEnum(['x', 'y'])
-		expect((schema as any).default).toBe('x')
+		expect('default' in schema).toBe(false)
 	})
 
 	it('does not mutate the options object', () => {

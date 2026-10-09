@@ -198,21 +198,43 @@ describe('Error extends', () => {
 	})
 
 	// 1.x `.error({ CODE: Class })` registered an error-code dictionary; 2.0
-	// dropped error codes (dispatch is by class), so the untyped object form
-	// registers no handler at all
-	it('ignores the 1.x error-code dictionary form', async () => {
+	// dispatches by class. Accepting it silently would leave the error
+	// unhandled (a 500) with no hint, so it must fail at registration
+	it('rejects the 1.x error-code dictionary form at registration', () => {
+		expect(() =>
+			new Elysia().error({ CUSTOM: CustomError } as any)
+		).toThrow('.error({ CODE: Class }) was removed in 2.0')
+	})
+
+	// the one-argument array form is typed; dropping it leaves every
+	// error unhandled (500) while the code reads as if it had a handler
+	it('registers every handler of the one-argument array form in order', async () => {
 		const app = new Elysia()
-			.error({ CUSTOM: CustomError } as any)
-			.error(({ error }) => (error instanceof CustomError ? 'general' : undefined))
+			.error([
+				({ error }) =>
+					error instanceof CustomError ? 'first' : undefined,
+				() => 'second'
+			])
 			.get('/', throws(CustomError))
+			.get('/2', throws(CustomError2))
 
-		await expect(text(app, '/')).resolves.toBe('general')
+		await expect(text(app, '/')).resolves.toBe('first')
+		await expect(text(app, '/2')).resolves.toBe('second')
+	})
 
-		const bare = await new Elysia()
-			.error({ CUSTOM: CustomError } as any)
+	it('keeps the class and scoped array overloads', async () => {
+		const plugin = new Elysia().error('global', [
+			({ error }) =>
+				error instanceof CustomError2 ? 'scoped' : undefined
+		])
+		const app = new Elysia()
+			.use(plugin)
+			.error(CustomError, () => 'class')
 			.get('/', throws(CustomError))
-			.handle('/')
-		expect(bare.status).toBe(500)
+			.get('/2', throws(CustomError2))
+
+		await expect(text(app, '/')).resolves.toBe('class')
+		await expect(text(app, '/2')).resolves.toBe('scoped')
 	})
 
 	it('preserve status code base on error if not set', async () => {

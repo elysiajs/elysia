@@ -291,7 +291,7 @@ describe('Native Static Response', () => {
 		})
 
 		it('collects a genuinely bare static route with an error hook', async () => {
-			const app = new Elysia().error({}).get('/', 'ok')
+			const app = new Elysia().error(() => {}).get('/', 'ok')
 
 			await expectResponseText(route(app, '/'), 'ok')
 		})

@@ -11,13 +11,24 @@ const FORWARDED_KEYS = [
 	'httpOnly',
 	'sameSite',
 	'priority',
-	'partitioned',
-	'secrets'
+	'partitioned'
 ] as const
 
 type FORWARDED_KEYS = typeof FORWARDED_KEYS
 
 type Updater<T> = T | ((value: T) => T)
+
+// signing comes only from the app or route cookie config
+type CookieMutation = Omit<BaseCookie, 'secrets'> & { secrets?: never }
+
+const rejectSecrets = <T>(name: string, config: T): T => {
+	if (config && typeof config === 'object' && 'secrets' in config)
+		throw new Error(
+			`[Elysia] cookie "${name}" can't take \`secrets\`: set signing on the app or route cookie config`
+		)
+
+	return config
+}
 
 export interface Cookie extends Pick<BaseCookie, FORWARDED_KEYS[number]> {}
 
@@ -44,15 +55,15 @@ export class Cookie<T = any> implements BaseCookie {
 		return (this.#setRef.cookie ??= Object.create(null))
 	}
 
-	get cookie() {
+	get cookie(): BaseCookie {
 		const c = this.#setRef.cookie?.[this.#name] ?? this.#initial
 		if (c && '~unsign' in c)
 			resolvePendingCookie(c as Record<string, any>, this.#name)
 		return c
 	}
 
-	set cookie(jar: BaseCookie) {
-		this.#jar[this.#name] = jar
+	set cookie(jar: CookieMutation) {
+		this.#jar[this.#name] = rejectSecrets(this.#name, jar)
 	}
 
 	protected get setCookie() {
@@ -92,11 +103,15 @@ export class Cookie<T = any> implements BaseCookie {
 		j[this.#name].value = value
 	}
 
-	update(config: Updater<Partial<BaseCookie>>) {
-		const cookie = Object.assign(
-			this.cookie,
-			typeof config === 'function' ? config(this.cookie) : config
+	update(config: Updater<CookieMutation>) {
+		// the updater gets a copy: a throw must leave the live cookie untouched
+		const next = rejectSecrets(
+			this.#name,
+			typeof config === 'function'
+				? config(Object.assign(nullObject(), this.cookie))
+				: config
 		)
+		const cookie = Object.assign(this.cookie, next)
 
 		delete (cookie as any)['~raw']
 
@@ -105,12 +120,18 @@ export class Cookie<T = any> implements BaseCookie {
 		return this
 	}
 
-	set(config: Updater<Partial<BaseCookie>>) {
+	set(config: Updater<CookieMutation>) {
+		const next = rejectSecrets(
+			this.#name,
+			typeof config === 'function'
+				? config(Object.assign(nullObject(), this.cookie))
+				: config
+		)
 		const cookie = Object.assign(
 			nullObject(),
 			this.#initial,
 			{ value: this.value },
-			typeof config === 'function' ? config(this.cookie) : config
+			next
 		)
 
 		delete (cookie as any)['~raw']

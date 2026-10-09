@@ -16,7 +16,7 @@ export { releaseAnalysisCaches } from './descriptor'
 import { returnedErrorClasses } from '../../handler/utils'
 import { deriveModes, joinDeriveEntries } from './utils'
 import { isAsyncFunction } from '../utils'
-import { describeRoute, routeDescriptors } from './descriptor'
+import { describeRoute } from './descriptor'
 import { Reconstruct } from './reconstruct'
 import { isResponseMap } from './frozen-validator'
 import type { Context } from '../../context'
@@ -1010,8 +1010,6 @@ export function compileHandler(
 		!mountMeta &&
 		(method === 'GET' || method === 'HEAD') &&
 		!root['~hasTrace'] &&
-		root['~introspect'] !== true &&
-		root['~config']?.introspect !== true &&
 		!isNotEmpty(frozenRoot['~ext']?.headers) &&
 		!Capture.isAotBuildEnv() &&
 		!Capture.isCapturing()
@@ -1042,16 +1040,6 @@ export function compileHandler(
 		isStaticResponse,
 		isPromiseHandler
 	})
-
-	if (root['~introspect'] === true || root['~config']?.introspect === true) {
-		let descriptors = routeDescriptors.get(root)
-		if (!descriptors) {
-			descriptors = new Map()
-			routeDescriptors.set(root, descriptors)
-		}
-
-		descriptors.set(`${method} ${path}`, state.descriptor)
-	}
 
 	return compileHandlerJit({
 		method,

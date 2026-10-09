@@ -552,8 +552,6 @@ export class Elysia<
 
 	declare '~generation'?: Generation
 
-	declare '~introspect'?: boolean
-
 	declare '~scopeChild'?: boolean
 	declare '~scopeChildren'?: AnyElysia[]
 
@@ -604,7 +602,6 @@ export class Elysia<
 		this['~aotFingerprint'] = undefined
 		this['~compilerSession'] = undefined
 		this['~generation'] = undefined
-		this['~introspect'] = undefined
 		this['~scopeChild'] = scopeChild
 		this['~scopeChildren'] = undefined
 
@@ -2335,10 +2332,14 @@ export class Elysia<
 		this.#assertMutable('error')
 		switch (arguments.length) {
 			case 1:
-				// 1.x `.error({ CODE: Class })`: 2.0 dispatches by class, nothing
-				// to register. Known gap: also swallows the typed `.error([fn])`
-				if (scopeOrFnOrError && typeof scopeOrFnOrError === 'object')
-					return this
+				if (
+					scopeOrFnOrError &&
+					typeof scopeOrFnOrError === 'object' &&
+					!Array.isArray(scopeOrFnOrError)
+				)
+					throw new Error(
+						'[Elysia] .error({ CODE: Class }) was removed in 2.0 — use .error(Class, handler)'
+					)
 
 				return this.#onBranch(
 					'error',
@@ -4517,8 +4518,6 @@ export class Elysia<
 		let addedByThisCall: Set<number> | undefined
 
 		const config = app['~config']
-
-		if (app['~introspect'] || config?.introspect) this['~introspect'] = true
 
 		const name = config?.name
 		if (name) {

@@ -4,13 +4,15 @@ import { Value } from 'typebox/value'
 import { post, json } from '../utils'
 
 describe('TypeSystem - UnionEnum', () => {
-	it('Create', () => {
-		expect(Value.Create(t.UnionEnum(['some', 'data']))).toEqual('some')
+	it('Create uses an explicit default', () => {
+		expect(
+			Value.Create(t.UnionEnum(['some', 'data'], { default: 'data' }))
+		).toEqual('data')
 	})
 
 	it('Allows readonly', () => {
 		const readonlyArray = ['some', 'data'] as const
-		expect(Value.Create(t.UnionEnum(readonlyArray))).toEqual('some')
+		expect(Value.Check(t.UnionEnum(readonlyArray), 'data')).toBe(true)
 	})
 
 	it('Check', () => {
@@ -58,5 +60,39 @@ describe('TypeSystem - UnionEnum', () => {
 
 		const res3 = await app.handle('/', json({ value: 'data' }))
 		expect(res3.status).toBe(422)
+	})
+
+	// a required field must not be filled in with the first member: a client
+	// that omits `role` would otherwise be handed `role: 'admin'`
+	it('rejects a missing required field', async () => {
+		const app = new Elysia().post(
+			'/',
+			{ body: t.Object({ role: t.UnionEnum(['admin', 'user']) }) },
+			({ body }) => body
+		)
+
+		const res = await app.handle('/', json({}))
+		expect(res.status).toBe(422)
+
+		const body = await res.json()
+		if (process.env.NODE_ENV === 'production')
+			expect(body.expected).toBeUndefined()
+		else expect(body.expected).toEqual({})
+	})
+
+	it('fills a missing field from an explicit default', async () => {
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					role: t.UnionEnum(['admin', 'user'], { default: 'user' })
+				})
+			},
+			({ body }) => body
+		)
+
+		const res = await app.handle('/', json({}))
+		expect(res.status).toBe(200)
+		await expect(res.json()).resolves.toEqual({ role: 'user' })
 	})
 })

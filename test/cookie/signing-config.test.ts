@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 
 import { Elysia } from '../../src'
+import { Cookie } from '../../src/cookie/cookie'
 import { compileCookieConfig } from '../../src/cookie/config'
 import { parseCookieRaw, signCookieValues } from '../../src/cookie/utils'
 
@@ -128,5 +129,108 @@ describe('cookie signing configuration', () => {
 		const cookies = { token: { value: 'secret-data' } }
 
 		expect(() => signCookieValues(cookies as any, config as any)).toThrow()
+	})
+
+	// signing is decided by the app/route config alone: a per-cookie
+	// `secrets` knob would read as signed while going out unsigned
+	it('signs every jar write path on a route with signing config', async () => {
+		const app = new Elysia({
+			cookie: { secrets: 'k', sign: ['a', 'b', 'c'] }
+		})
+			.get('/', ({ cookie }) => {
+				cookie.a.value = 'x'
+				cookie.b.set({ value: 'y' })
+				cookie.c.update({ value: 'z' })
+				return 'ok'
+			})
+			.get('/read', ({ cookie }) =>
+				[cookie.a.value, cookie.b.value, cookie.c.value].join()
+			)
+
+		const setCookie = (
+			await app.handle(new Request('http://localhost/'))
+		).headers
+			.getSetCookie()
+			.map((c) => c.slice(0, c.indexOf(';')))
+		expect(setCookie).toHaveLength(3)
+		for (const c of setCookie) expect(c).toMatch(/^[abc]=[xyz]\.[^.]+$/)
+
+		const read = await app.handle(
+			new Request('http://localhost/read', {
+				headers: { cookie: setCookie.join('; ') }
+			})
+		)
+		expect(read.status).toBe(200)
+		await expect(read.text()).resolves.toBe('x,y,z')
+	})
+
+	it('exposes no per-cookie secrets accessor', () => {
+		expect(
+			Object.getOwnPropertyDescriptor(Cookie.prototype, 'secrets')
+		).toBeUndefined()
+	})
+
+	// passing `secrets` to one cookie must fail loud instead of shipping it unsigned
+	it('rejects a per-cookie secrets write through set() and update()', async () => {
+		const errors: string[] = []
+		const app = new Elysia()
+			.error(({ error }) => {
+				errors.push((error as Error).message)
+			})
+			.get('/set', ({ cookie }) => {
+				cookie.a.set({ value: 'x', secrets: 'k' } as any)
+				return 'ok'
+			})
+			.get('/update', ({ cookie }) => {
+				cookie.a.update(() => ({ value: 'x', secrets: 'k' }) as any)
+				return 'ok'
+			})
+
+		for (const path of ['/set', '/update']) {
+			const response = await app.handle(
+				new Request('http://localhost' + path)
+			)
+			expect(response.status).toBe(500)
+			expect(response.headers.getSetCookie()).toEqual([])
+		}
+		expect(errors).toHaveLength(2)
+		for (const message of errors) expect(message).toContain('`secrets`')
+	})
+
+	// an updater that mutates what it is given must not leave a half-applied,
+	// unsigned cookie behind when the result is rejected: the error response
+	// carries only what was committed before (`before`), never `after`
+	it('leaves no cookie behind when a mutating updater adds secrets', async () => {
+		const mutate = (live: any) => {
+			live.value = 'after'
+			live.secrets = 'k'
+			return live
+		}
+		const app = new Elysia()
+			.get('/set', ({ cookie }) => {
+				cookie.a.value = 'before'
+				cookie.a.set(mutate)
+			})
+			.get('/update', ({ cookie }) => {
+				cookie.a.value = 'before'
+				cookie.a.update(mutate)
+			})
+			.get('/assign', ({ cookie }) => {
+				cookie.a.cookie = { value: 'after', secrets: 'k' } as any
+			})
+
+		for (const [path, committed] of [
+			['/set', ['a=before; Path=/']],
+			['/update', ['a=before; Path=/']],
+			['/assign', []]
+		] as const) {
+			const response = await app.handle(
+				new Request('http://localhost' + path)
+			)
+			expect(response.status, path).toBe(500)
+			expect(response.headers.getSetCookie(), path).toEqual([
+				...committed
+			])
+		}
 	})
 })

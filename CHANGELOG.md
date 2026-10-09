@@ -69,6 +69,7 @@ Breaking Change:
 - remove the phantom `'~Scope'` type member from `Elysia`
 - remove the protected `Cookie#setCookie` setter (the getter stays)
 - AOT: an entry whose default export is not an Elysia 2 app now throws instead of emitting an empty manifest with `strip: false`
+- remove the `introspect` config option: nothing read the route descriptors it kept, and it disabled the bare-route fast path. The macro `introspect` hook is unchanged
 
 Behavior Change:
 
@@ -132,6 +133,9 @@ Behavior Change:
 - `.state(key, object)` on a key inherited from a plugin merges into that shared object, so the plugin and its other consumers see the merged keys (unchanged from 1.x: the store is shared state)
 - a named plugin's hooks run once per route at the position of its outermost `.use()`, as in 1.x: a named plugin `.use()`d by both an app and one of its plugins ran its hooks twice on routes inside that plugin's `.group()` / `.guard()` callbacks, and late on its other routes. An unnamed plugin `.use()`d at two levels runs its hooks at each, as in 1.x
 - a `.group()` / `.guard()` callback shares the parent's `decorate`, `state`, `model`, `headers` and `parser` tables instead of copying them: a write inside the callback reaches the parent at once and stays if the callback throws. 1.x shared `decorate`, `state` and `model` this way; sharing `headers` and `parser` too is new. Writing through a callback instance kept past its callback throws the same error as the app once the app is sealed (first request, `listen` or `compile`)
+- `.error([fn, fn])` registers its handlers; the one-argument array form was silently ignored, leaving the error unhandled. The 1.x `.error({ CODE: Class })` dictionary now throws at registration instead of registering nothing
+- `secrets` is no longer a typed or forwarded property of `cookie.<name>`, and the cookie mutation APIs `set()`, `update()` and the `cookie` setter reject an object with a `secrets` key (a type error, and a throw at runtime) instead of sending the cookie unsigned. An updater callback now receives a copy, so a rejected update leaves the cookie unchanged. Signing comes only from the app or route cookie config
+- `t.UnionEnum` no longer sets an implicit `default` of its first value: a missing required field is now a `422` instead of being filled with that value, a missing optional field stays absent, and the schema no longer carries `default` (visible in OpenAPI output). Pass `default` explicitly to keep the old behaviour
 - `app.routes[i].hooks.response` and a macro `introspect` now get a copy of the route's status map (an empty `response: {}` stays the route's own), since equal maps are shared: a write no longer reaches other routes (an `introspect` write to a guard's map used to reach every route of the guard), and a write through `app.routes` no longer changes the route's validation. A `schema: 'merge'` guard's map (`hooks.schemas[i].response`) is frozen, not copied: an `introspect` writing into it now throws, failing the route's compile and `app.routes`
 
 Improvement:
@@ -206,6 +210,7 @@ Bug fix:
 - a plain-object `decorate` value with its own `Symbol.toStringTag` lost its identity and `Symbol.dispose` each time a `.group()` / `.guard()` callback was absorbed
 - a failed router build left the app marked as built, so a retry answered 404 for every route
 - many `.group()` / `.guard()` callbacks that each `.use()` a plugin with many `global` hooks overflowed the stack at compile (`Maximum call stack size exceeded`); those hooks now stay inside each callback
+- AOT: the stripped `flushMemory()` now makes the same `Bun.gc()` / optional `globalThis.gc?.()` call as the unstripped helper
 
 Chore:
 - declare the minimum supported Node.js version (`engines.node`) and test it in CI

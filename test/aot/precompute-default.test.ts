@@ -57,6 +57,39 @@ const makeJit = (schema: any) => {
 
 const entry = (m: any) => m.POST?.[PATH]?.[SLOT]
 
+describe('AOT UnionEnum default', () => {
+	// replay must not reintroduce the old implicit first-member default
+	it('frozen rejects a missing required UnionEnum field like JIT', () => {
+		const make = () => t.Object({ role: t.UnionEnum(['admin', 'user']) })
+		const m = capture(make())
+		expect(entry(m)).toBeDefined()
+
+		const frozen = makeFrozen(make(), m)
+		expect(frozen.reconstructedCheck).toBeDefined()
+		expect(frozen.tb).toBeUndefined()
+
+		expect(() => makeJit(make()).FromSync({})).toThrow()
+		expect(() => frozen.FromSync({})).toThrow()
+	})
+
+	it('frozen fills an explicit UnionEnum default like JIT', () => {
+		const make = () =>
+			t.Object({
+				role: t.UnionEnum(['admin', 'user'], { default: 'user' })
+			})
+		const m = capture(make())
+		expect(entry(m)?.ps).toBe(1)
+
+		const frozen = makeFrozen(make(), m)
+		expect(frozen.reconstructedCheck).toBeDefined()
+		expect(frozen.tb).toBeUndefined()
+		expect(frozen.precomputeSafe).toBe(true)
+
+		expect(makeJit(make()).FromSync({})).toEqual({ role: 'user' })
+		expect(frozen.FromSync({})).toEqual({ role: 'user' })
+	})
+})
+
 describe('AOT default preallocation', () => {
 	const BAKED: Array<{
 		name: string

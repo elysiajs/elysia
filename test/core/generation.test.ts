@@ -151,37 +151,6 @@ describe('sealed generation setup failure', () => {
 	})
 })
 
-// mirrors the `config.introspect === true || app['~introspect'] === true`
-// check base.ts used to snapshot onto the (now-removed, write-only)
-// `Generation.introspect` field at seal time
-const isIntrospectResolved = (app: any) =>
-	app['~config']?.introspect === true || app['~introspect'] === true
-
-describe('sealed generation introspection', () => {
-	it('copies app config.introspect to the resolved introspect flag', async () => {
-		const app = new Elysia({ introspect: true }).get('/', () => 'ok')
-		await app.handle('/')
-		expect(isIntrospectResolved(app)).toBe(true)
-	})
-
-	it('enables introspection when a plugin requests it', async () => {
-		const plugin = new Elysia({
-			name: 'introspected',
-			introspect: true
-		})
-
-		const app = new Elysia().use(plugin).get('/', () => 'ok')
-		await app.handle('/')
-		expect(isIntrospectResolved(app)).toBe(true)
-	})
-
-	it('introspect defaults to false', async () => {
-		const app = new Elysia().get('/', () => 'ok')
-		await app.handle('/')
-		expect(isIntrospectResolved(app)).toBe(false)
-	})
-})
-
 describe('sealed generation immutability', () => {
 	const sealed = async () => {
 		const app = new Elysia().get('/', () => 'ok')
@@ -204,7 +173,7 @@ describe('sealed generation immutability', () => {
 			['guard', (a) => a.guard({ query: t.Object({}) }, (x: any) => x)],
 			['as', (a) => a.as('global')],
 			['macro', (a) => a.macro({ m: { resolve: () => ({}) } })],
-			['error', (a) => a.error({ E: class extends Error {} })],
+			['error', (a) => a.error(class extends Error {}, () => 'e')],
 			['headers', (a) => a.headers({ 'x-a': '1' })],
 			['parser', (a) => a.parser('p', () => ({}))],
 			['wrap', (a) => a.wrap((f: any) => f)],

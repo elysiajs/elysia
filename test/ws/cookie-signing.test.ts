@@ -296,6 +296,37 @@ describe('WebSocket upgrade responses sign cookies', () => {
 	})
 })
 
+// a rejected per-cookie `secrets` write must not ship the cookie unsigned
+describe('WebSocket upgrade rejects a per-cookie secrets write', () => {
+	it('leaves no cookie behind when a mutating updater adds secrets', async () => {
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/p', {
+				beforeHandle({ cookie }: any) {
+					cookie.session.value = 'before'
+					cookie.session.update((live: any) => {
+						live.value = 'after'
+						live.secrets = 'k'
+						return live
+					})
+				},
+				message() {}
+			})
+			.listen(0)
+
+		try {
+			const res = await upgrade(app, '/p')
+			expect(res.status).toBe(500)
+			// only the committed write goes out, never the rejected `after`
+			expect(res.headers.getSetCookie()).toEqual([
+				'session=before; Path=/'
+			])
+		} finally {
+			await app.stop(true)
+		}
+	})
+})
+
 // `[null, secret]` verifies but has no current key to sign with: every signed
 // cookie is dropped, never sent unsigned, the rest of the response survives
 describe('WebSocket upgrade responses fail closed when signing fails', () => {

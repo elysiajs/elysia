@@ -108,11 +108,6 @@ export interface DescribeRouteInput {
 	isPromiseHandler: boolean
 }
 
-export const routeDescriptors = new WeakMap<
-	AnyElysia,
-	Map<string, RouteDescriptor>
->()
-
 // Lives here, not in base, so strip mode's descriptor stub keeps sucrose tree-shakeable
 export function releaseAnalysisCaches() {
 	clearSucroseCache()

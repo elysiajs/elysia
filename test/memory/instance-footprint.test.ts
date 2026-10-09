@@ -88,7 +88,6 @@ describe('Elysia instance footprint', () => {
 			'~aotFingerprint',
 			'~compilerSession',
 			'~generation',
-			'~introspect',
 			'~scopeChild',
 			'~scopeChildren'
 		])
@@ -136,7 +135,6 @@ describe('Elysia instance footprint', () => {
 			'~aotFingerprint',
 			'~compilerSession',
 			'~generation',
-			'~introspect',
 			'~scopeChild',
 			'~scopeChildren',
 			'~Prefix'

@@ -1,13 +1,27 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it, spyOn } from 'bun:test'
 
 import { borrow, Elysia } from '../../src'
 import { createAdapter } from '../../src/adapter'
 import { materializeSetHeaders } from '../../src/adapter/utils'
 import { WebStandardAdapter } from '../../src/adapter/web-standard'
-import { routeDescriptors } from '../../src/compile/handler/descriptor'
+import * as Descriptor from '../../src/compile/handler/descriptor'
 import { createContext } from '../../src/context'
 import { ElysiaStatus } from '../../src/error'
 import { req } from '../utils'
+
+const handleDescribed = async (app: Elysia<any, any>, path: string) => {
+	const spy = spyOn(Descriptor, 'describeRoute')
+	try {
+		const response = await app.handle(path)
+		expect(spy).toHaveBeenCalledTimes(1)
+		return {
+			response,
+			responseMode: spy.mock.results[0]!.value.descriptor.responseMode
+		}
+	} finally {
+		spy.mockRestore()
+	}
+}
 
 describe('application default headers', () => {
 	it('recognizes immutable defaults created by another package copy', () => {
@@ -135,16 +149,14 @@ describe('application default headers', () => {
 			context.set.headers['x-opaque'] = 'yes'
 			return 'ok'
 		}
-		const app = new Elysia({ introspect: true })
+		const app = new Elysia()
 			.headers({ 'x-default': 'base' })
 			.get('/', (context) => opaque(context))
 
-		const response = await app.handle('/')
+		const { response, responseMode } = await handleDescribed(app, '/')
 		expect(response.status).toBe(200)
 		expect(response.headers.get('x-opaque')).toBe('yes')
-		expect(
-			routeDescriptors.get(app as any)?.get('GET /')?.responseMode
-		).toBe('set-with-default-headers')
+		expect(responseMode).toBe('set-with-default-headers')
 	})
 
 	it('preserves header mutations made by error hooks', async () => {
@@ -225,7 +237,7 @@ describe('application default headers', () => {
 	})
 
 	it('records response modes for plain and set-aware routes', async () => {
-		const app = new Elysia({ introspect: true })
+		const app = new Elysia()
 			.headers({ 'x-default': 'base' })
 			.get('/default', () => 'ok')
 			.get('/set', ({ set }) => {
@@ -233,25 +245,18 @@ describe('application default headers', () => {
 				return 'ok'
 			})
 
-		await app.handle('/default')
-		await app.handle('/set')
-
-		const descriptors = routeDescriptors.get(app as any)!
-		expect(descriptors.get('GET /default')?.responseMode).toBe(
+		expect((await handleDescribed(app, '/default')).responseMode).toBe(
 			'default-headers'
 		)
-		expect(descriptors.get('GET /set')?.responseMode).toBe(
+		expect((await handleDescribed(app, '/set')).responseMode).toBe(
 			'set-with-default-headers'
 		)
 	})
 
 	it('keeps routes without declared defaults on the compact response path', async () => {
-		const app = new Elysia({ introspect: true })
-			.headers({})
-			.get('/', () => 'ok')
-		await app.handle('/')
-		expect(
-			routeDescriptors.get(app as any)?.get('GET /')?.responseMode
-		).toBe('compact')
+		const app = new Elysia().headers({}).get('/', function () {
+			return 'ok'
+		})
+		expect((await handleDescribed(app, '/')).responseMode).toBe('compact')
 	})
 })

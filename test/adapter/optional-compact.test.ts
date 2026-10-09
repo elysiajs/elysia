@@ -264,11 +264,10 @@ describe('optional adapter compact mapper', () => {
 			get: () =>
 				++reads === 1 ? selected : () => new Response('wrong mapper')
 		})
-		// Introspection bypasses the initial bare-route shortcut, exercising JIT specialization.
-		const app = new Elysia({ adapter, introspect: true }).get(
-			'/',
-			() => 'ok'
-		)
+		// A non-arrow handler bypasses the initial bare-route shortcut, exercising JIT specialization.
+		const app = new Elysia({ adapter }).get('/', function () {
+			return 'ok'
+		})
 		const rows = await dispatchTwice(app, calls)
 		expectResponses(rows, 'compact')
 		expect(reads).toBe(1)

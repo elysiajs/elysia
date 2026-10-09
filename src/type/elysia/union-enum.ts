@@ -24,9 +24,8 @@ export function UnionEnum<
 		else if (kind !== type) mixed = true
 	}
 
-	// User-supplied `default` wins over values[0]; never mutate the options bag.
 	const schema = Object.defineProperty(
-		{ default: values[0], ...options, enum: values },
+		{ ...options, enum: values },
 		'~kind',
 		unionEnumKind
 	) as any as TUnionEnum<T>
