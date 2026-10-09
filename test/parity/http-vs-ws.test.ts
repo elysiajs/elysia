@@ -950,3 +950,32 @@ describe('HTTP and WebSocket upgrade answers', () => {
 		expect(ws).toEqual(http)
 	})
 })
+
+describe('HTTP and WebSocket derive of a function', () => {
+	// a derive may return a function carrying properties; HTTP merges its own
+	// keys, so the WS upgrade must too or `tag` is missing on one lane only
+	const fn = () => Object.assign(() => {}, { tag: 'fn' })
+
+	for (const [name, register] of [
+		['derive', (app: any) => app.derive(fn)],
+		['mapDerive', (app: any) => app.mapDerive(fn)]
+	] as const)
+		it(`${name} exposes a function result's own properties on both lanes`, async () => {
+			const beforeHandle = ({ tag }: any) => `tag:${tag}`
+			const app = register(new Elysia().use(websocket()))
+				.get('/', { beforeHandle }, () => 'handler')
+				.ws('/', { beforeHandle, message() {} })
+
+			const answer = (upgrade: boolean) =>
+				app
+					.handle(
+						new Request('http://localhost/', {
+							headers: upgrade ? { upgrade: 'websocket' } : {}
+						})
+					)
+					.then((res: Response) => res.text())
+
+			expect(await answer(false)).toBe('tag:fn')
+			expect(await answer(true)).toBe('tag:fn')
+		})
+})

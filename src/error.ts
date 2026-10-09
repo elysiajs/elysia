@@ -1024,7 +1024,7 @@ export function internalServerErrorResponse(error: any) {
  * @example
  * ```ts
  * problem(400, { detail: 'Something went wrong' })
- * ````
+ * ```
  *
  * @see https://www.rfc-editor.org/info/rfc9457
  */
@@ -1045,7 +1045,7 @@ export function problem<
  * @example
  * ```ts
  * problem({ status: 400, detail: 'Something went wrong' })
- * ````
+ * ```
  *
  * @see https://www.rfc-editor.org/info/rfc9457
  */
@@ -1081,23 +1081,10 @@ export type SelectiveStatus<in out Res> = <
 	const Code extends
 		| keyof Res
 		| StatusMapBack[Extract<keyof StatusMapBack, keyof Res>],
-	T extends Code extends keyof Res
-		? Res[Code]
-		: Code extends keyof StatusMap
-			? // @ts-ignore StatusMap[Code] always valid because Code generic check
-				Res[StatusMap[Code]]
-			: never
+	T extends ResponseOf<Res, Code>
 >(
 	code: Code,
-	response: CheckExcessProps<
-		T,
-		Code extends keyof Res
-			? Res[Code]
-			: Code extends keyof StatusMap
-				? // @ts-ignore StatusMap[Code] always valid because Code generic check
-					Res[StatusMap[Code]]
-				: never
-	>
+	response: CheckExcessProps<T, ResponseOf<Res, Code>>
 ) => ElysiaStatus<
 	// @ts-ignore trust me bro
 	Code,
@@ -1278,7 +1265,8 @@ export abstract class HTTPError<
 	 *
 	 * @example
 	 * ```ts
-	 * class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {
+	 * class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT') {
+	 *     override readonly status = 402
 	 *     headers = {
 	 *         'x-powered-by': 'Elysia'
 	 *     }

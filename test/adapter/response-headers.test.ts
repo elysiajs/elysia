@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 
+import { Elysia } from '../../src'
 import { handleFile, responseToSetHeaders } from '../../src/adapter/utils'
 
 describe('file response range headers', () => {
@@ -25,6 +26,38 @@ describe('file response range headers', () => {
 		} as any)
 
 		expect(res.headers.get('accept-ranges')).toBe('none')
+	})
+
+	// An empty file has no byte range: send no content-range, never the literal "undefined"
+	it('omits content-range for an empty file with a plain set.headers', () => {
+		const res = handleFile(new Blob([]), {
+			status: 200,
+			headers: {}
+		} as any)
+
+		expect(res.headers.get('content-range')).toBeNull()
+		expect(res.headers.get('accept-ranges')).toBe('bytes')
+	})
+
+	it('omits content-range for an empty file with a Headers set.headers', () => {
+		const res = handleFile(new Blob([]), {
+			status: 200,
+			headers: new Headers({ 'x-custom': 'a' })
+		} as any)
+
+		expect(res.headers.get('content-range')).toBeNull()
+		expect(res.headers.get('x-custom')).toBe('a')
+	})
+
+	it('omits content-range for an empty Blob returned from a route', async () => {
+		const app = new Elysia()
+			.headers({ 'x-default': 'base' })
+			.get('/', () => new Blob([]))
+
+		const res = await app.handle('/')
+
+		expect(res.headers.get('content-range')).toBeNull()
+		expect(res.headers.get('x-default')).toBe('base')
 	})
 })
 

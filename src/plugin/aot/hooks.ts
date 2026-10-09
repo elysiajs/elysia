@@ -91,7 +91,7 @@ export const createAotPluginHooks = (
 		buildEnd() {
 			if (!entryMatched)
 				throw new Error(
-					`[elysia-aot] entry "${entry}" never appeared in the Vite ` +
+					`[elysia-aot] entry "${entry}" never appeared in the bundler ` +
 						`module graph. Compiled manifest was not injected. ` +
 						`Check that the plugin entry matches a build input.`
 				)

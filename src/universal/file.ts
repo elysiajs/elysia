@@ -83,7 +83,6 @@ export class ElysiaFile {
 		if (isBun) this.#value = Bun.file(path)
 		else {
 			// Browser
-			// @ts-ignore
 			if (!createReadStream || !stat) {
 				// @ts-ignore
 				if (typeof window !== 'undefined') {

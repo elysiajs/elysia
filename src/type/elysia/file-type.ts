@@ -16,11 +16,10 @@ export function setFileTypeDetector(detector: MaybeArray<FileTypeDetector>) {
 let warnedMissingDetector = false
 
 function warnMissingFileTypeDetector() {
-	warnedMissingDetector = true
+	if (warnedMissingDetector || isProduction()) return
 
-	console.warn(
-		'[elysia] missing file type detector'
-	)
+	warnedMissingDetector = true
+	console.warn('[elysia] missing file type detector')
 }
 
 async function detectFileType(file: File): Promise<string | undefined> {
@@ -48,8 +47,7 @@ export async function fileType(
 	if (!matchesAnyFileType(file.type, types)) return false
 
 	if (!fileTypeDetectors) {
-		if (!isProduction() && !warnedMissingDetector)
-			warnMissingFileTypeDetector()
+		warnMissingFileTypeDetector()
 
 		return false
 	}
@@ -126,8 +124,7 @@ export function maybeQueueFileTypeCheck(
 	}
 
 	if (!fileTypeDetectors) {
-		if (!isProduction() && !warnedMissingDetector)
-			warnMissingFileTypeDetector()
+		warnMissingFileTypeDetector()
 		;(pendingFileTypeChecks ??= []).push({
 			file: value,
 			check: Promise.resolve(message)

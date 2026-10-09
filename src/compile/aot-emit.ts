@@ -45,33 +45,18 @@ const checkFactorySource = (identifier: string, code: string) =>
 const handlerFactorySource = (alias: string, code: string) =>
 	`function(h${alias ? ',' + alias : ''}){return ${code}}`
 
-export function externalsMatch(a: unknown[], b: unknown[]) {
-	if (a.length !== b.length) return false
+function externalMatches(x: any, y: any) {
+	if (x === y) return true
+	if (x instanceof RegExp && y instanceof RegExp)
+		return x.source === y.source && x.flags === y.flags
 
-	for (let i = 0; i < a.length; i++) {
-		const x = a[i] as any
-		const y = b[i] as any
-
-		if (x === y) continue
-
-		if (x instanceof RegExp && y instanceof RegExp) {
-			if (x.source !== y.source || x.flags !== y.flags) return false
-			continue
-		}
-
-		// `findIndex` (not `every`) also compares holes
-		if (
-			Array.isArray(x) &&
-			Array.isArray(y) &&
-			x.length === y.length &&
-			x.findIndex((v, j) => v !== y[j]) === -1
-		)
-			continue
-
-		return false
-	}
-
-	return true
+	// `findIndex` (not `every`) also compares holes
+	return (
+		Array.isArray(x) &&
+		Array.isArray(y) &&
+		x.length === y.length &&
+		x.findIndex((v: unknown, j: number) => v !== y[j]) === -1
+	)
 }
 
 /**
@@ -99,7 +84,7 @@ export function alignBuildExternals(
 	for (const v of variables) {
 		const c = expected[j]
 
-		if (j < expected.length && externalsMatch([c], [v]))
+		if (j < expected.length && externalMatches(c, v))
 			slots.push(`${id}[${j++}]`)
 		else if (Array.isArray(c) && c.length === 1 && c[0] === v) {
 			slots.push(`${id}[${j++}][0]`)

@@ -41,10 +41,7 @@ export function parseCookieRawSync(
 		const v = cookies[name]
 		if (v === undefined) continue
 
-		// fall back to the raw string on malformed percent-encoding
-		out[name] = maybeJsonDecode(
-			(decodeComponent(v) as unknown as string) ?? v
-		)
+		out[name] = maybeJsonDecode(decodeComponent(v))
 	}
 
 	return out
@@ -76,7 +73,7 @@ export function parseCookieRawLazy(
 		const v = cookies[name]
 		if (v === undefined) continue
 
-		const decoded = (decodeComponent(v) as unknown as string) ?? v
+		const decoded = decodeComponent(v)
 		out[name] =
 			resolveSignSecrets(name, config) !== undefined
 				? decoded
@@ -117,7 +114,7 @@ export async function parseCookieRaw(
 		const v = cookies[name]
 		if (v === undefined) continue
 
-		let value: unknown = (decodeComponent(v) as unknown as string) ?? v
+		let value: unknown = decodeComponent(v)
 		const signCheck = resolveSignSecrets(name, config)
 
 		if (signCheck !== undefined)
@@ -158,8 +155,7 @@ export function parseCookieRawSigned(
 		const v = cookies[name]
 		if (v === undefined) continue
 
-		// fall back to the raw string on malformed percent-encoding
-		let value: unknown = (decodeComponent(v) as unknown as string) ?? v
+		let value: unknown = decodeComponent(v)
 
 		const signCheck = resolveSignSecrets(name, config)
 
@@ -219,12 +215,7 @@ class CookieJarHandler {
 			fieldDefaults,
 			{
 				value: this.deferDecode
-					? // fall back to the raw string on malformed percent-encoding
-						maybeJsonDecode(
-							(decodeComponent(
-								rawValue as string
-							) as unknown as string) ?? rawValue
-						)
+					? maybeJsonDecode(decodeComponent(rawValue as string))
 					: rawValue
 			}
 		)

@@ -258,8 +258,8 @@ export type CoerceOption =
 	| [CoerceParameters[1]]
 	| [CoerceParameters[1], CoerceParameters[2]]
 
-let _coerceRoot: CoerceOption[]
-export const coerceRoot = () =>
+let _coerceRoot: CoerceOption[] | undefined
+export const coerceRoot = (): CoerceOption[] =>
 	(_coerceRoot ??= [
 		[
 			[
@@ -279,8 +279,8 @@ const toObjectString = (x: BaseSchema & TSchemaOptions) =>
 const toArrayString = (x: BaseSchema & TSchemaOptions) =>
 	ArrayString((x.items ?? {}) as any, x)
 
-let _coerceQuery: CoerceOption[]
-export const coerceQuery = () =>
+let _coerceQuery: CoerceOption[] | undefined
+export const coerceQuery = (): CoerceOption[] =>
 	(_coerceQuery ??= [
 		[
 			[
@@ -294,8 +294,8 @@ export const coerceQuery = () =>
 		...coerceRoot()
 	])
 
-let _coerceBody: CoerceOption[]
-export const coerceBody = () =>
+let _coerceBody: CoerceOption[] | undefined
+export const coerceBody = (): CoerceOption[] =>
 	(_coerceBody ??= [
 		[
 			[
@@ -308,8 +308,8 @@ export const coerceBody = () =>
 		[[['Integer', IntegerString]]]
 	])
 
-let _coerceFormData: CoerceOption[]
-export const coerceFormData = () =>
+let _coerceFormData: CoerceOption[] | undefined
+export const coerceFormData = (): CoerceOption[] =>
 	(_coerceFormData ??= [
 		[[['Integer', IntegerString]]],
 		...coerceRoot(),
@@ -328,8 +328,8 @@ export const coerceFormData = () =>
 	])
 
 // headers, params
-let _coerceStringToStructure: CoerceOption[]
-export const coerceStringToStructure = () =>
+let _coerceStringToStructure: CoerceOption[] | undefined
+export const coerceStringToStructure = (): CoerceOption[] =>
 	(_coerceStringToStructure ??= [
 		[
 			[
@@ -526,14 +526,9 @@ export const buildCoercedFromPlan = (
 ) => buildCoercedFromScalarPlan(original, plan, seen, rebuildObjStr)
 
 export function deferCoercions() {
-	// @ts-expect-error
 	_coerceRoot = undefined
-	// @ts-expect-error
 	_coerceQuery = undefined
-	// @ts-expect-error
 	_coerceFormData = undefined
-	// @ts-expect-error
 	_coerceStringToStructure = undefined
-	// @ts-expect-error
 	_coerceBody = undefined
 }

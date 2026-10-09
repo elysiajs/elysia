@@ -728,9 +728,6 @@ export class TypeBoxValidator<
 				// keeps `precomputeSafe` true, as before.
 				if (precomputeCompileFailures() !== failures)
 					this.precomputeSafe = false
-			} else {
-				this.precomputeSafe = false
-				this.#defaultFastPath = undefined
 			}
 		}
 
@@ -778,7 +775,7 @@ export class TypeBoxValidator<
 					warnedMissingMirror = true
 
 					console.warn(
-						"exact-mirror is unavailable, normalization degraded to TypeBox. Install exact-mirror, or bundle it statically with the AOT build plugin ('elysia/plugin/aot') to restore the fast path. Use normalize: 'typebox' to silence this."
+						"exact-mirror is unavailable, normalization degraded to TypeBox. Install exact-mirror, or bundle it statically with the AOT build plugin ('elysia/plugin/aot/<bundler>', e.g. /bun or /vite) to restore the fast path. Use normalize: 'typebox' to silence this."
 					)
 				}
 			}
@@ -967,7 +964,6 @@ export class TypeBoxValidator<
 						run =
 							dir === 'decode'
 								? (v) => {
-										// @ts-ignore
 										const decoded = DecodeUnsafe(
 											nullObject(),
 											schema,
@@ -1126,8 +1122,7 @@ export class TypeBoxValidator<
 			}
 
 			const out = this.#noValidate
-				? // @ts-ignore EncodeUnsafe returns unknown
-					(EncodeUnsafe(nullObject(), this.schema, value) as any)
+				? (EncodeUnsafe(nullObject(), this.schema, value) as any)
 				: Encode(this.schema, value)
 
 			return this.Clean ? (this.Clean(out) as any) : out
@@ -1221,15 +1216,12 @@ export class TypeBoxValidator<
 		return Default(this.schema, value) as any
 	}
 
-	private optionalBypass(
-		value: Static<T>
-	): { bypass: true; value: Static<T> } | undefined {
+	private optionalBypass(value: Static<T>): { value: Static<T> } | undefined {
 		const schema = this.schema as any
 		if (!schema?.['~optional']) return
 
 		if (value === undefined || value === null)
 			return {
-				bypass: true,
 				value: (schema['~kind'] === 'Object'
 					? nullObject()
 					: value) as Static<T>
@@ -1241,7 +1233,7 @@ export class TypeBoxValidator<
 			!Array.isArray(value) &&
 			Object.keys(value as object).length === 0
 		)
-			return { bypass: true, value: nullObject() as Static<T> }
+			return { value: nullObject() as Static<T> }
 	}
 
 	async FromAsync(value: Static<T>, type?: string): Promise<Static<T>> {

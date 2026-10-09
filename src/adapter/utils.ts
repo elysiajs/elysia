@@ -95,14 +95,11 @@ export function handleFile(
 			set.status === 412 ||
 			set.status === 416)
 
-	const defaultHeader = immutable
+	const defaultHeader: Record<string, string> = immutable
 		? nullObject()
-		: ({
-				'accept-ranges': 'bytes',
-				'content-range': size
-					? `bytes 0-${size - 1}/${size}`
-					: undefined
-			} as Record<string, string>)
+		: { 'accept-ranges': 'bytes' }
+	if (!immutable && size)
+		defaultHeader['content-range'] = `bytes 0-${size - 1}/${size}`
 
 	if (!set && !size) return new Response(body as Blob)
 
@@ -296,7 +293,7 @@ export function createStreamHandler({
 		const isSSE =
 			typedSSE ||
 			(!skipFormat &&
-				// @ts-ignore First SSE result is wrapped with sse()
+				// First SSE result is wrapped with sse()
 				(init?.value?.sse ??
 					// @ts-ignore ReadableStream is wrapped with sse()
 					generator?.sse ??
@@ -675,18 +672,6 @@ function mergeHeaders(
 	return headers
 }
 
-function mergeStatus(
-	responseStatus: number,
-	setStatus: Context['set']['status']
-) {
-	if (typeof setStatus === 'string')
-		setStatus = StatusMap[setStatus as keyof typeof StatusMap]
-
-	if (responseStatus === 200) return setStatus
-
-	return responseStatus
-}
-
 function cancelPropagatingBody(
 	clonedBody: ReadableStream,
 	orphanedBranch: ReadableStream,
@@ -742,7 +727,9 @@ export function createResponseHandler(handler: CreateHandlerParameter) {
 		let status: Context['set']['status']
 
 		if (set) {
-			status = mergeStatus(response.status, set.status)
+			status = response.status === 200 ? set.status : response.status
+			if (typeof status === 'string')
+				status = StatusMap[status as keyof typeof StatusMap]
 			const statusUnchanged =
 				status === undefined || status === response.status
 

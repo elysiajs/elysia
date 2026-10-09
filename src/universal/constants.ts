@@ -1,4 +1,3 @@
-// @ts-ignore
 export const isBun = typeof Bun !== 'undefined'
 
 // @ts-expect-error

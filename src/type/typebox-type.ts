@@ -63,7 +63,7 @@ function resolveNamespaces(): TypeboxTypeNamespaces {
 
 	if (!req)
 		throw new Error(
-			"TypeBox couldn't be loaded: this runtime has no synchronous module loader. Build with the AOT plugin ('elysia/plugin/aot') so TypeBox is wired statically, or register it manually with setupTypebox({ typebox: { type, system } })."
+			"TypeBox couldn't be loaded: this runtime has no synchronous module loader. Build with the AOT plugin ('elysia/plugin/aot/<bundler>', e.g. /bun or /vite) so TypeBox is wired statically, or register it manually with setupTypebox({ typebox: { type, system } })."
 		)
 
 	return { type: req('typebox/type'), system: req('typebox/system') }

@@ -145,16 +145,10 @@ export function createContext(
 		Object.freeze(headers)
 	}
 
-	if (headers === null && !ext?.decorator && !ext?.store) {
-		sharedEmptyDecorator ??= buildEmptyDecorator()
-		const context = (sharedEmptyContext ??=
-			buildEmptyContext(sharedEmptyDecorator))
-		contextCache.set(app, context)
-
-		return context
-	}
-
-	const context = buildEmptyContext(createBaseContext(app), headers) as any
+	const context =
+		headers === null && !ext?.decorator && !ext?.store
+			? (sharedEmptyContext ??= buildEmptyContext(createBaseContext(app)))
+			: buildEmptyContext(createBaseContext(app), headers)
 
 	contextCache.set(app, context)
 	return context

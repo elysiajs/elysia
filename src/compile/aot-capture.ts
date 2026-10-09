@@ -115,9 +115,6 @@ function validateMergeSource(schema: TSchema, source: string): boolean {
 	if (!merger) return false
 
 	for (const probe of mergeProbes(schema)) {
-		// the runtime only invokes the merger for present, non-null object/array
-		if (probe === null || typeof probe !== 'object') continue
-
 		let expected: unknown
 		try {
 			expected = Default(schema, structuredClone(probe))
@@ -141,9 +138,8 @@ function validateMergeSource(schema: TSchema, source: string): boolean {
 const PROBE_SENTINEL = '__elysia_default_probe__'
 
 function* defaultProbes(
-	pod: Record<string, unknown> | undefined
+	pod: Record<string, unknown>
 ): Generator<Record<string, unknown>> {
-	if (!pod) return
 	yield {}
 
 	for (const k in pod) {
@@ -373,26 +369,19 @@ function captureCodecMirror(
 				captureMirrorCodecs(schema, ext.codecs, dir)
 			) {
 				let u: { identifier: string; code: string }[][] | undefined
-				let freezable = true
 
-				if (ext.unions && ext.unions.length) {
+				if (ext.unions?.length) {
 					u = captureMirrorUnions(schema, ext.unions)
-					if (!u) freezable = false
+					if (!u) return
 				}
 
-				if (freezable) {
-					const mirror = {
-						source: emitted.source,
-						hasExternals: true,
-						u
-					}
-					Capture.set(
-						{ method: aot.method, path: aot.path, slot },
-						dir === 'decode'
-							? { decodeMirror: mirror }
-							: { encodeMirror: mirror }
-					)
-				}
+				const mirror = { source: emitted.source, hasExternals: true, u }
+				Capture.set(
+					{ method: aot.method, path: aot.path, slot },
+					dir === 'decode'
+						? { decodeMirror: mirror }
+						: { encodeMirror: mirror }
+				)
 			}
 		}
 	} catch {}

@@ -42,7 +42,8 @@ function handleElysiaFile(
 	const headers = materializeSetHeaders(set)
 	// unknown extension: keep the user's or the runtime's content-type
 	if (contentType !== 'application/octet-stream')
-		headers['content-type'] = contentType
+		if (headers instanceof Headers) headers.set('content-type', contentType)
+		else headers['content-type'] = contentType
 
 	const stats = file.stats
 	if (stats)
@@ -192,8 +193,15 @@ function withStatus(
 			headers: nullObject()
 		} as Context['set']
 
-	if (response.headers)
-		Object.assign(materializeSetHeaders(set), response.headers)
+	if (response.headers) {
+		if (set.headers instanceof Headers)
+			for (const [key, value] of Object.entries(response.headers))
+				if (key.toLowerCase() === 'set-cookie')
+					for (const cookie of Array.isArray(value) ? value : [value])
+						set.headers.append(key, cookie as string)
+				else set.headers.set(key, value as string)
+		else Object.assign(materializeSetHeaders(set), response.headers)
+	}
 
 	return mapResponseWithSet(response.response, set, request, owned)
 }
@@ -384,18 +392,8 @@ function mapFallback(
 	if (response instanceof Error)
 		return errorToResponse(response as Error, set, request, owned)
 
-	if (response instanceof ElysiaStatus) {
-		// Spread, not withStatus: once >= 2 cookies turn set.headers into a
-		// Headers instance, withStatus drops the status headers, this drops
-		// set.headers instead (reached by subclasses and minified class names)
-		if (set && response.headers) {
-			set.status = response.status
-			set.headers = { ...set.headers, ...response.headers }
-			return mapResponse(response.response, set, request, owned)
-		}
-
+	if (response instanceof ElysiaStatus)
 		return withStatus(response, set, request, owned)
-	}
 
 	if (response instanceof ElysiaFile)
 		return handleElysiaFile(response as ElysiaFile, set, request)

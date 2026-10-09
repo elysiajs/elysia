@@ -376,6 +376,36 @@ describe('Parser', () => {
 		expect(response).toEqual([{ name: 'Aru' }, { name: 'Eden' }])
 	})
 
+	it('infers context a named parser reads whether given as string or array', async () => {
+		// `parse: 'x'` and `parse: ['x']` share one public type: both must have
+		// the parser scanned, or the `headers`/`query` it reads stay unparsed
+		const app = new Elysia()
+			.parser('hdr', ({ headers, query }) => ({
+				h: headers['x'],
+				q: query.q
+			}))
+			.post('/string', { parse: 'hdr' }, ({ body }) => body)
+			.post('/array', { parse: ['hdr'] }, ({ body }) => body)
+
+		const send = (path: string) =>
+			app
+				.handle(
+					new Request(`http://localhost${path}?q=1`, {
+						method: 'POST',
+						headers: { x: 'v' },
+						body: 'a'
+					})
+				)
+				.then((x) => x.json())
+
+		const response = await Promise.all([send('/string'), send('/array')])
+
+		expect(response).toEqual([
+			{ h: 'v', q: '1' },
+			{ h: 'v', q: '1' }
+		])
+	})
+
 	it('handle parser from plugin', async () => {
 		const plugin = new Elysia().parser(
 			'custom',

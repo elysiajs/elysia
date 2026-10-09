@@ -46,10 +46,10 @@ export function createSharedReference<
 	referenceCache(shared)
 
 	return (property: P): T => {
-		const hash = propertyChecksum(property)
-		if (hash[1]) return createType(property)
+		// meta (title, default, error, ...) is per-site, never shared
+		if (hasMeta(property)) return createType(property)
 
-		const h = hash[0]
+		const h = propertyChecksum(property)
 		const serialized = JSON.stringify(property)
 		const bucket = shared.get(h)
 
@@ -84,10 +84,9 @@ const hasMeta = (property: Partial<BaseSchema> & Record<keyof any, unknown>) =>
 	'default' in property
 
 export function getMeta(
-	property: Partial<BaseSchema> & Record<keyof any, unknown>,
-	doHaveMeta = hasMeta(property)
+	property: Partial<BaseSchema> & Record<keyof any, unknown>
 ) {
-	if (doHaveMeta) {
+	if (hasMeta(property)) {
 		const {
 			title,
 			description,
@@ -112,30 +111,8 @@ export function getMeta(
 	return [property] as const
 }
 
-export function propertyChecksum(
-	property: Partial<BaseSchema> & Record<keyof any, unknown>
-) {
-	if (hasMeta(property)) {
-		const [constraints, meta] = getMeta(property, true)
-		const entries = Object.entries(constraints)
-
-		switch (entries.length) {
-			case 0:
-				return [0, meta] as const
-
-			case 1:
-				return [fnv1a(entries[0].toString()), meta] as const
-
-			default:
-				return [fnv1a(entries.toSorted().toString()), meta] as const
-		}
-	}
-
-	const entries = Object.entries(property)
-	if (!entries.length) return [0] as const
-
-	return [fnv1a(JSON.stringify(entries))] as const
-}
+export const propertyChecksum = (property: object) =>
+	fnv1a(JSON.stringify(Object.entries(property)))
 
 export type Refines<T> = [refine: (value: T) => boolean, message: string][]
 export function Refines<T extends TSchema>(

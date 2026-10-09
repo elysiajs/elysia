@@ -81,12 +81,13 @@ export function armEntryAbort(context: any) {
 	return (context['~sig'] = context.request.signal).aborted
 }
 
+export const traceName = (fn: unknown) =>
+	(fn as any)?.name && typeof (fn as any).name === 'string'
+		? (fn as any).name
+		: 'anonymous'
+
 const traceChild = (report: TraceReporter | undefined, fn: Function) =>
-	report?.resolveChild(
-		(fn as any)?.name && typeof (fn as any).name === 'string'
-			? (fn as any).name
-			: 'anonymous'
-	) ?? noTrace
+	report?.resolveChild(traceName(fn)) ?? noTrace
 
 const toArray = <T>(v: MaybeArray<T>): T[] => (Array.isArray(v) ? v : [v])
 

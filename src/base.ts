@@ -650,12 +650,10 @@ export class Elysia<
 		)
 			return this.cachedRoutes
 
-		if (this.declaredRoutes === undefined && this['~routeTable']?.length)
-			this.#materializeDeclaredRoutes()
+		const declared = this['~routes']
+		if (!declared.length) return []
 
-		if (!this.declaredRoutes?.length) return []
-
-		const routes = this['~routes'].map(
+		const routes = declared.map(
 			([
 				method,
 				path,
@@ -1295,7 +1293,7 @@ export class Elysia<
 	 * ```typescript
 	 * new Elysia()
 	 *     .setup(({ server }) => {
-	 *         console.log("Running at ${server?.url}:${server?.port}")
+	 *         console.log(`Running at ${server?.url}`)
 	 *     })
 	 *     .listen(3000)
 	 * ```
@@ -2542,13 +2540,13 @@ export class Elysia<
 	>(
 		hook: GuardLocalHook<
 			Input,
-			// @ts-ignore
 			Schema & MacroContext,
 			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
 			BeforeHandle,
 			AfterHandle,
-			ErrorHandle
+			ErrorHandle,
+			'merge'
 		> & { schema: 'merge' } & MacroOptionContext<
 				Metadata['macroFn'],
 				Schema,
@@ -2574,7 +2572,6 @@ export class Elysia<
 			schema: Volatile['schema']
 			schemas: Volatile['schemas'] &
 				UnwrapRoute<Input, Definitions['typebox']> &
-				// @ts-ignore
 				MacroContext
 			response: UnionResponseStatus<
 				Volatile['response'],
@@ -2630,7 +2627,6 @@ export class Elysia<
 	>(
 		hook: GuardLocalHook<
 			Input,
-			// @ts-ignore
 			Schema & MacroContext,
 			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
@@ -2667,9 +2663,7 @@ export class Elysia<
 						UnwrapRoute<Input, Definitions['typebox']>,
 						Volatile['schema']
 					>
-			schemas: Volatile['schemas'] &
-				// @ts-ignore
-				MacroContext
+			schemas: Volatile['schemas'] & MacroContext
 			response: UnionResponseStatus<
 				Volatile['response'],
 				ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
@@ -2727,13 +2721,13 @@ export class Elysia<
 	>(
 		hook: GuardLocalHook<
 			Input,
-			// @ts-ignore
 			Schema & MacroContext,
 			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
 			BeforeHandle,
 			AfterHandle,
-			ErrorHandle
+			ErrorHandle,
+			'merge'
 		> & { schema: 'merge' } & MacroOptionContext<
 				Metadata['macroFn'],
 				Schema,
@@ -2760,7 +2754,6 @@ export class Elysia<
 					schema: Metadata['schema']
 					schemas: Metadata['schemas'] &
 						UnwrapRoute<Input, Definitions['typebox']> &
-						// @ts-ignore
 						MacroContext
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
@@ -2831,7 +2824,6 @@ export class Elysia<
 	>(
 		hook: GuardLocalHook<
 			Input,
-			// @ts-ignore
 			Schema & MacroContext,
 			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
@@ -2952,13 +2944,13 @@ export class Elysia<
 		scope: 'local',
 		hook: GuardLocalHook<
 			Input,
-			// @ts-ignore
 			Schema & MacroContext,
 			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
 			BeforeHandle,
 			AfterHandle,
-			ErrorHandle
+			ErrorHandle,
+			'merge'
 		> & { schema: 'merge' } & MacroOptionContext<
 				Metadata['macroFn'],
 				Schema,
@@ -2984,7 +2976,6 @@ export class Elysia<
 			schema: Volatile['schema']
 			schemas: Volatile['schemas'] &
 				UnwrapRoute<Input, Definitions['typebox']> &
-				// @ts-ignore
 				MacroContext
 			response: UnionResponseStatus<
 				Volatile['response'],
@@ -3041,7 +3032,6 @@ export class Elysia<
 		scope: 'local',
 		hook: GuardLocalHook<
 			Input,
-			// @ts-ignore
 			Schema & MacroContext,
 			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
@@ -3078,9 +3068,7 @@ export class Elysia<
 						UnwrapRoute<Input, Definitions['typebox']>,
 						Volatile['schema']
 					>
-			schemas: Volatile['schemas'] &
-				// @ts-ignore
-				MacroContext
+			schemas: Volatile['schemas'] & MacroContext
 			response: UnionResponseStatus<
 				Volatile['response'],
 				ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
@@ -3136,13 +3124,13 @@ export class Elysia<
 		scope: 'plugin',
 		hook: GuardLocalHook<
 			Input,
-			// @ts-ignore
 			Schema & MacroContext,
 			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
 			BeforeHandle,
 			AfterHandle,
-			ErrorHandle
+			ErrorHandle,
+			'merge'
 		> & { schema: 'merge' } & MacroOptionContext<
 				Metadata['macroFn'],
 				Schema,
@@ -3167,7 +3155,6 @@ export class Elysia<
 			schema: Ephemeral['schema']
 			schemas: Ephemeral['schemas'] &
 				UnwrapRoute<Input, Definitions['typebox']> &
-				// @ts-ignore
 				MacroContext
 			response: UnionResponseStatus<
 				Ephemeral['response'],
@@ -3225,7 +3212,6 @@ export class Elysia<
 		scope: 'plugin',
 		hook: GuardLocalHook<
 			Input,
-			// @ts-ignore
 			Schema & MacroContext,
 			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
@@ -3261,9 +3247,7 @@ export class Elysia<
 						UnwrapRoute<Input, Definitions['typebox']>,
 						Ephemeral['schema']
 					>
-			schemas: Ephemeral['schemas'] &
-				// @ts-ignore
-				MacroContext
+			schemas: Ephemeral['schemas'] & MacroContext
 			response: UnionResponseStatus<
 				Ephemeral['response'],
 				ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
@@ -3320,13 +3304,13 @@ export class Elysia<
 		scope: 'global',
 		hook: GuardLocalHook<
 			Input,
-			// @ts-ignore
 			Schema & MacroContext,
 			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
 			BeforeHandle,
 			AfterHandle,
-			ErrorHandle
+			ErrorHandle,
+			'merge'
 		> & { schema: 'merge' } & MacroOptionContext<
 				Metadata['macroFn'],
 				Schema,
@@ -3352,7 +3336,6 @@ export class Elysia<
 			schema: Metadata['schema']
 			schemas: Metadata['schemas'] &
 				UnwrapRoute<Input, Definitions['typebox']> &
-				// @ts-ignore
 				MacroContext
 			macro: Metadata['macro']
 			macroFn: Metadata['macroFn']
@@ -3414,7 +3397,6 @@ export class Elysia<
 		scope: 'global',
 		hook: GuardLocalHook<
 			Input,
-			// @ts-ignore
 			Schema & MacroContext,
 			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
@@ -3451,9 +3433,7 @@ export class Elysia<
 						UnwrapRoute<Input, Definitions['typebox']>,
 						Metadata['schema']
 					>
-			schemas: Metadata['schemas'] &
-				// @ts-ignore
-				MacroContext
+			schemas: Metadata['schemas'] & MacroContext
 			macro: Metadata['macro']
 			macroFn: Metadata['macroFn']
 			parser: Metadata['parser']
@@ -3607,13 +3587,13 @@ export class Elysia<
 		prefix: Prefix,
 		schema: GuardLocalHook<
 			Input,
-			// @ts-ignore
 			Schema & MacroContext,
 			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
 			BeforeHandle,
 			AfterHandle,
-			ErrorHandle
+			ErrorHandle,
+			'merge'
 		> & { schema: 'merge' } & MacroOptionContext<
 				Metadata['macroFn'],
 				Schema,
@@ -3640,7 +3620,6 @@ export class Elysia<
 					schema: Metadata['schema']
 					schemas: Metadata['schemas'] &
 						UnwrapRoute<Input, Definitions['typebox']> &
-						// @ts-ignore
 						MacroContext
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
@@ -3717,7 +3696,6 @@ export class Elysia<
 		prefix: Prefix,
 		schema: GuardLocalHook<
 			Input,
-			// @ts-ignore
 			Schema & MacroContext,
 			GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>,
 			keyof Metadata['parser'],
@@ -4640,7 +4618,7 @@ export class Elysia<
 	/**
 	 * Merge the absorbed app's `~ext` container into this one.
 	 *
-	 * `#use` needed a frame wide enoughfor every local in this block + `#propagateHooks`
+	 * `#use` needed a frame wide enough for every local in this block + `#propagateHooks`
 	 * JSC pays that width on *entry*, before a single field is read
 	 *
 	 * Keep the cold blocks in their own frames.
@@ -6684,7 +6662,8 @@ export class Elysia<
 
 	/**
 	 * ### ws
-	 * Register a WebSocket route. Mirrors `.get`/`.post` ergonomics:
+	 * Register a WebSocket route as `(path, options)`, `(path, handler)`, or `(path, options, handler)`.
+	 * Requires `.use(websocket())` from `elysia/websocket`.
 	 */
 	ws<
 		const Path extends string,
@@ -6717,7 +6696,6 @@ export class Elysia<
 		path: Path,
 		options: WSLocalHook<
 			Input,
-			// @ts-ignore
 			Schema & MacroContext,
 			Singleton & {
 				derive: Ephemeral['derive'] &
@@ -6782,7 +6760,6 @@ export class Elysia<
 					Definitions['typebox']
 				>,
 		const Handler extends WSMessageHandler<
-			// @ts-ignore
 			Schema & MacroContext,
 			Singleton & {
 				derive: Ephemeral['derive'] &
@@ -6841,7 +6818,6 @@ export class Elysia<
 					Definitions['typebox']
 				>,
 		const Handler extends WSMessageHandler<
-			// @ts-ignore
 			Schema & MacroContext,
 			Singleton & {
 				derive: Ephemeral['derive'] &
@@ -6854,7 +6830,6 @@ export class Elysia<
 		path: Path,
 		options: WSLocalHook<
 			Input,
-			// @ts-ignore
 			Schema & MacroContext,
 			Singleton & {
 				derive: Ephemeral['derive'] &

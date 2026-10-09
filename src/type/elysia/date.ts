@@ -23,26 +23,20 @@ function toDate(value: string | number) {
 		: date
 }
 
-let StringifiedDate: Type.TCodec<
+type DateSchema = Type.TCodec<
 	Type.TUnion<[Type.TUnsafe<Date>, Type.TString, Type.TNumber]>,
 	Date
 >
-let emptyDate: Type.TCodec<
-	Type.TUnion<[Type.TUnsafe<Date>, Type.TString, Type.TNumber]>,
-	Date
->
+
+let StringifiedDate: DateSchema
+let emptyDate: DateSchema
 let sharedDate: ReturnType<
 	typeof createSharedReference<
 		DateOptions,
 		ReturnType<typeof DateWithProperty>
 	>
 >
-export function DateType(
-	property?: DateOptions
-): Type.TCodec<
-	Type.TUnion<[Type.TUnsafe<Date>, Type.TString, Type.TNumber]>,
-	Date
-> {
+export function DateType(property?: DateOptions): DateSchema {
 	StringifiedDate ??= Codec(
 		Union([
 			Refine(

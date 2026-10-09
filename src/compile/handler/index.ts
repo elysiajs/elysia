@@ -827,7 +827,7 @@ export function compileHandler(
 	liveOnly: boolean = false
 ): CompiledHandler {
 	let [
-		_method,
+		method,
 		path,
 		handler,
 		instance,
@@ -839,7 +839,6 @@ export function compileHandler(
 
 	const frozenRoot = frozenRootOf(root)
 	const adapter = frozenRoot['~config']?.adapter ?? defaultAdapter
-	const method = _method
 
 	const mountMeta =
 		typeof handler === 'function' ? (handler as any)['~mount'] : undefined
@@ -887,6 +886,17 @@ export function compileHandler(
 	if (hook) {
 		promoteDerive(hook)
 		runIntrospect(hook)
+
+		// before toArray: a bare `.parser()` name must end up as [fn]
+		const namedParsers = frozenRoot['~ext']?.parser
+		if (namedParsers && hook.parse) {
+			const resolve = (p: any) =>
+				typeof p === 'string' && p in namedParsers ? namedParsers[p] : p
+
+			hook.parse = Array.isArray(hook.parse)
+				? (hook.parse as any[]).map(resolve)
+				: (resolve(hook.parse) as any)
+		}
 
 		toArray('parse', hook)
 		toArray('transform', hook)
@@ -950,16 +960,6 @@ export function compileHandler(
 
 	const isStaticResponse = !isHandleFunction && handler instanceof Response
 	const isPromiseHandler = !isHandleFunction && handler instanceof Promise
-
-	const namedParsers = frozenRoot['~ext']?.parser
-	if (namedParsers && hook?.parse) {
-		const resolve = (p: any) =>
-			typeof p === 'string' && p in namedParsers ? namedParsers[p] : p
-
-		hook.parse = Array.isArray(hook.parse)
-			? (hook.parse as any[]).map(resolve)
-			: (resolve(hook.parse) as any)
-	}
 
 	let shape: number | undefined
 	if (reconstructed || Capture.isCapturing()) {

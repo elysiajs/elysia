@@ -204,7 +204,6 @@ export async function handleWSResponse(
 						await r
 				} catch {}
 		}
-		return
 	}
 
 	const mapped = mapResponses.length
@@ -438,7 +437,6 @@ export function buildWSRoute(
 			validators = new RouteValidator(composed as any, {
 				models: frozenRootOf(app)['~ext']?.models,
 				app,
-				// unused by WS, kept for parity with the HTTP validator
 				normalize: frozenRootOf(app)['~config']?.normalize,
 				sanitize: frozenRootOf(app)['~config']?.sanitize,
 				schemas: (composed as { schemas?: any }).schemas,
@@ -990,7 +988,10 @@ export function buildWSRoute(
 				const deriveMode = upgradeDeriveModes?.[i]
 
 				if (deriveMode !== undefined && !(r instanceof ElysiaStatus)) {
-					if (r && typeof r === 'object') {
+					if (
+						r &&
+						(typeof r === 'object' || typeof r === 'function')
+					) {
 						if (deriveMode) {
 							const previous = context
 							context = replaceDeriveContext(context, r)
@@ -1149,7 +1150,6 @@ export function accumulateWSOptions(
 				console.warn(
 					`[Elysia] Conflicting per-route WebSocket option '${key}'\nBun uses one global WebSocket config per server, per-route values are not enforced (for limits the strictest route wins, otherwise the last-registered route).`
 				)
-				console.warn(new Error().stack)
 			}
 
 			// deliberately not gated on `isBun`: the merge, not the warning,

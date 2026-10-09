@@ -112,7 +112,7 @@ export interface CookieOptions {
 	secrets?: string | null | (string | null)[]
 
 	/**
-	 * Only use secret for signing cookie instead of secret + seperator + name
+	 * Only use secret for signing cookie instead of secret + separator + name
 	 *
 	 * Set to `false` once every signed cookie in circulation has been re-issued
 	 *

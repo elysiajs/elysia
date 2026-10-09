@@ -9,28 +9,6 @@ import {
 import { fnv1a, nullObject } from '../utils'
 import type { WSCapability, WSOptions, WSOptionsEntry } from '../ws/types'
 
-/**
- * ### elysia/websocket
- *
- * Runtime WebSocket capability. Register it once so `.ws()` (and any
- * inherited/scoped WS route) has a provider to build against:
- *
- * ```ts
- * import { Elysia } from 'elysia'
- * import { websocket } from 'elysia/websocket'
- *
- * new Elysia()
- *     .use(websocket())
- *     .ws('/chat', { message(ws, body) { ws.send(body) } })
- * ```
- *
- * Pass app-wide server-tuning defaults (the former `ElysiaConfig.websocket`):
- *
- * ```ts
- * .use(websocket({ idleTimeout: 60, maxPayloadLength: 1024 }))
- * ```
- */
-
 const provider = {
 	id: '@elysia/websocket@' + import.meta.url,
 	buildWSRoute,
@@ -53,6 +31,27 @@ function stable(value: unknown): unknown {
 const checksum = (options?: WSOptions) =>
 	options === undefined ? 0 : fnv1a(JSON.stringify(stable(options)))
 
+/**
+ * ### elysia/websocket
+ *
+ * Runtime WebSocket capability. Register it once so `.ws()` (and any
+ * inherited/scoped WS route) has a provider to build against:
+ *
+ * ```ts
+ * import { Elysia } from 'elysia'
+ * import { websocket } from 'elysia/websocket'
+ *
+ * new Elysia()
+ *     .use(websocket())
+ *     .ws('/chat', { message(ws, body) { ws.send(body) } })
+ * ```
+ *
+ * Pass app-wide server-tuning defaults (the former `ElysiaConfig.websocket`):
+ *
+ * ```ts
+ * .use(websocket({ idleTimeout: 60, maxPayloadLength: 1024 }))
+ * ```
+ */
 export const websocket = (options?: WSOptions): Elysia => {
 	const cs = checksum(options)
 

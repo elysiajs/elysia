@@ -172,7 +172,7 @@ function walk(
 }
 
 // `Object.keys` is exactly `JSON.stringify`'s own-enumerable key order.
-function walkObject(value: any, mode: number, state: WalkState): string {
+function walkObject(value: any, mode: number, state: WalkState) {
 	const keys = Object.keys(value)
 
 	// `join` builds a flat string; a `+=` key stays a rope whose fibers the
@@ -412,6 +412,8 @@ export class TypeBoxValidatorCache {
 		if (!isCloudflareWorker) {
 			if (this.#gc) clearTimeout(this.#gc)
 
+			// global-scope callback: a closure from this module pins the module
+			// graph under `bun --hot` for gcTime; the arrow is the no-eval fallback
 			this.#gc = setTimeout(
 				(clearWeak ??= (() => {
 					try {

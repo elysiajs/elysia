@@ -4,11 +4,12 @@ import { Elysia } from '../../src'
 import { trace } from '../../src/plugin/trace'
 import { Reconstruct } from '../../src/compile/handler/reconstruct'
 
-// `Reconstruct.trace` is only reached by the AOT-reconstructed handler path
-// (`reconstructed.a.includes('tr')` in src/compile/handler/index.ts), which
-// the ordinary JIT compile path never exercises. It's a plain exported static
-// method, so it's unit-tested directly here rather than through the full
-// capture/manifest/reconstruct machinery (see test/aot/_manifest.ts).
+// `Reconstruct.trace` builds the linked `tr` tracers for both the JIT compile
+// path (src/compile/handler/jit.ts) and the AOT replay path
+// (`reconstructed.a.includes('tr')` in src/compile/handler/index.ts). It's a
+// plain exported static method, so it's unit-tested directly here rather than
+// through the full capture/manifest/reconstruct machinery (see
+// test/aot/_manifest.ts).
 describe('Reconstruct.trace', () => {
 	it('returns undefined when the route has no trace hooks', () => {
 		const app = new Elysia()

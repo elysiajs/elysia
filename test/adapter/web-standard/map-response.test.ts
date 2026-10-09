@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import {
 	Elysia,
 	ElysiaFile,
+	ElysiaStatus,
 	file,
 	form,
 	redirect,
@@ -747,5 +748,114 @@ describe('Web Standard - Map Response with untouched set', () => {
 
 		await Bun.sleep(10)
 		expect(observed).toBe(418)
+	})
+})
+
+describe('Web Standard - ElysiaStatus headers once set.headers is a Headers', () => {
+	// Two or more set-cookie values turn set.headers into a Headers instance;
+	// a status's headers and the set's cookies must both survive that state
+	class Accepted extends ElysiaStatus<any, any> {}
+	let directory: string
+	let script: string
+
+	beforeAll(() => {
+		directory = mkdtempSync(join(tmpdir(), 'elysia-status-headers-'))
+		// .js: Elysia's mime table says application/javascript, Bun's Blob
+		// says text/javascript, so a dropped write is observable
+		script = join(directory, 'payload.js')
+		writeFileSync(script, 'export {}\n')
+	})
+
+	afterAll(() => rmSync(directory, { recursive: true }))
+
+	const app = new Elysia()
+		.get('/returned', ({ cookie: { a, b } }) => {
+			a.value = '1'
+			b.value = '2'
+
+			return new ElysiaStatus(201, 'made', { 'x-status': '1' })
+		})
+		.get(
+			'/thrown',
+			{
+				beforeHandle({ cookie: { a, b } }) {
+					a.value = '1'
+					b.value = '2'
+
+					throw new ElysiaStatus(201, 'made', { 'x-status': '1' })
+				}
+			},
+			() => 'unreachable'
+		)
+		// A subclass misses the `ElysiaStatus` tag and lands in mapFallback;
+		// raw set-cookie headers are not re-serialized from set.cookie later
+		.get('/subclass', ({ set }) => {
+			set.headers['set-cookie'] = ['a=1', 'b=2'] as any
+
+			return new Accepted(201, 'made', { 'x-status': '1' })
+		})
+		// Headers.set is case-insensitive: a mixed-case status header must still
+		// override the handler's lowercase one, not sit beside it as "set, status"
+		.get('/subclass-case', ({ set }) => {
+			set.headers['set-cookie'] = ['a=1', 'b=2'] as any
+			set.headers['x-test'] = 'set'
+
+			return new Accepted(201, 'made', { 'X-Test': 'status' })
+		})
+		// A status carrying its own Set-Cookie must add to, not replace, the
+		// cookies already on the response
+		.get('/subclass-cookie', ({ set }) => {
+			set.headers['set-cookie'] = ['a=1', 'b=2'] as any
+
+			return new Accepted(201, 'made', {
+				'Set-Cookie': 'status=3; Path=/'
+			})
+		})
+		.get('/file', ({ cookie: { a, b } }) => {
+			a.value = '1'
+			b.value = '2'
+
+			return file(script)
+		})
+
+	for (const [path, cookies] of [
+		['/returned', ['a=1; Path=/', 'b=2; Path=/']],
+		['/thrown', ['a=1; Path=/', 'b=2; Path=/']],
+		['/subclass', ['a=1', 'b=2']]
+	] as const)
+		it(`keep both cookies and status headers: ${path}`, async () => {
+			const response = await app.handle(path)
+
+			expect(response.status).toBe(201)
+			expect(response.headers.getSetCookie()).toEqual([...cookies])
+			expect(response.headers.get('x-status')).toBe('1')
+			await expect(response.text()).resolves.toBe('made')
+		})
+
+	it('let a mixed-case status header override the existing one', async () => {
+		const response = await app.handle('/subclass-case')
+
+		expect(response.headers.get('x-test')).toBe('status')
+	})
+
+	it('keep original cookies when the status carries Set-Cookie', async () => {
+		const response = await app.handle('/subclass-cookie')
+
+		expect(response.headers.getSetCookie()).toEqual(
+			expect.arrayContaining(['a=1', 'b=2', 'status=3; Path=/'])
+		)
+		expect(response.headers.getSetCookie()).toHaveLength(3)
+	})
+
+	it("keep an ElysiaFile's content-type alongside two cookies", async () => {
+		const response = await app.handle('/file')
+
+		expect(response.headers.get('content-type')).toBe(
+			'application/javascript'
+		)
+		expect(response.headers.getSetCookie()).toEqual([
+			'a=1; Path=/',
+			'b=2; Path=/'
+		])
 	})
 })

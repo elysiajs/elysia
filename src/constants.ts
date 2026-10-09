@@ -1,4 +1,3 @@
-/*#__PURE__*/
 function mapBack<const T extends Record<string, number>>(
 	map: T
 ): {
@@ -11,7 +10,7 @@ function mapBack<const T extends Record<string, number>>(
 	return result as any
 }
 
-export const StatusMap = /*#__PURE__*/ {
+export const StatusMap = {
 	Continue: 100,
 	'Switching Protocols': 101,
 	Processing: 102,
@@ -76,7 +75,7 @@ export const StatusMap = /*#__PURE__*/ {
 } as const
 export type StatusMap = typeof StatusMap
 
-export const traceEvents = /*#__PURE__*/ [
+export const traceEvents = [
 	'request',
 	'parse',
 	'transform',

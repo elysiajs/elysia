@@ -205,10 +205,7 @@ function fallbackErrorResponse(
 		context?: Context
 	) => unknown
 ): unknown {
-	if (error instanceof ElysiaStatus)
-		return mapResponse(error, context.set, context)
-
-	if (error instanceof Response)
+	if (error instanceof ElysiaStatus || error instanceof Response)
 		return mapResponse(error, context.set, context)
 
 	const self = (error ?? {}) as HTTPError & {

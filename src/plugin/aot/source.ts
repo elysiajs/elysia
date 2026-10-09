@@ -141,17 +141,13 @@ export function replayStubbability(
 		const history = app['~routes']
 
 		JITProbe.begin()
-		const exact = new Map<string, Set<string>>()
+		const seen = new Set<string>()
 		for (const route of history) {
-			const method = route[0] as string
-			if (method === 'WS') continue
+			if (route[0] === 'WS') continue
 
-			let paths = exact.get(method)
-			if (!paths) exact.set(method, (paths = new Set()))
-
-			if (paths.has(route[1]))
-				JITProbe.record('handler:indexed-duplicate')
-			else paths.add(route[1])
+			const key = `${route[0]}\0${route[1]}`
+			if (seen.has(key)) JITProbe.record('handler:indexed-duplicate')
+			else seen.add(key)
 		}
 
 		for (const route of history) {
@@ -685,13 +681,13 @@ function emitModule(
 	if (needs('Format')) body += importNamed('Format', 'typebox/format')
 	if (needs('Hashing')) body += importNamed('Hashing', 'typebox/system')
 
-	// every decl lives inside the registration IIFE: after
-	// `Compiled.release` the module retains nothing but the fingerprint
 	body += '\n'
 
 	// install the reconstruction table before `register`, ahead of any frozen entry
 	if (captured.length) body += 'Compiled.reconstruct = Reconstruct\n'
 
+	// every decl lives inside the registration IIFE: after
+	// `Compiled.release` the module retains nothing but the fingerprint
 	body +=
 		`export const fingerprint = ${JSON.stringify(fingerprint)}\n` +
 		'Compiled.register((() => {\n' +

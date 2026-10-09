@@ -53,7 +53,7 @@ export interface ElysiaConfig<
 	/**
 	 * Path prefix of the instance
 	 *
-	 * @default '''
+	 * @default ''
 	 */
 	prefix?: Prefix
 
@@ -65,7 +65,7 @@ export interface ElysiaConfig<
 	/**
 	 * Seed for generating checksum for plugin deduplication
 	 *
-	 * @see https://elysiajs.com/essential/plugin.html#plugin-deduplication
+	 * @see https://elysiajs.com/essential/plugin.html#deduplication
 	 */
 	seed?: unknown
 
@@ -175,13 +175,12 @@ export interface ElysiaConfig<
 	nativeStaticResponse?: boolean
 
 	/**
-	 * Array of callback function to transform a string value defined in a schema
+	 * Callback(s) to transform a string value defined in a schema
 	 *
-	 * This option only works when `sanitlize` is `exactMirror`
+	 * Requires `exact-mirror`; ignored when `normalize` is `false` or `'typebox'`
 	 *
 	 * This only works when set on the main instance
 	 *
-	 * @default true
 	 * @since 1.3.0
 	 */
 	sanitize?: ((value: string) => string) | ((value: string) => string)[]
@@ -382,8 +381,8 @@ export type LocalHook<
 	 * - 'text' / 'text/plain': parse body as string
 	 * - 'json' / 'application/json': parse body as json
 	 * - 'formdata' / 'multipart/form-data': parse body as form-data
-	 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
-	 * - 'arraybuffer': parse body as readable stream
+	 * - 'urlencoded' / 'application/x-www-form-urlencoded': parse body as urlencoded
+	 * - 'arrayBuffer' / 'application/octet-stream': parse body as ArrayBuffer
 	 */
 	parse?: MaybeArray<
 		| BodyHandler<Schema, Singleton & { derive: Schema['derive'] }>
@@ -409,7 +408,7 @@ export type LocalHook<
 		AfterHandler<Schema, Singleton & { derive: Schema['derive'] }>
 	>
 	/**
-	 * Execute after main handler
+	 * Map the returned value to a Response
 	 */
 	mapResponse?: MaybeArray<
 		MapResponse<Schema, Singleton & { derive: Schema['derive'] }>
@@ -439,7 +438,7 @@ export type GuardLocalHook<
 	BeforeHandle extends MaybeArray<OptionalHandler<any, any>>,
 	AfterHandle extends MaybeArray<AfterHandler<any, any>>,
 	ErrorHandle extends MaybeArray<ErrorHandler<any, any, any>>,
-	GuardType extends GuardSchemaType = 'merge'
+	GuardType extends GuardSchemaType = 'override'
 > = (Input extends any ? Input : Prettify<Input>) & {
 	/**
 	 * @default 'override'
@@ -462,8 +461,8 @@ export type GuardLocalHook<
 	 * - 'text' / 'text/plain': parse body as string
 	 * - 'json' / 'application/json': parse body as json
 	 * - 'formdata' / 'multipart/form-data': parse body as form-data
-	 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
-	 * - 'arraybuffer': parse body as readable stream
+	 * - 'urlencoded' / 'application/x-www-form-urlencoded': parse body as urlencoded
+	 * - 'arrayBuffer' / 'application/octet-stream': parse body as ArrayBuffer
 	 */
 	parse?: MaybeArray<BodyHandler<Schema, Singleton> | ContentType | Parser>
 	/**
@@ -479,7 +478,7 @@ export type GuardLocalHook<
 	 */
 	afterHandle?: AfterHandle
 	/**
-	 * Execute after main handler
+	 * Map the returned value to a Response
 	 */
 	mapResponse?: MaybeArray<MapResponse<Schema, Singleton>>
 	/**
@@ -1728,7 +1727,6 @@ type MergeResponseStatus<A> = {
 		A extends ElysiaStatus<any, any, infer Status>
 			? { [A in Status]: 1 }
 			: never
-		// @ts-ignore A is checked in key computation
 	>]: Extract<
 		A,
 		// `status` alone is a shape a handler may write by hand — the brand on
@@ -2506,8 +2504,7 @@ export type ExtractErrorFromHandle<in out Handle> = {
 		AnyElysiaStatus
 	> as ErrorResponse extends AnyElysiaStatus
 		? ErrorResponse['status']
-		: // @ts-ignore
-			never]: Prettify<ErrorResponse['response']>
+		: never]: Prettify<ErrorResponse['response']>
 }
 
 /**

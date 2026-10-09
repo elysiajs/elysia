@@ -201,4 +201,62 @@ describe('mergeDeep', () => {
 		).not.toThrow()
 		expect(inner).toEqual({ a: 1, b: 2 })
 	})
+
+	it('replaces a built-in value such as a Date instead of merging into it', async () => {
+		// a Date has no own keys, so merging into it would keep the old instant
+		expect(
+			mergeDeep({ a: new Date(0) }, { a: new Date(1000) }).a.getTime()
+		).toBe(1000)
+
+		const decorated = new Elysia()
+			.decorate({ now: new Date(0) })
+			.decorate('override', { now: new Date(1000) })
+			.get('/', ({ now }) => String(now.getTime()))
+		const stored = new Elysia()
+			.state({ now: new Date(0) })
+			.state('override', { now: new Date(1000) })
+			.get('/', ({ store }) => String(store.now.getTime()))
+		const plugin = new Elysia()
+			.decorate({ now: new Date(0) })
+			.use(new Elysia().decorate('override', { now: new Date(1000) }))
+			.get('/', ({ now }) => String(now.getTime()))
+
+		for (const app of [decorated, stored, plugin])
+			expect(
+				await app
+					.handle(new Request('http://localhost/'))
+					.then((r) => r.text())
+			).toBe('1000')
+	})
+
+	it('replaces a class instance that marks itself with its own toString()', async () => {
+		// FFI-style values carry no Symbol.toStringTag, only a '[object X]' toString(); merging into one keeps the old private state
+		class Client {
+			#id: number
+			constructor(id: number) {
+				this.#id = id
+			}
+			get id() {
+				return this.#id
+			}
+			toString() {
+				return '[object Client]'
+			}
+		}
+
+		expect(
+			mergeDeep({ a: new Client(0) }, { a: new Client(1000) }).a.id
+		).toBe(1000)
+
+		const app = new Elysia()
+			.decorate({ client: new Client(0) })
+			.decorate('override', { client: new Client(1000) })
+			.get('/', ({ client }) => String(client.id))
+
+		expect(
+			await app
+				.handle(new Request('http://localhost/'))
+				.then((r) => r.text())
+		).toBe('1000')
+	})
 })

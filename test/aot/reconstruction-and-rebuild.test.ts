@@ -26,16 +26,16 @@ describe('AOT reconstruction of named parsers', () => {
 		delete process.env.ELYSIA_AOT_BUILD
 	})
 
-	const build = () =>
+	const build = (parse: 'double' | 'double'[]) =>
 		new Elysia()
 			.parser('double', async ({ request }) => {
 				const text = await request.text()
 				return { doubled: text + text }
 			})
-			.post('/x', { parse: ['double'] }, ({ body }: any) => body)
+			.post('/x', { parse }, ({ body }: any) => body)
 
-	it('invokes the registered parser instead of its name string', async () => {
-		;(build() as any).compile()
+	const replay = async (parse: 'double' | 'double'[]) => {
+		;(build(parse) as any).compile()
 		const handlers = endHandlerCapture()
 		const validators = endValidatorCapture()
 
@@ -48,13 +48,21 @@ describe('AOT reconstruction of named parsers', () => {
 		})
 
 		delete process.env.ELYSIA_AOT_BUILD
-		const frozenApp = build()
+		const frozenApp = build(parse)
 		;(frozenApp as any).compile()
 
 		const res = await frozenApp.handle(post('/x', 'ab'))
 		expect(res.status).toBe(200)
 		await expect(res.json()).resolves.toEqual({ doubled: 'abab' })
-	})
+	}
+
+	it('invokes the registered parser instead of its name string', () =>
+		replay(['double']))
+
+	// `parse: 'x'` and `parse: ['x']` share one public type, so the replayed
+	// handler must get the resolved bare-name parser wrapped like the array
+	it('invokes a registered parser given as a bare name string', () =>
+		replay('double'))
 })
 
 describe('route error hook merging', () => {

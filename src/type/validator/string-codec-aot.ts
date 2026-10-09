@@ -32,6 +32,9 @@ function captureInnerCodec(
 	sanitize: ValidatorOptions['sanitize']
 ): NonNullable<CapturedValidator['innerCodecs']>[number] | undefined {
 	if (schemaHasDangerousProperties(inner)) return
+	// inner defaults aren't reconstructed under seal → refuse this slot so the
+	// route degrades to TypeBox (which fills the default at runtime)
+	if (hasProperty('default', inner)) return
 	const createMirror = getExactMirror()
 	if (!createMirror) return
 
@@ -41,10 +44,8 @@ function captureInnerCodec(
 			Build(inner) as unknown as CheckBuildResult,
 			inner
 		)
-		if (!cf) return
-	} catch {
-		return
-	}
+	} catch {}
+	if (!cf) return
 
 	let decode: CapturedMirror
 	try {
@@ -75,10 +76,6 @@ function captureInnerCodec(
 	} catch {
 		return
 	}
-
-	// inner defaults aren't reconstructed under seal → refuse this slot so the
-	// route degrades to TypeBox (which fills the default at runtime)
-	if (hasProperty('default', inner)) return
 
 	return { open, ...cf, decode }
 }

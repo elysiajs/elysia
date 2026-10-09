@@ -24,29 +24,21 @@ interface RouteSchema {
 
 export interface RouteValidatorOptions
 	extends Omit<ValidatorOptions, 'coerces' | 'schemas' | 'slot'> {
-	schemas?: {
-		body: AnySchema
-		headers: AnySchema
-		query: AnySchema
-		params: AnySchema
-		cookie: AnySchema
-		response: Record<number, AnySchema>
-	}[]
+	schemas?: RouteSchema[]
 }
 
-// @ts-expect-error
-const isTb = (schema: unknown): schema is AnySchema => '~kind' in schema
+const isTb = (schema: AnySchema) => '~kind' in schema
 
 function pickMerge<K extends keyof RouteSchema>(
-	schemas: NonNullable<RouteValidatorOptions['schemas']> | undefined,
+	schemas: RouteSchema[] | undefined,
 	key: K
-): AnySchema[] | undefined {
+): NonNullable<RouteSchema[K]>[] | undefined {
 	if (!schemas) return
 
-	const result: AnySchema[] = []
+	const result: NonNullable<RouteSchema[K]>[] = []
 
 	for (let i = 0; i < schemas.length; i++) {
-		const v = (schemas[i] as any)[key]
+		const v = schemas[i][key]
 		if (v) result.push(v)
 	}
 
@@ -85,9 +77,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 		const mergeSchemas = options?.schemas
 
 		for (const [slot, coerce] of SLOTS) {
-			const merge = pickMerge(mergeSchemas, slot) as
-				| AnySchema[]
-				| undefined
+			const merge = pickMerge(mergeSchemas, slot)
 			if (!route[slot] && !merge?.length) continue
 
 			const reference = Validator.reference(
@@ -106,10 +96,7 @@ export class RouteValidator<const in out T extends RouteSchema> {
 			})
 		}
 
-		const responseMerge = pickMerge(
-			mergeSchemas,
-			'response'
-		) as Record<number, AnySchema>[] | undefined
+		const responseMerge = pickMerge(mergeSchemas, 'response')
 
 		this.response = Validator.response(route.response, {
 			...options,

@@ -5,7 +5,7 @@ https://elysiajs.com/blog/elysia-20.html
 Feature:
 - tree-shake typebox
 - support static TypeBox wiring for Bun builds with `aot()`
-- support difference params prefix in dynamic path
+- support different param prefixes in a dynamic path
 - validator pre-computes default snapshot at construction for safe schema
 - use RFC 9457 by default with `problem` function
 - `t.Cookie(schema, opts)` field-form, wrap individual properties of `t.Object` for per-field cookie attributes/secrets, replacing the need for top-level `sign: ['name']` arrays
@@ -14,18 +14,18 @@ Feature:
 - on Bun, signed-cookie verification uses the native constant-time `crypto.timingSafeEqual` instead of loading `node:crypto`
 
 Breaking Change:
-- see for migration guide https://github.com/elysiajs/elysia/pull/1873#issuecomment-4734573873
+- see the migration guide: https://github.com/elysiajs/elysia/pull/1873#issuecomment-4734573873
 - swap route hook and handler parameter position
-- soft deprecated APIs and remove
+- remove soft-deprecated APIs
 - websocket/trace/autohead is now opt-in
 - change several internal exports
 - `getSchemaValidator` renamed to `Validator.create`
 - `NotFoundError` renamed to `NotFound`
-- `config.encodeSchema` as always enabled. Can't support both in a type safe manner.
+- `config.encodeSchema` is always enabled. Can't support both in a type-safe manner.
 - `derive` now run in `beforeHandle`. `resolve` is removed
-- rename `on<event>()` lifecycle methods to `<event>()` method instea
+- rename `on<event>()` lifecycle methods to `<event>()` instead
 - `onStart` renamed to `setup`, `onStop` renamed to `cleanup`.
-- rename `.onError()` `error()`. `error(Error, fn)` registers a per-class handler, `error(fn)` registers the general error handler
+- rename `.onError()` to `.error()`. `error(Error, fn)` registers a per-class handler, `error(fn)` registers the general error handler
 - inline `{ as: 'global' }` to literal instead
 - rename `scoped` scope to `plugin`
 - remove `.on` due to unsound type safety
@@ -42,7 +42,7 @@ Breaking Change:
 - `.guard()` and `.group()` form now defaults to the 'override' channel instead of 'standalone'
 - rename `schema: standalone` to `schema: 'merge'`
 - wrap API v2
-- remove `.macro(fn)`, use functional macro must be named via the object form `.macro({ name: fn })`
+- remove `.macro(fn)`; a functional macro must be named via the object form `.macro({ name: fn })`
 - remove `.macro(name, definition)`, use `.macro({ [name]: definition })`
 - recommended minimum TypeScript version is 5.7
 - `ElysiaError.problemType` / `problemTitle` removed in favour of `code` plus a `type` accessor
@@ -61,9 +61,10 @@ Breaking Change:
 - remove `fallbackRequestId` from `elysia/utils`; `requestId` is `Bun.randomUUIDv7` on Bun and `crypto.randomUUID` elsewhere
 - `WSCapability.accumulateOptions(target, routeOptions)` drops its unused `path` parameter
 - `WSResponseValidator` (`elysia/ws/types`) is now a `Map<number, WSValidatorLike>` keyed by numeric status instead of an object indexed by status
+- `elysia/trace`: `TraceStream.id` is now typed `string`, matching the runtime request id (UUID); it was never a number in v2
 - `app.handler()` drops its unused 4th `precomputedStatic` parameter: `handler(index, immediate?, route?, aliases?, table?)`
 - remove the `ElysiaFile#length` getter (never read); read `value.size` on Bun (`value` is the `BunFile`) or `(await stats).size` elsewhere
-- `pushField` from `elysia/utils` drops its unused 4th `defaultArray` parameter
+- remove `pushField` from `elysia/utils`
 - adapter `parse.default(context, contentType)` drops its 3rd `normalized` parameter: `contentType` must already be normalized (the framework always passes it normalized), `WebStandardAdapter.parse.default` no longer normalizes it
 - remove the phantom `'~Scope'` type member from `Elysia`
 - remove the protected `Cookie#setCookie` setter (the getter stays)
@@ -89,7 +90,7 @@ Behavior Change:
 - a `.guard()` / `.group()` `schema` other than `'merge'` / `'override'` now throws at registration: a 1.x `schema: 'standalone'` silently fell back to `override`, dropping the guard's own validation on routes with a schema
 - the error thrown when registering on a sealed app names the method that was called (`.get()`, `.beforeHandle()`) and what sealed it (first request, `listen` or `compile`)
 - `context.path` is now readonly, and its notice now fires only when a request hook actually changes the value
-- Validation error `payload.expected` values are shared and deeply froze
+- Validation error `payload.expected` values are shared and deeply frozen
 - Schemas are cloned on first registration and reused by identity
 - Signed-cookie verification now defaults to `verify: 'lazy'`
 - Values returned early from `request()` hooks now pass through `mapResponse` before they are sent.
@@ -106,7 +107,7 @@ Behavior Change:
 - a `file()` / `Blob` response now throws, like every other response path, when `set.headers` holds an enumerable Symbol key
 - off Bun, importing Elysia now requires a global `crypto.randomUUID` (no timestamp-id fallback)
 - `afterHandle` will skip the rest when short-circuit
-- `Error.summary` now use default TypeBox message instead
+- `Error.summary` now uses the default TypeBox message
 - `Error.summary` now support for Standard Schema
 - Validator runs `Convert` and reorders to `Convert -> Check -> DecodeUnsafe` for codec schemas
 - `streamResponse` (adapter utils) now yields raw body chunks
@@ -118,7 +119,7 @@ Behavior Change:
 - unhandled errors no longer leak their `message` to the client when `NODE_ENV=production`
 - thrown/returned generic `Error` or any `ElysiaError` with status >= 500 without explicit `response`, now responds with `Internal Server Error` instead of the raw error message for security reason
 - the JSON error response produced by the response mapper for a returned/mapped `Error` no longer includes the `cause` field, and its `message` is replaced with `Internal Server Error` when `NODE_ENV=production`. Non-production output is unchanged (`{ name, message, cause }`)
-- `file()` responses resolve their `content-type` from case-insensitively file extension
+- `file()` responses resolve their `content-type` from the file extension, case-insensitively
 - synchronous Standard Schema validators no longer force async route emission
 - Bun native static-route `Response` objects are no longer retained on the base Elysia instance during router build
 - `.decorate()` values are not disposed on `stop()`, the app does not own values it was handed; release them with `.cleanup()`

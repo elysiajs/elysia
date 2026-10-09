@@ -1087,7 +1087,6 @@ export function mergeHook(
 	b: Partial<AppHook> | undefined
 ): Partial<AppHook> {
 	if (!b) return a
-	// b is undefined but it's shorter this way
 	if (!a) return b
 
 	for (const key of hookSchemaKeys)
@@ -1139,11 +1138,12 @@ const isObject = (item: any): item is Object =>
 const isClassRegex = /^\s*class\s+/
 const isClass = (v: Object) =>
 	(typeof v === 'function' && isClassRegex.test(v.toString())) ||
-	// Handle Object.create(null)
+	// built-in tag, not `v.toString()`: Date, Map, URL, typed arrays,
+	// `import * as X` ([object Module]) and Symbol.toStringTag values like
+	// [object Prisma]; plain and Object.create(null) objects read [object Object]
+	Object.prototype.toString.call(v) !== '[object Object]' ||
+	// custom marker: FFI values whose own toString() returns '[object X]'
 	(v.toString &&
-		// Handle import * as Sentry from '@sentry/bun'
-		// This also handle [object Date], [object Array]
-		// and FFI value like [object Prisma]
 		v.toString().startsWith('[object ') &&
 		v.toString() !== '[object Object]') ||
 	// If object prototype is not pure, then probably a class-like object

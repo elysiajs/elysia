@@ -15,7 +15,7 @@ export namespace Sucrose {
 		afterResponse?: boolean
 	}
 
-	export type LifeCycle = Partial<Partial<AppHook>>
+	export type LifeCycle = Partial<AppHook>
 }
 
 const allAccessed = Object.freeze({

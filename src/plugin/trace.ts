@@ -3,6 +3,16 @@ import { createTracer, unionTracePhases } from '../trace'
 
 import type { TraceCapability } from '../trace'
 
+// Immutable module-level singleton. `id` embeds `import.meta.url` so a
+// dual-package (duplicated) copy is distinguishable at merge time. No nonce or
+// counter: identical registrations must always yield the same identity so the
+// registrar's name+seed checksum can dedup diamond dependencies.
+const provider = {
+	id: '@elysia/trace@' + import.meta.url,
+	createTracer,
+	unionTracePhases
+} as const satisfies TraceCapability
+
 /**
  * ### elysia/trace
  *
@@ -19,17 +29,6 @@ import type { TraceCapability } from '../trace'
  *     .trace(({ onHandle }) => { ... })
  * ```
  */
-
-// Immutable module-level singleton. `id` embeds `import.meta.url` so a
-// dual-package (duplicated) copy is distinguishable at merge time. No nonce or
-// counter: identical registrations must always yield the same identity so the
-// registrar's name+seed checksum can dedup diamond dependencies.
-const provider = {
-	id: '@elysia/trace@' + import.meta.url,
-	createTracer,
-	unionTracePhases
-} as const satisfies TraceCapability
-
 export const trace = () => {
 	const app = new Elysia({ name: '@elysia/trace', seed: provider.id })
 

@@ -88,7 +88,7 @@ describe('shared schema reference cache', () => {
 		const first = { minSize: 55_529, maxSize: 3_475_708_441 }
 		const second = { minSize: 134_114, maxSize: 43_387_202 }
 
-		expect(propertyChecksum(first)[0]).toBe(propertyChecksum(second)[0])
+		expect(propertyChecksum(first)).toBe(propertyChecksum(second))
 
 		const firstSchema = t.File(first)
 		const secondSchema = t.File(second)

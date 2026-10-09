@@ -227,9 +227,6 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 			inferCompactPrefix(beforeHandlePrefix)
 		)
 
-	if (hook && typeof hook.parse === 'function')
-		hook.parse = [hook.parse] as any
-
 	const parseLength = Array.isArray(hook?.parse) ? hook.parse.length : 0
 	const parseFirst = Array.isArray(hook?.parse) ? hook.parse[0] : hook?.parse
 	const hasMergeBody = !!(hook as any)?.schemas?.some(

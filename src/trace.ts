@@ -60,7 +60,7 @@ export function unionTracePhases(
 }
 
 export interface TraceStream {
-	id: number
+	id: string
 	event: TraceEvent
 	begin: number
 	name?: string
@@ -452,7 +452,7 @@ class TracerHandle {
 			const begin = this.bt?.[index]
 			if (begin !== undefined) {
 				slot.begin({
-					id: this.rid as unknown as number,
+					id: this.rid,
 					event: traceEvents[index],
 					name: this.nm?.[index] ?? traceEvents[index],
 					begin,

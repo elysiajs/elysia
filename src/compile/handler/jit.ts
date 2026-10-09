@@ -53,6 +53,7 @@ import {
 	asyncTail,
 	tailPlain,
 	tailStage,
+	traceName,
 	type AsyncMode,
 	type TailMode,
 	type TraceReporter
@@ -65,7 +66,7 @@ import {
 } from '../../adapter/utils'
 import { ELYSIA_TYPES } from '../../type/constants'
 import type { TraceEvent } from '../../trace'
-import { resolvedTraceOf, traceCapabilityRequired } from '../../generation'
+import { Reconstruct } from './reconstruct'
 import { Capture } from '../aot'
 import { JITProbe } from '../jit-probe'
 
@@ -167,7 +168,7 @@ function parse(
 	report: TraceReporter | undefined,
 	arm: string
 ) {
-	// `describeRoute` already wrapped a bare function parser in an array
+	// `compileHandler` already wrapped a bare function parser in an array
 	let parsers: ContentType | (ContentType | BodyHandler)[] | undefined =
 		hook?.parse
 
@@ -188,14 +189,8 @@ function parse(
 		)
 	}
 
-	let hasFn = false
+	const hasFn = !!parsers?.some((p) => typeof p === 'function')
 	let hasType = false
-	if (parsers)
-		for (let i = 0; i < parsers.length; i++)
-			if (typeof parsers[i] === 'function') {
-				hasFn = true
-				break
-			}
 
 	// 1 structured/form, 2 scalar, 3 file
 	const bodyKind = hasFn
@@ -424,7 +419,6 @@ export function compileHandlerJit(
 		inference,
 		cookieConfig,
 		beforeHandlePrefix,
-		traceHandlers,
 		tracePhases,
 		hasAnyPhase,
 		traceHandleOn,
@@ -639,14 +633,8 @@ export function compileHandlerJit(
 	if (asyncCookieSign) code += 'let _sg\n'
 
 	if (hasTrace) {
-		const traceProvider =
-			resolvedTraceOf(root) ?? resolvedTraceOf(errorRoot)
-		if (!traceProvider) throw new Error(traceCapabilityRequired)
-
-		const wrappedTracers = traceHandlers!.map((fn: any) =>
-			traceProvider.createTracer(fn)
-		)
-		link(wrappedTracers, 'tr')
+		const tracers = Reconstruct.trace(hook!, root)
+		link(tracers, 'tr')
 		link(requestId, 'rid')
 
 		code += `c.rid??=rid()\n`
@@ -1042,11 +1030,7 @@ export function compileHandlerJit(
 				: ''
 
 		if (traceHandleOn) {
-			const handleName =
-				(handler as any)?.name &&
-				typeof (handler as any).name === 'string'
-					? (handler as any).name
-					: 'anonymous'
+			const handleName = traceName(handler)
 
 			code += beginTrace('handle', 1, handleName)
 			const handleChild = buildReport('handle')!.resolveChild(handleName)

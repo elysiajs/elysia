@@ -31,6 +31,7 @@ import {
 } from '../error'
 
 import type { AppHook, CompiledHandler, MaybePromise } from '../types'
+import type { Server } from '../universal/server'
 
 function extractPath(url: string, context: any) {
 	const s = url.indexOf('/', authorityEnd(url))
@@ -342,24 +343,17 @@ export function createFetchHandler(
 	const plainMap = (
 		response: unknown,
 		set: Context['set'],
-		context?: Context,
+		context: Context,
 		sign?: (set: Context['set']) => unknown
-	) =>
-		finalMap(
-			response,
-			set,
-			(context as { request?: Request } | undefined)?.request,
-			sign
-		)
+	) => finalMap(response, set, context.request, sign)
 
 	function mapWithHooks(
 		mapResponseHooks: ((context: Context) => unknown)[],
 		response: unknown,
 		set: Context['set'],
-		context?: Context,
+		context: Context,
 		sign?: (set: Context['set']) => unknown
 	) {
-		if (!context) return baseMapResponse(response, set, undefined, true)
 		;(context as { responseValue?: unknown }).responseValue = response
 
 		const request = context.request
@@ -600,7 +594,7 @@ export function createFetchHandler(
 
 		return async (
 			request: Request,
-			server?: unknown
+			server?: Server | null
 		): Promise<Response> => {
 			const context = new Context(request)
 			materializeSetHeaders(context.set)
@@ -608,7 +602,6 @@ export function createFetchHandler(
 				return emptyResponse.clone() as Response
 
 			const path = extractPath(request.url, context)
-			// @ts-expect-error
 			context.server = server ?? null
 
 			context.rid = requestId()
@@ -655,7 +648,7 @@ export function createFetchHandler(
 					if (watchPath && context.path !== path)
 						warnPathMutation(app)
 
-					for (let i = 0; i < traceLength; i++) endReports[i]?.()
+					for (let j = 0; j < traceLength; j++) endReports[j]?.()
 
 					if (armedAbort(context)) {
 						for (let j = 0; j < traceLength; j++)
@@ -674,8 +667,7 @@ export function createFetchHandler(
 							context
 						)) as Response
 
-						// eslint-disable-next-line sonarjs/no-use-of-empty-return-value -- optional call, result unused
-						afterResponse?.(context)
+						afterResponse(context)
 						return response
 					}
 				}
@@ -712,7 +704,7 @@ export function createFetchHandler(
 		if (hasAsync(onRequests))
 			return async (
 				request: Request,
-				server?: unknown
+				server?: Server | null
 			): Promise<Response> => {
 				const context = new Context(request)
 				materializeSetHeaders(context.set)
@@ -720,7 +712,6 @@ export function createFetchHandler(
 					return emptyResponse.clone() as Response
 
 				const path = extractPath(request.url, context)
-				// @ts-expect-error
 				context.server = server ?? null
 
 				let routed = false
@@ -746,8 +737,7 @@ export function createFetchHandler(
 								context
 							)) as Response
 
-							// eslint-disable-next-line sonarjs/no-use-of-empty-return-value -- optional call, result unused
-							afterResponse?.(context)
+							afterResponse(context)
 							return response
 						}
 					}
@@ -771,14 +761,16 @@ export function createFetchHandler(
 				}
 			}
 
-		return (request: Request, server?: unknown): MaybePromise<Response> => {
+		return (
+			request: Request,
+			server?: Server | null
+		): MaybePromise<Response> => {
 			const context = new Context(request)
 			materializeSetHeaders(context.set)
 			if (armEager(request, context))
 				return emptyResponse.clone() as Response
 
 			const path = extractPath(request.url, context)
-			// @ts-expect-error
 			context.server = server ?? null
 
 			let routed = false
@@ -801,15 +793,13 @@ export function createFetchHandler(
 						if (response instanceof Promise)
 							return response.then(
 								(response) => {
-									// eslint-disable-next-line sonarjs/no-use-of-empty-return-value -- optional call, result unused
-									afterResponse?.(context)
+									afterResponse(context)
 									return response
 								},
 								catchError(context, handleError, afterResponse)
 							)
 
-						// eslint-disable-next-line sonarjs/no-use-of-empty-return-value -- optional call, result unused
-						afterResponse?.(context)
+						afterResponse(context)
 						return response
 					}
 				}
@@ -834,11 +824,13 @@ export function createFetchHandler(
 		}
 	}
 
-	return (request: Request, server?: unknown): MaybePromise<Response> => {
+	return (
+		request: Request,
+		server?: Server | null
+	): MaybePromise<Response> => {
 		const context = new Context(request)
 
 		extractPath(request.url, context)
-		// @ts-expect-error
 		context.server = server ?? null
 
 		try {

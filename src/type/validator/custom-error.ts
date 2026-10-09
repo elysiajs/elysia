@@ -262,11 +262,7 @@ export function buildFindCustomError(
 						: EMPTY_EXTERNALS
 				)
 			} catch {}
-		else
-			try {
-				const c = Compile(node)
-				check = (v) => c.Check(v)
-			} catch {}
+		else check = compileOnce(node)
 
 		if (!check) continue
 
