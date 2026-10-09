@@ -46,7 +46,7 @@ export const replaceFunction = <T extends Function>(
 
 /** @internal */
 export const originalFunction = <T extends Function>(
-	fn: T & { '~original': NoInfer<T> }
+	fn: T & { '~original'?: NoInfer<T> }
 ): T => (fn as any)['~original'] ?? fn
 
 /** @internal */
