@@ -1,5 +1,6 @@
 import { mkdir, readdir, readFile, rename, rm } from 'node:fs/promises'
 import { dirname, relative, resolve } from 'node:path'
+import { parseArgs } from 'node:util'
 
 import {
 	assertBenchSourceFileListCoversStaticImports,
@@ -123,9 +124,14 @@ function captureFixtures(
 }
 
 function option(name: string) {
-	return process.argv
-		.find((argument) => argument.startsWith(`--${name}=`))
-		?.slice(name.length + 3)
+	const { values } = parseArgs({
+		args: process.argv.slice(2),
+		options: { [name]: { type: 'string' } },
+		allowPositionals: true,
+		strict: false
+	})
+	const value = values[name]
+	return typeof value === 'string' ? value : undefined
 }
 
 function effectiveSeed(seed: number) {

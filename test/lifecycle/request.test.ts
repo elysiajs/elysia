@@ -2,7 +2,6 @@ import { Elysia } from '../../src'
 import { trace } from '../../src/plugin/trace'
 
 import { describe, expect, it } from 'bun:test'
-import { delay } from '../utils'
 
 describe('request hooks', () => {
 	it('inject headers to response', async () => {
@@ -39,7 +38,7 @@ describe('request hooks', () => {
 	it('handle async', async () => {
 		const app = new Elysia()
 			.request(async ({ set }) => {
-				await delay(5)
+				await Bun.sleep(5)
 				set.headers.name = 'llama'
 			})
 			.get('/', () => 'hi')

@@ -11,10 +11,6 @@ defaults:
 permissions:
   contents: read
 
-env:
-  # Enable debug logging for actions
-  ACTIONS_RUNNER_DEBUG: true
-
 jobs:
   publish-npm:
     name: 'Publish: npm Registry'
@@ -44,6 +40,9 @@ jobs:
 
       - name: Test
         run: bun run test
+
+      - name: Test (Node)
+        run: bun run test:node
 
       - name: Test
         run: bun run test:cf

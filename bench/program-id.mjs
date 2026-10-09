@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { parseArgs } from 'node:util'
 
 const isBun = typeof Bun !== 'undefined'
 const jsc = isBun ? await import('bun:jsc') : undefined
@@ -12,10 +13,15 @@ const entry = new URL(
 )
 const { Elysia } = await import(entry.href)
 
-const argument = (name, fallback) => {
-	const value = process.argv.find((item) => item.startsWith(`--${name}=`))
-	return value === undefined ? fallback : value.slice(name.length + 3)
-}
+const { values } = parseArgs({
+	args: process.argv.slice(2),
+	options: { mode: { type: 'string' }, size: { type: 'string' } },
+	allowPositionals: true,
+	strict: false
+})
+
+const argument = (name, fallback) =>
+	typeof values[name] === 'string' ? values[name] : fallback
 
 const forceGc = () => {
 	for (let i = 0; i < 3; i++) {

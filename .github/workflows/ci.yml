@@ -24,7 +24,7 @@ jobs:
             - name: Install packages
               run: bun install
 
-            - name: Test (Bun + types + Node)
+            - name: Test (Bun + types)
               run: bun run test
 
             - name: Test (Cloudflare)

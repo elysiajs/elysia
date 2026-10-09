@@ -78,9 +78,6 @@ export const json = (body: Record<string, any> | any[]): RequestInit => ({
 	body: JSON.stringify(body)
 })
 
-export const delay = (delay: number) =>
-	new Promise((resolve) => setTimeout(resolve, delay))
-
 /**
  * How many times validating `value` reaches the global `JSON.parse`.
  * Synchronous validators only: `finally` restores `JSON.parse` before an async

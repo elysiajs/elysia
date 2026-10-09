@@ -1,11 +1,6 @@
 import { build } from 'tsdown'
 
-import pack from './package.json'
-
 const LAZY_SHIM = /^\.\/typebox-(?:value-ops|system-lite)$/
-
-if ('elysia' in pack.dependencies)
-	throw new Error("Error can't be a dependency of itself")
 
 await build({
 	entry: ['src/**/*.ts'],

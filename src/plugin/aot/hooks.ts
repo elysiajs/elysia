@@ -1,7 +1,6 @@
 import {
 	alignStubExtensions,
 	generateCompiledArtifacts,
-	generateCompiledArtifactsIsolated,
 	realPath,
 	resolveEntry,
 	resolveEntryModuleKind,
@@ -50,7 +49,6 @@ export const createAotPluginHooks = (
 	const entryPosix = toPosix(entryPath)
 	const entryRealPosix = toPosix(realPath(entryPath))
 	let entryMatched = false
-	let initial = true
 
 	const isEntry = (id: string) => {
 		const posix = toPosix(id)
@@ -68,19 +66,12 @@ export const createAotPluginHooks = (
 
 	return {
 		async buildStart() {
-			const generated = initial
-				? await generateCompiledArtifacts(
-						entry,
-						options,
-						moduleCondition
-					)
-				: await generateCompiledArtifactsIsolated(
-						entry,
-						options,
-						moduleCondition
-					)
+			const generated = await generateCompiledArtifacts(
+				entry,
+				options,
+				moduleCondition
+			)
 
-			initial = false
 			source = generated.source
 			stub = generated.stub
 			virtualType = generated.virtualType

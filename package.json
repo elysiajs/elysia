@@ -183,7 +183,7 @@
 	],
 	"license": "MIT",
 	"scripts": {
-		"test": "bun run test:functionality && bun run test:types && bun run test:node && bun run test:bundle && bun run test:type-perf",
+		"test": "bun run test:functionality && bun run test:types && bun run test:bundle && bun run test:type-perf",
 		"test:functionality": "bun run build && bun test ./test && bun run test:imports",
 		"test:imports": "bun run test/type-system/import.ts",
 		"test:types": "tsc --project tsconfig.test.json",
@@ -195,14 +195,9 @@
 		"bench": "bun run example/stress/run.ts",
 		"bench:quick": "bun run example/stress/run.ts --quick",
 		"bench:throughput": "bun run example/stress/throughput.ts",
-		"bench:d1": "bun run bench/d1/run.ts record",
-		"bench:d1:aa": "bun run bench/d1/run.ts aa",
-		"bench:d1:gate": "bun run bench/d1/run.ts gate",
-		"bench:d1:selftest": "bun run bench/d1/run.ts self-test",
-		"bench:d1:verify": "bun run bench/d1/run.ts verify",
+		"bench:d1": "bun run bench/d1/run.ts",
 		"dev": "bun run --watch example/a.ts",
-		"build": "bun build.ts",
-		"release": "bun run test && bun publish"
+		"build": "bun build.ts"
 	},
 	"sideEffects": [
 		"./dist/type/exports.mjs",
@@ -219,7 +214,6 @@
 		"memoirist": "1.2.3"
 	},
 	"devDependencies": {
-		"@eslint/eslintrc": "^3.3.5",
 		"@eslint/js": "^10.0.1",
 		"@rspack/core": "^2.1.4",
 		"@types/bun": "^1.3.5",

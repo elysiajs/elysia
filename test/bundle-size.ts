@@ -18,29 +18,11 @@ const baseline: Record<string, number> = baselineExists
 	: {}
 const measured: Record<string, number> = {}
 
-async function printAttribution(source: string) {
-	const esbuild = await import('esbuild')
-
-	const { metafile } = await esbuild.build({
-		stdin: {
-			contents: source,
-			resolveDir: process.cwd(),
-			loader: 'js'
-		},
-		bundle: true,
-		minify: true,
-		format: 'esm',
-		platform: 'node',
-		write: false,
-		metafile: true,
-		outfile: 'out.js',
-		logLevel: 'silent'
-	})
-
+function printAttribution(metafile: Bun.BuildMetafile) {
 	const groups: Record<string, number> = {}
 
 	for (const [input, { bytesInOutput }] of Object.entries(
-		metafile.outputs['out.js'].inputs
+		Object.values(metafile.outputs)[0].inputs
 	)) {
 		let group = input
 
@@ -55,39 +37,18 @@ async function printAttribution(source: string) {
 
 	const sorted = Object.entries(groups).sort(([, a], [, b]) => b - a)
 
-	console.log(
-		'(esbuild attribution below is an approximation of the Bun total)'
-	)
-
 	for (const [group, bytes] of sorted.slice(0, 15))
 		console.log(`${bytes}\t${group}`)
 }
 
 for (const [name, { limit, source }] of Object.entries(cases)) {
 	const result = await Bun.build({
-		entrypoints: ['virtual:entry'],
+		entrypoints: ['./entry.js'],
+		files: { './entry.js': source },
 		target: 'node',
 		format: 'esm',
 		minify: true,
-		plugins: [
-			{
-				name: 'virtual-entry',
-				setup(build) {
-					build.onResolve({ filter: /^virtual:entry$/ }, () => ({
-						path: 'entry',
-						namespace: 'bundle-size'
-					}))
-					build.onLoad(
-						{ filter: /.*/, namespace: 'bundle-size' },
-						() => ({
-							contents: source,
-							loader: 'js',
-							resolveDir: process.cwd()
-						})
-					)
-				}
-			}
-		]
+		metafile: true
 	})
 
 	if (!result.success)
@@ -127,7 +88,7 @@ for (const [name, { limit, source }] of Object.entries(cases)) {
 		)
 
 	if (raw.byteLength > limit) {
-		await printAttribution(source)
+		printAttribution(result.metafile!)
 
 		throw new Error(
 			`${name} bundle exceeds its ${limit}-byte budget (${raw.byteLength} bytes)`
@@ -141,7 +102,7 @@ for (const [name, { limit, source }] of Object.entries(cases)) {
 		const delta = raw.byteLength - base
 
 		if (delta > 1024) {
-			await printAttribution(source)
+			printAttribution(result.metafile!)
 
 			throw new Error(
 				`${name} grew ${delta} bytes over baseline (${raw.byteLength} vs ${base}). If intentional, rerun with UPDATE_BASELINE=1 and commit the baseline.`

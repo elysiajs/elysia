@@ -1,7 +1,6 @@
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { delay } from '../utils'
 
 describe('beforeHandle', () => {
 	it('an app hook can short-circuit the route handler', async () => {
@@ -149,7 +148,7 @@ describe('beforeHandle', () => {
 			'/name/:name',
 			{
 				beforeHandle: async ({ params: { name } }) => {
-					await delay(5)
+					await Bun.sleep(5)
 
 					if (name === 'Watame') return 'Warukunai yo ne'
 				}
@@ -233,7 +232,7 @@ describe('beforeHandle', () => {
 		)
 
 		await app.handle('/handler')
-		await delay(10)
+		await Bun.sleep(10)
 
 		expect(hasAfterHandleResponse).toBe(true)
 		expect(hasAfterResponseResponse).toBe(true)

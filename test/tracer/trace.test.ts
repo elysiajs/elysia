@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia, type TraceProcess, type TraceEvent } from '../../src'
 import { trace } from '../../src/plugin/trace'
-import { delay } from '../utils'
 
 describe('trace', () => {
 	it('inherits plugin', async () => {
@@ -546,7 +545,7 @@ describe('trace', () => {
 			.get('/', async function* () {
 				for (let i = 0; i < 5; i++) {
 					yield `${i}`
-					await delay(1)
+					await Bun.sleep(1)
 				}
 			})
 

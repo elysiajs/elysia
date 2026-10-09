@@ -1,8 +1,14 @@
+import { parseArgs } from 'node:util'
+
 export function integerArgument(name: string, fallback: number) {
-	const value = process.argv
-		.find((argument) => argument.startsWith(`--${name}=`))
-		?.slice(name.length + 3)
-	const parsed = value === undefined ? fallback : Number(value)
+	const { values } = parseArgs({
+		args: process.argv.slice(2),
+		options: { [name]: { type: 'string' } },
+		allowPositionals: true,
+		strict: false
+	})
+	const value = values[name]
+	const parsed = typeof value === 'string' ? Number(value) : fallback
 	return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
 }
 
