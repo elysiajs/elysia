@@ -197,7 +197,8 @@
 		"bench:throughput": "bun run example/stress/throughput.ts",
 		"bench:d1": "bun run bench/d1/run.ts",
 		"dev": "bun run --watch example/a.ts",
-		"build": "bun build.ts"
+		"build": "bun build.ts",
+		"release": "bun run test && bun publish"
 	},
 	"sideEffects": [
 		"./dist/type/exports.mjs",

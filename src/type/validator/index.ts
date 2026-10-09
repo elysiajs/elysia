@@ -29,7 +29,11 @@ import {
 } from '../coerce'
 
 import { ELYSIA_TYPES } from '../constants'
-import { dropCompiledSource, isPureRefinement } from '../shared'
+import {
+	dropCompiledSource,
+	isPureRefinement,
+	replaceFunction
+} from '../shared'
 import { Validator, type ValidatorOptions } from '../../validator'
 
 import {
@@ -171,7 +175,7 @@ function guardRefinement(refinement: Refinement) {
 	}
 
 	guardedChecks.add(guarded)
-	refinement.check = guarded
+	refinement.check = replaceFunction(guarded, check)
 }
 
 function collectRefinements(
@@ -205,7 +209,10 @@ function collectRefinements(
 				if (!group.pure)
 					for (let index = 0; index < members.length; index++) {
 						const refinement = members[index]
-						refinement.check = function (value: unknown) {
+						refinement.check = replaceFunction(function (
+							this: unknown,
+							value: unknown
+						) {
 							const validation = activeRefineValidation
 							const slot = validation?.slots.get(group!)
 							if (slot === undefined)
@@ -248,7 +255,7 @@ function collectRefinements(
 							if (slot.occurrences > slot.recorded) return true
 
 							return slot.verdicts[slot.occurrences - 1][index]
-						}
+						}, group.checks[index])
 						guardedChecks.add(refinement.check)
 					}
 			}

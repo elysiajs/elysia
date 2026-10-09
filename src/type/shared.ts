@@ -36,6 +36,20 @@ export const isPureRefinement = (refinement: object) =>
 	pureRefinements.has(refinement)
 
 /** @internal */
+export const replaceFunction = <T extends Function>(
+	replacement: T,
+	original: Function
+): T & { '~original': T } =>
+	Object.defineProperty(replacement, '~original', {
+		value: (original as any)['~original'] ?? original
+	}) as any
+
+/** @internal */
+export const originalFunction = <T extends Function>(
+	fn: T & { '~original': NoInfer<T> }
+): T => (fn as any)['~original'] ?? fn
+
+/** @internal */
 export const coerceLeafCache = new Map<string, any>()
 
 /** @internal test isolation */
@@ -79,10 +93,32 @@ export function dropCompiledSource(tb: any) {
 
 export function nonAdditionalProperties(
 	node: BaseSchema,
-	seen: WeakSet<object> = new WeakSet()
+	// a node reused at many positions closes at each, a cycle stays open
+	seen: WeakMap<object, BaseSchema> = new WeakMap(),
+	// an allOf member: its top level keys answer to the allOf's
+	// `unevaluatedProperties`, closing it would reject the other members' keys
+	open = false,
+	seenOpen: WeakMap<object, BaseSchema> = new WeakMap(),
+	defs?: Record<string, BaseSchema>
 ): BaseSchema {
-	if (!node || typeof node !== 'object' || seen.has(node)) return node
-	seen.add(node)
+	if (!node || typeof node !== 'object') return node
+
+	defs = node.$defs ?? defs
+	// an open `$ref` into `$defs` is inlined open, the def stays closed elsewhere
+	const def = open && node.$ref && defs?.[node.$ref]
+	if (def) {
+		const r = cloneNode(
+			def,
+			nonAdditionalProperties(def, seen, true, seenOpen, defs)
+		)
+		delete (r as any).$id
+		return r
+	}
+
+	const memo = open ? seenOpen : seen
+	const closed = memo.get(node)
+	if (closed) return closed
+	memo.set(node, node)
 
 	let out: any = node
 
@@ -91,9 +127,9 @@ export function nonAdditionalProperties(
 		out[key] = value
 	}
 
-	const single = (key: string) => {
+	const single = (key: string, top?: boolean) => {
 		const v = (node as any)[key]
-		const r = nonAdditionalProperties(v, seen)
+		const r = nonAdditionalProperties(v, seen, top, seenOpen, defs)
 		if (r !== v) set(key, r)
 	}
 
@@ -102,7 +138,7 @@ export function nonAdditionalProperties(
 		let copy: Record<string, BaseSchema> | undefined
 		for (const k in children) {
 			const v = children[k]
-			const r = nonAdditionalProperties(v, seen)
+			const r = nonAdditionalProperties(v, seen, false, seenOpen, defs)
 			if (r !== v) (copy ??= { ...children })[k] = r
 		}
 		if (copy) set(key, copy)
@@ -114,9 +150,17 @@ export function nonAdditionalProperties(
 	for (const key of ['items', 'anyOf', 'allOf', 'oneOf'] as const) {
 		const arr = (node as any)[key]
 		if (!Array.isArray(arr)) continue
+		// branches at an open node's top level are open too
+		const branch = key === 'allOf' || (open && key !== 'items')
 		let copy: BaseSchema[] | undefined
 		for (let i = 0; i < arr.length; i++) {
-			const r = nonAdditionalProperties(arr[i], seen)
+			const r = nonAdditionalProperties(
+				arr[i],
+				seen,
+				branch,
+				seenOpen,
+				defs
+			)
 			if (r !== arr[i]) (copy ??= [...arr])[i] = r
 		}
 		if (copy) set(key, copy)
@@ -131,13 +175,29 @@ export function nonAdditionalProperties(
 	if (node.patternProperties) record('patternProperties')
 	if (node.$defs) record('$defs')
 
-	if (
-		(node.type === 'object' || (node as any)['~kind'] === 'Object') &&
-		!('additionalProperties' in node)
-	) {
-		out = cloneNode(node, out)
-		out.additionalProperties = false
+	// a Dependent's branches are like allOf members
+	for (const key of ['then', 'else']) single(key, true)
+
+	if (!open && !('additionalProperties' in node)) {
+		const members = 'if' in node ? [out.then, out.else] : out.allOf
+		if (Array.isArray(members)) {
+			// TypeBox applies it to arrays too, an array intersect stays as is
+			if (
+				!('unevaluatedProperties' in node) &&
+				!members.some((member: any) => member?.type === 'array')
+			) {
+				out = cloneNode(node, out)
+				out.unevaluatedProperties = false
+			}
+		} else if (
+			node.type === 'object' ||
+			(node as any)['~kind'] === 'Object'
+		) {
+			out = cloneNode(node, out)
+			out.additionalProperties = false
+		}
 	}
 
+	memo.set(node, out)
 	return out
 }

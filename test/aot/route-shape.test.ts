@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test'
 import { Elysia, t } from '../../src'
 import type { AnyElysia } from '../../src/base'
 import { routeShape } from '../../src/compile/handler'
+import { replaceFunction } from '../../src/type/shared'
 
 const fn = () => 'ok'
 const plain = new Elysia()
@@ -145,4 +146,68 @@ describe('routeShape', () => {
 		it(`keeps k of ${name}`, () => {
 			expect(routeShape(hook as any, handler, root)).toBe(k)
 		})
+})
+
+// Validator compile replaces refine checks in place. An AOT build hashes after
+// its compile, runtime before, so a `k` that sees the replacements never
+// replays and a strip build 500s (#2012)
+const date = new Date().toISOString()
+const refined = t.Refine(t.String(), (v) => v.length > 0)
+const compiles: [name: string, body: any, value: unknown, status: number][] = [
+	[
+		't.Partial with 2 t.Date',
+		t.Partial(t.Object({ id: t.Number(), a: t.Date(), b: t.Date() })),
+		{ id: 1, a: date, b: date },
+		200
+	],
+	[
+		't.Partial with a reused t.Refine',
+		t.Partial(t.Object({ a: refined, b: refined })),
+		{ a: 'a', b: 'b' },
+		200
+	],
+	// a sync guard wraps an async check
+	[
+		'async t.Refine',
+		t.Object({ a: t.Refine(t.String(), (async () => true) as any) }),
+		{ a: 'a' },
+		500
+	]
+]
+
+describe('routeShape across validator compile', () => {
+	for (const [name, body, value, status] of compiles)
+		it(`keeps k of ${name}`, async () => {
+			const k = routeShape({ body }, fn, plain)
+
+			const response = await new Elysia().post('/', { body }, fn).handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify(value)
+				})
+			)
+
+			expect(response.status).toBe(status)
+			expect(routeShape({ body }, fn, plain)).toBe(k)
+		})
+})
+
+// a manifest may reconstruct through another elysia install's module copy
+it('keeps k when another module copy replaces a check', async () => {
+	const copy = await import('../../src/type/shared.ts' + '?copy')
+	expect(copy.replaceFunction).not.toBe(replaceFunction)
+
+	const object = t.ObjectString({ x: t.Number() })
+	const body = t.Partial(t.Object({ a: object, b: object })) as any
+	const k = routeShape({ body }, fn, plain)
+
+	for (const key of ['a', 'b']) {
+		const refinement = body.properties[key].anyOf[1]['~refine'][0]
+		const check = () => true
+		copy.replaceFunction(check, refinement.check)
+		refinement.check = check
+	}
+
+	expect(routeShape({ body }, fn, plain)).toBe(k)
 })

@@ -198,6 +198,47 @@ describe('nested query coercion plans without TypeBox', () => {
 			[{ o: '{"n":1}', s: 'a' }, { s: 'a' }, { o: 'garbage', s: 'a' }]
 		)
 	})
+
+	// each site decodes with its own inner schema, as built
+	it('keeps nested sites apart', () => {
+		assertParity(
+			t.Object({
+				o: t.Object({ n: t.Number() }),
+				xs: t.Array(t.String()),
+				p: t.Object({ s: t.String() })
+			}),
+			[
+				{ o: '{"n":1}', xs: '["a"]', p: '{"s":"b"}' },
+				{ o: '{"n":1,"s":"c"}', xs: '[]', p: '{"s":"b","n":2}' },
+				{ o: '{"n":1}', xs: '["a"]', p: '{"s":1}' }
+			]
+		)
+	})
+
+	// coerce() makes a node reused at two positions one coerced node, its
+	// codec counted once: rebuilt twice, `c` decodes with a shifted codec
+	for (const [name, reused, value] of [
+		['object', t.Object({ x: t.Number() }), ['{"x":1}', { x: 1 }]],
+		['constrained leaf', t.Number({ minimum: 1 }), ['1', 1]]
+	] as const)
+		it(`rebuilds a reused ${name} once`, () => {
+			const schema = t.Object({
+				a: reused,
+				b: reused,
+				c: t.Array(t.String())
+			})
+			freeze(schema)
+			const input = { a: value[0], b: value[0], c: '["u","v"]' }
+			const expected = JSON.stringify({
+				ok: true,
+				value: { a: value[1], b: value[1], c: ['u', 'v'] }
+			})
+
+			expect(JSON.stringify(run(wired(schema), input))).toBe(expected)
+			expect(JSON.stringify(run(bridgeFree(schema), input))).toBe(
+				expected
+			)
+		})
 })
 
 describe('coercion plans that require TypeBox', () => {

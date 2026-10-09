@@ -278,6 +278,288 @@ describe('Normalize', () => {
 		expect(response.status).toBe(422)
 	})
 
+	// a schema reused at many positions is one object: closing it at its
+	// first position only would let an extra key through the others
+	it('strictly validate a reused schema at every position if not normalize', async () => {
+		const shared = t.Object({ x: t.Number() })
+		const app = new Elysia({ normalize: false })
+			.post(
+				'/',
+				{
+					body: t.Object({
+						a: shared,
+						b: shared,
+						list: t.Optional(t.Array(shared)),
+						union: t.Optional(t.Union([shared, t.String()]))
+					})
+				},
+				({ body }) => body
+			)
+			.get('/', { query: t.Object({ a: shared, b: shared }) }, () => 'ok')
+
+		const valid = { a: { x: 1 }, b: { x: 1 } }
+		const extra = { x: 1, extra: 1 }
+		const statuses = []
+		for (const body of [
+			valid,
+			{ ...valid, b: extra },
+			{ ...valid, list: [extra] },
+			{ ...valid, union: extra }
+		])
+			statuses.push((await app.handle('/', json(body))).status)
+
+		const query = (b: unknown) =>
+			app.handle(
+				'/?a=' +
+					encodeURIComponent('{"x":1}') +
+					'&b=' +
+					encodeURIComponent(JSON.stringify(b))
+			)
+		statuses.push((await query({ x: 1 })).status)
+		statuses.push((await query(extra)).status)
+
+		expect(statuses).toEqual([200, 422, 422, 422, 200, 422])
+	})
+
+	// closing every member would reject the other members' keys: an intersect
+	// accepts what any member declares and rejects the rest, nested still strict
+	it('strictly validate an intersect by its members if not normalize', async () => {
+		const x = t.Object({ x: t.Object({ q: t.Number() }) })
+		const app = new Elysia({ normalize: false })
+			.post(
+				'/',
+				{ body: t.Intersect([x, t.Object({ y: t.Number() })]) },
+				({ body }) => body
+			)
+			.post(
+				'/union',
+				{
+					body: t.Intersect([
+						t.Object({ a: t.Number() }),
+						t.Union([
+							t.Object({ b: t.Number() }),
+							t.Object({ c: t.Number() })
+						])
+					])
+				},
+				({ body }) => body
+			)
+			// one object standalone and as a member
+			.post(
+				'/shared',
+				{
+					body: t.Object({
+						x,
+						i: t.Intersect([x, t.Object({ y: t.Number() })])
+					})
+				},
+				({ body }) => body
+			)
+			// `unevaluatedProperties` applies to arrays too, it would reject items
+			.post(
+				'/array',
+				{
+					body: t.Intersect([
+						t.Array(t.Number()),
+						t.Array(t.Number())
+					])
+				},
+				({ body }) => body
+			)
+
+		const valid = { x: { q: 1 }, y: 2 }
+		const statuses = []
+		for (const [path, body] of [
+			['/', valid],
+			['/', { ...valid, z: 1 }],
+			['/', { ...valid, x: { q: 1, z: 1 } }],
+			['/union', { a: 1, b: 2 }],
+			['/union', { a: 1, c: 2 }],
+			['/union', { a: 1, b: 2, z: 1 }],
+			['/shared', { x: { x: { q: 1 } }, i: valid }],
+			['/shared', { x: { x: { q: 1 }, y: 2 }, i: valid }],
+			['/shared', { x: { x: { q: 1 } }, i: { ...valid, z: 1 } }],
+			['/array', [1]],
+			['/array', ['x']]
+		] as const)
+			statuses.push((await app.handle(path, json(body))).status)
+
+		expect(statuses).toEqual([
+			200, 422, 422, 200, 200, 422, 200, 422, 422, 200, 422
+		])
+	})
+
+	// a def closes for every use: an intersect member pointing to it would
+	// reject the other members' keys, so that member reads the def open
+	it('strictly validate a cyclic intersect if not normalize', async () => {
+		const defs = {
+			A: t.Object({
+				x: t.Number(),
+				n: t.Optional(t.Object({ q: t.Number() }))
+			}),
+			B: t.Intersect([
+				t.Ref('A'),
+				t.Object({ y: t.Number(), a: t.Optional(t.Ref('A')) })
+			])
+		}
+		const app = new Elysia({ normalize: false })
+			.post('/', { body: t.Cyclic(defs, 'B') }, ({ body }) => body)
+			.post('/a', { body: t.Cyclic(defs, 'A') }, ({ body }) => body)
+			.post(
+				'/list',
+				{
+					body: t.Cyclic(
+						{ L: t.Array(t.Union([t.Number(), t.Ref('L')])) },
+						'L'
+					)
+				},
+				({ body }) => body
+			)
+			// an array def stays clear of `unevaluatedProperties`
+			.post(
+				'/arrays',
+				{
+					body: t.Cyclic(
+						{
+							L: t.Array(t.Number()),
+							K: t.Array(t.Number({ minimum: 0 })),
+							M: t.Intersect([t.Ref('L'), t.Ref('K')])
+						},
+						'M'
+					)
+				},
+				({ body }) => body
+			)
+			// a cyclic member of an outer intersect opens through its own `$defs`
+			.post(
+				'/nested',
+				{
+					body: t.Intersect([
+						t.Cyclic(defs, 'B'),
+						t.Object({ w: t.Number() })
+					])
+				},
+				({ body }) => body
+			)
+
+		const valid = { x: 1, y: 2 }
+		const statuses = []
+		for (const [path, body] of [
+			['/', valid],
+			['/', { ...valid, z: 1 }],
+			['/', { ...valid, n: { q: 1, z: 1 } }],
+			['/', { ...valid, a: { x: 1 } }],
+			['/', { ...valid, a: { x: 1, y: 2 } }],
+			['/a', { x: 1 }],
+			['/a', { x: 1, y: 2 }],
+			['/list', [1, [2, [3]]]],
+			['/arrays', [1]],
+			['/nested', { ...valid, w: 3 }],
+			['/nested', { ...valid, w: 3, z: 1 }]
+		] as const)
+			statuses.push((await app.handle(path, json(body))).status)
+
+		expect(statuses).toEqual([
+			200, 422, 422, 200, 422, 200, 422, 200, 200, 200, 422
+		])
+	})
+
+	// a Dependent's branches answer to its `unevaluatedProperties` like
+	// intersect members: keys from `if` and the taken branch pass, the rest fail
+	it('strictly validate a Dependent by its branches if not normalize', async () => {
+		const dependent = () =>
+			t.Dependent(
+				t.Object({ kind: t.Literal('a') }),
+				t.Object({
+					a: t.Number(),
+					n: t.Optional(t.Object({ q: t.Number() }))
+				}),
+				t.Object({ kind: t.Literal('b'), b: t.Number() })
+			)
+		const app = new Elysia({ normalize: false })
+			.post('/', { body: dependent() }, ({ body }) => body)
+			.post(
+				'/member',
+				{
+					body: t.Intersect([
+						t.Object({ x: t.Number() }),
+						dependent()
+					])
+				},
+				({ body }) => body
+			)
+			.post(
+				'/property',
+				{ body: t.Object({ d: dependent() }) },
+				({ body }) => body
+			)
+			// spec: a failed `if` drops its annotations, else declares its own keys
+			.post(
+				'/else',
+				{
+					body: t.Dependent(
+						t.Object({ kind: t.Literal('a') }),
+						t.Object({ a: t.Number() }),
+						t.Object({ b: t.Number() })
+					)
+				},
+				({ body }) => body
+			)
+			.post(
+				'/array',
+				{
+					body: t.Dependent(
+						t.Array(t.Number(), { minItems: 1 }),
+						t.Array(t.Number()),
+						t.Array(t.Number())
+					)
+				},
+				({ body }) => body
+			)
+			// `if` is a condition: closing its nested `n` would fail it and take
+			// the else branch, accepting what the schema rejects
+			.post(
+				'/condition',
+				{
+					body: t.Dependent(
+						t.Object({ n: t.Object({ q: t.Number() }) }),
+						t.Object({ a: t.Number() }),
+						t.Object({ n: t.Any(), b: t.Number() })
+					)
+				},
+				({ body }) => body
+			)
+
+		const a = { kind: 'a', a: 1 }
+		const b = { kind: 'b', b: 1 }
+		const statuses = []
+		for (const [path, body] of [
+			['/', a],
+			['/', { ...a, z: 1 }],
+			['/', b],
+			['/', { ...b, z: 1 }],
+			['/', { kind: 'a', b: 1 }],
+			['/', { ...a, n: { q: 1 } }],
+			['/', { ...a, n: { q: 1, z: 1 } }],
+			['/member', { ...a, x: 1 }],
+			['/member', { ...a, x: 1, z: 1 }],
+			['/property', { d: a }],
+			['/property', { d: { ...a, z: 1 } }],
+			['/else', b],
+			['/else', { b: 1 }],
+			['/array', [1]],
+			['/array', ['x']],
+			['/condition', { n: { q: 1, z: 1 }, b: 2 }],
+			['/condition', { n: { q: 1 }, a: 1 }]
+		] as const)
+			statuses.push((await app.handle(path, json(body))).status)
+
+		expect(statuses).toEqual([
+			200, 422, 200, 422, 422, 200, 422, 200, 422, 200, 422, 422, 200,
+			200, 422, 422, 200
+		])
+	})
+
 	it('loosely validate body if not normalize and has additionalProperties', async () => {
 		const app = new Elysia({ normalize: false }).post(
 			'/',

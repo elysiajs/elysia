@@ -16,6 +16,7 @@ export { releaseAnalysisCaches } from './descriptor'
 import { returnedErrorClasses } from '../../handler/utils'
 import { deriveModes, joinDeriveEntries } from './utils'
 import { isAsyncFunction } from '../utils'
+import { originalFunction } from '../../type/shared'
 import { describeRoute } from './descriptor'
 import { Reconstruct } from './reconstruct'
 import { isResponseMap } from './frozen-validator'
@@ -653,6 +654,8 @@ export function routeShape(
 				return feed('U')
 
 			case 'function':
+				// compile replaces refine checks in place
+				v = originalFunction(v)
 				if (ids.has(v)) return feed('#' + ids.get(v))
 				ids.set(v, ids.size)
 				return feed(isAsyncFunction(v) ? 'fa' : 'fs')

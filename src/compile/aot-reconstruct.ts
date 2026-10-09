@@ -12,6 +12,7 @@
  * The build-only source emitters/verifiers live in `aot-emit.ts`.
  */
 import { ELYSIA_TYPES } from '../type/constants'
+import { originalFunction, replaceFunction } from '../type/shared'
 import {
 	EMPTY_EXTERNALS,
 	type FrozenCheckFactory,
@@ -106,7 +107,8 @@ export function collectMirrorCodecs(
 	if (
 		codec &&
 		typeof codec[dir] === 'function' &&
-		out.indexOf(codec[dir]) === -1
+		// dedupe as the build did: a replaced `decode` counts as its original
+		!out.some((fn) => originalFunction(fn) === originalFunction(codec[dir]))
 	)
 		out.push(codec[dir])
 
@@ -240,7 +242,8 @@ export function reconstructInnerCodecs(
 			: (entry.d.s as (value: unknown) => unknown)
 
 		const open = entry.o
-		node.codec['~refine'][0].check = (v: string) => {
+		const refinement = node.codec['~refine'][0]
+		refinement.check = replaceFunction((v: string) => {
 			if (v.charCodeAt(0) !== open) return false
 
 			try {
@@ -248,9 +251,13 @@ export function reconstructInnerCodecs(
 			} catch {
 				return false
 			}
-		}
+		}, refinement.check)
 
-		node.codec['~codec'].decode = (v: string) => innerMirror(JSON.parse(v))
+		const codec = node.codec['~codec']
+		codec.decode = replaceFunction(
+			(v: string) => innerMirror(JSON.parse(v)),
+			codec.decode
+		)
 	}
 }
 

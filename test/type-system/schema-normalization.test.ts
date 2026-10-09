@@ -50,6 +50,24 @@ describe('nonAdditionalProperties $defs traversal', () => {
 	})
 })
 
+describe('nonAdditionalProperties Dependent', () => {
+	// a raw `if: false` still selects a branch, its keys answer to the node
+	it('closes a Dependent whose if is false', () => {
+		const schema = {
+			if: false,
+			then: {},
+			else: {
+				type: 'object' as const,
+				properties: { b: { type: 'number' as const } }
+			}
+		}
+
+		const result = nonAdditionalProperties(schema as any) as any
+		expect(Value.Check(result, { b: 1 })).toBe(true)
+		expect(Value.Check(result, { b: 1, z: 1 })).toBe(false)
+	})
+})
+
 describe('coercion preserves schema markers on cloned containers', () => {
 	it('keeps ~optional and ~refine on a refined+optional container child', () => {
 		const schema = t.Object({

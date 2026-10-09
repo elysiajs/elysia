@@ -94,7 +94,8 @@ const rebuildObjStrShape: RebuildObjStr = (original, site) => {
 					Refine(StringType(), icPlaceholder, () =>
 						isObject ? 'must be an object' : 'must be an array'
 					),
-					icPlaceholder
+					// one per node, the build gave each site its own `decode`
+					() => icPlaceholder()
 				)
 			],
 			meta
@@ -110,12 +111,29 @@ const rebuildObjStrShape: RebuildObjStr = (original, site) => {
 	return node
 }
 
-const buildCoerceNode = (
-	original: any,
+function buildCoerceNode<T>(
+	original: T,
 	node: CoerceNode,
 	seen: Set<string>,
-	objStr: RebuildObjStr
-): any => {
+	objStr: RebuildObjStr,
+	memo: WeakMap<object, any>
+): T {
+	let out = memo.get(original as any)
+	if (!out) {
+		out = rebuildCoerceNode(original, node, seen, objStr, memo)
+		if (original) memo.set(original, out)
+	}
+
+	return out
+}
+
+function rebuildCoerceNode<T>(
+	original: T,
+	node: CoerceNode,
+	seen: Set<string>,
+	objStr: RebuildObjStr,
+	memo: WeakMap<object, any>
+): T {
 	if (isCoerceLeaf(node)) {
 		const key = node.e + (node.c ? JSON.stringify(node.c) : '')
 
@@ -151,9 +169,10 @@ const buildCoerceNode = (
 	}
 
 	if (isCoerceObjStr(node)) return objStr(original, node)
-	if (isCoerceUnion(node)) return rebuildUnion(original, node, seen, objStr)
+	if (isCoerceUnion(node))
+		return rebuildUnion(original, node, seen, objStr, memo)
 
-	return buildCoercedFromPlan(original, node, seen, objStr)
+	return buildCoercedFromPlan(original, node, seen, objStr, memo)
 }
 
 // clone `original` preserving prototype + non-enumerable markers
@@ -175,12 +194,15 @@ function rebuildUnion(
 	original: any,
 	site: CoerceUnion,
 	seen: Set<string>,
-	objStr: RebuildObjStr
+	objStr: RebuildObjStr,
+	memo: WeakMap<object, any>
 ) {
 	const out = cloneSchemaNode(original)
 
 	out.anyOf = (original.anyOf as any[]).map((branch, i) =>
-		site.u[i] ? buildCoerceNode(branch, site.u[i]!, seen, objStr) : branch
+		site.u[i]
+			? buildCoerceNode(branch, site.u[i]!, seen, objStr, memo)
+			: branch
 	)
 
 	return out
@@ -193,10 +215,11 @@ export function buildCoercedFromPlan(
 	original: any,
 	plan: CoerceNode,
 	seen: Set<string> = new Set(),
-	objStr: RebuildObjStr = rebuildObjStrShape
+	objStr: RebuildObjStr = rebuildObjStrShape,
+	memo: WeakMap<object, any> = new WeakMap()
 ) {
 	if (isCoerceLeaf(plan) || isCoerceObjStr(plan) || isCoerceUnion(plan))
-		return buildCoerceNode(original, plan, seen, objStr)
+		return buildCoerceNode(original, plan, seen, objStr, memo)
 
 	const out = cloneSchemaNode(original)
 
@@ -207,13 +230,14 @@ export function buildCoercedFromPlan(
 				original.properties[k],
 				plan.p[k]!,
 				seen,
-				objStr
+				objStr,
+				memo
 			)
 		out.properties = props
 	}
 
 	if (plan.i)
-		out.items = buildCoerceNode(original.items, plan.i, seen, objStr)
+		out.items = buildCoerceNode(original.items, plan.i, seen, objStr, memo)
 
 	return out
 }

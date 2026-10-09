@@ -1010,6 +1010,324 @@ describe('AOT replay of a route that differs from the build', () => {
 		expect(replayed.warnings).toEqual([])
 	})
 
+	// clones share a refine check that the build's compile replaced per clone,
+	// the runtime reuses the same schemas like a module-level one (#2012)
+	it('replays clones of an object reusing a refined field', async () => {
+		const dates = t.Object({ id: t.Number(), a: t.Date(), b: t.Date() })
+		const refined = t.Refine(t.String(), (v: string) => v.length > 0)
+		const partial = t.Partial(dates)
+		const pick = t.Pick(dates, ['a', 'b'])
+		const omit = t.Omit(dates, ['id'])
+		const extended = t.Interface([dates], { c: t.String() })
+		const strings = t.Partial(t.Object({ a: refined, b: refined }))
+		const echo = ({ body }: any) => body
+
+		const app = () =>
+			new Elysia()
+				.post('/partial', { body: partial }, echo)
+				.post('/pick', { body: pick }, echo)
+				.post('/omit', { body: omit }, echo)
+				.post('/interface', { body: extended }, echo)
+				.post('/refine', { body: strings }, echo)
+		const date = new Date(0).toISOString()
+		const value = json({ id: 1, a: date, b: date, c: 'c' })
+		const requests: Row['requests'] = [
+			['/partial', value],
+			['/pick', value],
+			['/omit', value],
+			['/interface', value],
+			['/refine', value],
+			['/refine', json({ a: '' })]
+		]
+
+		const replayed = await replay(app, app)
+
+		expect(await serve(replayed.app, requests)).toEqual(
+			await live(app, requests)
+		)
+		expect(replayed.factoryCalls).toBe(5)
+		expect(replayed.warnings).toEqual([])
+	})
+
+	// the frozen mirror indexes codecs as the build deduped them: clones that
+	// shared one decode still count once, or a later field gets its decode
+	it('replays clones of an object reusing a string codec', async () => {
+		const object = t.ObjectString({ x: t.Number() })
+		const array = t.ArrayString(t.Number())
+		const strings = t.Partial(
+			t.Object({ a: object, b: object, c: array, d: array })
+		)
+		const dated = t.Partial(t.Object({ a: object, b: object, d: t.Date() }))
+		const echo = ({ body }: any) => body
+
+		const app = () =>
+			new Elysia()
+				.post('/strings', { body: strings }, echo)
+				.post('/dated', { body: dated }, echo)
+		const requests: Row['requests'] = [
+			[
+				'/strings',
+				json({ a: '{"x":1}', b: '{"x":2}', c: '[3]', d: '[4]' })
+			],
+			[
+				'/dated',
+				json({
+					a: '{"x":1}',
+					b: '{"x":2}',
+					d: new Date(0).toISOString()
+				})
+			]
+		]
+
+		const replayed = await replay(app, app)
+
+		expect(await serve(replayed.app, requests)).toEqual(
+			await live(app, requests)
+		)
+		expect(replayed.factoryCalls).toBe(2)
+		expect(replayed.warnings).toEqual([])
+	})
+
+	// replaying a route rewrites the clones' check and decode in place, later
+	// routes hash and reconstruct them after, which the build never did
+	it('replays routes sharing clones of a string codec', async () => {
+		const make = () => {
+			const object = t.ObjectString({ x: t.Number() })
+			const body = t.Partial(t.Object({ a: object, b: object }))
+			const { a } = body.properties
+			const { c } = t.Partial(t.Object({ c: object })).properties
+			const { e } = t.Partial(t.Object({ e: object })).properties
+			const echo = ({ body }: any) => body
+
+			return () =>
+				new Elysia()
+					.post('/a', { body }, echo)
+					.post('/b', { body }, echo)
+					// `a` rewritten by /a, `c` never seen
+					.post('/c', { body: t.Object({ a, c, d: t.Date() }) }, echo)
+					// `a` rewritten twice, `e` never seen
+					.post('/d', { body: t.Object({ a, e }) }, echo)
+		}
+		const value = json({
+			a: '{"x":1}',
+			b: '{"x":2}',
+			c: '{"x":3}',
+			d: new Date(0).toISOString(),
+			e: '{"x":5}'
+		})
+		const requests: Row['requests'] = [
+			['/a', value],
+			['/b', value],
+			['/c', value],
+			['/d', value]
+		]
+
+		const replayed = await replay(make(), make())
+
+		expect(await serve(replayed.app, requests)).toEqual(
+			await live(make(), requests)
+		)
+		expect(replayed.factoryCalls).toBe(4)
+		expect(replayed.warnings).toEqual([])
+	})
+
+	// a node reused for two query fields is one coerced node at build: the
+	// rebuild must keep it one, or `c` decodes with a shifted codec
+	it('replays a query reusing one coerced node', async () => {
+		const shared = t.Object({ x: t.Number() })
+		const n = t.Number({ minimum: 1 })
+		const echo = ({ query }: any) => query
+
+		const app = () =>
+			new Elysia()
+				.get(
+					'/object',
+					{ query: t.Object({ a: shared, b: shared, c: t.Date() }) },
+					echo
+				)
+				.get(
+					'/leaf',
+					{ query: t.Object({ a: n, b: n, c: t.Date() }) },
+					echo
+				)
+		const c = '&c=' + new Date(0).toISOString()
+		const requests: Row['requests'] = [
+			[
+				'/object?a=' +
+					encodeURIComponent('{"x":1}') +
+					'&b=' +
+					encodeURIComponent('{"x":2}') +
+					c
+			],
+			['/leaf?a=1&b=2' + c]
+		]
+
+		const replayed = await replay(app, app)
+
+		expect(await serve(replayed.app, requests)).toEqual(
+			await live(app, requests)
+		)
+		expect(replayed.factoryCalls).toBe(2)
+		expect(replayed.warnings).toEqual([])
+	})
+
+	// the build compiles the strict schema: a reused object must be closed at
+	// every position there too, or the replayed check lets an extra key through
+	it('replays a strict schema reusing one object', async () => {
+		const shared = t.Object({ x: t.Number() })
+		const echo = ({ body }: any) => body
+
+		const app = () =>
+			new Elysia({ normalize: false })
+				.post(
+					'/',
+					{
+						body: t.Object({
+							a: shared,
+							b: shared,
+							list: t.Optional(t.Array(shared))
+						})
+					},
+					echo
+				)
+				.get(
+					'/',
+					{ query: t.Object({ a: shared, b: shared }) },
+					() => 'ok'
+				)
+		const valid = { a: { x: 1 }, b: { x: 1 } }
+		const extra = { x: 1, extra: 1 }
+		const query = (b: unknown) =>
+			'/?a=' +
+			encodeURIComponent('{"x":1}') +
+			'&b=' +
+			encodeURIComponent(JSON.stringify(b))
+		const requests: Row['requests'] = [
+			['/', json(valid)],
+			['/', json({ ...valid, b: extra })],
+			['/', json({ ...valid, list: [extra] })],
+			[query({ x: 1 })],
+			[query(extra)]
+		]
+
+		const replayed = await replay(app, app)
+		const answered = (await serve(replayed.app, requests)) as {
+			status: number
+		}[]
+
+		expect(answered.map(({ status }) => status)).toEqual([
+			200, 422, 422, 200, 422
+		])
+		expect(answered).toEqual(await live(app, requests))
+		expect(replayed.factoryCalls).toBe(2)
+		expect(replayed.warnings).toEqual([])
+	})
+
+	// the build compiles the strict intersect: `unevaluatedProperties` on the
+	// allOf, members open at their top level, nested objects still closed
+	it('replays a strict intersect', async () => {
+		const echo = ({ body }: any) => body
+
+		const app = () =>
+			new Elysia({ normalize: false }).post(
+				'/',
+				{
+					body: t.Intersect([
+						t.Object({ x: t.Object({ q: t.Number() }) }),
+						t.Object({ y: t.Number() })
+					])
+				},
+				echo
+			)
+		const valid = { x: { q: 1 }, y: 2 }
+		const requests: Row['requests'] = [
+			['/', json(valid)],
+			['/', json({ ...valid, z: 1 })],
+			['/', json({ ...valid, x: { q: 1, z: 1 } })]
+		]
+
+		const replayed = await replay(app, app)
+		const answered = (await serve(replayed.app, requests)) as {
+			status: number
+		}[]
+
+		expect(answered.map(({ status }) => status)).toEqual([200, 422, 422])
+		expect(answered).toEqual(await live(app, requests))
+		expect(replayed.factoryCalls).toBe(1)
+		expect(replayed.warnings).toEqual([])
+	})
+
+	it('replays a strict cyclic intersect', async () => {
+		const echo = ({ body }: any) => body
+
+		const app = () =>
+			new Elysia({ normalize: false }).post(
+				'/',
+				{
+					body: t.Cyclic(
+						{
+							A: t.Object({ x: t.Number() }),
+							B: t.Intersect([
+								t.Ref('A'),
+								t.Object({ y: t.Number() })
+							])
+						},
+						'B'
+					)
+				},
+				echo
+			)
+		const requests: Row['requests'] = [
+			['/', json({ x: 1, y: 2 })],
+			['/', json({ x: 1, y: 2, z: 3 })]
+		]
+
+		const replayed = await replay(app, app)
+		const answered = (await serve(replayed.app, requests)) as {
+			status: number
+		}[]
+
+		expect(answered.map(({ status }) => status)).toEqual([200, 422])
+		expect(answered).toEqual(await live(app, requests))
+		expect(replayed.factoryCalls).toBe(1)
+		expect(replayed.warnings).toEqual([])
+	})
+
+	it('replays a strict Dependent', async () => {
+		const echo = ({ body }: any) => body
+
+		const app = () =>
+			new Elysia({ normalize: false }).post(
+				'/',
+				{
+					body: t.Dependent(
+						t.Object({ kind: t.Literal('a') }),
+						t.Object({ a: t.Number() }),
+						t.Object({ kind: t.Literal('b'), b: t.Number() })
+					)
+				},
+				echo
+			)
+		const requests: Row['requests'] = [
+			['/', json({ kind: 'a', a: 1 })],
+			['/', json({ kind: 'a', a: 1, z: 1 })],
+			['/', json({ kind: 'b', b: 1 })],
+			['/', json({ kind: 'b', b: 1, z: 1 })]
+		]
+
+		const replayed = await replay(app, app)
+		const answered = (await serve(replayed.app, requests)) as {
+			status: number
+		}[]
+
+		expect(answered.map(({ status }) => status)).toEqual([
+			200, 422, 200, 422
+		])
+		expect(answered).toEqual(await live(app, requests))
+		expect(replayed.factoryCalls).toBe(1)
+		expect(replayed.warnings).toEqual([])
+	})
+
 	// runtime interning must not merge build-distinct schemas, or the app stops replaying
 	it('replays an app whose schemas differ only by a -0 default', async () => {
 		const app = () =>
