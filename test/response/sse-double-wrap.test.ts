@@ -15,7 +15,9 @@ describe('SSE - Response Double Wrapping', () => {
 			})
 		})
 
-		const response = await app.handle(new Request('http://localhost/')).then(r => r.text())
+		const response = await app
+			.handle(new Request('http://localhost/'))
+			.then((r) => r.text())
 
 		// Should NOT double-wrap with "data: data:"
 		expect(response).toBe('data: hello\n\ndata: world\n\n')
@@ -34,7 +36,9 @@ describe('SSE - Response Double Wrapping', () => {
 			})
 		})
 
-		const response = await app.handle(new Request('http://localhost/')).then(r => r.text())
+		const response = await app
+			.handle(new Request('http://localhost/'))
+			.then((r) => r.text())
 
 		expect(response).toBe('data: message1\n\ndata: message2\n\n')
 		expect(response).not.toContain('data: data:')
@@ -60,10 +64,10 @@ describe('SSE - Response Double Wrapping', () => {
 
 	it('should format SSE correctly for generators with explicit SSE configuration', async () => {
 		const { sse } = await import('../../src')
-		
+
 		const app = new Elysia().get('/', ({ set }) => {
 			set.headers['content-type'] = 'text/event-stream'
-			
+
 			return (async function* () {
 				yield sse({ data: 'first message' })
 				yield sse({ data: 'second message' })

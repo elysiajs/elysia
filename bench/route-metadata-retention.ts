@@ -62,8 +62,8 @@ async function main() {
 	if (MACRO && fastPath)
 		throw new Error('macro bench app IS on the fast path (unexpected)')
 
-	// Keepalive: pin `app` via a global so JSC's conservative stack scan cannot
-	// collect the app graph during either snapshot's GC.
+		// Keepalive: pin `app` via a global so JSC's conservative stack scan cannot
+		// collect the app graph during either snapshot's GC.
 	;(globalThis as any).__keepAlive = app
 
 	const preSeal = snapshot()
@@ -79,7 +79,8 @@ async function main() {
 
 	// Touch the pinned app after the final snapshot so it cannot be
 	// dead-code-eliminated before the measurement completes.
-	if ((globalThis as any).__keepAlive !== app) throw new Error('keepalive lost')
+	if ((globalThis as any).__keepAlive !== app)
+		throw new Error('keepalive lost')
 
 	const dObj = postSeal.objectCount - preSeal.objectCount
 	const dHeap = postSeal.heapSize - preSeal.heapSize

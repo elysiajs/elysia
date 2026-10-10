@@ -47,8 +47,7 @@ for (const variant of variants) {
 	validate(variant, await apps[variant].handle(request))
 	listenerCounts[variant] = count
 
-	for (let i = 0; i < warmupSize; i++)
-		fetches[variant](new Request(url))
+	for (let i = 0; i < warmupSize; i++) fetches[variant](new Request(url))
 }
 
 const samples = Object.fromEntries(

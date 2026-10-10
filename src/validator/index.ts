@@ -7,7 +7,11 @@ import { type AnySchema, type StandardSchemaV1Like } from '../type'
 
 import type { ElysiaConfig, MaybePromise } from '../types'
 import type { CoerceOption } from '../type/coerce'
-import { clearCoerceLeafCache, clearSharedReferenceCaches, nonAdditionalProperties } from '../type/shared'
+import {
+	clearCoerceLeafCache,
+	clearSharedReferenceCaches,
+	nonAdditionalProperties
+} from '../type/shared'
 import {
 	Compiled,
 	inAotBuild,
@@ -400,7 +404,9 @@ export class MultiValidator extends Validator {
 			codecs.push(HasCodec(coercedSchema))
 			hasDefaults.push(hd)
 
-			if ((TypeBoxValidator as any).isAsyncMember(coercedSchema, compiled)) {
+			if (
+				(TypeBoxValidator as any).isAsyncMember(coercedSchema, compiled)
+			) {
 				this.isAsync = true
 
 				asyncMembers.push(

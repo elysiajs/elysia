@@ -224,9 +224,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 
 	const parseLength = Array.isArray(hook?.parse) ? hook.parse.length : 0
 	const parseFirst = Array.isArray(hook?.parse) ? hook.parse[0] : hook?.parse
-	const hasMergeBody = !!(hook as any)?.schemas?.some(
-		(s: any) => s?.body
-	)
+	const hasMergeBody = !!(hook as any)?.schemas?.some((s: any) => s?.body)
 
 	const bodylessMethod = method === 'GET' || method === 'HEAD'
 	const hasBody =
@@ -248,8 +246,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		: undefined
 	const hasCookieSign = !!cookieConfig?.hasSign
 
-	const syncCookieSign =
-		hasCookieSign && hasSyncHmac && !inAotBuild()
+	const syncCookieSign = hasCookieSign && hasSyncHmac && !inAotBuild()
 	const asyncCookieSign = hasCookieSign && !syncCookieSign
 
 	const lazyCookieVerify =

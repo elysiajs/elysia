@@ -71,7 +71,9 @@ const appS3 = new Elysia().get('/', () => 'ok')
 
 function handler(app: Elysia<any, any>, header: string) {
 	return () =>
-		app.handle(new Request('http://localhost/', { headers: { cookie: header } }))
+		app.handle(
+			new Request('http://localhost/', { headers: { cookie: header } })
+		)
 }
 
 const scenarios: [name: string, fn: () => Promise<Response>][] = [

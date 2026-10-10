@@ -1,16 +1,16 @@
 {
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "incremental": true,
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"incremental": true,
 
-    "target": "ES2020",
+		"target": "ES2020",
 
-    "module": "ES2022",
+		"module": "ES2022",
 
-    "declaration": false,
+		"declaration": false,
 
-    "types": ["@types/bun"]
-  },
-  "exclude": ["node_modules", "test/cloudflare/**/*"],
-  "include": ["src/**/*", "test/types/**/*", "test/type-system/import.ts"]
+		"types": ["@types/bun"]
+	},
+	"exclude": ["node_modules", "test/cloudflare/**/*"],
+	"include": ["src/**/*", "test/types/**/*", "test/type-system/import.ts"]
 }

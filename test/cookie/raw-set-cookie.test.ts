@@ -33,7 +33,10 @@ describe('raw set-cookie header next to the cookie jar', () => {
 
 		const res = await app.handle(new Request('http://localhost/'))
 
-		expect(res.headers.getSetCookie()).toEqual(['a=1', 'theme=dark; Path=/'])
+		expect(res.headers.getSetCookie()).toEqual([
+			'a=1',
+			'theme=dark; Path=/'
+		])
 	})
 
 	// Streaming lanes map `set` twice; the jar cookie must not repeat

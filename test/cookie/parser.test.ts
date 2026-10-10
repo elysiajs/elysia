@@ -40,7 +40,9 @@ it('keeps decoding and request isolation across raw cookie paths', async () => {
 		expect(Object.keys(first)).toEqual(['data', 'bad'])
 		expect(first.bad).toBe('%E0%A4%A')
 		expect(first.data).toEqual(
-			read === parseCookieRawDeferred ? '%7B%22ok%22%3Atrue%7D' : { ok: true }
+			read === parseCookieRawDeferred
+				? '%7B%22ok%22%3Atrue%7D'
+				: { ok: true }
 		)
 		first.data = 'changed'
 		expect(second.data).not.toBe('changed')

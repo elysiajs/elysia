@@ -326,11 +326,7 @@ describe('model references', () => {
 	it('an eager compile failure cannot expose earlier partial routes', () => {
 		const app = new Elysia()
 			.get('/ok', () => 'ok')
-			.get(
-				'/bad',
-				{ headers: BAD_HEADERS } as any,
-				'hello' as any
-			)
+			.get('/bad', { headers: BAD_HEADERS } as any, 'hello' as any)
 
 		expect(() => app.compile()).toThrow(/Failed to compile route GET \/bad/)
 		expect(() => app.fetch).toThrow(/Failed to compile route GET \/bad/)
@@ -464,17 +460,21 @@ describe('URL authority is not assumed to be a fixed length', () => {
 	//   scheme's own second `/` and swallows the entire host into the path
 	//   for *every* host length, so only `https` rows discriminate here.
 	for (const [label, config, urls] of [
-		['default', undefined, [
-			'http://a/public/admin',
-			'http://ab/public/admin',
-			'http://api/public/admin',
-			'http://a:8/public/admin',
-			'https://a/public/admin',
-			'https://ab/public/admin',
-			'http://a.b/public/admin',
-			'http://x:1/public/admin',
-			'http://a1/public/admin'
-		]],
+		[
+			'default',
+			undefined,
+			[
+				'http://a/public/admin',
+				'http://ab/public/admin',
+				'http://api/public/admin',
+				'http://a:8/public/admin',
+				'https://a/public/admin',
+				'https://ab/public/admin',
+				'http://a.b/public/admin',
+				'http://x:1/public/admin',
+				'http://a1/public/admin'
+			]
+		],
 		[
 			'https (old standardHostname: false offset)',
 			undefined,
@@ -492,14 +492,17 @@ describe('URL authority is not assumed to be a fixed length', () => {
 		]
 	] as const)
 		describe(label, () => {
-			it.each(urls)('%s must not reach the /admin handler', async (url) => {
-				const response = await boundary(config).handle(
-					new Request(url)
-				)
+			it.each(urls)(
+				'%s must not reach the /admin handler',
+				async (url) => {
+					const response = await boundary(config).handle(
+						new Request(url)
+					)
 
-				expect(response.status).toBe(200)
-				await expect(response.text()).resolves.toBe('public')
-			})
+					expect(response.status).toBe(200)
+					await expect(response.text()).resolves.toBe('public')
+				}
+			)
 
 			// A missed anchor made `indexOf` return -1, so `url.slice(-1)` was
 			// the last character of the URL, and with a query string
@@ -525,9 +528,7 @@ describe('URL authority is not assumed to be a fixed length', () => {
 	// `standardHostname`, so it could disagree with `extractPath`: the mount
 	// prefix survived into the sub-app, or the splice landed mid-path and handed
 	// the sub-app an attacker-chosen extra leading segment.
-	it.each([
-		['default', undefined]
-	] as const)(
+	it.each([['default', undefined]] as const)(
 		'mount rewrites the path against the real authority (%s)',
 		async (_label, config) => {
 			const app = new Elysia(config as any).mount(
@@ -552,9 +553,7 @@ describe('URL authority is not assumed to be a fixed length', () => {
 				).resolves.toBe('/sub')
 
 			await expect(
-				(
-					await app.handle(new Request('http://a/mnt/sub?q=1'))
-				).text()
+				(await app.handle(new Request('http://a/mnt/sub?q=1'))).text()
 			).resolves.toBe('/sub?q=1')
 
 			// A short host must not let the client inject a leading segment

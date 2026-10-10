@@ -987,8 +987,8 @@ export async function generateCompiledArtifacts(
 
 		for (const handler of artifacts.handlers)
 			if (handler.alias)
+				// a response param resolves through the route validator like `va`
 				for (const name of handler.alias.split(','))
-					// a response param resolves through the route validator like `va`
 					aliases.add(isResponseParam(name) ? 'va' : name)
 
 		const history = typedApp['~routes']

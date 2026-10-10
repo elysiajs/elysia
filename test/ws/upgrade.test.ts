@@ -7,7 +7,8 @@ import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
 describe('WebSocket upgrade option', () => {
 	it('accepts a static upgrade headers object', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				upgrade: { 'x-powered-by': 'elysia' },
 				open(ws) {
 					ws.send('upgraded')
@@ -29,7 +30,8 @@ describe('WebSocket upgrade option', () => {
 		let called = false
 
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				upgrade(context) {
 					called = context.path === '/ws'
 

@@ -35,9 +35,11 @@ const linkedNames = () => {
 
 const descriptorNames = () =>
 	new Set(
-		[...paramsSource.matchAll(/^\t([a-z0-9]+): (?:\(|staticCloneResolver,?$)/gm)].map(
-			(match) => match[1]!
-		)
+		[
+			...paramsSource.matchAll(
+				/^\t([a-z0-9]+): (?:\(|staticCloneResolver,?$)/gm
+			)
+		].map((match) => match[1]!)
 	)
 
 describe('frozen handler parameter descriptors', () => {
@@ -45,9 +47,7 @@ describe('frozen handler parameter descriptors', () => {
 		const linked = linkedNames()
 		expect(linked.size).toBeGreaterThan(20)
 
-		expect([...descriptorNames()].sort()).toEqual(
-			[...linked].sort()
-		)
+		expect([...descriptorNames()].sort()).toEqual([...linked].sort())
 	})
 
 	it('resolves params positionally, in alias order', () => {

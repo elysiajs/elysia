@@ -63,7 +63,9 @@ describe('1.x argument order', () => {
 
 	it('still serves a static object whose keys are not macros', async () => {
 		const app = (
-			new Elysia().macro({ auth: { beforeHandle: () => 'blocked' } }) as any
+			new Elysia().macro({
+				auth: { beforeHandle: () => 'blocked' }
+			}) as any
 		).get('/x', () => {}, { hello: 'world' })
 
 		await expect((await app.handle('/x')).json()).resolves.toEqual({

@@ -12,14 +12,17 @@ if (lane === 'subtle') {
 }
 
 const { Elysia, t } = await import('../../src')
-const { hasSyncHmac, signCookie, unsignCookie } =
-	await import('../../src/cookie/crypto')
+const { hasSyncHmac, signCookie, unsignCookie } = await import(
+	'../../src/cookie/crypto'
+)
 const { Compiled } = await import('../../src/compile/aot')
 const { Validator } = await import('../../src/validator')
-const { endHandlerCapture, endValidatorCapture } =
-	await import('../../src/compile/aot-capture')
-const { materialise, materialiseHandlers, registerManifest } =
-	await import('../aot/_manifest')
+const { endHandlerCapture, endValidatorCapture } = await import(
+	'../../src/compile/aot-capture'
+)
+const { materialise, materialiseHandlers, registerManifest } = await import(
+	'../aot/_manifest'
+)
 
 assert.equal(hasSyncHmac, lane !== 'subtle')
 

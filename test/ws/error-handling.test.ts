@@ -32,7 +32,8 @@ const within = async (promise: Promise<unknown>, ms: number, what: string) => {
 			promise,
 			new Promise((_, reject) => {
 				timer = setTimeout(
-					() => reject(new Error(`${what} did not happen in ${ms}ms`)),
+					() =>
+						reject(new Error(`${what} did not happen in ${ms}ms`)),
 					ms
 				)
 			})
@@ -55,7 +56,8 @@ describe('WebSocket errors thrown by error hooks', () => {
 			.onError((_ctx: any) => {
 				throw new Error('secondary hook failure')
 			})
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message() {
 					throw new Error('original error')
 				}
@@ -106,7 +108,8 @@ describe('WebSocket rejected message handlers', () => {
 		const handlerRan = Promise.withResolvers<void>()
 
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				async message() {
 					handlerRan.resolve()
 					await Promise.reject(new Error('dispatch rejected'))
@@ -143,7 +146,8 @@ describe('WebSocket rejected message handlers', () => {
 		process.env.NODE_ENV = 'development'
 
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				async message() {
 					throw new Error('boom async')
 				}
@@ -181,7 +185,8 @@ describe('WebSocket production validation errors without error hooks', () => {
 		process.env.NODE_ENV = 'production'
 
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				body: t.Object({ x: t.Number() }),
 				message() {}
 			})
@@ -219,7 +224,8 @@ describe('WebSocket production validation errors without error hooks', () => {
 		process.env.NODE_ENV = 'production'
 
 		const app = new Elysia({ allowUnsafeValidationDetails: true })
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				body: t.Object({ x: t.Number() }),
 				message() {}
 			})
@@ -262,7 +268,8 @@ describe('WebSocket upgrade validation error responses', () => {
 				if (error instanceof ValidationError)
 					return status(401, 'denied')
 			})
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				query: t.Object({ name: t.String() }),
 				message() {}
 			})
@@ -294,7 +301,8 @@ describe('WebSocket upgrade validation error responses', () => {
 				if (error instanceof ValidationError)
 					return status(403, { msg: 'forbidden' })
 			})
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				query: t.Object({ name: t.String() }),
 				message() {}
 			})
@@ -335,7 +343,8 @@ describe('WebSocket self-describing errors', () => {
 	// was the empty message of an error that never carried one
 	it('serves a problem frame for a thrown HTTPError', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message() {
 					throw new OutOfCredit()
 				}
@@ -376,7 +385,8 @@ describe('WebSocket self-describing errors', () => {
 		}
 
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message() {
 					throw new Legacy()
 				}
@@ -409,7 +419,8 @@ describe('WebSocket self-describing errors', () => {
 	it('adopts the error type into a problem returned by an error hook', async () => {
 		const app = new Elysia()
 			.onError(() => problem(402, { detail: 'from hook' }))
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message() {
 					throw new OutOfCredit()
 				}
@@ -444,7 +455,8 @@ describe('WebSocket self-describing errors', () => {
 			.get('/http', () => {
 				throw new OutOfCredit()
 			})
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message() {
 					throw new OutOfCredit()
 				}
@@ -603,13 +615,9 @@ describe('WebSocket message error status in mapResponse', () => {
 		}
 		const app = new Elysia()
 			.use(websocket())
-			.get(
-				'/h',
-				{ error: () => status(418, 'tea'), mapResponse },
-				() => {
-					throw new Error('x')
-				}
-			)
+			.get('/h', { error: () => status(418, 'tea'), mapResponse }, () => {
+				throw new Error('x')
+			})
 			.ws('/ws', {
 				error: () => status(418, 'tea'),
 				mapResponse,

@@ -80,7 +80,8 @@ function nestedOwnDefaultDiverges(objectSchema: any) {
 		if ('default' in child) {
 			if (
 				!(key in own) ||
-				stableStringify((own as any)[key]) !== stableStringify(child.default)
+				stableStringify((own as any)[key]) !==
+					stableStringify(child.default)
 			)
 				return true
 		} else if (child['~kind'] === 'Object' || child.type === 'object') {
@@ -740,7 +741,11 @@ export function verifyPreallocatableDefault(schema: TSchema, validate = true) {
 		const root = emitMerger(schema, helpers)
 		if (root) ms = `(function(){${helpers.join(';')};return ${root}})()`
 	}
-	if (ms !== undefined && validate && !probe().validateMergeSource(schema, ms))
+	if (
+		ms !== undefined &&
+		validate &&
+		!probe().validateMergeSource(schema, ms)
+	)
 		ms = undefined
 
 	if (!nullDefault && ms === undefined) {

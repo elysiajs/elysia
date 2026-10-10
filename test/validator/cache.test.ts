@@ -7,7 +7,10 @@ import { Type, type TSchema } from 'typebox'
 import { Elysia, t } from '../../src'
 import { post, json } from '../utils'
 import { TypeBoxValidatorCache } from '../../src/type/validator'
-import { fnKey, computeSchemaMeta } from '../../src/type/validator/validator-cache'
+import {
+	fnKey,
+	computeSchemaMeta
+} from '../../src/type/validator/validator-cache'
 import { Validator } from '../../src/validator'
 import {
 	beginValidatorCapture,
@@ -692,7 +695,6 @@ describe('TypeBoxValidatorCache walk reentrancy', () => {
 describe('TypeBoxValidatorCache idle timer', () => {
 	it('does not retain an abandoned cache', () => {
 		let ref: WeakRef<TypeBoxValidatorCache> | undefined
-
 		;(() => {
 			const cache = new TypeBoxValidatorCache(60_000)
 			cache.set(Type.Object({ gone: Type.String() }), undefined, {

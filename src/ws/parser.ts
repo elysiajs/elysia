@@ -46,10 +46,7 @@ export function createMessageParser(
 		| undefined
 ) {
 	if (!parsers || parsers.length === 0)
-		return function parse(
-			_ws: unknown,
-			rawMessage: string | Buffer
-		) {
+		return function parse(_ws: unknown, rawMessage: string | Buffer) {
 			return defaultWSParse(rawMessage)
 		}
 
@@ -72,10 +69,7 @@ export function createMessageParser(
 		return value
 	}
 
-	return function parse(
-		ws: unknown,
-		rawMessage: string | Buffer
-	) {
+	return function parse(ws: unknown, rawMessage: string | Buffer) {
 		let value = defaultWSParse(rawMessage)
 
 		for (let i = 0; i < parsers.length; i++) {

@@ -224,7 +224,8 @@ describe('Exact Mirror', () => {
 		)
 
 		const response = await app.handle(
-			'/test', json({
+			'/test',
+			json({
 				foo: 'asd'
 			})
 		)

@@ -261,7 +261,11 @@ export function collectHTMLBundleRoutes(
 		if (isHTMLBundle(handler)) continue
 
 		const targets =
-			method === '*' ? dynamic : dynamic.has(method) ? [method] : undefined
+			method === '*'
+				? dynamic
+				: dynamic.has(method)
+					? [method]
+					: undefined
 		if (!targets) continue
 
 		for (const variant of expandOptional(path)) {
@@ -271,7 +275,9 @@ export function collectHTMLBundleRoutes(
 					? variant
 					: getLoosePath(variant)
 
-			for (const raw of loose === variant ? [variant] : [variant, loose]) {
+			for (const raw of loose === variant
+				? [variant]
+				: [variant, loose]) {
 				if (!isNativePath(raw)) {
 					if (!isProduction())
 						console.warn(
@@ -470,9 +476,7 @@ export const BunAdapter = createAdapter({
 		let modulesReady: Promise<void> | undefined
 
 		let pendingSetups: Promise<unknown>[] | undefined
-		let setupsSettled:
-			| Promise<PromiseSettledResult<unknown>[]>
-			| undefined
+		let setupsSettled: Promise<PromiseSettledResult<unknown>[]> | undefined
 
 		const build = () => {
 			const fetch = app.fetch
@@ -772,7 +776,6 @@ export const BunAdapter = createAdapter({
 				const quiescence = quiesce(forceRequested || !published)
 				let releasable = false
 				let abandonedSetups: typeof setupsSettled
-
 				;(async () => {
 					try {
 						await Promise.resolve()

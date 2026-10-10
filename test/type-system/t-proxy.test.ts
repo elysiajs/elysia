@@ -31,9 +31,12 @@ function run(script: string) {
  * `in` — has to keep seeing the object it used to be.
  */
 describe('t namespace proxy', () => {
-	const eager = { ...typebox, ...Object.fromEntries(
-		Object.keys(OVERRIDE_MAP).map((name) => [name, (t as any)[name]])
-	) }
+	const eager = {
+		...typebox,
+		...Object.fromEntries(
+			Object.keys(OVERRIDE_MAP).map((name) => [name, (t as any)[name]])
+		)
+	}
 
 	it('enumerates the same keys, in the same order, as the eager object', () => {
 		expect(Object.keys(t)).toEqual(Object.keys(eager))

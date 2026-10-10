@@ -432,7 +432,10 @@ for (const section of throughput) {
 }
 for (const section of throughput)
 	if (section.error)
-		markdown.push('', `> Throughput ${section.file}: ${cell(section.error)}`)
+		markdown.push(
+			'',
+			`> Throughput ${section.file}: ${cell(section.error)}`
+		)
 
 markdown.push('', '### Emitted route size', '')
 markdown.push('| route | bytes |')

@@ -31,10 +31,11 @@ import type { ElysiaAotOptions } from './core'
 export type AotTarget = 'bun' | 'node' | 'workerd'
 export type AotModuleCondition = 'esm' | 'cjs'
 
-export interface CompileToSourceOptions extends Pick<
-	ElysiaAotOptions,
-	'registerFrom' | 'reconstructFrom' | 'lazy' | 'target'
-> {
+export interface CompileToSourceOptions
+	extends Pick<
+		ElysiaAotOptions,
+		'registerFrom' | 'reconstructFrom' | 'lazy' | 'target'
+	> {
 	/** @internal Package condition used by the entry that owns this manifest. */
 	moduleCondition?: AotModuleCondition
 }

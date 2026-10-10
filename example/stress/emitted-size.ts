@@ -98,9 +98,9 @@ const resolve = (entry: unknown): ((...args: any[]) => unknown) | undefined => {
 	const direct = record.f ?? record.handler
 	if (typeof direct === 'function') return direct as any
 
-	return Object.values(record).find((value) => typeof value === 'function') as
-		| ((...args: any[]) => unknown)
-		| undefined
+	return Object.values(record).find(
+		(value) => typeof value === 'function'
+	) as ((...args: any[]) => unknown) | undefined
 }
 
 for (const probe of probes) {

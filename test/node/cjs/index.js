@@ -71,9 +71,7 @@ const main = async () => {
 
 	const text = chunks.map((c) => new TextDecoder().decode(c)).join('')
 	if (text !== 'hello world')
-		throw new Error(
-			`❌ stream text is "${text}", expected "hello world"`
-		)
+		throw new Error(`❌ stream text is "${text}", expected "hello world"`)
 
 	console.log('✅ CommonJS Node.js stream chunks are Uint8Array')
 
@@ -227,7 +225,9 @@ const main = async () => {
 		const mutablePath = join(temp, 'mutable.txt')
 		await writeFile(mutablePath, 'abc')
 		const mutableApp = new Elysia().get('/file', file(mutablePath))
-		await (await mutableApp.handle(new Request('http://localhost/file'))).text()
+		await (
+			await mutableApp.handle(new Request('http://localhost/file'))
+		).text()
 		await writeFile(mutablePath, 'abcdefghij')
 		const changed = await mutableApp.handle(
 			new Request('http://localhost/file')
@@ -261,7 +261,9 @@ const main = async () => {
 					.get('/file', value)
 					.handle(new Request('http://localhost/file'))
 				if ((await hooked.text()) !== 'abcdefghij')
-					throw new Error(`❌ CommonJS Node.js static file with ${hook} lost its body`)
+					throw new Error(
+						`❌ CommonJS Node.js static file with ${hook} lost its body`
+					)
 			}
 
 		process.on('unhandledRejection', onUnhandled)
@@ -280,7 +282,10 @@ const main = async () => {
 		const recovered = await missingApp.handle(
 			new Request('http://localhost/file')
 		)
-		if (recovered.status !== 200 || (await recovered.text()) !== 'recovered')
+		if (
+			recovered.status !== 200 ||
+			(await recovered.text()) !== 'recovered'
+		)
 			throw new Error('❌ CommonJS Node.js missing file did not recover')
 	} finally {
 		process.off('unhandledRejection', onUnhandled)

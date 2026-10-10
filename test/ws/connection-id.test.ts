@@ -6,7 +6,8 @@ import { newWebsocket, wsOpen, wsMessage, wsClosed } from './utils'
 describe('WebSocket connection id', () => {
 	it('assigns distinct non-empty ids to concurrent connections', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message(ws) {
 					ws.send(ws.id)
 				}
@@ -39,7 +40,8 @@ describe('WebSocket connection id', () => {
 
 	it('reuses one id for every message on a connection', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message(ws, message) {
 					ws.send(`${message}:${ws.id}`)
 				}

@@ -15,7 +15,9 @@ import {
 const config = { cookie: { secrets: 'secret', sign: ['session'] } }
 
 const roundTrip = async (app: any, path: string, method = 'GET') => {
-	const res = await app.handle(new Request(`http://localhost${path}`, { method }))
+	const res = await app.handle(
+		new Request(`http://localhost${path}`, { method })
+	)
 	const setCookie = res.headers.get('set-cookie')
 	expect(setCookie).not.toBeNull()
 
@@ -54,12 +56,15 @@ describe('signed cookies on every compiled lane', () => {
 
 	it('signs when the handler calls defer()', async () => {
 		const app = withMe(
-			new Elysia(config).get('/login', ({ cookie: { session }, defer }) => {
-				session.value = 'user-42'
-				defer(() => {})
+			new Elysia(config).get(
+				'/login',
+				({ cookie: { session }, defer }) => {
+					session.value = 'user-42'
+					defer(() => {})
 
-				return 'ok'
-			})
+					return 'ok'
+				}
+			)
 		)
 
 		expect((await roundTrip(app, '/login')).me).toBe(200)
@@ -95,11 +100,14 @@ describe('signed cookies on every compiled lane', () => {
 
 	it('signs on a thrown status without an error hook', async () => {
 		const app = withMe(
-			new Elysia(config).get('/login', ({ cookie: { session }, status }) => {
-				session.value = 'user-42'
+			new Elysia(config).get(
+				'/login',
+				({ cookie: { session }, status }) => {
+					session.value = 'user-42'
 
-				throw status(409, 'conflict')
-			})
+					throw status(409, 'conflict')
+				}
+			)
 		)
 
 		expect((await roundTrip(app, '/login')).status).toBe(409)
@@ -108,12 +116,15 @@ describe('signed cookies on every compiled lane', () => {
 
 	it('signs on an async rejection without an error hook', async () => {
 		const app = withMe(
-			new Elysia(config).get('/login', async ({ cookie: { session } }) => {
-				session.value = 'user-42'
-				await Promise.resolve()
+			new Elysia(config).get(
+				'/login',
+				async ({ cookie: { session } }) => {
+					session.value = 'user-42'
+					await Promise.resolve()
 
-				throw new Error('boom')
-			})
+					throw new Error('boom')
+				}
+			)
 		)
 
 		expect((await roundTrip(app, '/login')).me).toBe(200)
@@ -562,7 +573,11 @@ describe('error and mapResponse hooks sign on every lane', () => {
 	for (const lane of ['jit', 'subtle', 'aot'] as const)
 		it(lane, async () => {
 			const child = Bun.spawn(
-				[process.execPath, import.meta.dir + '/sign-lanes.fixture.ts', lane],
+				[
+					process.execPath,
+					import.meta.dir + '/sign-lanes.fixture.ts',
+					lane
+				],
 				{ stdout: 'pipe', stderr: 'pipe' }
 			)
 			const timeout = setTimeout(() => child.kill(), 10_000)

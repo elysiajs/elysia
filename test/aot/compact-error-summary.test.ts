@@ -37,7 +37,6 @@ function captureRouteCount(count: number, verbose = false): string[] {
 				{ query: t.Object({ n: t.Numeric() }) },
 				({ query }) => query
 			)
-
 		;(app as any).compile()
 		endValidatorCapture()
 		endHandlerCapture()

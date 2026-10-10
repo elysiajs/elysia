@@ -1,8 +1,4 @@
-import {
-	ElysiaStatus,
-	ParseError,
-	ValidationError,
-} from '../../error'
+import { ElysiaStatus, ParseError, ValidationError } from '../../error'
 import { parseQueryFromURL } from '../../parse-query'
 import {
 	parseCookieRaw,
@@ -65,75 +61,76 @@ let _handlerParams: Record<string, Resolver | undefined> | undefined
 
 const handlerParams = (): Record<string, Resolver | undefined> =>
 	(_handlerParams ??= {
-	// parse adapter
-	pf: (c) => c.parse.formData,
-	pj: (c) => c.parse.json,
-	pu: (c) => c.parse.urlencoded,
-	pa: (c) => c.parse.arrayBuffer,
-	pt: (c) => c.parse.text,
-	pd: (c) => c.parse.default,
-	nc: () => normalizeContentType,
-	hb: () => hasRequestBody,
-	qa: (c) => getQueryParseChannels((c.vali as any)?.query?.schema)?.array,
-	qo: (c) => getQueryParseChannels((c.vali as any)?.query?.schema)?.object,
-	// response adapter
-	rm: (c) => c.res.map,
-	rc: (c) => c.res.compact,
-	// constants
-	rid: () => requestId,
-	pq: () => parseQueryFromURL,
-	pe: () => ParseError,
-	es: () => ElysiaStatus,
-	sm: () => StatusMap,
-	rdc: () => replaceDeriveContext,
-	dsp: () => registerDeriveDisposable,
-	dds: () => drainDisposables,
-	emp: () => emptyResponse,
-	// route-entry abort probe
-	ea: () => armEntryAbort,
-	// allowUnsafeValidationDetails opt-in: `e instanceof verr` in the error catch
-	verr: () => ValidationError,
-	tee: () => tee,
-	obs: () => observeStream,
-	msh: () => materializeSetHeaders,
-	cr: () => cloneResponse,
-	scl: staticCloneResolver,
-	pcr: () => parseCookieRaw,
-	pcrs: () => parseCookieRawSync,
-	pcrsg: () => parseCookieRawSigned,
-	pcrl: () => parseCookieRawLazy,
-	pcrd: () => parseCookieRawDeferred,
-	bcj: () => buildCookieJar,
-	// `scv` cookie sign (async WebCrypto path; sync `node:crypto` path when
-	// `hasSyncHmac`, resolved internally by `signCookieValues`).
-	scv: () => signCookieValues,
-	// validator
-	va: (c) => c.vali,
-	// returned-error forwarder
-	fe: () => forwardError,
-	// `fe` that also rethrows a registered non-Error class
-	ie: (c) => {
-		const classes = returnedErrorClasses(c.hook as any)
-		return classes ? forwardErrorOf(classes) : forwardError
-	},
-	// route-level error boundary
-	fre: (c) => finalizeRouteErrorOf(c.hook as any),
-	// shared error fallback, reached once every error hook has declined
-	fbr: () => fallbackResponse,
-	// adopts the error's `type` into an unspecified problem a hook returned
-	aet: () => adoptErrorType,
-	rt: (c) => c.root,
-	// route hook
-	ho: (c) => c.hook,
-	tf: (c) => c.hook.transform,
-	bf: (c) => c.hook.beforeHandle,
-	af: (c) => c.hook.afterHandle,
-	mr: (c) => c.hook.mapResponse,
-	er: (c) => c.hook.error,
-	ar: (c) => c.hook.afterResponse,
-	// per route compute
-	tr: (c) => c.tracers,
-	cc: (c) => c.cookieConfig
+		// parse adapter
+		pf: (c) => c.parse.formData,
+		pj: (c) => c.parse.json,
+		pu: (c) => c.parse.urlencoded,
+		pa: (c) => c.parse.arrayBuffer,
+		pt: (c) => c.parse.text,
+		pd: (c) => c.parse.default,
+		nc: () => normalizeContentType,
+		hb: () => hasRequestBody,
+		qa: (c) => getQueryParseChannels((c.vali as any)?.query?.schema)?.array,
+		qo: (c) =>
+			getQueryParseChannels((c.vali as any)?.query?.schema)?.object,
+		// response adapter
+		rm: (c) => c.res.map,
+		rc: (c) => c.res.compact,
+		// constants
+		rid: () => requestId,
+		pq: () => parseQueryFromURL,
+		pe: () => ParseError,
+		es: () => ElysiaStatus,
+		sm: () => StatusMap,
+		rdc: () => replaceDeriveContext,
+		dsp: () => registerDeriveDisposable,
+		dds: () => drainDisposables,
+		emp: () => emptyResponse,
+		// route-entry abort probe
+		ea: () => armEntryAbort,
+		// allowUnsafeValidationDetails opt-in: `e instanceof verr` in the error catch
+		verr: () => ValidationError,
+		tee: () => tee,
+		obs: () => observeStream,
+		msh: () => materializeSetHeaders,
+		cr: () => cloneResponse,
+		scl: staticCloneResolver,
+		pcr: () => parseCookieRaw,
+		pcrs: () => parseCookieRawSync,
+		pcrsg: () => parseCookieRawSigned,
+		pcrl: () => parseCookieRawLazy,
+		pcrd: () => parseCookieRawDeferred,
+		bcj: () => buildCookieJar,
+		// `scv` cookie sign (async WebCrypto path; sync `node:crypto` path when
+		// `hasSyncHmac`, resolved internally by `signCookieValues`).
+		scv: () => signCookieValues,
+		// validator
+		va: (c) => c.vali,
+		// returned-error forwarder
+		fe: () => forwardError,
+		// `fe` that also rethrows a registered non-Error class
+		ie: (c) => {
+			const classes = returnedErrorClasses(c.hook as any)
+			return classes ? forwardErrorOf(classes) : forwardError
+		},
+		// route-level error boundary
+		fre: (c) => finalizeRouteErrorOf(c.hook as any),
+		// shared error fallback, reached once every error hook has declined
+		fbr: () => fallbackResponse,
+		// adopts the error's `type` into an unspecified problem a hook returned
+		aet: () => adoptErrorType,
+		rt: (c) => c.root,
+		// route hook
+		ho: (c) => c.hook,
+		tf: (c) => c.hook.transform,
+		bf: (c) => c.hook.beforeHandle,
+		af: (c) => c.hook.afterHandle,
+		mr: (c) => c.hook.mapResponse,
+		er: (c) => c.hook.error,
+		ar: (c) => c.hook.afterResponse,
+		// per route compute
+		tr: (c) => c.tracers,
+		cc: (c) => c.cookieConfig
 	})
 
 /**

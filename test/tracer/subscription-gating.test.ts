@@ -167,7 +167,10 @@ describe('trace subscription gating', () => {
 			'use before the alias',
 			'(p) => { const run = () => alias.onHandle(fire); const alias = p; run() }'
 		],
-		['chained assignment', '(p) => { let a, b; a = b = p; a.onHandle(fire) }'],
+		[
+			'chained assignment',
+			'(p) => { let a, b; a = b = p; a.onHandle(fire) }'
+		],
 		['assignment as an argument', '(p) => { hold(alias = p) }']
 	])('instruments every phase for an alias by %s', async (_, source) => {
 		let fired = 0

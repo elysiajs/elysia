@@ -246,9 +246,9 @@ describe('AOT manifest ownership and compiler sessions', () => {
 			const app = new Elysia({ precompile: true }).get(path, () => path)
 			const artifacts = await captureArtifacts(app)
 
-			expect(artifacts.handlers.some((handler) => handler.path === path)).toBe(
-				true
-			)
+			expect(
+				artifacts.handlers.some((handler) => handler.path === path)
+			).toBe(true)
 			await expect(
 				app.handle(path).then((response) => response.text())
 			).resolves.toBe(path)

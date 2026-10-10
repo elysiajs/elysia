@@ -21,7 +21,10 @@ describe('AOT plugin source transforms', () => {
 		const packageRoot = resolve(import.meta.dir, '../..')
 		const hooks = createAotPluginHooks(resolve(packageRoot, 'src/index.ts'))
 
-		for (const leaf of ['src/type/typebox-type.ts', 'dist/type/typebox-type.mjs'])
+		for (const leaf of [
+			'src/type/typebox-type.ts',
+			'dist/type/typebox-type.mjs'
+		])
 			expect(hooks.transform('', resolve(packageRoot, leaf))).toContain(
 				`export * from './typebox-type-live`
 			)
@@ -62,7 +65,9 @@ describe('AOT plugin source transforms', () => {
 				`dist/${leaf}.mjs`,
 				`dist/${leaf}.js`
 			])
-				expect(hooks.transform('', resolve(packageRoot, file))).toBe(stub)
+				expect(hooks.transform('', resolve(packageRoot, file))).toBe(
+					stub
+				)
 	})
 
 	it('wires only the static TypeBox leaves without an entry', () => {
@@ -157,7 +162,9 @@ describe('AOT plugin source transforms', () => {
 
 	it('refreshes static clone omission without touching a nested package', async () => {
 		const packageRoot = resolve(import.meta.dir, '../..')
-		const directory = await mkdtemp(resolve(import.meta.dir, '_clone-hooks-'))
+		const directory = await mkdtemp(
+			resolve(import.meta.dir, '_clone-hooks-')
+		)
 		const entry = resolve(directory, 'app.ts')
 		const previousMode = process.env.ELYSIA_AOT_STATIC_CLONE_MODE
 		const input = 'export const staticCloneResolver = () => undefined\n'

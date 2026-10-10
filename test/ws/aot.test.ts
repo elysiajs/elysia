@@ -6,7 +6,8 @@ import { newWebsocket, wsOpen, wsMessage, wsClosed } from './utils'
 describe('WebSocket connection', () => {
 	it('should connect and close', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message(ws, message) {
 					ws.send(message)
 				}

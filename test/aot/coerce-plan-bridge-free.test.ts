@@ -373,7 +373,10 @@ describe('root body coercion plans without TypeBox', () => {
 			PATH
 		) as any
 
-		expect(f, 'expected schema to be reconstructed bridge-free').toBeDefined()
+		expect(
+			f,
+			'expected schema to be reconstructed bridge-free'
+		).toBeDefined()
 
 		for (const input of inputs) {
 			const wo = runBody(w, structuredClone(input))

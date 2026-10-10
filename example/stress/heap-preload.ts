@@ -4,7 +4,10 @@
 import { heapStats } from 'bun:jsc'
 
 process.on('beforeExit', () => {
-	const name = (process.argv[1] ?? 'unknown').split('/').pop()!.replace(/\.ts$/, '')
+	const name = (process.argv[1] ?? 'unknown')
+		.split('/')
+		.pop()!
+		.replace(/\.ts$/, '')
 	const dir = 'trace/profile'
 	require('node:fs').mkdirSync(dir, { recursive: true })
 

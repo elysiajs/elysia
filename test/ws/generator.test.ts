@@ -16,7 +16,8 @@ function collectMessages(ws: WebSocket, n: number): Promise<string[]> {
 describe('WebSocket generator handlers', () => {
 	it('message: sync generator yields are each sent as messages', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message: function* ({ ws, body }: any) {
 					yield `a:${body}`
 					yield `b:${body}`
@@ -40,7 +41,8 @@ describe('WebSocket generator handlers', () => {
 
 	it('3-arg form: positional generator handler streams yields', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', function* (ws) {
+			.use(websocket())
+			.ws('/ws', function* (ws) {
 				void ws
 				yield 'x:1'
 				yield 'x:2'
@@ -62,7 +64,8 @@ describe('WebSocket generator handlers', () => {
 
 	it('message: async generator yields are each sent as messages', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message: async function* ({ body }: any) {
 					yield `a:${body}`
 					await Bun.sleep(5)
@@ -86,7 +89,8 @@ describe('WebSocket generator handlers', () => {
 
 	it('open: generator yields are sent as initial messages on connect', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				open: function* () {
 					yield 'hello'
 					yield 'world'
@@ -107,7 +111,8 @@ describe('WebSocket generator handlers', () => {
 
 	it('close: server-initiated close flushes generator yields before close frame', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message(ws: any) {
 					ws.close()
 				},
@@ -136,7 +141,8 @@ describe('WebSocket generator handlers', () => {
 
 	it('regular function returning a value sends it as a single message', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message: ({ body }: any) => `echo:${body}`
 			})
 			.listen(0)
@@ -156,7 +162,8 @@ describe('WebSocket generator handlers', () => {
 
 	it('thrown error mid-stream is sent via error hook; connection stays open', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				error: () => 'caught',
 				message: function* ({ body }: any) {
 					yield 'first'
@@ -188,7 +195,8 @@ describe('WebSocket generator handlers', () => {
 		let seenReason: string | undefined
 
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message({ ws }: any) {
 					ws.close(4242, 'bye')
 				},
@@ -219,7 +227,8 @@ describe('WebSocket generator handlers', () => {
 		const seen: unknown[] = []
 
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message: function* ({ body }: any) {
 					yield `${body}-1`
 					yield `${body}-2`
@@ -248,7 +257,8 @@ describe('WebSocket generator handlers', () => {
 		let afterResponseCount = 0
 
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message: function* ({ body }: any) {
 					yield `${body}:1`
 					yield `${body}:2`
@@ -278,7 +288,8 @@ describe('WebSocket generator handlers', () => {
 		let seen: unknown = undefined
 
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				ping({ body }: any) {
 					seen = body
 				},
@@ -303,7 +314,8 @@ describe('WebSocket generator handlers', () => {
 
 	it('status(code, body) is serialized as { status, error } JSON', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message({ ws, body }: any) {
 					ws.send(status(404, `missing:${body}`))
 				}
@@ -363,7 +375,8 @@ describe('WebSocket generator handlers', () => {
 
 	it('status-keyed response schema: 200 vs 400 validate the right shape', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				response: {
 					200: t.Object({ ok: t.Boolean() }),
 					400: t.Object({ reason: t.String() })
@@ -399,7 +412,8 @@ describe('WebSocket generator handlers', () => {
 		let afterHandleCount = 0
 
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message: function* ({ body }: any) {
 					yield `${body}:1`
 					yield `${body}:2`

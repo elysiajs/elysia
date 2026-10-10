@@ -805,10 +805,11 @@ export class TypeBoxValidator<
 						this.Clean = (value: unknown) => {
 							if (clean === undefined)
 								try {
-									clean = reconstruct().instantiateFrozenMirror(
-										m,
-										schema
-									)
+									clean =
+										reconstruct().instantiateFrozenMirror(
+											m,
+											schema
+										)
 								} catch (error) {
 									warnMirrorFailure(schema, error)
 									clean = (v) => v
@@ -874,12 +875,7 @@ export class TypeBoxValidator<
 		if (!this.#noValidate)
 			this.#findCustomError = buildFindCustomError(this.schema, frozen)
 
-		if (
-			options?.aot &&
-			options.slot &&
-			inAotBuild() &&
-			captureImpl
-		)
+		if (options?.aot && options.slot && inAotBuild() && captureImpl)
 			captureImpl.captureBridgeFree(options.aot, options.slot, rawSchema)
 	}
 

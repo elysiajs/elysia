@@ -1,10 +1,7 @@
 // @ts-nocheck
 
 import { sucrose, clearSucroseCache } from '../../src/sucrose'
-import {
-	beginCompilerSession,
-	endCompilerSession
-} from '../../src/compile/aot'
+import { beginCompilerSession, endCompilerSession } from '../../src/compile/aot'
 import { profile } from './utils'
 
 // Sucrose has two caches, and which one engages depends on HOW it is called:
@@ -50,12 +47,9 @@ const lifeCycle = () => ({
 	const stop = profile('100k sucrose — NO cache (fresh fns, no session)')
 
 	for (let i = 0; i < total; i++)
-		sucrose(
-			function ({ query }) {
-				query.a
-			},
-			lifeCycle()
-		)
+		sucrose(function ({ query }) {
+			query.a
+		}, lifeCycle())
 
 	stop()
 }
@@ -75,12 +69,9 @@ clearSucroseCache()
 	)
 
 	for (let i = 0; i < total; i++)
-		sucrose(
-			function ({ query }) {
-				query.a
-			},
-			lifeCycle()
-		)
+		sucrose(function ({ query }) {
+			query.a
+		}, lifeCycle())
 
 	stop()
 	endCompilerSession(app, session)

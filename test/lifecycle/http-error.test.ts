@@ -479,7 +479,9 @@ describe('HTTPError', () => {
 			[
 				'registered-class',
 				(app: Elysia) =>
-					app.onError(Registered, () => status(400, 'other')) as Elysia
+					app.onError(Registered, () =>
+						status(400, 'other')
+					) as Elysia
 			]
 		] as const
 
@@ -1156,7 +1158,10 @@ describe('HTTPError', () => {
 		// A garbage status name must not resolve through `Object.prototype`
 		// (e.g. `.constructor`) and land a function on `.status`
 		it('leave `status` undefined when the name does not resolve', () => {
-			class Garbage extends HTTPError.id('GARBAGE', 'constructor' as any) {}
+			class Garbage extends HTTPError.id(
+				'GARBAGE',
+				'constructor' as any
+			) {}
 
 			expect(new Garbage().status).toBeUndefined()
 		})
@@ -1864,12 +1869,12 @@ describe('typeBase on the built-in 404 and 500 bodies', () => {
 
 		const app = new Elysia().get('/', 'hi').onError(() => {})
 
-		await expect((await app.handle('/missing')).json()).resolves.toMatchObject(
-			{
-				type: 'https://example.com/errors/not-found',
-				code: 'not-found'
-			}
-		)
+		await expect(
+			(await app.handle('/missing')).json()
+		).resolves.toMatchObject({
+			type: 'https://example.com/errors/not-found',
+			code: 'not-found'
+		})
 	})
 
 	it('prefixes the 404 of a precompiled app', async () => {
@@ -1878,12 +1883,12 @@ describe('typeBase on the built-in 404 and 500 bodies', () => {
 		const app = new Elysia({ precompile: true }).get('/', 'static')
 		await app.modules
 
-		await expect((await app.handle('/missing')).json()).resolves.toMatchObject(
-			{
-				type: 'https://example.com/errors/not-found',
-				code: 'not-found'
-			}
-		)
+		await expect(
+			(await app.handle('/missing')).json()
+		).resolves.toMatchObject({
+			type: 'https://example.com/errors/not-found',
+			code: 'not-found'
+		})
 	})
 
 	it('carries `code` on the generic 500 and prefixes its `type`', async () => {

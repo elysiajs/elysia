@@ -68,7 +68,9 @@ describe('Bun HTML import route', () => {
 	it('leaves plain literals on the JS lane when a request hook is present', () => {
 		expect(
 			collectStaticRoutes(
-				new Elysia().onRequest(() => {}).get('/literal', 'literal') as any
+				new Elysia()
+					.onRequest(() => {})
+					.get('/literal', 'literal') as any
 			)
 		).toBeUndefined()
 	})
@@ -107,7 +109,9 @@ describe('Bun HTML import route', () => {
 
 			for (const path of ['/', '/deep/client/route', '/u/42']) {
 				const page = await get(path)
-				expect(page.headers.get('content-type')).toStartWith('text/html')
+				expect(page.headers.get('content-type')).toStartWith(
+					'text/html'
+				)
 				expect(await page.text()).toContain('id="fixture"')
 			}
 		} finally {

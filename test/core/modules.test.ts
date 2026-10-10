@@ -526,7 +526,9 @@ describe('fetch while async plugins are pending', () => {
 
 		expect((await app.handle('/lazy')).status).toBe(404)
 
-		const early = Promise.resolve(app.fetch(new Request('http://e.ly/lazy')))
+		const early = Promise.resolve(
+			app.fetch(new Request('http://e.ly/lazy'))
+		)
 		gate.resolve()
 
 		expect((await early).status).toBe(200)

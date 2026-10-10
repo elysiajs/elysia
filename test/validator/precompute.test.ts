@@ -439,9 +439,7 @@ describe('TypeBoxValidator default precompute — codegen failure is loud', () =
 		// the indicator must not claim the fast path is live when it is gone
 		expect(broken!.precomputeSafe).toBe(false)
 		// but the interpreted fallback still applies the default correctly
-		expect(broken!.FromSync({} as any)).toEqual(
-			Default(schema, {}) as any
-		)
+		expect(broken!.FromSync({} as any)).toEqual(Default(schema, {}) as any)
 	})
 
 	it('keeps precomputeSafe true and warns nothing when codegen compiles', () => {
@@ -554,8 +552,7 @@ describe('default cloner emits only plain data', () => {
 	})
 
 	it('emits hostile strings and keys as inert data', () => {
-		const payload =
-			"'\"`${globalThis.__pwned=1}`</script>\u2028\u2029\0\\"
+		const payload = '\'"`${globalThis.__pwned=1}`</script>\u2028\u2029\0\\'
 		const value = { [payload]: [payload], 'a b': payload }
 
 		const out = createDefaultCloner(value)!()

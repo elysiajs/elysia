@@ -94,7 +94,6 @@ describe('route introspection cache', () => {
 		const app = seal(build())
 
 		expect(app.routes.length).toBe(2)
-
 		;(app as any)['~generation'] = undefined
 		app.use(new Elysia({ name: 'late-plugin' }).get('/plugged', () => 'p'))
 		seal(app)
@@ -108,7 +107,6 @@ describe('route introspection cache', () => {
 
 		expect(app.routes.length).toBe(2)
 		expect(app.history.length).toBe(2)
-
 		;(app as any)['~generation'] = undefined
 		app.get('/late', () => 'late')
 		seal(app)

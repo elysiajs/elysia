@@ -61,10 +61,7 @@ export function buildRouteTable(
 			(isDynamic ? RouteFlag.Dynamic : 0) |
 			(needEncodeRegex.test(p) ? RouteFlag.Encode : 0)
 
-		if (
-			!isDynamic &&
-			(p.length === 0 || p.charCodeAt(p.length - 1) === 47)
-		)
+		if (!isDynamic && (p.length === 0 || p.charCodeAt(p.length - 1) === 47))
 			hasLoose = true
 
 		if (route[7])

@@ -74,16 +74,12 @@ import { Elysia } from '../../src'
 			iris: { touch: (route: string) => route }
 		}))
 
-	new Elysia()
-		.use(plugin)
-		.get('/', { fnForm: true }, ({ iris }) => {
-			expectTypeOf(iris.publish).toEqualTypeOf<
-				(value: unknown) => string
-			>()
-			expectTypeOf(iris.touch).toEqualTypeOf<(route: string) => string>()
-			// @ts-expect-error Named plugins preserve exact macro-derived context.
-			iris.definitelyNotAThing()
-		})
+	new Elysia().use(plugin).get('/', { fnForm: true }, ({ iris }) => {
+		expectTypeOf(iris.publish).toEqualTypeOf<(value: unknown) => string>()
+		expectTypeOf(iris.touch).toEqualTypeOf<(route: string) => string>()
+		// @ts-expect-error Named plugins preserve exact macro-derived context.
+		iris.definitelyNotAThing()
+	})
 }
 
 // Conditional function-form macro responses survive named plugin composition.

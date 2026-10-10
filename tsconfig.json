@@ -1,24 +1,24 @@
 {
-  "compilerOptions": {
-    "resolveJsonModule": true,
-    "preserveSymlinks": true,
+	"compilerOptions": {
+		"resolveJsonModule": true,
+		"preserveSymlinks": true,
 
-    "target": "ES2021",
-    "lib": ["ESNext"],
+		"target": "ES2021",
+		"lib": ["ESNext"],
 
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
 
-    "declaration": true,
-    "noEmit": true,
+		"declaration": true,
+		"noEmit": true,
 
-    "allowSyntheticDefaultImports": true,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
+		"allowSyntheticDefaultImports": true,
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
 
-    "strict": true,
+		"strict": true,
 
-    "skipLibCheck": true
-  },
-  "exclude": ["node_modules", "design", ".claude"]
+		"skipLibCheck": true
+	},
+	"exclude": ["node_modules", "design", ".claude"]
 }

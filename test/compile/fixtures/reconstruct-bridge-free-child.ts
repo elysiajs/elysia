@@ -35,9 +35,7 @@ const root = { ...claimed, '~config': {}, '~ext': {} } as any
 // either return a frozen validator without ever wiring the bridge, or
 // (when reconstruction is impossible) surface the same
 // "Typebox module isn't initialized" error the wired path would throw.
-const { Reconstruct } = await import(
-	'../../../src/compile/handler/reconstruct'
-)
+const { Reconstruct } = await import('../../../src/compile/handler/reconstruct')
 
 try {
 	const result = Reconstruct.validator(

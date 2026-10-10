@@ -112,7 +112,10 @@ async function main() {
 		.get('/implementer-thrown', () => {
 			throw new Implementer('implementer-secret')
 		})
-		.get('/implementer-returned', () => new Implementer('implementer-secret'))
+		.get(
+			'/implementer-returned',
+			() => new Implementer('implementer-secret')
+		)
 		.get('/flip-type', () => {
 			throw new FlipType('flip-secret')
 		})

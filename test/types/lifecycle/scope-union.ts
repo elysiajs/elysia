@@ -41,7 +41,8 @@ const withLifecycleHooks = <Scope extends 'local' | 'plugin' | 'global'>(
 		.mapResponse(scope, () => {})
 		.onAfterResponse(scope, () => {})
 		.onError(scope, () => {})
-		.use(trace()).trace(scope, () => {})
+		.use(trace())
+		.trace(scope, () => {})
 
 const globalLifecycle = withLifecycleHooks('global')
 const pluginLifecycle = withLifecycleHooks('plugin')

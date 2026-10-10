@@ -12,8 +12,14 @@ module.exports = async (Elysia, trace, format) => {
 			let handled = 0
 			let began
 			const watch = (phase, detail) => {
-				checks.push({ phase, begin: detail.begin, pending: Promise.all([detail.end, detail.error]) })
-				detail.onStop(({ error }) => { stops[phase].push(error) })
+				checks.push({
+					phase,
+					begin: detail.begin,
+					pending: Promise.all([detail.end, detail.error])
+				})
+				detail.onStop(({ error }) => {
+					stops[phase].push(error)
+				})
 			}
 			const app = new Elysia()
 				.use(trace())
@@ -39,7 +45,8 @@ module.exports = async (Elysia, trace, format) => {
 			assert.equal(checks.length, 3)
 			for (const check of checks) {
 				const [end, error] = await check.pending
-				const expected = fail && check.phase === 'handle' ? failure : null
+				const expected =
+					fail && check.phase === 'handle' ? failure : null
 				assert.ok(Number.isFinite(end) && end >= check.begin)
 				assert.equal(error, expected)
 				assert.deepEqual(stops[check.phase], [expected])
@@ -50,5 +57,7 @@ module.exports = async (Elysia, trace, format) => {
 	} finally {
 		process.off('unhandledRejection', onUnhandled)
 	}
-	console.log(`✅ ${format} Node.js trace settles parent and child lifecycles`)
+	console.log(
+		`✅ ${format} Node.js trace settles parent and child lifecycles`
+	)
 }

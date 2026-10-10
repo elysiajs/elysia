@@ -61,12 +61,10 @@ describe('AOT unplugin Vite adapter', () => {
 		).toBe(38)
 		expect(vt).toBe(native.load(native.resolveId('elysia/type')!)!)
 
-		expect(
-			(plugin.transform as any).call(ctx, 'x', COMPAT)
-		).toBe('export function setupTypebox(){}\n')
-		expect(
-			(plugin.transform as any).call(ctx, 'x', BRIDGE)
-		).toBeUndefined()
+		expect((plugin.transform as any).call(ctx, 'x', COMPAT)).toBe(
+			'export function setupTypebox(){}\n'
+		)
+		expect((plugin.transform as any).call(ctx, 'x', BRIDGE)).toBeUndefined()
 	})
 
 	it('wired builds reroute the bridge like the native plugin', async () => {
@@ -81,12 +79,12 @@ describe('AOT unplugin Vite adapter', () => {
 		await (plugin.buildStart as any).call(ctx)
 		await native.buildStart()
 
-		expect(
-			(plugin.transform as any).call(ctx, 'x', COMPAT)
-		).toBe('export function setupTypebox(){}\n')
-		expect(
-			(plugin.transform as any).call(ctx, 'x', BRIDGE)
-		).toBe("export * from './bridge-live'\n")
+		expect((plugin.transform as any).call(ctx, 'x', COMPAT)).toBe(
+			'export function setupTypebox(){}\n'
+		)
+		expect((plugin.transform as any).call(ctx, 'x', BRIDGE)).toBe(
+			"export * from './bridge-live'\n"
+		)
 		expect(native.transform('x', BRIDGE)).toBe(
 			"export * from './bridge-live'\n"
 		)

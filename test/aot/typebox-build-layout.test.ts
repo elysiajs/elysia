@@ -6,7 +6,10 @@ import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
 import { RouteValidator } from '../../src/validator/route'
 import { Compiled } from '../../src/compile/aot'
-import { alignBuildExternals, reconstructCheck } from '../../src/compile/aot-emit'
+import {
+	alignBuildExternals,
+	reconstructCheck
+} from '../../src/compile/aot-emit'
 import { collectExternals } from '../../src/compile/aot-reconstruct'
 import {
 	beginValidatorCapture,

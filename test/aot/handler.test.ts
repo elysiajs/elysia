@@ -178,11 +178,8 @@ describe('AOT handler emit dedup', () => {
 		expect((src.match(/const _h\d+ =/g) ?? []).length).toBe(1)
 		expect((src.match(/const _a\d+ =/g) ?? []).length).toBe(1)
 		expect(
-			(
-				src.match(
-					/const _w\d+ = \{ a: _a0, f: _h0, k: \d+ \}/g
-				) ?? []
-			).length
+			(src.match(/const _w\d+ = \{ a: _a0, f: _h0, k: \d+ \}/g) ?? [])
+				.length
 		).toBe(3)
 
 		// the same schema three times is one shape: one wrapper

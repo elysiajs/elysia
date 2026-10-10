@@ -13,7 +13,8 @@ import { Elysia, t } from '../../src'
 		.get(
 			'/numeric',
 			{ response: { 200: t.String(), 404: t.String() } },
-			({ status }) => (Math.random() > 0.5 ? status(404, 'missing') : 'ok')
+			({ status }) =>
+				Math.random() > 0.5 ? status(404, 'missing') : 'ok'
 		)
 }
 

@@ -18,7 +18,8 @@ describe('WebSocket derive', () => {
 	it('derive survives a second upgrade to the same route', async () => {
 		const app = new Elysia()
 			.derive(() => ({ user: 'alice' }))
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message(ws: any) {
 					ws.send(ws.user)
 				}
@@ -34,7 +35,8 @@ describe('WebSocket derive', () => {
 	it('mapDerive survives a second upgrade to the same route', async () => {
 		const app = new Elysia()
 			.mapDerive(() => ({ user: 'bob' }))
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message(ws: any) {
 					ws.send(ws.user)
 				}

@@ -53,7 +53,9 @@ describe('typebox-value', () => {
 			value.Check(...args)) as typeof value.Check
 
 		try {
-			setupTypebox({ typebox: { value: { ...value, Check }, schema, compile } })
+			setupTypebox({
+				typebox: { value: { ...value, Check }, schema, compile }
+			})
 			expect(ops.Check).toBe(Check)
 
 			setupTypebox({ typebox: { value, schema, compile } })

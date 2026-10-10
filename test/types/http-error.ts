@@ -642,7 +642,10 @@ class Deferred extends HTTPError<'DEFERRED'> {
 // under the annotated status, and the `detail` fall-through beside it.
 {
 	class Mixed extends HTTPError.id('MIXED', 402) {
-		value(): ElysiaStatus<503, { esc: true }> | { plain: true } | undefined {
+		value():
+			| ElysiaStatus<503, { esc: true }>
+			| { plain: true }
+			| undefined {
 			return undefined
 		}
 

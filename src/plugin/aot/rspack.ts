@@ -8,7 +8,6 @@ import { registerAotHooks, unregisterAotHooks } from './rspack-loader'
 import { resolveEntry, siblingModuleExt } from './core'
 import type { ElysiaAotOptions } from './core'
 
-
 // mirror of the rspack `Compiler`
 interface RspackModuleRule {
 	test?: RegExp | ((value: string) => boolean)

@@ -186,11 +186,8 @@ describe('production error masking across HTTP and WebSocket', () => {
 	})
 
 	it('keeps the cookie.secrets advice during development', async () => {
-		const {
-			NODE_ENV,
-			httpElysiaError,
-			wsElysiaError
-		} = await runProbe('development')
+		const { NODE_ENV, httpElysiaError, wsElysiaError } =
+			await runProbe('development')
 		expect(NODE_ENV).toBe('development')
 
 		expect(httpElysiaError).toContain('cookie.secrets')

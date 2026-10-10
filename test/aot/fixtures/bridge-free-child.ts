@@ -77,9 +77,7 @@ out('RESULT', { reconstructed: true, results })
 // Exercise the actual detour site: with a dead bridge `Reconstruct.validator`
 // must return a frozen validator without throwing, and must not wire the
 // bridge as a side effect
-const { Reconstruct } = await import(
-	'../../../src/compile/handler/reconstruct'
-)
+const { Reconstruct } = await import('../../../src/compile/handler/reconstruct')
 const detour = Reconstruct.validator(
 	hook,
 	root,

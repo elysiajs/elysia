@@ -70,16 +70,14 @@ describe('Macro introspect', () => {
 
 	it("sees the route's own afterHandle list", async () => {
 		const log: string[] = []
-		const app = new Elysia()
-			.macro({ last: last(log) })
-			.get(
-				'/',
-				{
-					last: true,
-					afterHandle: [push(log, 'a'), push(log, 'b')]
-				},
-				() => 'ok'
-			)
+		const app = new Elysia().macro({ last: last(log) }).get(
+			'/',
+			{
+				last: true,
+				afterHandle: [push(log, 'a'), push(log, 'b')]
+			},
+			() => 'ok'
+		)
 
 		await app.handle('/')
 		expect(log).toEqual(['a', 'b', 'mark'])

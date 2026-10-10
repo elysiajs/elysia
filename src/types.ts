@@ -2056,45 +2056,45 @@ export type ObjectMacroDefs<
 	// Verbatim definition record captured in a first inference pass
 	Refs = {}
 > = MacroRefChannel<Refs> & {
-		[K in keyof N]: MaybeValueOrVoidFunction<
-			MacroProperty<
-				MacroNames & InputSchema<keyof Definitions['typebox'] & string>,
-				IntersectIfObjectSchema<
-					MergeSchema<
-						UnwrapMacroSchema<
-							RefDefSchema<K extends keyof Refs ? Refs[K] : {}>,
-							Definitions['typebox']
-						>,
-						AmbientSchema
+	[K in keyof N]: MaybeValueOrVoidFunction<
+		MacroProperty<
+			MacroNames & InputSchema<keyof Definitions['typebox'] & string>,
+			IntersectIfObjectSchema<
+				MergeSchema<
+					UnwrapMacroSchema<
+						RefDefSchema<K extends keyof Refs ? Refs[K] : {}>,
+						Definitions['typebox']
 					>,
-					ScopedSchemas
+					AmbientSchema
 				>,
-				Singleton & {
-					derive: Singleton['derive'] &
-						MacroRefDerive<
-							MacroFn,
-							K extends keyof Refs ? Refs[K] : {},
-							Definitions['typebox']
-						>
-				},
-				Definitions['error']
-			>
+				ScopedSchemas
+			>,
+			Singleton & {
+				derive: Singleton['derive'] &
+					MacroRefDerive<
+						MacroFn,
+						K extends keyof Refs ? Refs[K] : {},
+						Definitions['typebox']
+					>
+			},
+			Definitions['error']
 		>
-	} & {
-		[K in keyof N]: N[K] extends (...a: any[]) => any
+	>
+} & {
+	[K in keyof N]: N[K] extends (...a: any[]) => any
+		? unknown
+		: string extends keyof N[K]
 			? unknown
-			: string extends keyof N[K]
-				? unknown
-				: {
-						[P in Exclude<
-							keyof N[K],
-							| MacroPropertyKey
-							| InputSchemaKey
-							| keyof MacroFn
-							| keyof N
-						>]: `Unknown macro property '${P & string}'`
-					}
-	} & N
+			: {
+					[P in Exclude<
+						keyof N[K],
+						| MacroPropertyKey
+						| InputSchemaKey
+						| keyof MacroFn
+						| keyof N
+					>]: `Unknown macro property '${P & string}'`
+				}
+} & N
 
 // ? Unwrap Handler Stuff
 export type CreateEden<
@@ -2594,18 +2594,20 @@ export type UnhandledReturnedErrorOf<
  * `~handled` so a parent handler registered before `.use()`, which runs first
  * at runtime, can take the error over
  */
-type HandledReturnedError<Value, Errors extends ErrorDefinition[]> =
-	Errors extends []
+type HandledReturnedError<
+	Value,
+	Errors extends ErrorDefinition[]
+> = Errors extends []
+	? never
+	: 0 extends 1 & Value
 		? never
-		: 0 extends 1 & Value
-			? never
-			: ErrorOf<Value> extends infer Es
-				? Es extends Error
-					? HasErrorMatch<Es, Errors> extends true
-						? { error: Es; response: MatchRegisteredError<Es, Errors> }
-						: never
+		: ErrorOf<Value> extends infer Es
+			? Es extends Error
+				? HasErrorMatch<Es, Errors> extends true
+					? { error: Es; response: MatchRegisteredError<Es, Errors> }
 					: never
 				: never
+			: never
 
 export type HandledReturnedErrorOf<
 	T,
@@ -2695,8 +2697,9 @@ type ResolveRouteLeafErrors<
 			>
 			error: UnhandledReturnedError<Route['error'], Errors>
 		} & HandledErrorKey<
-			RouteHandled<Route> | HandledReturnedError<Route['error'], Errors>
-		>
+				| RouteHandled<Route>
+				| HandledReturnedError<Route['error'], Errors>
+			>
 
 /**
  * Take a parent's handlers registered before `.use()` in front of the
@@ -2725,7 +2728,9 @@ type PrependRouteLeafErrors<
 										>
 									>,
 									MergeStatusUnion<
-										HandledResponseOf<RehandledError<Won, Errors>>
+										HandledResponseOf<
+											RehandledError<Won, Errors>
+										>
 									>
 								>
 							>
@@ -2939,43 +2944,43 @@ export type AddRoute<
 			{
 				[method in Method]: WithHandledErrors<
 					CreateEdenResponse<
-					Path,
-					Schema,
-					MacroContext,
-					ComposeElysiaResponse<
-						Schema &
-							MacroContext &
-							Metadata['schemas'] &
-							Ephemeral['schemas'] &
-							Volatile['schemas'],
-						Handle,
-						UnionResponseStatus<
-							Metadata['response'],
+						Path,
+						Schema,
+						MacroContext,
+						ComposeElysiaResponse<
+							Schema &
+								MacroContext &
+								Metadata['schemas'] &
+								Ephemeral['schemas'] &
+								Volatile['schemas'],
+							Handle,
 							UnionResponseStatus<
-								Ephemeral['response'],
+								Metadata['response'],
 								UnionResponseStatus<
-									Volatile['response'],
-									// @ts-ignore
-									MacroContext['return'] & {}
+									Ephemeral['response'],
+									UnionResponseStatus<
+										Volatile['response'],
+										// @ts-ignore
+										MacroContext['return'] & {}
+									>
 								>
-							>
+							>,
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							],
+							Path
 						>,
-						[
-							...Definitions['error'],
-							...Ephemeral['error'],
-							...Volatile['error']
-						],
-						Path
+						UnhandledReturnedErrorOf<
+							Handle,
+							[
+								...Definitions['error'],
+								...Ephemeral['error'],
+								...Volatile['error']
+							]
+						>
 					>,
-					UnhandledReturnedErrorOf<
-						Handle,
-						[
-							...Definitions['error'],
-							...Ephemeral['error'],
-							...Volatile['error']
-						]
-					>
-				>,
 					Handle,
 					[
 						...Definitions['error'],

@@ -183,8 +183,8 @@ describe('attacker-supplied prototypes', () => {
 			.guard({ schema: 'merge', body: passthrough })
 			.post('/', { body: named }, ({ body }) => ({
 				isAdmin: (body as any).isAdmin ?? null,
-				prototype: Object.getPrototypeOf(body as object) ===
-					Object.prototype,
+				prototype:
+					Object.getPrototypeOf(body as object) === Object.prototype,
 				own: Object.hasOwn(body as object, '__proto__'),
 				keys: Object.keys(body as object)
 			}))

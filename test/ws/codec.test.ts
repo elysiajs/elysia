@@ -6,7 +6,8 @@ import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
 describe('WebSocket upgrade schema decoding', () => {
 	it('decodes Numeric route parameters before the handler', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws/:id', {
+			.use(websocket())
+			.ws('/ws/:id', {
 				params: t.Object({ id: t.Numeric() }),
 				message({ ws, params }: any) {
 					ws.send(`${typeof params.id}:${params.id + 1}`)
@@ -27,7 +28,8 @@ describe('WebSocket upgrade schema decoding', () => {
 
 	it('decodes Numeric query parameters before the handler', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				query: t.Object({ page: t.Numeric() }),
 				message({ ws, query }: any) {
 					ws.send(`${typeof query.page}:${query.page * 2}`)
@@ -50,7 +52,8 @@ describe('WebSocket upgrade schema decoding', () => {
 
 	it('decodes Numeric headers before the handler', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				headers: t.Object({ 'x-version': t.Numeric() }),
 				message({ ws, headers }: any) {
 					ws.send(
@@ -76,7 +79,8 @@ describe('WebSocket upgrade schema decoding', () => {
 
 	it('rejects invalid codec values during upgrade', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				query: t.Object({ page: t.Numeric() }),
 				message({ ws }: any) {
 					ws.send('ok')
@@ -102,7 +106,8 @@ describe('WebSocket upgrade schema decoding', () => {
 
 	it('passes String query parameters through unchanged', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				query: t.Object({ name: t.String() }),
 				message({ ws, query }: any) {
 					ws.send(`${typeof query.name}:${query.name}`)
@@ -147,7 +152,8 @@ describe('WebSocket upgrade schema decoding', () => {
 
 	it('awaits async Standard Schema decoding for query parameters', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				query: makeAsyncStandardSchema((v: any) => ({
 					decoded: v?.page
 				})) as any,
@@ -173,7 +179,8 @@ describe('WebSocket upgrade schema decoding', () => {
 
 	it('awaits async Standard Schema decoding for route parameters', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws/:id', {
+			.use(websocket())
+			.ws('/ws/:id', {
 				params: makeAsyncStandardSchema((v: any) => ({
 					id: v?.id + '-decoded'
 				})) as any,
@@ -209,7 +216,8 @@ describe('WebSocket upgrade schema decoding', () => {
 		}
 
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				query: rejectingAsyncSchema as any,
 				message({ ws }: any) {
 					ws.send('reached')
@@ -246,7 +254,8 @@ describe('WebSocket upgrade schema decoding', () => {
 		}
 
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				query: syncReturningPromise as any,
 				message({ ws, query }: any) {
 					ws.send(typeof query)
@@ -286,7 +295,8 @@ describe('WebSocket upgrade schema decoding', () => {
 
 	it('accepts synchronous Standard Schema validators for query parameters', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				query: makeSyncStandardSchema() as any,
 				message({ ws, query }: any) {
 					ws.send(typeof query)

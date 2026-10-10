@@ -44,10 +44,7 @@ const build = {
 
 const configurations: [label: string, make: Build][] = [
 	['lazy static-fn  (structural)', build.staticFn()],
-	[
-		'lazy static-fn loose candidate',
-		build.staticFnLooseCandidate()
-	],
+	['lazy static-fn loose candidate', build.staticFnLooseCandidate()],
 	['precompile static-fn', build.staticFn({ precompile: true })],
 	['lazy static-fn strictPath', build.staticFn({ strictPath: true })],
 	['lazy static-literal (+nativeStatic)', build.staticLiteral()],

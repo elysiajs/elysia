@@ -1,87 +1,87 @@
 name: Publish
 
 on:
-  release:
-    types: [published]
+    release:
+        types: [published]
 
 defaults:
-  run:
-    shell: bash
+    run:
+        shell: bash
 
 permissions:
-  contents: read
+    contents: read
 
 jobs:
-  publish-npm:
-    name: 'Publish: npm Registry'
-    runs-on: ubuntu-latest
+    publish-npm:
+        name: 'Publish: npm Registry'
+        runs-on: ubuntu-latest
 
-    permissions:
-      contents: read
-      id-token: write
+        permissions:
+            contents: read
+            id-token: write
 
-    steps:
-      - name: 'Checkout'
-        uses: actions/checkout@v4
+        steps:
+            - name: 'Checkout'
+              uses: actions/checkout@v4
 
-      - name: 'Setup Bun'
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
-          registry-url: "https://registry.npmjs.org"
+            - name: 'Setup Bun'
+              uses: oven-sh/setup-bun@v1
+              with:
+                  bun-version: latest
+                  registry-url: 'https://registry.npmjs.org'
 
-      - uses: actions/setup-node@v5
-        with:
-          node-version: '24.x'
-          registry-url: 'https://registry.npmjs.org'
+            - uses: actions/setup-node@v5
+              with:
+                  node-version: '24.x'
+                  registry-url: 'https://registry.npmjs.org'
 
-      - name: Install packages
-        run: bun install
+            - name: Install packages
+              run: bun install
 
-      - name: Test
-        run: bun run test
+            - name: Test
+              run: bun run test
 
-      - name: Test (Node)
-        run: bun run test:node
+            - name: Test (Node)
+              run: bun run test:node
 
-      - name: Test
-        run: bun run test:cf
+            - name: Test
+              run: bun run test:cf
 
-      - name: 'Publish'
-        run: |
-          NODE_AUTH_TOKEN="" npm publish --provenance --access=public
+            - name: 'Publish'
+              run: |
+                  NODE_AUTH_TOKEN="" npm publish --provenance --access=public
 
-  benchmark:
-    name: Benchmark
-    runs-on: ubuntu-latest
+    benchmark:
+        name: Benchmark
+        runs-on: ubuntu-latest
 
-    permissions:
-      contents: read
+        permissions:
+            contents: read
 
-    steps:
-      - name: 'Checkout'
-        uses: actions/checkout@v4
+        steps:
+            - name: 'Checkout'
+              uses: actions/checkout@v4
 
-      - name: 'Setup Bun'
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
+            - name: 'Setup Bun'
+              uses: oven-sh/setup-bun@v1
+              with:
+                  bun-version: latest
 
-      - name: Install packages
-        run: bun install
+            - name: Install packages
+              run: bun install
 
-      - name: Benchmark report
-        run: bun run example/stress/ci-report.ts --json-out trace/bench-report.json --md-out trace/bench-report.md
+            - name: Benchmark report
+              run: bun run example/stress/ci-report.ts --json-out trace/bench-report.json --md-out trace/bench-report.md
 
-      - name: Append report to step summary
-        if: always()
-        run: cat trace/bench-report.md >> "$GITHUB_STEP_SUMMARY"
+            - name: Append report to step summary
+              if: always()
+              run: cat trace/bench-report.md >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload benchmark report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: bench-${{ github.event.release.tag_name || github.sha }}
-          path: |
-            trace/bench-report.json
-            trace/bench-report.md
+            - name: Upload benchmark report
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: bench-${{ github.event.release.tag_name || github.sha }}
+                  path: |
+                      trace/bench-report.json
+                      trace/bench-report.md

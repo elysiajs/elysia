@@ -52,15 +52,16 @@ describe('dist `// @bun` pragma', () => {
 	})
 
 	it('keeps every marked file ASCII, as Bun reads it as Latin-1', () => {
-		expect(marked.filter((file) => /[^\x00-\x7f]/.test(read(file)))).toEqual(
-			[]
-		)
+		expect(
+			marked.filter((file) => /[^\x00-\x7f]/.test(read(file)))
+		).toEqual([])
 	})
 
 	it('never marks CommonJS', () => {
 		expect(
 			files.filter(
-				(file) => file.endsWith('.js') && read(file).startsWith('// @bun')
+				(file) =>
+					file.endsWith('.js') && read(file).startsWith('// @bun')
 			)
 		).toEqual([])
 	})
@@ -98,7 +99,10 @@ describe('dist `// @bun` pragma', () => {
 	it('Bun honors the pragma by skipping its transpiler', () => {
 		const dir = mkdtempSync(join(tmpdir(), 'elysia-pragma-'))
 		const file = join(dir, 'typed.mjs')
-		writeFileSync(file, PRAGMA + 'let typed: number = 1\nexport default typed\n')
+		writeFileSync(
+			file,
+			PRAGMA + 'let typed: number = 1\nexport default typed\n'
+		)
 
 		const proc = Bun.spawnSync({
 			cmd: [process.execPath, file],

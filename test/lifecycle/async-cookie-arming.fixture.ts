@@ -8,10 +8,12 @@ const { hasSyncHmac } = await import('../../src/cookie/crypto')
 const { origin } = await import('../../src/adapter/origin')
 const { Compiled } = await import('../../src/compile/aot')
 const { Validator } = await import('../../src/validator')
-const { endHandlerCapture, endValidatorCapture } =
-	await import('../../src/compile/aot-capture')
-const { materialise, materialiseHandlers, registerManifest } =
-	await import('../aot/_manifest')
+const { endHandlerCapture, endValidatorCapture } = await import(
+	'../../src/compile/aot-capture'
+)
+const { materialise, materialiseHandlers, registerManifest } = await import(
+	'../aot/_manifest'
+)
 assert.equal(hasSyncHmac, false)
 
 for (const mode of ['lazy', 'eager', 'frozen']) {

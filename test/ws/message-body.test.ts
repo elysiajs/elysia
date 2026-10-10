@@ -6,7 +6,8 @@ import { newWebsocket, wsOpen, wsMessage, wsClosed } from './utils'
 describe('WebSocket message body', () => {
 	it('delivers the positional body when the handler does not read ws.body', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message(ws, message) {
 					ws.send(`echo:${message}`)
 				}
@@ -27,7 +28,8 @@ describe('WebSocket message body', () => {
 
 	it('sets ws.body when the handler reads it directly', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message(ws) {
 					ws.send(`body:${ws.body}`)
 				}
@@ -54,7 +56,8 @@ describe('WebSocket message body', () => {
 		const bound = impl.bind(null)
 
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message: bound as any
 			})
 			.listen(0)
@@ -74,7 +77,8 @@ describe('WebSocket message body', () => {
 	it('sets ws.body when the handler passes ws to another function', async () => {
 		const read = (w: any) => w.body
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message(ws) {
 					ws.send(`fwd:${read(ws)}`)
 				}
@@ -121,7 +125,8 @@ describe('WebSocket message body', () => {
 
 	it('validates and sets ws.body when the handler only reads ws.body', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				body: t.Object({ n: t.Number() }),
 				message(ws) {
 					ws.send(JSON.stringify(ws.body))
@@ -144,7 +149,8 @@ describe('WebSocket message body', () => {
 	it('makes ws.body available to response lifecycle hooks', async () => {
 		const seen: string[] = []
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message() {
 					return 'reply'
 				},
@@ -179,7 +185,8 @@ describe('WebSocket message body', () => {
 
 	it('makes the failing message body available to error hooks', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message() {
 					throw new Error('boom')
 				},

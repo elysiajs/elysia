@@ -106,7 +106,11 @@ describe('file-type queue refinements', () => {
 
 		const app = new Elysia().post(
 			'/',
-			{ body: t.Object({ files: t.Files({ type: 'image', maxItems: 2 }) }) },
+			{
+				body: t.Object({
+					files: t.Files({ type: 'image', maxItems: 2 })
+				})
+			},
 			() => 'ok'
 		)
 
@@ -131,7 +135,11 @@ describe('file-type queue refinements', () => {
 
 		const app = new Elysia().post(
 			'/',
-			{ body: t.Object({ files: t.Files({ type: 'image', maxItems: 2 }) }) },
+			{
+				body: t.Object({
+					files: t.Files({ type: 'image', maxItems: 2 })
+				})
+			},
 			({ body }) => String(body.files.length)
 		)
 
@@ -249,7 +257,10 @@ describe('file-type queue refinements', () => {
 		overBudget.append('gallery', Bun.file('./test/images/aris-yuzu.jpg'))
 
 		const overResponse = await strictApp.handle(
-			new Request('http://localhost/', { method: 'POST', body: overBudget })
+			new Request('http://localhost/', {
+				method: 'POST',
+				body: overBudget
+			})
 		)
 
 		expect(overResponse.status).toBe(422)

@@ -46,9 +46,9 @@ import { expectTypeOf } from 'expect-type'
 		})
 		.get('/x', { maybe: true }, () => 'ok')
 
-	expectTypeOf<
-		(typeof app)['~Routes']['x']['get']['meta']
-	>().toEqualTypeOf<{ readonly maybe: true }>()
+	expectTypeOf<(typeof app)['~Routes']['x']['get']['meta']>().toEqualTypeOf<{
+		readonly maybe: true
+	}>()
 }
 
 // Two meta-bearing macros on one route intersect their metas.
@@ -66,9 +66,9 @@ import { expectTypeOf } from 'expect-type'
 		})
 		.get('/w', { live: true, audit: true }, () => 'ok')
 
-	expectTypeOf<
-		(typeof app)['~Routes']['w']['get']['meta']
-	>().toEqualTypeOf<{ readonly live: true } & { readonly audit: 'v1' }>()
+	expectTypeOf<(typeof app)['~Routes']['w']['get']['meta']>().toEqualTypeOf<
+		{ readonly live: true } & { readonly audit: 'v1' }
+	>()
 }
 
 // A macro that declares NO meta must NOT leak a `meta` key onto the route.
@@ -154,7 +154,7 @@ import { expectTypeOf } from 'expect-type'
 		})
 		.get('/x', { outer: true }, () => 'ok')
 
-	expectTypeOf<
-		(typeof app)['~Routes']['x']['get']['meta']
-	>().toEqualTypeOf<{ readonly outer: 2 } & { readonly inner: 1 }>()
+	expectTypeOf<(typeof app)['~Routes']['x']['get']['meta']>().toEqualTypeOf<
+		{ readonly outer: 2 } & { readonly inner: 1 }
+	>()
 }

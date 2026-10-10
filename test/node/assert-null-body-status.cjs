@@ -20,7 +20,9 @@ module.exports = async (Elysia, status, format) => {
 		['/304', 304, ''],
 		['/override', 200, 'kept']
 	]) {
-		const response = await app.handle(new Request(`http://localhost${path}`))
+		const response = await app.handle(
+			new Request(`http://localhost${path}`)
+		)
 		const text = await response.text()
 
 		if (response.status !== expected || text !== body)

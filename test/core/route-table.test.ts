@@ -45,50 +45,52 @@ const inDevelopment = <T>(fn: () => T) => {
 }
 
 describe('columnar route table', () => {
-	it('stores every authoring tuple field', () => inDevelopment(() => {
-		const app = buildFixture()
-		const table = app['~routeTable']
-		const tuples = rawTuples(app)
+	it('stores every authoring tuple field', () =>
+		inDevelopment(() => {
+			const app = buildFixture()
+			const table = app['~routeTable']
+			const tuples = rawTuples(app)
 
-		expect(table).toBeDefined()
-		expect(table.length).toBe(tuples.length)
+			expect(table).toBeDefined()
+			expect(table.length).toBe(tuples.length)
 
-		for (let i = 0; i < tuples.length; i++) {
-			const t = tuples[i]
+			for (let i = 0; i < tuples.length; i++) {
+				const t = tuples[i]
 
-			expect(table.method[i]).toBe(t[0])
-			expect(table.path[i]).toBe(t[1])
-			expect(table.handler[i]).toBe(t[2])
-			expect(table.owner[i]).toBe(t[3])
-			expect(table.localHook[i]).toBe(t[4])
-			expect(table.appHook[i]).toBe(t[5])
-			expect(table.inheritedChain[i]).toBe(t[6])
+				expect(table.method[i]).toBe(t[0])
+				expect(table.path[i]).toBe(t[1])
+				expect(table.handler[i]).toBe(t[2])
+				expect(table.owner[i]).toBe(t[3])
+				expect(table.localHook[i]).toBe(t[4])
+				expect(table.appHook[i]).toBe(t[5])
+				expect(table.inheritedChain[i]).toBe(t[6])
 
-			if (t[7] === undefined)
-				expect(table.macroScope?.has(i) ?? false).toBe(false)
-			else expect(table.macroScope.get(i)).toBe(t[7])
+				if (t[7] === undefined)
+					expect(table.macroScope?.has(i) ?? false).toBe(false)
+				else expect(table.macroScope.get(i)).toBe(t[7])
 
-			expect(!!(table.flags[i] & RouteFlag.WS)).toBe(t[0] === 'WS')
-			expect(!!(table.flags[i] & RouteFlag.Dynamic)).toBe(
-				/[:*]/.test(t[1])
-			)
-		}
-	}))
+				expect(!!(table.flags[i] & RouteFlag.WS)).toBe(t[0] === 'WS')
+				expect(!!(table.flags[i] & RouteFlag.Dynamic)).toBe(
+					/[:*]/.test(t[1])
+				)
+			}
+		}))
 
-	it('routeRow returns a fresh tuple with every stored field', () => inDevelopment(() => {
-		const app = buildFixture()
-		const table = app['~routeTable']
-		const tuples = rawTuples(app)
+	it('routeRow returns a fresh tuple with every stored field', () =>
+		inDevelopment(() => {
+			const app = buildFixture()
+			const table = app['~routeTable']
+			const tuples = rawTuples(app)
 
-		for (let i = 0; i < tuples.length; i++) {
-			const row = routeRow(table, i)
-			const t = tuples[i]
+			for (let i = 0; i < tuples.length; i++) {
+				const row = routeRow(table, i)
+				const t = tuples[i]
 
-			for (let f = 0; f < 8; f++) expect(row[f]).toBe(t[f])
+				for (let f = 0; f < 8; f++) expect(row[f]).toBe(t[f])
 
-			expect(row).not.toBe(t)
-		}
-	}))
+				expect(row).not.toBe(t)
+			}
+		}))
 
 	it('does not retain authoring tuple arrays', () => {
 		const app = buildFixture()

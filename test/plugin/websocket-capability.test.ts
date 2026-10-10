@@ -103,9 +103,7 @@ describe('websocket capability', () => {
 		})
 
 		it('bare .use(websocket()) with no options and a plain route yields no config', () => {
-			const app = new Elysia()
-				.use(websocket())
-				.ws('/x', { message() {} })
+			const app = new Elysia().use(websocket()).ws('/x', { message() {} })
 			app.compile()
 			expect(app['~wsConfig']).toBeUndefined()
 		})
@@ -169,24 +167,26 @@ describe('websocket capability', () => {
 			const warn = spyOn(console, 'warn').mockImplementation(() => {})
 			let reloaded = false
 			let reloadServe: any
-			const serveSpy = spyOn(Bun, 'serve').mockImplementation(
-				((options: any) => {
-					const server: any = {
-						hostname: 'localhost',
-						port: 0,
-						reload(next: any) {
-							reloaded = true
-							reloadServe = next
-						},
-						stop() {}
-					}
-					return server
-				}) as any
-			)
+			const serveSpy = spyOn(Bun, 'serve').mockImplementation(((
+				options: any
+			) => {
+				const server: any = {
+					hostname: 'localhost',
+					port: 0,
+					reload(next: any) {
+						reloaded = true
+						reloadServe = next
+					},
+					stop() {}
+				}
+				return server
+			}) as any)
 
 			try {
 				const app = new Elysia()
-					.use(websocket({ idleTimeout: 100, backpressureLimit: 999 }))
+					.use(
+						websocket({ idleTimeout: 100, backpressureLimit: 999 })
+					)
 					.use(async (inner) => {
 						inner.ws('/room', {
 							idleTimeout: 60,

@@ -361,7 +361,10 @@ for (const [lane, config] of lanes)
 						throw new Error('hook')
 					}
 				],
-				['rejection-returning', () => Promise.reject(new Error('hook'))],
+				[
+					'rejection-returning',
+					() => Promise.reject(new Error('hook'))
+				],
 				['returning', () => 'handled'],
 				// the hook already scheduled afterResponse, then mapping throws
 				[

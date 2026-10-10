@@ -7,7 +7,8 @@ import { newWebsocket, wsOpen, wsMessage, wsClosed } from './utils'
 describe('WebSocket schema decoding', () => {
 	it('decodes Date and Numeric in message bodies', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				body: t.Object({ when: t.Date(), n: t.Numeric() }),
 				message(ws, body: any) {
 					ws.send(
@@ -45,7 +46,8 @@ describe('WebSocket schema decoding', () => {
 
 	it('rejects invalid codec messages without calling the handler', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				body: t.Object({ when: t.Date() }),
 				message(ws) {
 					ws.send('ok')
@@ -70,7 +72,8 @@ describe('WebSocket schema decoding', () => {
 
 	it('accepts declared fields for schemas without codecs', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				body: t.Object({ text: t.String() }),
 				message(ws, { text }: any) {
 					ws.send(text)
@@ -93,7 +96,8 @@ describe('WebSocket schema decoding', () => {
 
 	it('strips undeclared properties from message bodies', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				body: t.Object({ a: t.String() }),
 				message(ws, body: any) {
 					ws.send(JSON.stringify(body))
@@ -116,7 +120,8 @@ describe('WebSocket schema decoding', () => {
 
 	it('strips undeclared query parameters during upgrade', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				query: t.Object({ room: t.String() }),
 				message({ ws, query }: any) {
 					ws.send(JSON.stringify(query))

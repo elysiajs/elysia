@@ -127,8 +127,9 @@ export const compileFromFrozenHandler = async <
 ): Promise<App> => {
 	// loaded on call, keeping the capture module out of the bridge-free
 	// fixtures that import this file
-	const { endHandlerCapture, endValidatorCapture } =
-		await import('../../src/compile/aot-capture')
+	const { endHandlerCapture, endValidatorCapture } = await import(
+		'../../src/compile/aot-capture'
+	)
 
 	let factoryCalls = 0
 	process.env.ELYSIA_AOT_BUILD = '1'

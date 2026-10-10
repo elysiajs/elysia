@@ -996,8 +996,7 @@ corpus.push({
 		{ id: 'set', make: get('/set') },
 		{
 			id: 'remove',
-			make: () =>
-				new Request(url('/rm'), { headers: { cookie: 'a=v' } })
+			make: () => new Request(url('/rm'), { headers: { cookie: 'a=v' } })
 		}
 	]
 })
@@ -1079,7 +1078,8 @@ corpus.push({
 	define: (app) =>
 		app.mount(
 			'/mnt',
-			(req: Request) => new Response(`mounted:${new URL(req.url).pathname}`)
+			(req: Request) =>
+				new Response(`mounted:${new URL(req.url).pathname}`)
 		),
 	requests: [
 		{ id: 'root', make: get('/mnt') },

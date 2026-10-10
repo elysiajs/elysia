@@ -12,8 +12,9 @@ const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
 describe('AOT plugin', () => {
 	it('classifies JavaScript entries from the nearest package type', async () => {
 		const directory = await mkdtemp(join(tmpdir(), 'elysia-aot-kind-'))
-		const { resolveEntryModuleKind } =
-			await import('../../src/plugin/aot/core')
+		const { resolveEntryModuleKind } = await import(
+			'../../src/plugin/aot/core'
+		)
 
 		try {
 			await writeFile(
@@ -43,8 +44,9 @@ describe('AOT plugin', () => {
 	})
 
 	it('generateCompiledModule emits a self-registering manifest', async () => {
-		const { generateCompiledArtifacts } =
-			await import('../../src/plugin/aot/core')
+		const { generateCompiledArtifacts } = await import(
+			'../../src/plugin/aot/core'
+		)
 		const previous = process.env.ELYSIA_AOT_BUILD
 		process.env.ELYSIA_AOT_BUILD = 'keep'
 		const log = spyOn(console, 'log').mockImplementation(() => {})
@@ -200,8 +202,9 @@ describe('AOT plugin', () => {
 	})
 
 	it('generateCompiledArtifacts honors ELYSIA_AOT_VERBOSE when the verbose option is unset', async () => {
-		const { generateCompiledArtifacts } =
-			await import('../../src/plugin/aot/core')
+		const { generateCompiledArtifacts } = await import(
+			'../../src/plugin/aot/core'
+		)
 		const previous = process.env.ELYSIA_AOT_VERBOSE
 		process.env.ELYSIA_AOT_VERBOSE = '1'
 
@@ -234,8 +237,9 @@ describe('AOT plugin', () => {
 	})
 
 	it('generateCompiledArtifacts finds an app exported under a custom name', async () => {
-		const { generateCompiledArtifacts } =
-			await import('../../src/plugin/aot/core')
+		const { generateCompiledArtifacts } = await import(
+			'../../src/plugin/aot/core'
+		)
 
 		const { source } = await generateCompiledArtifacts(
 			resolve(import.meta.dir, 'fixtures/named-export-app.ts'),
@@ -247,8 +251,9 @@ describe('AOT plugin', () => {
 	})
 
 	it('generateCompiledArtifacts rejects an entry exporting several Elysia apps with no app/default', async () => {
-		const { generateCompiledArtifacts } =
-			await import('../../src/plugin/aot/core')
+		const { generateCompiledArtifacts } = await import(
+			'../../src/plugin/aot/core'
+		)
 
 		const error = await generateCompiledArtifacts(
 			resolve(import.meta.dir, 'fixtures/ambiguous-export-app.ts'),
@@ -274,7 +279,9 @@ describe('AOT plugin', () => {
 		const out = await result.outputs[0]!.text()
 		// the frozen manifest was inlined and self-registers (zero user wiring)
 		expect(out).toContain('.register((() => {')
-		expect(out).toMatch(/return \{ fingerprint,[^}]*\bvalidators\b[^}]*\bhandlers\b/)
+		expect(out).toMatch(
+			/return \{ fingerprint,[^}]*\bvalidators\b[^}]*\bhandlers\b/
+		)
 		expect(out).toContain('"/body"')
 		// A real validator factory (including a merged check/clean factory), not a stub.
 		expect(out).toContain('(External')
@@ -364,7 +371,9 @@ describe('AOT plugin', () => {
 		// frozen manifest inlined + self-registers (validators AND handlers)
 		// (esbuild auto-annotates the scoping IIFE with /* @__PURE__ */)
 		expect(out).toMatch(/\.register\((?:\/\* @__PURE__ \*\/ )?\(\(\) => \{/)
-		expect(out).toMatch(/return \{ fingerprint,[^}]*\bvalidators\b[^}]*\bhandlers\b/)
+		expect(out).toMatch(
+			/return \{ fingerprint,[^}]*\bvalidators\b[^}]*\bhandlers\b/
+		)
 		expect(out).toContain('"/body"')
 		// A real validator factory (including a merged check/clean factory), not a stub.
 		expect(out).toContain('(External')
@@ -403,9 +412,7 @@ describe('AOT plugin', () => {
 		)
 		expect(injected).toBe("import 'elysia/compiled'\nexport const app = 1")
 		// any other module is untouched
-		expect(
-			plugin.transform('x', '/some/other/file.ts')
-		).toBeUndefined()
+		expect(plugin.transform('x', '/some/other/file.ts')).toBeUndefined()
 	})
 
 	it('builds with forced lazy loading and serves a request', async () => {

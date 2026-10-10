@@ -39,11 +39,9 @@ describe('decorate is not disposed on stop', () => {
 	it('leaves it alone on the generic stop lane', async () => {
 		const log: string[] = []
 
-		const app = new Elysia()
-			.decorate('db', handed(log))
-			.onStop(() => {
-				log.push('cleanup')
-			})
+		const app = new Elysia().decorate('db', handed(log)).onStop(() => {
+			log.push('cleanup')
+		})
 		// adapters without their own stop (e.g. Node) run the generic lane
 		;(app as any).server = { stop() {} }
 		await app.stop()

@@ -40,7 +40,10 @@ function snapshot() {
 	gc5()
 	const { heapStats } = require('bun:jsc')
 	const h = heapStats()
-	return { objectCount: h.objectCount as number, heapSize: h.heapSize as number }
+	return {
+		objectCount: h.objectCount as number,
+		heapSize: h.heapSize as number
+	}
 }
 
 async function main() {

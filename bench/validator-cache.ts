@@ -67,8 +67,7 @@ function bestOf(
 	for (let i = 0; i < RUNS; i++) samples.push(timeOnce(schemaOf))
 
 	const best = Math.min(...samples)
-	const variance =
-		(Math.max(...samples) - best) / best
+	const variance = (Math.max(...samples) - best) / best
 
 	console.log(
 		`${label}: best=${(best / 1e6).toFixed(3)}ms  samples(ms)=[${samples

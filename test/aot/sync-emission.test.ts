@@ -652,12 +652,13 @@ describe('sync-first routes', () => {
 	it('waits for a thenable at the point it appears', async () => {
 		const order: string[] = []
 		const app = new Elysia()
-			.onBeforeHandle(() =>
-				(Math.random() < 2
-					? Promise.resolve().then(() => {
-							order.push('beforeHandle')
-						})
-					: undefined) as any
+			.onBeforeHandle(
+				() =>
+					(Math.random() < 2
+						? Promise.resolve().then(() => {
+								order.push('beforeHandle')
+							})
+						: undefined) as any
 			)
 			.get('/', () => {
 				order.push('handler')
@@ -674,10 +675,13 @@ describe('sync-first routes', () => {
 	it('routes a rejected thenable to the error pipeline', async () => {
 		const app = new Elysia()
 			.onError(() => 'recovered')
-			.get('/', { response: t.String() }, () =>
-				(Math.random() < 2
-					? Promise.reject(new Error('late'))
-					: 'never') as any
+			.get(
+				'/',
+				{ response: t.String() },
+				() =>
+					(Math.random() < 2
+						? Promise.reject(new Error('late'))
+						: 'never') as any
 			)
 
 		const response = await app.handle(new Request('http://localhost/'))

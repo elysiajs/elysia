@@ -1,10 +1,8 @@
 import { createAotPluginHooks, type AotPluginHooks } from './hooks'
 import type { ElysiaAotOptions } from './core'
 
-export interface ElysiaAotVitePlugin extends Omit<
-	AotPluginHooks,
-	'isTransformCandidate'
-> {
+export interface ElysiaAotVitePlugin
+	extends Omit<AotPluginHooks, 'isTransformCandidate'> {
 	name: string
 	enforce?: 'pre'
 	apply?: 'build'

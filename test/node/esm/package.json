@@ -1,9 +1,9 @@
 {
-    "type": "module",
-    "dependencies": {
-        "elysia": "../../.."
-    },
-    "volta": {
-        "node": "24.21.0"
-    }
+	"type": "module",
+	"dependencies": {
+		"elysia": "../../.."
+	},
+	"volta": {
+		"node": "24.21.0"
+	}
 }

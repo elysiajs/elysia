@@ -1,8 +1,9 @@
 # DayDream
 
 https://elysiajs.com/blog/elysia-20.html
- 
+
 Feature:
+
 - tree-shake typebox
 - support static TypeBox wiring for Bun builds with `aot()`
 - support different param prefixes in a dynamic path
@@ -14,6 +15,7 @@ Feature:
 - on Bun, signed-cookie verification uses the native constant-time `crypto.timingSafeEqual` instead of loading `node:crypto`
 
 Breaking Change:
+
 - see the migration guide: https://github.com/elysiajs/elysia/pull/1873#issuecomment-4734573873
 - swap route hook and handler parameter position
 - remove soft-deprecated APIs
@@ -138,6 +140,7 @@ Behavior Change:
 - `app.routes[i].hooks.response` and a macro `introspect` now get a copy of the route's status map (an empty `response: {}` stays the route's own), since equal maps are shared: a write no longer reaches other routes (an `introspect` write to a guard's map used to reach every route of the guard), and a write through `app.routes` no longer changes the route's validation. A `schema: 'merge'` guard's map (`hooks.schemas[i].response`) is frozen, not copied: an `introspect` writing into it now throws, failing the route's compile and `app.routes`
 
 Improvement:
+
 - `t.File({ type })` / `t.Files({ type })` content-detection failures now report the offending property path (`property: '/avatar'`, `/files/0`) instead of an empty path — the validated value is identity-walked only when a detection fails
 - adapter v2
 - sub type validator
@@ -145,7 +148,7 @@ Improvement:
 - shared schema reference
 - Cookie schema field
 - plain `t.File()` / `t.Files()` (no `type` option) no longer force the async validation path
-- a route that is async only because a callback *may* return a Promise (a response schema over `() => ({...})`, an expression-bodied `derive`, a `beforeHandle` with a `return`) is compiled sync-first on Bun: it answers synchronously and hands off to an async continuation only on a real thenable, instead of paying a Promise and a microtask per request (in-process vs the async lane: sync −39%, a real promise −12%, a rejection −2%). Other runtimes keep the plain async lane, which V8 runs faster; an AOT build follows its `target`
+- a route that is async only because a callback _may_ return a Promise (a response schema over `() => ({...})`, an expression-bodied `derive`, a `beforeHandle` with a `return`) is compiled sync-first on Bun: it answers synchronously and hands off to an async continuation only on a real thenable, instead of paying a Promise and a microtask per request (in-process vs the async lane: sync −39%, a real promise −12%, a rejection −2%). Other runtimes keep the plain async lane, which V8 runs faster; an AOT build follows its `target`
 - generator / SSE streams enqueue synchronously, with a Promise only for a `Blob` chunk (−25% allocation, −6.5% server CPU per 10-event SSE request)
 - `listen()` loads the TypeBox graph asynchronously, overlapping async plugins, once the app has used `t` (time to first response −31% for a 100-schema-route app); apps that never touch `t` still do not load TypeBox
 - signed-cookie HMAC on Bun copies a keyed hasher per secret instead of re-keying per sign/verify (signed-cookie route −5%)
@@ -158,6 +161,7 @@ Improvement:
 - a route's `response` status map is kept frozen, and routes declaring equal maps (same statuses and schemas) share one container while it stays in the bounded snapshot cache, instead of a writable copy per route that JSC sized to the largest status: a route with `{ 200: t.String(), 404: t.String() }` retains 447 B instead of 5.8 KB, and about 5 KB less when every route's map differs
 
 Bug fix:
+
 - AOT replay ran the build's frozen route when the runtime app registered different hooks or schemas: a `beforeHandle`, `derive`, `error` or `mapResponse` added at runtime (by a plugin, guard, macro or root hook) was skipped, a new or tightened validator and response redaction were not applied (HTTP and WebSocket), runtime cookie signing accepted unsigned cookies, and runtime default headers were dropped
 - cookie signing config was ignored when the cookie schema reached the route indirectly (a model name, `t.Ref`, a guard, a macro, a plugin model, `t.Intersect` / `t.Union`): forged unsigned cookies were accepted and outgoing cookies were not signed, on HTTP, WebSocket upgrades and AOT replay
 - `t.Partial`, `t.Required`, `t.Pick`, `t.Omit`, `t.ReadonlyObject`, `t.Composite`, `t.Interface`, `t.Mapped` and `t.Evaluate` dropped a `t.Cookie` signing config
@@ -212,11 +216,13 @@ Bug fix:
 - AOT: the stripped `flushMemory()` now makes the same `Bun.gc()` / optional `globalThis.gc?.()` call as the unstripped helper
 
 Chore:
+
 - declare the minimum supported Node.js version (`engines.node`) and test it in CI
 - `build()` loads the TypeBox graph once when any route carries a TypeBox schema (~100 ms at boot, flat in route count), so the first schema-bearing request no longer stalls the event loop; schema-less, Standard-Schema-only and AOT apps are unaffected
 - a `listen()` boot that fails after the server bound (rejected async plugin, `onStart()` or `build()` throw) is rolled back, logged once as `[Elysia] listen() failed:` and sets `process.exitCode = 1`
 
 Known issue:
+
 - `t.ObjectString` with an optional or coercing inner field drops those fields on the default `normalize`, use `normalize: 'typebox'` until the next `exact-mirror` release
 - a returned `new Response(stream)` is not observed like a bare `ReadableStream`, so `derive` dispose / `defer()` / `afterResponse` still run before its body is read; return the stream itself
 - a stream or generator that reaches 64 chunks or 4 MiB and that a later hook replaces, or that a throwing `afterHandle` / `mapResponse` leaves behind, is never drained, so `afterResponse` / dispose for that request do not run; the hook can `return()` / `cancel()` the `responseValue` it drops
@@ -224,10 +230,13 @@ Known issue:
 - a static-value route (`.get(path, value)`) keeps the `.headers()` app defaults over a hook: a `request`, `transform`, `derive`, `beforeHandle`, `afterHandle`, `mapResponse` or `trace` hook that overrides or deletes such a header in `set.headers` (e.g. `cache-control: no-store` on a per-user response) is ignored on that route, because the defaults are prepared into its response at startup and a prepared response's own headers outrank `set`. A hook `content-type` likewise loses to the MIME generated for a static string, number, object or array, with or without `.headers()`. Headers that `.headers()` does not declare, and every header on a function route, apply normally. Use a function handler (`.get(path, () => value)`) when a hook must change these headers
 
 # 1.4.30 - 26 Aug 2026
+
 Chore:
+
 - update test case for Bun 1.4
 
 Advisory:
+
 - GHSA-gmm9-qwx3-2m3h
 - GHSA-2p5p-r4r9-f9jm
 - GHSA-3958-wq4x-729c

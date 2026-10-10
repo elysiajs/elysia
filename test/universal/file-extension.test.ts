@@ -10,8 +10,6 @@ describe('ElysiaFile type', () => {
 	})
 
 	it('falls back when the path has no known extension', () => {
-		expect(new ElysiaFile('Makefile').type).toBe(
-			'application/octet-stream'
-		)
+		expect(new ElysiaFile('Makefile').type).toBe('application/octet-stream')
 	})
 })

@@ -120,12 +120,20 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			expect(aliases.has('scl')).toBe(hasClone)
 			expect(report).toEqual({
 				jit: mode !== 'duplicate',
-				reasons: mode === 'duplicate' ? ['handler:indexed-duplicate'] : []
+				reasons:
+					mode === 'duplicate' ? ['handler:indexed-duplicate'] : []
 			})
 			if (mode === 'mixed') expect(handlers[0]?.path).toBe('/plain')
 			expect(
-				planFromReport('auto', report, false, false, aliases, true, false)
-					.plan.staticClone
+				planFromReport(
+					'auto',
+					report,
+					false,
+					false,
+					aliases,
+					true,
+					false
+				).plan.staticClone
 			).toBe(omit)
 		}
 	)

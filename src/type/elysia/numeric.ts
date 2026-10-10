@@ -63,8 +63,7 @@ function inRange(n: number, c: TNumberOptions) {
 		return false
 	if (typeof c.exclusiveMaximum === 'number' && n >= c.exclusiveMaximum)
 		return false
-	if (typeof c.multipleOf === 'number' && n % c.multipleOf !== 0)
-		return false
+	if (typeof c.multipleOf === 'number' && n % c.multipleOf !== 0) return false
 
 	return true
 }

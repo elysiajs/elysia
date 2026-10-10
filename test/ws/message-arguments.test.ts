@@ -6,7 +6,8 @@ import { newWebsocket, wsOpen, wsMessage, wsClosed } from './utils'
 describe('WebSocket message arguments', () => {
 	it('delivers the body to a default parameter regardless of function length', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message(ws, message = 'DEFAULT') {
 					ws.send(String(message))
 				}
@@ -27,7 +28,8 @@ describe('WebSocket message arguments', () => {
 
 	it('delivers the body through rest parameters regardless of function length', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message(ws, ...args: unknown[]) {
 					ws.send(String(args[0]))
 				}

@@ -56,9 +56,10 @@ describe('statically wired TypeBox bridge', () => {
 			expect(typeof bridge[member]).toBe('function')
 		}
 
-		const typeOps = (await import(
-			'../../src/type/typebox-type'
-		)) as Record<string, any>
+		const typeOps = (await import('../../src/type/typebox-type')) as Record<
+			string,
+			any
+		>
 
 		// force the lazy load so the seam holds the real builders
 		typeOps.Ref('#/x')

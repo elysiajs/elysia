@@ -23,7 +23,9 @@ for (let i = 0; i < 5000; i++) {
 summary(() => {
 	bench('parseQueryFromURL (4 pairs)', () => parseQueryFromURL(url, qi))
 	bench('parseQuery (4 pairs)', () => parseQuery(qs))
-	bench('parseQueryFromURL (7 pairs +decode)', () => parseQueryFromURL(url2, qi2))
+	bench('parseQueryFromURL (7 pairs +decode)', () =>
+		parseQueryFromURL(url2, qi2)
+	)
 	bench('parseQuery (7 pairs +decode)', () => parseQuery(qs2))
 })
 

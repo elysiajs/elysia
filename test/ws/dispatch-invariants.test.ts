@@ -7,7 +7,8 @@ describe('WebSocket event dispatch', () => {
 	// A generator return terminates iteration; only yielded values are messages.
 	it('generator return value is not sent as a trailing message', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message: function* ({ body }: any) {
 					yield `a:${body}`
 					yield `b:${body}`
@@ -32,7 +33,8 @@ describe('WebSocket event dispatch', () => {
 
 	it('async generator return value is not sent', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message: async function* ({ body }: any) {
 					yield `a:${body}`
 					return `ret:${body}`
@@ -56,7 +58,8 @@ describe('WebSocket event dispatch', () => {
 
 	it('skips response validation when the returned status has no validator', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				response: {
 					200: t.Object({ ok: t.Boolean() })
 				},
@@ -86,7 +89,8 @@ describe('WebSocket event dispatch', () => {
 			.onError(() => {
 				return 'caught'
 			})
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message() {
 					throw new Error('boom')
 				},
@@ -112,7 +116,8 @@ describe('WebSocket event dispatch', () => {
 		const seen: { before: string; after: string }[] = []
 
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				async ping(ws: any) {
 					// Read ws.body again after the await to detect shared state.
 					const before = String(ws.body)

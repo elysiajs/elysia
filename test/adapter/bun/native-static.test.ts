@@ -8,9 +8,9 @@ describe('Bun native static promotion', () => {
 		const promoted = collectStaticRoutes(app as any)
 
 		expect(promoted?.['/literal']?.GET).toBeInstanceOf(Response)
-		expect(
-			(promoted!['/literal'].GET as Response).text()
-		).resolves.toBe('literal')
+		expect((promoted!['/literal'].GET as Response).text()).resolves.toBe(
+			'literal'
+		)
 	})
 
 	it('keeps primitive literals text/plain when a wrapper blocks promotion', async () => {

@@ -6,7 +6,8 @@ import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
 describe('WebSocket .use(websocket()).ws() signature', () => {
 	it('3-arg form: positional message handler echoes back', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', ({ ws, body }: any) => {
+			.use(websocket())
+			.ws('/ws', ({ ws, body }: any) => {
 				ws.send(`echo:${body}`)
 			})
 			.listen(0)
@@ -28,7 +29,8 @@ describe('WebSocket .use(websocket()).ws() signature', () => {
 		const order: string[] = []
 
 		const app = new Elysia()
-			.use(websocket()).ws(
+			.use(websocket())
+			.ws(
 				'/ws',
 				{
 					open: () => {
@@ -59,7 +61,8 @@ describe('WebSocket .use(websocket()).ws() signature', () => {
 
 	it('3-arg form: generator function as positional handler', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', function* ({ body }: any) {
+			.use(websocket())
+			.ws('/ws', function* ({ body }: any) {
 				yield `${body}-1`
 				yield `${body}-2`
 			})
@@ -85,7 +88,8 @@ describe('WebSocket .use(websocket()).ws() signature', () => {
 
 	it('3-arg form: schema in options validates per message', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws(
+			.use(websocket())
+			.ws(
 				'/ws',
 				{
 					body: t.Object({ text: t.String() })
@@ -119,7 +123,8 @@ describe('WebSocket .use(websocket()).ws() signature', () => {
 
 	it('2-arg form (legacy) continues to work unchanged', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				message(ws: any, body: any) {
 					ws.send(`legacy:${body}`)
 				}

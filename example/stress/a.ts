@@ -5,9 +5,11 @@ const end = profile('q')
 
 const app = new Elysia()
 
-for (let i = 0; i < 100_000; i++)
-	app.get(`/${i}`, () => i)
+for (let i = 0; i < 100_000; i++) app.get(`/${i}`, () => i)
 
-await app.handle('/').then(r => r.text()).then(console.log)
+await app
+	.handle('/')
+	.then((r) => r.text())
+	.then(console.log)
 
 end()

@@ -39,16 +39,12 @@ describe('guard scope', () => {
 			body: t.Object({ org: t.String() })
 		})
 
-		const app = new Elysia()
-			.use(plugin)
-			.post('/x', ({ body }) => body)
+		const app = new Elysia().use(plugin).post('/x', ({ body }) => body)
 
-		expect(
-			(await app.handle(json('/x', { content: 'hi' }))).status
-		).toBe(422)
-		expect(
-			(await app.handle(json('/x', { org: 'o' }))).status
-		).toBe(200)
+		expect((await app.handle(json('/x', { content: 'hi' }))).status).toBe(
+			422
+		)
+		expect((await app.handle(json('/x', { org: 'o' }))).status).toBe(200)
 	})
 
 	it("merges a plugin-scoped guard schema with the route's own schema via schema: 'merge'", async () => {
@@ -59,7 +55,11 @@ describe('guard scope', () => {
 
 		const app = new Elysia()
 			.use(plugin)
-			.post('/x', { body: t.Object({ content: t.String() }) }, ({ body }) => body)
+			.post(
+				'/x',
+				{ body: t.Object({ content: t.String() }) },
+				({ body }) => body
+			)
 
 		// guard's slot stays enforced alongside the route's own schema
 		const missing = await app.handle(json('/x', { content: 'hi' }))

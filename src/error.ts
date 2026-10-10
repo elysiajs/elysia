@@ -738,11 +738,13 @@ export class ValidationError extends ElysiaError {
 
 		const value = this.value
 		let found: unknown
-		if (jsonLengthWithin(value, FOUND_ECHO_LIMIT) >= 0)
-			found = value
+		if (jsonLengthWithin(value, FOUND_ECHO_LIMIT) >= 0) found = value
 		else {
 			const sub = subValueAt(value, first?.instancePath ?? first?.path)
-			if (sub !== undefined && jsonLengthWithin(sub, FOUND_ECHO_LIMIT) >= 0)
+			if (
+				sub !== undefined &&
+				jsonLengthWithin(sub, FOUND_ECHO_LIMIT) >= 0
+			)
 				found = sub
 			else found = FOUND_ECHO_OMITTED
 		}

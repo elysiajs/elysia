@@ -157,8 +157,16 @@ describe('Error extends', () => {
 			)
 
 		const local = new Elysia().onError(CustomError, () => 'local')
-		const plugin = new Elysia().onError('plugin', CustomError, () => 'plugin')
-		const global = new Elysia().onError('global', CustomError, () => 'global')
+		const plugin = new Elysia().onError(
+			'plugin',
+			CustomError,
+			() => 'plugin'
+		)
+		const global = new Elysia().onError(
+			'global',
+			CustomError,
+			() => 'global'
+		)
 
 		// local: stays inside the plugin
 		await expect(route(local)).resolves.not.toBe('local')
@@ -348,8 +356,10 @@ describe('returned error class instance', () => {
 
 	// The reported repro: a hand-built ZodError used to be served as `200 []`
 	it('serves the reported 3-arg global zod handler repro as 418', async () => {
-		const errorHandler = new Elysia().onError('global', z.ZodError, ({ error }) =>
-			status(418, `quack! ${error.message}`)
+		const errorHandler = new Elysia().onError(
+			'global',
+			z.ZodError,
+			({ error }) => status(418, `quack! ${error.message}`)
 		)
 
 		const app = new Elysia()
@@ -556,7 +566,10 @@ describe('hook registered after the route', () => {
 
 	const lateHooks: [hook: string, add: (app: AnyElysia) => AnyElysia][] = [
 		['a class handler', (app) => app.onError(Late, answer)],
-		['a global class handler', (app) => app.onError('global', Late, answer)],
+		[
+			'a global class handler',
+			(app) => app.onError('global', Late, answer)
+		],
 		['a catch-all', (app) => app.onError(answer)],
 		['a global catch-all', (app) => app.onError('global', answer)]
 	]
@@ -571,7 +584,10 @@ describe('hook registered after the route', () => {
 			'with a local error hook',
 			(app, h) => app.get('/', { error: decline }, h)
 		],
-		['behind a request hook', (app, h) => app.onRequest(() => {}).get('/', h)]
+		[
+			'behind a request hook',
+			(app, h) => app.onRequest(() => {}).get('/', h)
+		]
 	]
 
 	for (const lane of lanes)

@@ -10,7 +10,8 @@ describe('Bun router', () => {
 		let traceOnRequest = false
 
 		const app = new Elysia()
-			.use(traceCap()).trace(({ onHandle, onRequest }) => {
+			.use(traceCap())
+			.trace(({ onHandle, onRequest }) => {
 				onRequest(() => {
 					traceOnRequest = true
 				})
@@ -143,7 +144,8 @@ describe('Bun router', () => {
 		let hasRequestId = false
 
 		const app = new Elysia()
-			.use(traceCap()).trace((a) => {
+			.use(traceCap())
+			.trace((a) => {
 				a.onHandle(() => {
 					url = a.context.request.url
 					hasRequestId = !!a.context.rid
@@ -188,7 +190,8 @@ describe('Bun router', () => {
 
 				return fn
 			})
-			.use(traceCap()).trace((a) => {
+			.use(traceCap())
+			.trace((a) => {
 				a.onHandle(() => {
 					url = a.context.request.url
 

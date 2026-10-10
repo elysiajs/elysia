@@ -213,7 +213,8 @@ describe('route descriptor', () => {
 
 	it('classifies a traced route', async () => {
 		const app = new Elysia()
-			.use(trace()).trace(({ onHandle }) => {
+			.use(trace())
+			.trace(({ onHandle }) => {
 				onHandle(() => {})
 			})
 			.get('/tr', () => 'hi')

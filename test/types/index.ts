@@ -7,9 +7,10 @@ import { Cookie } from '../../src/cookie/cookie'
 
 const app = new Elysia()
 
-const typedByteStream = new ReadableStream<Uint8Array>() as ReadableStream<Uint8Array> & {
-	readonly marker: 'preserved'
-}
+const typedByteStream =
+	new ReadableStream<Uint8Array>() as ReadableStream<Uint8Array> & {
+		readonly marker: 'preserved'
+	}
 expectTypeOf(bytes(typedByteStream)).toEqualTypeOf<typeof typedByteStream>()
 // @ts-expect-error certified byte streams must yield Uint8Array chunks
 bytes(new ReadableStream<string>())

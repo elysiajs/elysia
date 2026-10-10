@@ -27,6 +27,8 @@ describe('inline file() AOT target', () => {
 			expect(handlers[0]!.code.includes('cr(h)')).toBe(baked)
 
 			// a drifted replay keeps the JIT, so strip can't drop it
-			expect(replayStubbability(app, handlers, target).reasons).toEqual([])
+			expect(replayStubbability(app, handlers, target).reasons).toEqual(
+				[]
+			)
 		})
 })

@@ -50,40 +50,47 @@ async function main() {
 	const httpExplicitResponse = await r.text()
 
 	const app = new Elysia()
-		.use(websocket()).ws('/v', {
+		.use(websocket())
+		.ws('/v', {
 			body: t.Object({ n: t.Number() }),
 			message(ws: any) {
 				ws.send('ok')
 			}
 		})
-		.use(websocket()).ws('/e', {
+		.use(websocket())
+		.ws('/e', {
 			message() {
 				throw new Error('secret-detail')
 			}
 		})
-		.use(websocket()).ws('/str', {
+		.use(websocket())
+		.ws('/str', {
 			message() {
 				throw 'secret-string'
 			}
 		})
-		.use(websocket()).ws('/obj', {
+		.use(websocket())
+		.ws('/obj', {
 			message() {
 				throw { password: 'secret-object' }
 			}
 		})
-		.use(websocket()).ws('/ce', {
+		.use(websocket())
+		.ws('/ce', {
 			message() {
 				throw InvalidCookie.secret('session')
 			}
 		})
-		.use(websocket()).ws('/c4', {
+		.use(websocket())
+		.ws('/c4', {
 			message() {
 				throw InvalidCookie.signature('session')
 			}
 		})
 		// returned, not thrown: the frame is the instance serialized as data,
 		// so it never reaches the error lane's problem document
-		.use(websocket()).ws('/ret', {
+		.use(websocket())
+		.ws('/ret', {
 			message() {
 				return InvalidCookie.secret('session')
 			}

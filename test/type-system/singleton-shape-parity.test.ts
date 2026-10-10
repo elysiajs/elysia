@@ -56,9 +56,7 @@ describe('hand-built type singletons', () => {
 			})
 
 			it("keeps '~kind' readable but non-enumerable", () => {
-				expect((ours as any)['~kind']).toBe(
-					(theirs as any)['~kind']
-				)
+				expect((ours as any)['~kind']).toBe((theirs as any)['~kind'])
 				expect(Object.keys(ours)).not.toContain('~kind')
 			})
 		})

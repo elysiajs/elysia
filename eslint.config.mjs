@@ -6,12 +6,7 @@ import tsParser from '@typescript-eslint/parser'
 import js from '@eslint/js'
 
 export default defineConfig([
-	globalIgnores([
-		'example/*',
-		'test/**/*',
-		'dist/**',
-		'design/**'
-	]),
+	globalIgnores(['example/*', 'test/**/*', 'dist/**', 'design/**']),
 	{
 		extends: [
 			js.configs.recommended,

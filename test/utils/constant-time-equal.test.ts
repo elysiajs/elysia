@@ -40,7 +40,8 @@ describe('constantTimeEqual', () => {
 	it.if(typeof Bun !== 'undefined')(
 		'uses the native constant-time compare without loading node:crypto on Bun',
 		() => {
-			const utils = new URL('../../src/utils.ts', import.meta.url).pathname
+			const utils = new URL('../../src/utils.ts', import.meta.url)
+				.pathname
 			const { stdout, exitCode } = Bun.spawnSync({
 				cmd: [
 					process.execPath,

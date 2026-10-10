@@ -8,7 +8,8 @@ describe('WebSocket subscriptions getter', () => {
 		let snapshot: string[] = []
 
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				open(ws: any) {
 					ws.subscribe('a')
 					ws.subscribe('b')
@@ -40,7 +41,8 @@ describe('WebSocket subscriptions getter', () => {
 describe('WebSocket destructuring', () => {
 	it('should destructure', async () => {
 		const app = new Elysia()
-			.use(websocket()).ws('/ws', {
+			.use(websocket())
+			.ws('/ws', {
 				async open(ws) {
 					const {
 						subscribe,
@@ -48,7 +50,7 @@ describe('WebSocket destructuring', () => {
 						publish,
 						unsubscribe,
 						cork,
-						send,
+						send
 						// close,
 						// terminate
 					} = ws

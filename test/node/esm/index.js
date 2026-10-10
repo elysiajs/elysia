@@ -252,7 +252,9 @@ try {
 	const mutableApp = new Elysia().get('/file', file(mutablePath))
 	await (await mutableApp.handle(new Request('http://localhost/file'))).text()
 	await writeFile(mutablePath, 'abcdefghij')
-	const changed = await mutableApp.handle(new Request('http://localhost/file'))
+	const changed = await mutableApp.handle(
+		new Request('http://localhost/file')
+	)
 	if (
 		changed.headers.get('content-length') !== '10' ||
 		(await changed.text()) !== 'abcdefghij'
@@ -280,7 +282,9 @@ try {
 				.get('/file', value)
 				.handle(new Request('http://localhost/file'))
 			if ((await hooked.text()) !== 'abcdefghij')
-				throw new Error(`❌ ESM Node.js static file with ${hook} lost its body`)
+				throw new Error(
+					`❌ ESM Node.js static file with ${hook} lost its body`
+				)
 		}
 
 	process.on('unhandledRejection', onUnhandled)
@@ -291,7 +295,9 @@ try {
 	)
 	await new Promise(setImmediate)
 	if (missing.status !== 500 || unhandled)
-		throw new Error('❌ ESM Node.js missing file handling leaked a rejection')
+		throw new Error(
+			'❌ ESM Node.js missing file handling leaked a rejection'
+		)
 
 	await writeFile(missingPath, 'recovered')
 	const recovered = await missingApp.handle(

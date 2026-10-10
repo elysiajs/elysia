@@ -23,7 +23,10 @@ const channel = new Elysia({ name: 'channel' }).macro({
 			'/room',
 			{ channel: { of: t.Object({ id: t.String(), name: t.String() }) } },
 			({ custom }) => {
-				expectTypeOf(custom).toEqualTypeOf<{ id: string; name: string }>()
+				expectTypeOf(custom).toEqualTypeOf<{
+					id: string
+					name: string
+				}>()
 			}
 		)
 		.get(
@@ -143,7 +146,9 @@ const channel = new Elysia({ name: 'channel' }).macro({
 // Object-form macros carry the phantom tag through an annotated value.
 {
 	interface FlagLambda extends MacroTypeLambda {
-		output: this['input'] extends true ? { flagged: 'on' } : { flagged: 'off' }
+		output: this['input'] extends true
+			? { flagged: 'on' }
+			: { flagged: 'off' }
 	}
 
 	const flagged: { $type?: FlagLambda; beforeHandle(): void } = {
@@ -157,21 +162,19 @@ const channel = new Elysia({ name: 'channel' }).macro({
 
 // Route schemas stay exact beside a lambda contribution.
 {
-	new Elysia()
-		.use(channel)
-		.post(
-			'/write/:id',
-			{
-				channel: { of: t.Object({ id: t.String() }) },
-				params: t.Object({ id: t.Number() }),
-				body: t.Object({ msg: t.String() })
-			},
-			({ custom, params, body }) => {
-				expectTypeOf(custom).toEqualTypeOf<{ id: string }>()
-				expectTypeOf(params).toEqualTypeOf<{ id: number }>()
-				expectTypeOf(body).toEqualTypeOf<{ msg: string }>()
-			}
-		)
+	new Elysia().use(channel).post(
+		'/write/:id',
+		{
+			channel: { of: t.Object({ id: t.String() }) },
+			params: t.Object({ id: t.Number() }),
+			body: t.Object({ msg: t.String() })
+		},
+		({ custom, params, body }) => {
+			expectTypeOf(custom).toEqualTypeOf<{ id: string }>()
+			expectTypeOf(params).toEqualTypeOf<{ id: number }>()
+			expectTypeOf(body).toEqualTypeOf<{ msg: string }>()
+		}
+	)
 }
 
 // Early returns without the marker keep the lambda.

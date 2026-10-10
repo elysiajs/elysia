@@ -104,16 +104,18 @@ describe('resources outlive a returned ReadableStream', () => {
 	})
 
 	it('keeps an sse stream an event stream', async () => {
-		const app = new Elysia().onAfterResponse(() => {}).get('/sse', () =>
-			sse(
-				new ReadableStream({
-					start(controller) {
-						controller.enqueue('a')
-						controller.close()
-					}
-				})
+		const app = new Elysia()
+			.onAfterResponse(() => {})
+			.get('/sse', () =>
+				sse(
+					new ReadableStream({
+						start(controller) {
+							controller.enqueue('a')
+							controller.close()
+						}
+					})
+				)
 			)
-		)
 
 		const res = await app.handle(new Request('http://localhost/sse'))
 		expect(res.headers.get('content-type')).toBe('text/event-stream')

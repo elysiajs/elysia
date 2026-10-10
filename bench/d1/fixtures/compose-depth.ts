@@ -83,8 +83,7 @@ function buildChain(
 ): number {
 	let node: any = new Elysia(opt)
 	// Seed the innermost node with its own routes so depth-1 still has routes.
-	for (let r = 0; r < perLevel; r++)
-		node = node.get(`/seed${r}`, () => r)
+	for (let r = 0; r < perLevel; r++) node = node.get(`/seed${r}`, () => r)
 	for (let d = 1; d < depth; d++) {
 		let parent: any = new Elysia({ prefix: `/l${d}`, ...opt })
 		parent = parent.use(node)

@@ -3,7 +3,11 @@ import { describe, it, expect, afterEach } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
-import { Compiled, type CapturedValidator, type ProgramId } from '../../src/compile/aot'
+import {
+	Compiled,
+	type CapturedValidator,
+	type ProgramId
+} from '../../src/compile/aot'
 import {
 	beginValidatorCapture,
 	endValidatorCapture,
@@ -53,11 +57,7 @@ function lanes(slot: 'cookie' | 'query' | 'body', schema: any) {
 		const app =
 			slot === 'body'
 				? new Elysia().post(PATH, { body: schema }, () => 'ok')
-				: new Elysia().get(
-						PATH,
-						{ [slot]: schema } as any,
-						() => 'ok'
-					)
+				: new Elysia().get(PATH, { [slot]: schema } as any, () => 'ok')
 		;(app as any).compile()
 		const captured = endValidatorCapture()
 		endHandlerCapture()
@@ -235,7 +235,11 @@ describe('sealed JSON-string codec errors name the decoded field', () => {
 			})
 		)
 
-		const f = validationError(sealed, { challenge: { nonce: 'ab' } }, 'cookie')
+		const f = validationError(
+			sealed,
+			{ challenge: { nonce: 'ab' } },
+			'cookie'
+		)
 
 		expect(f.errors[0]).toEqual({
 			keyword: 'type',
@@ -283,7 +287,9 @@ describe('sealed JSON-string codec errors name the decoded field', () => {
 				params: { type: 'object' },
 				message: 'must be object'
 			})
-			expect(JSON.stringify(f.errors[0])).toBe(JSON.stringify(w.errors[0]))
+			expect(JSON.stringify(f.errors[0])).toBe(
+				JSON.stringify(w.errors[0])
+			)
 		})
 	})
 
@@ -381,15 +387,18 @@ describe('the coarse-detail build warning', () => {
 
 	it('stays silent for a union nested inside a union', () => {
 		expect(
-			buildWarnings('cookie', t.Cookie({ ids: t.ArrayString(t.String()) }))
+			buildWarnings(
+				'cookie',
+				t.Cookie({ ids: t.ArrayString(t.String()) })
+			)
 		).toEqual([])
 	})
 
 	it('still fires for a scalar coercion the walker cannot see past', () => {
 		// t.Numeric is a coercion union with no decoded object branch to walk
-		expect(buildWarnings('query', t.Object({ n: t.Numeric() })).length).toBe(
-			1
-		)
+		expect(
+			buildWarnings('query', t.Object({ n: t.Numeric() })).length
+		).toBe(1)
 	})
 
 	it('still fires when a scalar coercion sits beside an ObjectString', () => {
@@ -414,9 +423,13 @@ describe('the coarse-detail build warning', () => {
 		expect(
 			buildWarnings(
 				'cookie',
-				t.Cookie({ challenge: t.Optional(t.Object({ when: t.Date() })) }),
+				t.Cookie({
+					challenge: t.Optional(t.Object({ when: t.Date() }))
+				}),
 				(captured) => {
-					const cookie = captured.find((entry) => entry.slot === 'cookie')
+					const cookie = captured.find(
+						(entry) => entry.slot === 'cookie'
+					)
 					expect(cookie?.bridgeFree).toBe(true)
 					expect(cookie?.decodeMirror).toBeDefined()
 				}

@@ -81,7 +81,12 @@ describe('lazy-jit: async-detection parity matrix (§10.2)', () => {
 		[
 			'cyclic w/ nested file',
 			(t as any).Cyclic(
-				{ Node: t.Object({ file: F(), next: t.Optional(t.Ref('Node')) }) },
+				{
+					Node: t.Object({
+						file: F(),
+						next: t.Optional(t.Ref('Node'))
+					})
+				},
 				'Node'
 			)
 		],
@@ -104,7 +109,9 @@ describe('lazy-jit: async-detection parity matrix (§10.2)', () => {
 		],
 		[
 			'unreferenced $defs w/ file',
-			Object.assign(t.Object({ a: t.String() }), { $defs: { Unused: F() } })
+			Object.assign(t.Object({ a: t.String() }), {
+				$defs: { Unused: F() }
+			})
 		]
 	]
 

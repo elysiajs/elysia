@@ -1,9 +1,9 @@
 {
-    "type": "commonjs",
-    "dependencies": {
-        "elysia": "../../.."
-    },
-    "volta": {
-        "node": "24.21.0"
-    }
+	"type": "commonjs",
+	"dependencies": {
+		"elysia": "../../.."
+	},
+	"volta": {
+		"node": "24.21.0"
+	}
 }

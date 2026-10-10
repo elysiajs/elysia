@@ -206,9 +206,9 @@ describe('TypeSystem - ObjectString raw string lane', () => {
 		})
 
 		expect(Value.Check(schema, { meta: encoded, token: 'bad' })).toBe(false)
-		expect(
-			Value.Check(schema, { meta: '{"nonce":"c"}', token: 1 })
-		).toBe(false)
+		expect(Value.Check(schema, { meta: '{"nonce":"c"}', token: 1 })).toBe(
+			false
+		)
 	})
 
 	it('releases the memo once decode consumes it', () => {
@@ -262,7 +262,8 @@ describe('TypeSystem - ObjectString inner coercion', () => {
 			body: JSON.stringify(value)
 		})
 
-	const app = () => new Elysia().post('/b', { body: shape }, ({ body }) => body)
+	const app = () =>
+		new Elysia().post('/b', { body: shape }, ({ body }) => body)
 
 	it('coerces an inner field of a still-encoded object', async () => {
 		const res = await app().handle(body({ m: '{"n":"42","s":"keep"}' }))
@@ -276,7 +277,11 @@ describe('TypeSystem - ObjectString inner coercion', () => {
 	it('keeps an optional inner field of a still-encoded object', async () => {
 		const optional = new Elysia().post(
 			'/b',
-			{ body: t.Object({ m: t.ObjectString({ s: t.Optional(t.String()) }) }) },
+			{
+				body: t.Object({
+					m: t.ObjectString({ s: t.Optional(t.String()) })
+				})
+			},
 			({ body }) => body
 		)
 

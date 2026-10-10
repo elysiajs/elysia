@@ -1830,7 +1830,9 @@ describe('drainDisposables', () => {
 		const log: string[] = []
 		const stack = [
 			() => log.push('first'),
-			() => { throw new Error('disposer failed') },
+			() => {
+				throw new Error('disposer failed')
+			},
 			() => log.push('last')
 		]
 

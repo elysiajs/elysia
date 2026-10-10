@@ -30,16 +30,19 @@ All of the test files are located inside the [`test/`](test/) directory. Unit te
 Recommended to use `main` branch as a base to work on.
 
 #### General Recommendation
+
 - Please kindly verify that you have run test suite before request a review from maintainers with `bun run test`
 - We do not condone the usage of any form of plagiarism or copying code without proper attribution.
 - We do not tolerate disrespectful or inappropriate behavior within the community.
 - AI generated pull request without human interaction, review and supervision may result in close without further notice or ban from future contribution to Elysia.
 
 #### Adding New Features
+
 - Provide a reason why you would like to add this feature. Ideally before creating a PR, create a new issue with, explain the reason, tag as `feature request` and tag maintainer eg. "saltyaom"
 - It's recommended to add test cases to cover core feature of the feature you intent to add
 
 #### Fixing Bug
+
 - When opening an pull request fixing existing issue, please kindly include the issue link or id in the description
 - Provide a detailed description of the bug in the PR. Live demo preferred.
 - Add appropriate test coverage if applicable.

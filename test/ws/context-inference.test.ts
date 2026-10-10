@@ -71,7 +71,8 @@ describe('WebSocket context inference', () => {
 			.use(websocket())
 			.ws('/ws', {
 				beforeHandle(ctx: any) {
-					if (ctx.body === undefined) upgradeUser = ctx.headers['x-user']
+					if (ctx.body === undefined)
+						upgradeUser = ctx.headers['x-user']
 				},
 				open(ws) {
 					ws.send(`${ws.headers['x-user']}:${ws.query.by}`)
