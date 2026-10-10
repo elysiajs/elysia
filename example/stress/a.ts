@@ -1,30 +1,15 @@
-import { getHeapSpaceStatistics } from 'v8'
-import { Elysia, t } from '../../src'
-import { generateHeapSnapshot } from 'bun'
+import { Elysia } from 'elysia'
+import { profile } from './utils'
 
-const memory = process.memoryUsage().heapTotal / 1024 / 1024
-
-const total = 500
-const sub = 1
+const end = profile('q')
 
 const app = new Elysia()
-const plugin = new Elysia()
 
-const t1 = performance.now()
+for (let i = 0; i < 100_000; i++) app.get(`/${i}`, () => i)
 
-for (let i = 0; i < total * sub; i++)
-	plugin.get(`/${i}`, () => 'hi', { response: t.String() })
+await app
+	.handle('/')
+	.then((r) => r.text())
+	.then(console.log)
 
-app.use(plugin)
-
-const t2 = performance.now()
-
-Bun.gc(true)
-const memoryAfter = process.memoryUsage().heapTotal / 1024 / 1024
-const totalRoutes = total * sub
-const totalTime = t2 - t1
-const avgTimePerRoute = totalTime / totalRoutes
-
-console.log(`${totalRoutes} routes took ${totalTime.toFixed(4)} ms`)
-console.log(`Average ${avgTimePerRoute.toFixed(4)} ms per route`)
-console.log(`${(memoryAfter - memory).toFixed(2)} MB memory used`)
+end()

@@ -1,229 +1,92 @@
-import { describe, expect, it } from 'bun:test'
+import '../../src/compile/aot-capture'
+import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
-import { req } from '../utils'
-import { signCookie } from '../../src/utils'
+import { Validator } from '../../src/validator'
+import { TypeBoxValidator } from '../../src/type/validator'
+import { Compiled } from '../../src/compile/aot'
+import {
+	beginValidatorCapture,
+	endValidatorCapture
+} from '../../src/compile/aot-capture'
+import { claimManifest, materialise } from './_manifest'
 
-const secrets = 'We long for the seven wailings. We bear the koan of Jericho.'
+/** Response validators are frozen independently for each declared status. */
 
-const getCookies = (response: Response) =>
-	response.headers.getAll('Set-Cookie').map((x) => {
-		return decodeURIComponent(x)
-	})
+afterEach(() => {
+	Compiled.clear()
+	Validator.clear()
+})
 
-const app = new Elysia()
-	.get(
-		'/council',
-		({ cookie: { council } }) =>
-			(council.value = [
-				{
-					name: 'Rin',
-					affilation: 'Administration'
-				}
-			])
-	)
-	.get('/create', ({ cookie: { name } }) => (name.value = 'Himari'))
-	.get('/multiple', ({ cookie: { name, president } }) => {
-		name.value = 'Himari'
-		president.value = 'Rio'
-
-		return 'ok'
-	})
-	.get(
-		'/update',
-		({ cookie: { name } }) => {
-			name.value = 'seminar: Himari'
-
-			return name.value
-		},
+const buildResponseApp = () =>
+	new Elysia().get(
+		'/u',
 		{
-			cookie: t.Cookie(
-				{
-					name: t.Optional(t.String())
-				},
-				{
-					secrets,
-					sign: ['name']
-				}
-			)
-		}
+			response: {
+				200: t.Object({ id: t.String(), name: t.String() }),
+				404: t.Object({ error: t.String() })
+			}
+		},
+		() => ({ id: 'x', name: 'y' })
 	)
-	.get('/remove', ({ cookie }) => {
-		for (const self of Object.values(cookie)) self.remove()
 
-		return 'Deleted'
-	})
+describe('AOT response freezing', () => {
+	it('captures a separate frozen validator for each declared status', () => {
+		beginValidatorCapture()
+		buildResponseApp().compile()
+		const m = materialise(endValidatorCapture())
 
-describe('Dynamic Cookie Response', () => {
-	it('set cookie', async () => {
-		const response = await app.handle(req('/create'))
+		expect(m.GET?.['/u']?.['response:200']).toBeDefined()
+		expect(m.GET?.['/u']?.['response:404']).toBeDefined()
+		expect(
+			(m.GET?.['/u'] as Record<string, unknown> | undefined)?.['response']
+		).toBeUndefined()
 
-		expect(getCookies(response)).toEqual(['name=Himari; Path=/'])
-	})
+		Validator.clear()
 
-	it('set multiple cookie', async () => {
-		const response = await app.handle(req('/multiple'))
-
-		expect(getCookies(response)).toEqual([
-			'name=Himari; Path=/',
-			'president=Rio; Path=/'
-		])
-	})
-
-	it('set JSON cookie', async () => {
-		const response = await app.handle(req('/council'))
-
-		expect(getCookies(response)).toEqual([
-			'council=[{"name":"Rin","affilation":"Administration"}]; Path=/'
-		])
-	})
-
-	it('write cookie on difference value', async () => {
-		const response = await app.handle(
-			req('/council', {
-				headers: {
-					cookie:
-						'council=' +
-						encodeURIComponent(
-							JSON.stringify([
-								{
-									name: 'Aoi',
-									affilation: 'Financial'
-								}
-							])
-						) +
-						'; Path=/'
-				}
-			})
-		)
-
-		expect(getCookies(response)).toEqual([
-			'council=[{"name":"Rin","affilation":"Administration"}]; Path=/'
-		])
-	})
-
-	it('remove cookie', async () => {
-		const response = await app.handle(
-			req('/remove', {
-				headers: {
-					cookie:
-						'council=' +
-						encodeURIComponent(
-							JSON.stringify([
-								{
-									name: 'Rin',
-									affilation: 'Administration'
-								}
-							])
-						)
-				}
-			})
-		)
-
-		expect(getCookies(response)[0]).toInclude(
-			`council=; Max-Age=0; Path=/; Expires=${new Date(0).toUTCString()}`
-		)
-	})
-
-	it('sign cookie', async () => {
-		const response = await app.handle(req('/update'))
-
-		expect(getCookies(response)).toEqual([
-			`name=${await signCookie('seminar: Himari', secrets)}; Path=/`
-		])
-	})
-
-	it('sign/unsign cookie', async () => {
-		const response = await app.handle(
-			req('/update', {
-				headers: {
-					cookie: `name=${await signCookie(
-						'seminar: Himari',
-						secrets
-					)}`
-				}
-			})
-		)
-
-		expect(response.status).toBe(200)
-	})
-
-	it('inherits cookie settings', async () => {
-		const app = new Elysia({
-			cookie: {
-				secrets,
-				sign: ['name']
-			}
-		}).get(
-			'/update',
-			({ cookie: { name } }) => {
-				if (!name.value) name.value = 'seminar: Himari'
-
-				return name.value
-			},
+		const v = Validator.create(
+			t.Object({ id: t.String(), name: t.String() }),
 			{
-				cookie: t.Cookie({
-					name: t.Optional(t.String())
-				})
+				aot: { method: 'GET', path: '/u' },
+				slot: 'response:200',
+				app: claimManifest({ validators: m })
 			}
-		)
-
-		const response = await app.handle(
-			req('/update', {
-				headers: {
-					cookie: `name=${await signCookie(
-						'seminar: Himari',
-						secrets
-					)}`
-				}
-			})
-		)
-
-		expect(response.status).toBe(200)
+		) as any
+		expect(v.tb).toBeUndefined()
+		expect(v.reconstructedCheck).toBeDefined()
+		expect(v.Check({ id: 'a', name: 'b' })).toBe(true)
+		expect(v.Check({ id: 1 })).toBe(false)
 	})
 
-	it('sign all cookie', async () => {
-		const app = new Elysia({
-			cookie: {
-				secrets,
-				sign: true
-			}
-		}).get(
-			'/update',
-			({ cookie: { name } }) => {
-				if (!name.value) name.value = 'seminar: Himari'
+	it('strips undeclared properties identically in frozen and live validators', () => {
+		const schema = () => t.Object({ id: t.String(), n: t.Number() })
 
-				return name.value
-			},
-			{
-				cookie: t.Cookie({
-					name: t.Optional(t.String())
-				})
-			}
+		beginValidatorCapture()
+		new Elysia()
+			.get(
+				'/u',
+				{
+					response: { 200: schema() }
+				},
+				() => ({ id: 'a', n: 1 })
+			)
+			.compile()
+		const m = materialise(endValidatorCapture())
+
+		Validator.clear()
+		Compiled.clear()
+		const live = new TypeBoxValidator(schema()) as any
+
+		Validator.clear()
+		const frozen = Validator.create(schema(), {
+			aot: { method: 'GET', path: '/u' },
+			slot: 'response:200',
+			app: claimManifest({ validators: m })
+		}) as any
+
+		expect(frozen.tb).toBeUndefined()
+		const input = { id: 'a', n: 1, extra: 'strip' }
+		expect(frozen.Clean?.(structuredClone(input))).toEqual(
+			live.Clean?.(structuredClone(input))
 		)
-
-		const response = await app.handle(
-			req('/update', {
-				headers: {
-					cookie: `name=${await signCookie('seminar: Himari', secrets)}`
-				}
-			})
-		)
-
-		expect(response.status).toBe(200)
-	})
-
-	it("don't share context between race condition", async () => {
-		const resolver = Promise.withResolvers()
-
-		const app = new Elysia({ aot: false })
-			.onRequest(() => new Promise((resolve) => setTimeout(resolve, 1)))
-			.get('/test', ({ request }) => {
-				resolver.resolve(request.url)
-			})
-
-		app.handle(new Request('http://localhost:1025/test'))
-		app.handle(new Request('http://localhost:1025/bad'))
-
-		expect(await resolver.promise).toBe('http://localhost:1025/test')
 	})
 })

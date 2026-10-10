@@ -1,7 +1,7 @@
-import { isBun } from './utils'
+import { nullObject } from '../utils'
 
-export const env = isBun
-	? Bun.env
-	: typeof process !== 'undefined' && process?.env
-		? process.env
-		: {}
+const nodeEnv =
+	typeof process !== 'undefined' && process?.env ? process.env : undefined
+
+export const env = nodeEnv ?? nullObject()
+export const hasReadableEnv = nodeEnv !== undefined

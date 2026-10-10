@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
-import { req } from '../utils'
 
 describe('as', () => {
 	it('scoped', async () => {
@@ -10,7 +9,7 @@ describe('as', () => {
 					hi: 'hi'
 				}
 			})
-			.as('scoped')
+			.as('plugin')
 
 		const plugin = new Elysia()
 			.use(subPlugin1)
@@ -22,8 +21,8 @@ describe('as', () => {
 			.get('/', ({ hi }) => hi ?? 'none')
 
 		const res = await Promise.all([
-			app.handle(req('/')).then((x) => x.text()),
-			app.handle(req('/inner')).then((x) => x.text())
+			app.handle('/').then((x) => x.text()),
+			app.handle('/inner').then((x) => x.text())
 		])
 
 		expect(res).toEqual(['none', 'hi'])
@@ -45,8 +44,8 @@ describe('as', () => {
 		const app = new Elysia().use(plugin).get('/', ({ hi }) => hi ?? 'none')
 
 		const res = await Promise.all([
-			app.handle(req('/')).then((x) => x.text()),
-			app.handle(req('/inner')).then((x) => x.text())
+			app.handle('/').then((x) => x.text()),
+			app.handle('/inner').then((x) => x.text())
 		])
 
 		expect(res).toEqual(['hi', 'hi'])
@@ -54,7 +53,7 @@ describe('as', () => {
 
 	it('global on scoped event', async () => {
 		const subPlugin1 = new Elysia()
-			.derive({ as: 'scoped' }, () => {
+			.derive('plugin', () => {
 				return {
 					hi: 'hi'
 				}
@@ -68,8 +67,8 @@ describe('as', () => {
 		const app = new Elysia().use(plugin).get('/', ({ hi }) => hi ?? 'none')
 
 		const res = await Promise.all([
-			app.handle(req('/')).then((x) => x.text()),
-			app.handle(req('/inner')).then((x) => x.text())
+			app.handle('/').then((x) => x.text()),
+			app.handle('/inner').then((x) => x.text())
 		])
 
 		expect(res).toEqual(['hi', 'hi'])
@@ -80,7 +79,7 @@ describe('as', () => {
 
 		const inner = new Elysia()
 			.guard({
-				response: t.Number(),
+				response: t.Number()
 			})
 			.onBeforeHandle(() => {
 				called++
@@ -98,13 +97,13 @@ describe('as', () => {
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')
 
 		const response = await Promise.all([
-			app.handle(req('/inner')).then((x) => x.status),
-			app.handle(req('/plugin')).then((x) => x.status),
-			app.handle(req('/')).then((x) => x.status)
+			app.handle('/inner').then((x) => x.status),
+			app.handle('/plugin').then((x) => x.status),
+			app.handle('/').then((x) => x.status)
 		])
 
 		expect(called).toBe(3)
-		expect(response).toEqual([422, 422, 422])
+		expect(response).toEqual([500, 500, 500])
 	})
 
 	it('handle as global with local override', async () => {
@@ -135,13 +134,15 @@ describe('as', () => {
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')
 
 		const response = await Promise.all([
-			app.handle(req('/inner')).then((x) => x.status),
-			app.handle(req('/plugin')).then((x) => x.status),
-			app.handle(req('/')).then((x) => x.status)
+			app.handle('/inner').then((x) => x.status),
+			app.handle('/plugin').then((x) => x.status),
+			app.handle('/').then((x) => x.status)
 		])
 
+		// /inner 1 (plugin's hook came after `.use(inner)`: a hook reaches only
+		// the routes after it), /plugin 2, / 1
 		expect(called).toBe(4)
-		expect(response).toEqual([422, 200, 422])
+		expect(response).toEqual([500, 200, 500])
 	})
 
 	it('handle as global with scoped override', async () => {
@@ -160,11 +161,10 @@ describe('as', () => {
 
 		const plugin = new Elysia()
 			.use(inner)
-			.guard({
-				as: 'scoped',
+			.guard('plugin', {
 				response: t.String()
 			})
-            .onBeforeHandle({ as: 'scoped' }, () => {
+			.onBeforeHandle('plugin', () => {
 				called++
 			})
 			.get('/plugin', () => 'ok')
@@ -172,13 +172,13 @@ describe('as', () => {
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')
 
 		const response = await Promise.all([
-			app.handle(req('/inner')).then((x) => x.status),
-			app.handle(req('/plugin')).then((x) => x.status),
-			app.handle(req('/')).then((x) => x.status)
+			app.handle('/inner').then((x) => x.status),
+			app.handle('/plugin').then((x) => x.status),
+			app.handle('/').then((x) => x.status)
 		])
 
 		expect(called).toBe(5)
-		expect(response).toEqual([422, 200, 200])
+		expect(response).toEqual([500, 200, 200])
 	})
 
 	it('handle as scoped', async () => {
@@ -193,7 +193,7 @@ describe('as', () => {
 			})
 			// @ts-expect-error
 			.get('/inner', () => 'a')
-			.as('scoped')
+			.as('plugin')
 
 		const plugin = new Elysia()
 			.use(inner)
@@ -203,13 +203,13 @@ describe('as', () => {
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')
 
 		const response = await Promise.all([
-			app.handle(req('/inner')).then((x) => x.status),
-			app.handle(req('/plugin')).then((x) => x.status),
-			app.handle(req('/')).then((x) => x.status)
+			app.handle('/inner').then((x) => x.status),
+			app.handle('/plugin').then((x) => x.status),
+			app.handle('/').then((x) => x.status)
 		])
 
 		expect(called).toBe(2)
-		expect(response).toEqual([422, 422, 200])
+		expect(response).toEqual([500, 500, 200])
 	})
 
 	it('handle as scoped twice', async () => {
@@ -224,24 +224,24 @@ describe('as', () => {
 			})
 			// @ts-expect-error
 			.get('/inner', () => 'a')
-			.as('scoped')
+			.as('plugin')
 
 		const plugin = new Elysia()
 			.use(inner)
 			// @ts-expect-error
 			.get('/plugin', () => true)
-			.as('scoped')
+			.as('plugin')
 
 		// @ts-expect-error
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')
 
 		const response = await Promise.all([
-			app.handle(req('/inner')).then((x) => x.status),
-			app.handle(req('/plugin')).then((x) => x.status),
-			app.handle(req('/')).then((x) => x.status)
+			app.handle('/inner').then((x) => x.status),
+			app.handle('/plugin').then((x) => x.status),
+			app.handle('/').then((x) => x.status)
 		])
 
 		expect(called).toBe(3)
-		expect(response).toEqual([422, 422, 422])
+		expect(response).toEqual([500, 500, 500])
 	})
 })

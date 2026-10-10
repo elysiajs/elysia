@@ -2,7 +2,6 @@ import { describe, expect, it } from 'bun:test'
 
 import { Elysia } from '../../src'
 import { mergeDeep } from '../../src/utils'
-import { req } from '../utils'
 
 describe('mergeDeep', () => {
 	it('merge empty object', () => {
@@ -14,6 +13,18 @@ describe('mergeDeep', () => {
 		const result = mergeDeep({ key1: 'value1' }, { key2: 'value2' })
 
 		expect(result).toEqual({ key1: 'value1', key2: 'value2' })
+	})
+
+	it('merges arrays target-first without leaking into a shared source', () => {
+		// Route macros may reuse the same source object.
+		const source = { lifecycle: ['plugin', 'route'] }
+
+		const a = mergeDeep({ lifecycle: ['a'] }, source, undefined, true, true)
+		const b = mergeDeep({ lifecycle: ['b'] }, source, undefined, true, true)
+
+		expect(a.lifecycle).toEqual(['a', 'plugin', 'route'])
+		expect(b.lifecycle).toEqual(['b', 'plugin', 'route'])
+		expect(source.lifecycle).toEqual(['plugin', 'route'])
 	})
 
 	it('merge overlapping key', () => {
@@ -76,7 +87,7 @@ describe('mergeDeep', () => {
 			.use(userRoutes)
 			.get('/health', ({ db }) => db.health())
 
-		const response = await app.handle(req('/health')).then((x) => x.text())
+		const response = await app.handle('/health').then((x) => x.text())
 
 		expect(response).toBe('ok')
 	})
@@ -136,7 +147,7 @@ describe('mergeDeep', () => {
 
 		const Plugin = new Elysia({ name: 'Plugin', seed: 'seed' })
 			.decorate('dep', complex)
-			.as('scoped')
+			.as('plugin')
 
 		const ModuleA = new Elysia({ name: 'ModuleA' })
 			.use(Plugin)
@@ -150,14 +161,102 @@ describe('mergeDeep', () => {
 
 		const app = new Elysia().use(ModuleA).use(ModuleB)
 
-		const resA = await app.handle(req('/moda/a')).then((x) => x.text())
-		const resB = await app.handle(req('/modb/a')).then((x) => x.text())
-		const resC = await app.handle(req('/moda/b')).then((x) => x.text())
-		const resD = await app.handle(req('/modb/b')).then((x) => x.text())
+		const resA = await app.handle('/moda/a').then((x) => x.text())
+		const resB = await app.handle('/modb/a').then((x) => x.text())
+		const resC = await app.handle('/moda/b').then((x) => x.text())
+		const resD = await app.handle('/modb/b').then((x) => x.text())
 
 		expect(resA).toBe('1')
 		expect(resB).toBe('1')
 		expect(resC).toBe('2')
 		expect(resD).toBe('2')
+	})
+
+	it('ignores an override for a getter-only property', () => {
+		const target: Record<string, unknown> = {}
+		Object.defineProperty(target, 'sameKey', {
+			get: () => 1,
+			enumerable: true,
+			configurable: false
+		})
+
+		expect(() =>
+			mergeDeep(target, { sameKey: 2 }, undefined, true)
+		).not.toThrow()
+		expect(target.sameKey).toBe(1)
+	})
+
+	it('merges through a non-writable object property', () => {
+		const inner = { a: 1 }
+		const target: Record<string, unknown> = {}
+		Object.defineProperty(target, 'cfg', {
+			value: inner,
+			writable: false,
+			enumerable: true,
+			configurable: false
+		})
+
+		expect(() =>
+			mergeDeep(target, { cfg: { b: 2 } }, undefined, true)
+		).not.toThrow()
+		expect(inner).toEqual({ a: 1, b: 2 })
+	})
+
+	it('replaces a built-in value such as a Date instead of merging into it', async () => {
+		// a Date has no own keys, so merging into it would keep the old instant
+		expect(
+			mergeDeep({ a: new Date(0) }, { a: new Date(1000) }).a.getTime()
+		).toBe(1000)
+
+		const decorated = new Elysia()
+			.decorate({ now: new Date(0) })
+			.decorate('override', { now: new Date(1000) })
+			.get('/', ({ now }) => String(now.getTime()))
+		const stored = new Elysia()
+			.state({ now: new Date(0) })
+			.state('override', { now: new Date(1000) })
+			.get('/', ({ store }) => String(store.now.getTime()))
+		const plugin = new Elysia()
+			.decorate({ now: new Date(0) })
+			.use(new Elysia().decorate('override', { now: new Date(1000) }))
+			.get('/', ({ now }) => String(now.getTime()))
+
+		for (const app of [decorated, stored, plugin])
+			expect(
+				await app
+					.handle(new Request('http://localhost/'))
+					.then((r) => r.text())
+			).toBe('1000')
+	})
+
+	it('replaces a class instance that marks itself with its own toString()', async () => {
+		// FFI-style values carry no Symbol.toStringTag, only a '[object X]' toString(); merging into one keeps the old private state
+		class Client {
+			#id: number
+			constructor(id: number) {
+				this.#id = id
+			}
+			get id() {
+				return this.#id
+			}
+			toString() {
+				return '[object Client]'
+			}
+		}
+
+		expect(
+			mergeDeep({ a: new Client(0) }, { a: new Client(1000) }).a.id
+		).toBe(1000)
+
+		const app = new Elysia()
+			.decorate({ client: new Client(0) })
+			.decorate('override', { client: new Client(1000) })
+			.get('/', ({ client }) => String(client.id))
+
+		expect(
+			await app
+				.handle(new Request('http://localhost/'))
+				.then((r) => r.text())
+		).toBe('1000')
 	})
 })

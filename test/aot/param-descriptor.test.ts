@@ -1,0 +1,109 @@
+import { describe, it, expect } from 'bun:test'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { resolveHandlerParams } from '../../src/compile/handler/params'
+
+const source = (file: string) =>
+	readFileSync(resolve(import.meta.dir, file), 'utf8')
+
+const compilerSource = [
+	'../../src/compile/handler/index.ts',
+	'../../src/compile/handler/jit.ts',
+	'../../src/compile/handler/utils.ts'
+]
+	.map(source)
+	.join('\n')
+
+const paramsSource = source('../../src/compile/handler/params.ts')
+
+const linkedNames = () => {
+	const names = new Set<string>()
+	for (const m of compilerSource.matchAll(
+		/\blink\([^,]+,\s*'([a-z0-9]+)'\)/g
+	))
+		names.add(m[1]!)
+	// `rt`/`fre` are seeded into `seenKeys`/`paramValues` rather than linked
+	for (const m of compilerSource.matchAll(
+		/\bnew Set<string>\(\[([^\]]+)\]\)/g
+	))
+		for (const n of m[1]!.matchAll(/'([a-z0-9]+)'/g)) names.add(n[1]!)
+	// compact prefix is never built under capture (composeRouteHook)
+	names.delete('bp')
+	names.delete('rbp')
+	return names
+}
+
+const descriptorNames = () =>
+	new Set(
+		[
+			...paramsSource.matchAll(
+				/^\t([a-z0-9]+): (?:\(|staticCloneResolver,?$)/gm
+			)
+		].map((match) => match[1]!)
+	)
+
+describe('frozen handler parameter descriptors', () => {
+	it('matches every dependency linked by the handler compiler', () => {
+		const linked = linkedNames()
+		expect(linked.size).toBeGreaterThan(20)
+
+		expect([...descriptorNames()].sort()).toEqual([...linked].sort())
+	})
+
+	it('resolves params positionally, in alias order', () => {
+		const ctx = {
+			parse: { json: 'PJ', formData: 'PF' },
+			res: { map: 'RM', compact: 'RC' },
+			hook: { beforeHandle: 'BF', afterHandle: 'AF', error: 'ER' },
+			vali: 'VA',
+			cookieConfig: 'CC',
+			tracers: 'TR'
+		} as any
+
+		expect(
+			resolveHandlerParams(['pj', 'va', 'bf', 'rc', 'cc', 'tr'], ctx)
+		).toEqual(['PJ', 'VA', 'BF', 'RC', 'CC', 'TR'])
+		expect(resolveHandlerParams([], ctx)).toEqual([])
+		expect(
+			resolveHandlerParams(['rc'], { res: { map: 'M' } } as any)
+		).toEqual([undefined])
+	})
+
+	it('rejects an unknown dependency name', () => {
+		expect(() => resolveHandlerParams(['bogus'], {} as any)).toThrow(
+			/Fail to reconstruct build/
+		)
+	})
+
+	// `vs<i>` / `vr<i>` are linked from a template, which the scan above
+	// cannot see: they bind the i-th declared response status and validator
+	it('resolves response statuses and validators by position', () => {
+		const vali = {
+			response: new Map<number, unknown>([
+				[200, 'V200'],
+				[404, 'V404']
+			])
+		}
+
+		expect(
+			resolveHandlerParams(['vs0', 'vr0', 'vs1', 'vr1'], { vali } as any)
+		).toEqual([200, 'V200', 404, 'V404'])
+	})
+
+	// replaying with a missing validator would skip response validation and
+	// redaction, so the reconstruction fails instead
+	it('rejects a response param the validator does not declare', () => {
+		const vali = { response: new Map<number, unknown>([[200, 'V200']]) }
+
+		for (const [name, ctx] of [
+			['vr1', { vali }],
+			['vs1', { vali }],
+			['vr0', { vali: undefined }],
+			['vr0', { vali: {} }]
+		] as const)
+			expect(
+				() => resolveHandlerParams([name], ctx as any),
+				`${name} with ${JSON.stringify(ctx)}`
+			).toThrow(/Fail to reconstruct build, missing "v[rs][01]" param/)
+	})
+})
