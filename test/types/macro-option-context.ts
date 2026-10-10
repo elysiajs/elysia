@@ -778,7 +778,7 @@ const touch = new Elysia({ name: 'touch' }).macro({
 
 	new Elysia().guard({ params }).group('/user/:id', {}, (app) =>
 		app
-			.beforeHandle(({ params }) => {
+			.onBeforeHandle(({ params }) => {
 				expectTypeOf(params).toEqualTypeOf<{ id: number }>()
 			})
 			.derive(({ params }) => {
@@ -793,7 +793,7 @@ const touch = new Elysia({ name: 'touch' }).macro({
 
 	new Elysia({ prefix: '/user/:id' }).guard({ params }).guard({}, (app) =>
 		app
-			.beforeHandle(({ params }) => {
+			.onBeforeHandle(({ params }) => {
 				expectTypeOf(params).toEqualTypeOf<{ id: number }>()
 			})
 			.derive(({ params }) => {
@@ -807,7 +807,7 @@ const touch = new Elysia({ name: 'touch' }).macro({
 	)
 
 	new Elysia().group('/user/:id', {}, (app) =>
-		app.beforeHandle(({ params }) => {
+		app.onBeforeHandle(({ params }) => {
 			expectTypeOf(params).toEqualTypeOf<{ id: string }>()
 		})
 	)

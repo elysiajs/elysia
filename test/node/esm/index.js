@@ -110,7 +110,7 @@ if (!disposed.includes('derive'))
 // `listen()` needs an adapter on Node, so drive the generic stop lane directly
 disposeApp.server = { stop() {} }
 await disposeApp.stop()
-// the app does not own a value it was handed: `.cleanup()` releases it
+// the app does not own a value it was handed: `.onStop()` releases it
 if (disposed.includes('decorator'))
 	throw new Error('❌ ESM Node.js decorator was disposed on stop')
 
@@ -259,10 +259,22 @@ try {
 	)
 		throw new Error('❌ ESM Node.js file metadata stayed stale')
 
+	const emptyPath = join(temp, 'empty.txt')
+	await writeFile(emptyPath, '')
+	const empty = await new Elysia()
+		.get('/file', file(emptyPath))
+		.handle(new Request('http://localhost/file'))
+	if (
+		empty.status !== 200 ||
+		empty.headers.get('content-range') !== null ||
+		(await empty.text()) !== ''
+	)
+		throw new Error('❌ ESM Node.js empty file sent a content-range')
+
 	// structuredClone isolation served a static file as JSON `{ "path": … }`
 	class OtherFile extends ElysiaFile {}
 	for (const value of [file(mutablePath), new OtherFile(mutablePath)])
-		for (const hook of ['afterHandle', 'mapResponse']) {
+		for (const hook of ['onAfterHandle', 'mapResponse']) {
 			const hooked = await new Elysia()
 				[hook]('global', () => {})
 				.get('/file', value)

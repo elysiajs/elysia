@@ -5,16 +5,16 @@ describe('plugin-scoped hooks', () => {
 	it('runs inherited hooks in order without leaking to later parent routes', async () => {
 		const order: unknown[] = []
 
-		const a1 = new Elysia().beforeHandle('plugin', function a1() {
+		const a1 = new Elysia().onBeforeHandle('plugin', function a1() {
 			order.push(1)
 		})
-		const a2 = new Elysia().beforeHandle('plugin', function a2() {
+		const a2 = new Elysia().onBeforeHandle('plugin', function a2() {
 			order.push(2)
 		})
-		const a3 = new Elysia().beforeHandle('plugin', function a3() {
+		const a3 = new Elysia().onBeforeHandle('plugin', function a3() {
 			order.push(3)
 		})
-		const a4 = new Elysia().beforeHandle('plugin', function a4() {
+		const a4 = new Elysia().onBeforeHandle('plugin', function a4() {
 			order.push(4)
 		})
 
@@ -31,7 +31,7 @@ describe('plugin-scoped hooks', () => {
 			})
 
 		const app = new Elysia()
-			.beforeHandle(function root() {
+			.onBeforeHandle(function root() {
 				order.push('root')
 			})
 			.use(q)
@@ -50,7 +50,7 @@ describe('plugin-scoped hooks', () => {
 
 		const sub = new Elysia({ prefix: '/sub' }).get('/r', () => 'ok')
 		const parent = new Elysia()
-			.beforeHandle('plugin', () => {
+			.onBeforeHandle('plugin', () => {
 				count++
 			})
 			.use(sub)
@@ -63,7 +63,7 @@ describe('plugin-scoped hooks', () => {
 	it('inherited hook chain survives mounting under a prefix', async () => {
 		const inner = new Elysia().get('/c', () => 'handler')
 		const guarded = new Elysia()
-			.beforeHandle(() => 'INTERCEPTED')
+			.onBeforeHandle(() => 'INTERCEPTED')
 			.use(inner)
 
 		const noPrefix = await new Elysia()

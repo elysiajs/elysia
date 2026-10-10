@@ -43,12 +43,12 @@ const throws = (Class: new () => Error) => () => {
 const text = (app: AnyElysia, path: string) =>
 	app.handle(path).then((response) => response.text())
 
-// An error class is "registered" only by the handler `.error(Class, fn)`
+// An error class is "registered" only by the handler `.onError(Class, fn)`
 // attaches: dispatch is `instanceof`, there is no code dictionary to consult
 describe('Error extends', () => {
 	it('dispatches a class handler only to instances of that class', async () => {
 		const app = new Elysia()
-			.error(CustomError, () => 'custom')
+			.onError(CustomError, () => 'custom')
 			.get('/custom', throws(CustomError))
 			.get('/sub', throws(SubError))
 			.get('/other', throws(CustomError2))
@@ -67,8 +67,8 @@ describe('Error extends', () => {
 
 	it('dispatches several classes to their own handlers', async () => {
 		const app = new Elysia()
-			.error(CustomError, () => 'one')
-			.error(CustomError2, () => 'two')
+			.onError(CustomError, () => 'one')
+			.onError(CustomError2, () => 'two')
 			.get('/one', throws(CustomError))
 			.get('/two', throws(CustomError2))
 
@@ -78,8 +78,8 @@ describe('Error extends', () => {
 
 	it('lets the first handler registered for a class win', async () => {
 		const app = new Elysia()
-			.error(CustomError, () => 'first')
-			.error(CustomError, () => 'second')
+			.onError(CustomError, () => 'first')
+			.onError(CustomError, () => 'second')
 			.get('/', throws(CustomError))
 
 		await expect(text(app, '/')).resolves.toBe('first')
@@ -87,7 +87,7 @@ describe('Error extends', () => {
 
 	it('answers a static value registered for a class', async () => {
 		const app = new Elysia()
-			.error(CustomError, 'static')
+			.onError(CustomError, 'static')
 			.get('/', throws(CustomError))
 
 		await expect(text(app, '/')).resolves.toBe('static')
@@ -98,7 +98,7 @@ describe('Error extends', () => {
 		const thrown = new CustomError()
 
 		const app = new Elysia()
-			.error(CustomError, (ctx) => {
+			.onError(CustomError, (ctx) => {
 				context = ctx
 				return 'handled'
 			})
@@ -114,7 +114,7 @@ describe('Error extends', () => {
 
 	it('maps the status from the error class, overridable by the handler', async () => {
 		const app = new Elysia()
-			.error(TeapotError, () => 'tea')
+			.onError(TeapotError, () => 'tea')
 			.get('/', throws(TeapotError))
 
 		const response = await app.handle('/')
@@ -122,7 +122,7 @@ describe('Error extends', () => {
 		expect(await response.text()).toBe('tea')
 
 		const overridden = await new Elysia()
-			.error(TeapotError, ({ status }) => status(409, 'conflict'))
+			.onError(TeapotError, ({ status }) => status(409, 'conflict'))
 			.get('/', throws(TeapotError))
 			.handle('/')
 		expect(overridden.status).toBe(409)
@@ -130,7 +130,7 @@ describe('Error extends', () => {
 
 		// a handled error without a status stays a server error
 		const plain = await new Elysia()
-			.error(CustomError, () => 'handled')
+			.onError(CustomError, () => 'handled')
 			.get('/', throws(CustomError))
 			.handle('/')
 		expect(plain.status).toBe(500)
@@ -138,7 +138,7 @@ describe('Error extends', () => {
 
 	it('inherits a class handler from a functional plugin', async () => {
 		const plugin = (app: Elysia) =>
-			app.error(CustomError, () => 'functional')
+			app.onError(CustomError, () => 'functional')
 
 		const app = new Elysia().use(plugin).get('/', throws(CustomError))
 
@@ -156,9 +156,9 @@ describe('Error extends', () => {
 				'/'
 			)
 
-		const local = new Elysia().error(CustomError, () => 'local')
-		const plugin = new Elysia().error('plugin', CustomError, () => 'plugin')
-		const global = new Elysia().error('global', CustomError, () => 'global')
+		const local = new Elysia().onError(CustomError, () => 'local')
+		const plugin = new Elysia().onError('plugin', CustomError, () => 'plugin')
+		const global = new Elysia().onError('global', CustomError, () => 'global')
 
 		// local: stays inside the plugin
 		await expect(route(local)).resolves.not.toBe('local')
@@ -176,13 +176,13 @@ describe('Error extends', () => {
 	// 3-arg form does, not misread it as a hook scope and throw
 	it('registers an error class whose prototype does not extend Error', async () => {
 		const app = new Elysia()
-			.error(z.ZodError, ({ error }) => `zod ${error.issues.length}`)
+			.onError(z.ZodError, ({ error }) => `zod ${error.issues.length}`)
 			.get('/', () => z.string().parse(1))
 
 		await expect(text(app, '/')).resolves.toBe('zod 1')
 
 		// no explicit scope: it comes from the instance config
-		const plugin = new Elysia({ as: 'global' }).error(
+		const plugin = new Elysia({ as: 'global' }).onError(
 			z.ZodError,
 			() => 'global zod'
 		)
@@ -202,15 +202,15 @@ describe('Error extends', () => {
 	// unhandled (a 500) with no hint, so it must fail at registration
 	it('rejects the 1.x error-code dictionary form at registration', () => {
 		expect(() =>
-			new Elysia().error({ CUSTOM: CustomError } as any)
-		).toThrow('.error({ CODE: Class }) was removed in 2.0')
+			new Elysia().onError({ CUSTOM: CustomError } as any)
+		).toThrow('.onError({ CODE: Class }) was removed in 2.0')
 	})
 
 	// the one-argument array form is typed; dropping it leaves every
 	// error unhandled (500) while the code reads as if it had a handler
 	it('registers every handler of the one-argument array form in order', async () => {
 		const app = new Elysia()
-			.error([
+			.onError([
 				({ error }) =>
 					error instanceof CustomError ? 'first' : undefined,
 				() => 'second'
@@ -223,13 +223,13 @@ describe('Error extends', () => {
 	})
 
 	it('keeps the class and scoped array overloads', async () => {
-		const plugin = new Elysia().error('global', [
+		const plugin = new Elysia().onError('global', [
 			({ error }) =>
 				error instanceof CustomError2 ? 'scoped' : undefined
 		])
 		const app = new Elysia()
 			.use(plugin)
-			.error(CustomError, () => 'class')
+			.onError(CustomError, () => 'class')
 			.get('/', throws(CustomError))
 			.get('/2', throws(CustomError2))
 
@@ -238,7 +238,7 @@ describe('Error extends', () => {
 	})
 
 	it('preserve status code base on error if not set', async () => {
-		const app = new Elysia().error(({ error }) => {
+		const app = new Elysia().onError(({ error }) => {
 			if (error instanceof NotFound) return 'UwU'
 		})
 
@@ -285,7 +285,7 @@ describe('Error extends', () => {
 		])
 
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				if (error instanceof ValidationError)
 					return error.detail(error.message)
 			})
@@ -304,12 +304,12 @@ describe('Error extends', () => {
 })
 
 // A handler or beforeHandle RETURNING an Error is rethrown into the error
-// lane. An instance of a class registered with `.error(Class, fn)` must be
+// lane. An instance of a class registered with `.onError(Class, fn)` must be
 // too, even when it is not an Error (zod v4 `new ZodError()`): otherwise its
 // handler, and the status the route's type claims for it, are skipped and
 // the instance is served as a 200 value
 describe('returned error class instance', () => {
-	// `name` + `message` satisfy the `.error(Class)` type, yet instances are
+	// `name` + `message` satisfy the `.onError(Class)` type, yet instances are
 	// not Errors: only the registration makes them one
 	class Problem {
 		name = 'Problem'
@@ -322,7 +322,7 @@ describe('returned error class instance', () => {
 		const app = () =>
 			new Elysia()
 				.use(
-					new Elysia({ as: 'global' }).error(z.ZodError, () =>
+					new Elysia({ as: 'global' }).onError(z.ZodError, () =>
 						status(418, 'quack')
 					)
 				)
@@ -348,7 +348,7 @@ describe('returned error class instance', () => {
 
 	// The reported repro: a hand-built ZodError used to be served as `200 []`
 	it('serves the reported 3-arg global zod handler repro as 418', async () => {
-		const errorHandler = new Elysia().error('global', z.ZodError, ({ error }) =>
+		const errorHandler = new Elysia().onError('global', z.ZodError, ({ error }) =>
 			status(418, `quack! ${error.message}`)
 		)
 
@@ -378,14 +378,14 @@ describe('returned error class instance', () => {
 			],
 			[
 				'sync afterResponse',
-				(app, h) => app.afterResponse(() => {}).get('/', h),
+				(app, h) => app.onAfterResponse(() => {}).get('/', h),
 				418
 			],
 			// `() => {}`, not `() => undefined`, which may return a Promise and
 			// goes async
 			[
 				'own sync error hook',
-				(app, h) => app.error(() => {}).get('/', h),
+				(app, h) => app.onError(() => {}).get('/', h),
 				418
 			]
 		]
@@ -413,7 +413,7 @@ describe('returned error class instance', () => {
 			for (const [shape, returns, throws] of shapes) {
 				const respond = async (handler: () => unknown) => {
 					const response = await route(
-						new Elysia().error(Problem, problemHandler),
+						new Elysia().onError(Problem, problemHandler),
 						handler
 					).handle(lane === 'bare POST' ? post('/') : req('/'))
 
@@ -434,7 +434,7 @@ describe('returned error class instance', () => {
 
 	it('rethrows an instance a beforeHandle returns', async () => {
 		const response = await new Elysia()
-			.error(Problem, problemHandler)
+			.onError(Problem, problemHandler)
 			.get('/', { beforeHandle: () => new Problem() }, () => 'handler')
 			.handle('/')
 
@@ -444,7 +444,7 @@ describe('returned error class instance', () => {
 
 	it('throws a registered class instance served as a static value', async () => {
 		const response = await new Elysia()
-			.error(Problem, problemHandler)
+			.onError(Problem, problemHandler)
 			.get('/', new Problem() as any)
 			.handle('/')
 
@@ -458,7 +458,7 @@ describe('returned error class instance', () => {
 		const app = new Elysia()
 			.use(
 				new Elysia()
-					.error(Problem, problemHandler)
+					.onError(Problem, problemHandler)
 					.get('/inside', () => new Problem())
 			)
 			.get('/outside', () => new Problem())
@@ -480,11 +480,11 @@ describe('returned error class instance', () => {
 
 		try {
 			await new Elysia()
-				.error(CustomError, () => 'custom')
+				.onError(CustomError, () => 'custom')
 				.get('/', () => 'hi')
 				.handle('/')
 			await new Elysia()
-				.error(Error, () => 'error')
+				.onError(Error, () => 'error')
 				.get('/', () => 'hi')
 				.handle('/')
 
@@ -493,7 +493,7 @@ describe('returned error class instance', () => {
 
 			emitted.length = 0
 			await new Elysia()
-				.error(z.ZodError, () => 'zod')
+				.onError(z.ZodError, () => 'zod')
 				.get('/', () => 'hi')
 				.handle('/')
 
@@ -507,15 +507,15 @@ describe('returned error class instance', () => {
 	// An arrow has no prototype: as a class, `instanceof` would throw on
 	// every later error dispatch, so it must fail at registration
 	it('rejects a prototype-less function as an error class', () => {
-		expect(() => new Elysia().error((() => 1) as any, () => 'x')).toThrow(
+		expect(() => new Elysia().onError((() => 1) as any, () => 'x')).toThrow(
 			/Invalid hook scope/
 		)
 
-		expect(() => new Elysia().error(z.ZodError, () => 'x')).not.toThrow()
+		expect(() => new Elysia().onError(z.ZodError, () => 'x')).not.toThrow()
 	})
 })
 
-// A hook reaches only the routes registered after it, `.error()` included:
+// A hook reaches only the routes registered after it, `.onError()` included:
 // the Elysia 1 rule (life-cycle "order of code", 1.0 "local first"). A
 // matched route's error ends with its own hooks, as Elysia 1's `skipGlobal`
 describe('hook registered after the route', () => {
@@ -555,10 +555,10 @@ describe('hook registered after the route', () => {
 	const answer = () => status(418, 'late')
 
 	const lateHooks: [hook: string, add: (app: AnyElysia) => AnyElysia][] = [
-		['a class handler', (app) => app.error(Late, answer)],
-		['a global class handler', (app) => app.error('global', Late, answer)],
-		['a catch-all', (app) => app.error(answer)],
-		['a global catch-all', (app) => app.error('global', answer)]
+		['a class handler', (app) => app.onError(Late, answer)],
+		['a global class handler', (app) => app.onError('global', Late, answer)],
+		['a catch-all', (app) => app.onError(answer)],
+		['a global catch-all', (app) => app.onError('global', answer)]
 	]
 
 	const routes: [
@@ -566,12 +566,12 @@ describe('hook registered after the route', () => {
 		define: (app: AnyElysia, handler: () => unknown) => AnyElysia
 	][] = [
 		['without error hooks', (app, h) => app.get('/', h)],
-		['after a catch-all', (app, h) => app.error(decline).get('/', h)],
+		['after a catch-all', (app, h) => app.onError(decline).get('/', h)],
 		[
 			'with a local error hook',
 			(app, h) => app.get('/', { error: decline }, h)
 		],
-		['behind a request hook', (app, h) => app.request(() => {}).get('/', h)]
+		['behind a request hook', (app, h) => app.onRequest(() => {}).get('/', h)]
 	]
 
 	for (const lane of lanes)
@@ -622,7 +622,7 @@ describe('hook registered after the route', () => {
 					(app) =>
 						app
 							.get('/', () => 'ok')
-							.error(({ error }) =>
+							.onError(({ error }) =>
 								error instanceof NotFound
 									? status(418, 'late')
 									: undefined
@@ -631,11 +631,11 @@ describe('hook registered after the route', () => {
 				),
 				request: await serve(lane, (app) =>
 					app
-						.request(() => {
+						.onRequest(() => {
 							throw new Late()
 						})
 						.get('/', () => 'ok')
-						.error(Late, answer)
+						.onError(Late, answer)
 				)
 			}
 
@@ -688,9 +688,9 @@ describe('hook registered after the route', () => {
 		scope: string,
 		add: (inner: AnyElysia) => AnyElysia
 	][] = [
-		['local', (inner) => inner.error(Late, answer)],
-		['plugin', (inner) => inner.error('plugin', Late, answer)],
-		['global', (inner) => inner.error('global', Late, answer)]
+		['local', (inner) => inner.onError(Late, answer)],
+		['plugin', (inner) => inner.onError('plugin', Late, answer)],
+		['global', (inner) => inner.onError('global', Late, answer)]
 	]
 
 	for (const lane of lanes)
@@ -723,18 +723,18 @@ describe('hook registered after the route', () => {
 				app.group('/g', (outer) =>
 					outer
 						.group('/n', (n) =>
-							n.get('/r', () => new Late()).error(inner as any)
+							n.get('/r', () => new Late()).onError(inner as any)
 						)
-						.error(Late, answer)
+						.onError(Late, answer)
 				)
 
 			const outerFirst =
 				(route: (n: AnyElysia) => AnyElysia) => (app: AnyElysia) =>
 					app.group('/g', (outer) =>
 						outer
-							.error(Late, answer)
+							.onError(Late, answer)
 							.group('/n', (n) =>
-								route(n).error(() => status(409, 'inner'))
+								route(n).onError(() => status(409, 'inner'))
 							)
 					)
 
@@ -772,7 +772,7 @@ describe('hook registered after the route', () => {
 										{ error: () => status(401, 'local') },
 										() => new Late()
 									)
-									.error(() => status(409, 'inner'))
+									.onError(() => status(409, 'inner'))
 							)
 						),
 					'/g/n/r'
@@ -918,7 +918,7 @@ describe('hook registered after the route', () => {
 					app.use(
 						new Elysia()
 							.get('/', () => new Late())
-							.error(Late, answer)
+							.onError(Late, answer)
 					)
 				)
 			).slice(0, 3)
@@ -944,7 +944,7 @@ describe('hook registered after the route', () => {
 			const own = await serve(lane, (app) =>
 				app
 					.mapResponse(map)
-					.afterResponse(() => {
+					.onAfterResponse(() => {
 						ran.push('own')
 					})
 					.get('/', thrown)
@@ -954,7 +954,7 @@ describe('hook registered after the route', () => {
 				app
 					.get('/', thrown)
 					.mapResponse(map)
-					.afterResponse(() => {
+					.onAfterResponse(() => {
 						ran.push('later')
 					})
 			)
@@ -978,7 +978,7 @@ describe('hook registered after the route', () => {
 			}
 
 			const define = (handler: () => unknown) => (app: AnyElysia) =>
-				app.get('/', handler).error(Problem as any, answer)
+				app.get('/', handler).onError(Problem as any, answer)
 
 			const served = {
 				returned: (
@@ -1014,7 +1014,7 @@ describe('hook registered after the route', () => {
 					app.group('/g', (group) =>
 						group
 							.get('/own', new ValueError() as any)
-							.error(ValueError as any, answer)
+							.onError(ValueError as any, answer)
 					),
 				'/g/own'
 			)

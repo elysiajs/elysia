@@ -25,7 +25,7 @@ const app = new Elysia()
 		(app) =>
 			app
 				.derive(() => ({ user: { id: 1 } }))
-				.beforeHandle(() => {})
+				.onBeforeHandle(() => {})
 				.get('/hooked', () => 'ok')
 	)
 	// (c) async + body + response validation

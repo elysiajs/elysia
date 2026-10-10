@@ -569,7 +569,7 @@ export const BunAdapter = createAdapter({
 
 			if (!epoch.setup)
 				throw new Error(
-					'[Elysia] .cleanup() called after its setup epoch settled'
+					'[Elysia] .onStop() called after its onStart epoch settled'
 				)
 
 			if (Array.isArray(handler)) epochCleanup.push(...handler)
@@ -866,7 +866,7 @@ export const BunAdapter = createAdapter({
 								for (const result of results)
 									if (result.status === 'rejected')
 										console.error(
-											'[Elysia] setup abandoned by stop(true) failed:',
+											'[Elysia] onStart abandoned by stop(true) failed:',
 											result.reason
 										)
 

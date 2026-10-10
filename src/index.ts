@@ -33,6 +33,7 @@ export {
 export {
 	Capture as Manifest,
 	Compiled,
+	inAotBuild,
 	type AotFingerprint,
 	type CompilerSession,
 	type ProgramId

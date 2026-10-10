@@ -128,7 +128,7 @@ describe('Path', () => {
 	})
 
 	it('custom error', async () => {
-		const app = new Elysia().error(({ error }) => {
+		const app = new Elysia().onError(({ error }) => {
 			if (error instanceof NotFound)
 				return new Response('Not Stonk :(', {
 					status: 404
@@ -411,8 +411,8 @@ describe('Path', () => {
 
 	it('add path if onRequest is used', async () => {
 		const app = new Elysia()
-			.request(() => {})
-			.afterHandle(({ path }) => {
+			.onRequest(() => {})
+			.onAfterHandle(({ path }) => {
 				return path
 			})
 			.get('/', () => 'Hi')

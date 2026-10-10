@@ -393,7 +393,7 @@ describe('Cookie Response', () => {
 
 	it('signs a cookie set before a thrown-then-handled error', async () => {
 		const app = new Elysia()
-			.error(() => 'handled')
+			.onError(() => 'handled')
 			.get(
 				'/boom',
 				{

@@ -17,10 +17,10 @@ describe('route absorption', () => {
 	it('preserves lifecycle order and error recovery through absorption', async () => {
 		const order: string[] = []
 		const lifecycle = new Elysia()
-			.beforeHandle(() => void order.push('plugin'))
+			.onBeforeHandle(() => void order.push('plugin'))
 			.get('/hook', () => 'hook')
 		const error = new Elysia()
-			.error(() => 'recovered')
+			.onError(() => 'recovered')
 			.get('/error', () => {
 				throw new Error('boom')
 			})
@@ -96,9 +96,9 @@ describe('route absorption', () => {
 			return 'ok'
 		})
 		const root = new Elysia()
-			.beforeHandle(() => void order.push('before-use'))
+			.onBeforeHandle(() => void order.push('before-use'))
 			.use(plugin)
-			.beforeHandle(() => void order.push('after-use'))
+			.onBeforeHandle(() => void order.push('after-use'))
 
 		expectOwner(root, '/ordered', plugin)
 		await expect((await root.handle('/ordered')).text()).resolves.toBe('ok')

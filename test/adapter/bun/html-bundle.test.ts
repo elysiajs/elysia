@@ -58,7 +58,7 @@ describe('Bun HTML import route', () => {
 		// a fetch-level hook must not push the bundle onto the JS lane,
 		// where it cannot be served at all
 		const { response, body } = await serve(
-			new Elysia().request(() => {}).get('/', index)
+			new Elysia().onRequest(() => {}).get('/', index)
 		)
 
 		expect(response.status).toBe(200)
@@ -68,7 +68,7 @@ describe('Bun HTML import route', () => {
 	it('leaves plain literals on the JS lane when a request hook is present', () => {
 		expect(
 			collectStaticRoutes(
-				new Elysia().request(() => {}).get('/literal', 'literal') as any
+				new Elysia().onRequest(() => {}).get('/literal', 'literal') as any
 			)
 		).toBeUndefined()
 	})
@@ -78,7 +78,7 @@ describe('Bun HTML import route', () => {
 	// registered natively as hand-offs so Bun's specificity picks them
 	it('serves a wildcard bundle as SPA fallback without shadowing routes', async () => {
 		const app = new Elysia()
-			.request(({ set }) => {
+			.onRequest(({ set }) => {
 				set.headers['x-elysia'] = '1'
 			})
 			.get('/*', index)

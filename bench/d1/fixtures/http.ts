@@ -118,7 +118,7 @@ async function main() {
 		await app.stop()
 		stoppedResolve()
 	}
-	if (process.env.D1_INJECT === 'http') app.request(injectHttp)
+	if (process.env.D1_INJECT === 'http') app.onRequest(injectHttp)
 	app.get('/plain', () => 'ok')
 		.get('/dynamic/:id', ({ params }: any) => params.id)
 		.post(

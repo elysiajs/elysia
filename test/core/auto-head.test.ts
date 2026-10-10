@@ -59,7 +59,7 @@ describe('autoHead plugin', () => {
 		let requests = 0
 		let beforeHandle = 0
 		const app = new Elysia()
-			.request(() => {
+			.onRequest(() => {
 				requests++
 			})
 			.use(autoHead())

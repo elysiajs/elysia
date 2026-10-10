@@ -12,7 +12,7 @@ describe('context.path', () => {
 
 		try {
 			const app = new Elysia()
-				.request((context) => {
+				.onRequest((context) => {
 					;(context as any).path = '/moved'
 				})
 				.get('/original', () => 'original')
@@ -39,7 +39,7 @@ describe('context.path', () => {
 		let descriptor: PropertyDescriptor | undefined
 
 		const app = new Elysia()
-			.request((context) => {
+			.onRequest((context) => {
 				keys = Object.keys(context)
 				spread = { ...context }
 				json = JSON.stringify(context)
@@ -60,7 +60,7 @@ describe('context.path', () => {
 		let keys: string[] = []
 
 		const app = new Elysia()
-			.request((context) => {
+			.onRequest((context) => {
 				descriptor = Object.getOwnPropertyDescriptor(context, 'path')
 				keys = Object.keys(context)
 			})
@@ -84,7 +84,7 @@ describe('context.path', () => {
 
 		try {
 			const app = new Elysia()
-				.request((context) => {
+				.onRequest((context) => {
 					;(context as any).path = '/moved'
 				})
 				.get('/original', () => 'original')

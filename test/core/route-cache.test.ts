@@ -7,7 +7,7 @@ const build = () => {
 
 	return new Elysia()
 		.use(plugin)
-		.beforeHandle(() => {})
+		.onBeforeHandle(() => {})
 		.get('/a', () => 'a')
 		.get('/b', { body: t.Object({ x: t.String() }) }, () => 'b')
 }
@@ -132,7 +132,7 @@ describe('route introspection cache', () => {
 
 		expect(errorHooks()).toBe(0)
 
-		plugin.error(() => {
+		plugin.onError(() => {
 			ran.push('late')
 			return new Response('handled', { status: 500 })
 		})

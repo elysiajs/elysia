@@ -11,7 +11,7 @@ import { compileToSource } from '../../src/plugin/aot/source'
 /** The AOT target selects the runtime-specific header extraction it emits. */
 const build = () =>
 	new Elysia()
-		.beforeHandle(() => {})
+		.onBeforeHandle(() => {})
 		.get(
 			'/',
 			{ headers: t.Object({ 'x-id': t.Optional(t.String()) }) },

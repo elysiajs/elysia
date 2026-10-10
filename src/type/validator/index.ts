@@ -40,7 +40,7 @@ import {
 	Compiled,
 	reconstruct,
 	EMPTY_EXTERNALS,
-	Capture,
+	inAotBuild,
 	captureImpl,
 	type FrozenValidator
 } from '../../compile/aot'
@@ -622,7 +622,7 @@ export class TypeBoxValidator<
 			this.schema = nonAdditionalProperties(this.schema as any) as T
 
 		if (!isFrozen) {
-			const capturing = Capture.isCapturing()
+			const capturing = inAotBuild()
 
 			this.hasCodec = HasCodec(this.schema)
 			this.hasDefault = hasProperty('default', this.schema as any)
@@ -695,7 +695,7 @@ export class TypeBoxValidator<
 			const defaults = this.hasDefault
 				? verifyPreallocatableDefault(
 						this.schema as TSchema,
-						Capture.isCapturing()
+						inAotBuild()
 					)
 				: undefined
 
@@ -817,7 +817,7 @@ export class TypeBoxValidator<
 							return clean(value)
 						}
 					} else {
-						if (aot && slot && Capture.isCapturing() && captureImpl)
+						if (aot && slot && inAotBuild() && captureImpl)
 							captureImpl.captureMirror(
 								schema,
 								aot,
@@ -877,7 +877,7 @@ export class TypeBoxValidator<
 		if (
 			options?.aot &&
 			options.slot &&
-			Capture.isCapturing() &&
+			inAotBuild() &&
 			captureImpl
 		)
 			captureImpl.captureBridgeFree(options.aot, options.slot, rawSchema)
@@ -1000,7 +1000,7 @@ export class TypeBoxValidator<
 				? !slot?.startsWith('response')
 				: !!slot?.startsWith('response')
 
-		if (aot && slot && Capture.isCapturing() && captureSlot && captureImpl)
+		if (aot && slot && inAotBuild() && captureSlot && captureImpl)
 			captureImpl.captureCodecMirror(
 				schema,
 				aot,

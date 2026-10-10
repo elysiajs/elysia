@@ -46,7 +46,7 @@ describe('NotFound miss sentinel', () => {
 
 		const app = new Elysia()
 			.get('/', () => 'hi')
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				observed = error
 			})
 
@@ -68,7 +68,7 @@ describe('NotFound miss sentinel', () => {
 
 		const app = new Elysia()
 			.get('/user/:id', ({ params }) => params.id)
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				observed = error
 			})
 
@@ -82,7 +82,7 @@ describe('NotFound miss sentinel', () => {
 	it('error hook can return a custom response for a miss', async () => {
 		const app = new Elysia()
 			.get('/', () => 'hi')
-			.error(({ error, set }) => {
+			.onError(({ error, set }) => {
 				if (error instanceof NotFound) {
 					set.status = 404
 
@@ -102,7 +102,7 @@ describe('NotFound miss sentinel', () => {
 		// the materialized NotFound as detail — pinned byte-identical here
 		const app = new Elysia()
 			.get('/', () => 'hi')
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				throw error
 			})
 
@@ -128,7 +128,7 @@ describe('NotFound miss sentinel', () => {
 
 		const app = new Elysia()
 			.get('/', () => 'hi')
-			.error(async ({ error }) => {
+			.onError(async ({ error }) => {
 				observed = error
 			})
 
@@ -153,10 +153,10 @@ describe('NotFound miss sentinel', () => {
 				})
 			})
 			.get('/', () => 'hi')
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				hookError = error
 			})
-			.afterResponse((context) => {
+			.onAfterResponse((context) => {
 				afterResponseError = (context as any).error
 			})
 
@@ -179,9 +179,9 @@ describe('NotFound miss sentinel', () => {
 		let observed: unknown
 
 		const app = new Elysia()
-			.request(() => {})
+			.onRequest(() => {})
 			.get('/', () => 'hi')
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				observed = error
 			})
 
@@ -195,7 +195,7 @@ describe('NotFound miss sentinel', () => {
 	it('static-route hit is unaffected', async () => {
 		const app = new Elysia()
 			.get('/', () => 'hi')
-			.error(() => 'should not run')
+			.onError(() => 'should not run')
 
 		const response = await app.handle('/')
 
@@ -209,7 +209,7 @@ describe('NotFound miss sentinel', () => {
 		const custom = new NotFound('custom message')
 
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				observed = error
 			})
 			.get('/', () => {

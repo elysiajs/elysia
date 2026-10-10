@@ -75,7 +75,7 @@ describe('JIT route factory cache', () => {
 	it('never runs a factory that did not compile the route source', async () => {
 		const app = () =>
 			new Elysia()
-				.beforeHandle(() => {})
+				.onBeforeHandle(() => {})
 				.get('/', ({ query }) => `own:${query.q}`)
 
 		factoryCache.clear()

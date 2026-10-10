@@ -27,21 +27,21 @@ const abortPrefix = async (asyncHook: boolean, flatFallback: boolean) => {
 				controller.abort()
 			}
 	let first = new Elysia()
-		.beforeHandle('plugin', abort)
+		.onBeforeHandle('plugin', abort)
 		.get('/first', () => 'first')
 
 	if (flatFallback)
-		first = first.afterHandle('plugin', () => {
+		first = first.onAfterHandle('plugin', () => {
 			order.push('after')
 		}) as any
 
 	const second = new Elysia()
-		.beforeHandle('plugin', () => {
+		.onBeforeHandle('plugin', () => {
 			order.push('later-prefix')
 		})
 		.get('/second', () => 'second')
 	const target = new Elysia()
-		.beforeHandle('plugin', () => {
+		.onBeforeHandle('plugin', () => {
 			order.push('local')
 		})
 		.get('/target', () => {
@@ -67,7 +67,7 @@ describe('eager propagated-hook prefixes', () => {
 		const order: string[] = []
 		const plugins = ['a', 'b', 'c'].map((name, index) =>
 			new Elysia()
-				.beforeHandle('plugin', () => {
+				.onBeforeHandle('plugin', () => {
 					order.push(name)
 				})
 				.get(`/r${index}`, () => name)
@@ -87,12 +87,12 @@ describe('eager propagated-hook prefixes', () => {
 	it('serves a direct eager request through the compact prefix runner', async () => {
 		const order: string[] = []
 		const first = new Elysia()
-			.beforeHandle('plugin', () => {
+			.onBeforeHandle('plugin', () => {
 				order.push('first')
 			})
 			.get('/first', () => 'first')
 		const second = new Elysia()
-			.beforeHandle('plugin', () => {
+			.onBeforeHandle('plugin', () => {
 				order.push('second')
 			})
 			.get('/second', () => 'second')
@@ -132,12 +132,12 @@ describe('eager propagated-hook prefixes', () => {
 		}
 
 		const first = new Elysia()
-			.beforeHandle('plugin', duplicate)
-			.beforeHandle('plugin', duplicate)
-			.beforeHandle('plugin', () => Promise.resolve(undefined))
+			.onBeforeHandle('plugin', duplicate)
+			.onBeforeHandle('plugin', duplicate)
+			.onBeforeHandle('plugin', () => Promise.resolve(undefined))
 			.get('/first', () => 'first')
 		const second = new Elysia()
-			.beforeHandle('plugin', () => {
+			.onBeforeHandle('plugin', () => {
 				order.push('early')
 				return new Response('blocked', { status: 409 })
 			})
@@ -250,7 +250,7 @@ describe('eager propagated-hook prefixes', () => {
 		for (let i = 0; i < total; i++)
 			app.use(
 				new Elysia()
-					.beforeHandle('plugin', () => {
+					.onBeforeHandle('plugin', () => {
 						order.push(i)
 					})
 					.get(`/deep-${i}`, () => i)
@@ -275,20 +275,20 @@ describe('eager propagated-hook prefixes', () => {
 					events.push('mapDerive')
 					return { mapped: derived + 'm' }
 				})
-				.afterHandle('plugin', () => {
+				.onAfterHandle('plugin', () => {
 					events.push('afterHandle')
 				})
 				.mapResponse('plugin', () => {
 					events.push('mapResponse')
 				})
-				.afterResponse('plugin', () => {
+				.onAfterResponse('plugin', () => {
 					events.push('afterResponse')
 				})
 				.get('/plugin', ({ derived, mapped }) => derived + mapped)
 
 			return new Elysia()
 				.use(plugin)
-				.error(
+				.onError(
 					({ error }) => new Response(error.message, { status: 418 })
 				)
 				.get('/throw', () => {

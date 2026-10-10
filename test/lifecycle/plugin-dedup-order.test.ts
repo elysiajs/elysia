@@ -40,6 +40,17 @@ type Event =
 	| 'afterResponse'
 	| 'error'
 
+// event name -> the builder method that registers it
+const method = {
+	transform: 'onTransform',
+	derive: 'derive',
+	beforeHandle: 'onBeforeHandle',
+	afterHandle: 'onAfterHandle',
+	mapResponse: 'mapResponse',
+	afterResponse: 'onAfterResponse',
+	error: 'onError'
+} as const
+
 const hookOf = (event: Event, name: string) =>
 	event === 'derive' ? markDerive(name) : mark(name)
 
@@ -48,7 +59,7 @@ const on = (
 	event: Event,
 	name: string,
 	scope: 'local' | 'plugin' | 'global' = 'local'
-) => app[event](scope, hookOf(event, name))
+) => app[method[event]](scope, hookOf(event, name))
 
 const routes = (
 	app: any,
@@ -465,7 +476,7 @@ table('seeded and factory plugins', [
 		define: (app) => {
 			const shared = mark('shared')
 			const factory = (seed: number) =>
-				named('s', seed).beforeHandle('global', shared)
+				named('s', seed).onBeforeHandle('global', shared)
 			const feature = routes(new Elysia().use(factory(2)))
 			return app.use(factory(1)).use(feature)
 		},
@@ -482,8 +493,8 @@ table('multiplicity Elysia 1 keeps', [
 		define: (app) => {
 			const same = mark('same')
 			const audit = named('audit')
-				.beforeHandle('global', same)
-				.beforeHandle('global', same)
+				.onBeforeHandle('global', same)
+				.onBeforeHandle('global', same)
 			const feature = routes(new Elysia().use(audit), '/child')
 			return app.use(audit).use(feature).get('/root', ok)
 		},
@@ -499,8 +510,8 @@ table('multiplicity Elysia 1 keeps', [
 			const both = mark('both')
 			const plugin = routes(
 				named('scope')
-					.beforeHandle('local', both)
-					.beforeHandle('global', both),
+					.onBeforeHandle('local', both)
+					.onBeforeHandle('global', both),
 				'/child'
 			)
 			return app.use(plugin).get('/root', ok)
@@ -515,7 +526,7 @@ table('multiplicity Elysia 1 keeps', [
 		// maintainer decision: unnamed plugins run once per path, as in 1.x
 		name: 'unnamed plugin used by the root and a feature',
 		define: (app) => {
-			const anon = new Elysia().beforeHandle('global', mark('anon'))
+			const anon = new Elysia().onBeforeHandle('global', mark('anon'))
 			const feature = routes(new Elysia().use(anon), '/child')
 			return app.use(anon).use(feature).get('/root', ok)
 		},
@@ -529,9 +540,9 @@ table('multiplicity Elysia 1 keeps', [
 		name: 'named plugin hook function also registered on the root',
 		define: (app) => {
 			const shared = mark('shared')
-			const audit = named('audit').beforeHandle('global', shared)
+			const audit = named('audit').onBeforeHandle('global', shared)
 			const feature = routes(new Elysia().use(audit))
-			return app.beforeHandle(shared).use(feature).get('/root', ok)
+			return app.onBeforeHandle(shared).use(feature).get('/root', ok)
 		},
 		expect: {
 			'/plain': '200 shared,shared',
@@ -543,10 +554,10 @@ table('multiplicity Elysia 1 keeps', [
 		// an unnamed helper takes the first named plugin it passes through
 		name: 'unnamed helper re-exported by a named plugin',
 		define: (app) => {
-			const helper = new Elysia().beforeHandle('global', mark('helper'))
+			const helper = new Elysia().onBeforeHandle('global', mark('helper'))
 			const auth = named('auth')
 				.use(helper)
-				.beforeHandle('global', mark('auth'))
+				.onBeforeHandle('global', mark('auth'))
 			const feature = routes(new Elysia().use(auth), '/child')
 			return app.use(auth).use(feature).get('/root', ok)
 		},
@@ -657,8 +668,8 @@ table('plugin local hooks and callback errors', [
 		name: "re-emitted plugin route keeps the plugin's local hook",
 		define: (app) => {
 			const p = named('P')
-				.beforeHandle(mark('Plocal'))
-				.beforeHandle('global', mark('Pglobal'))
+				.onBeforeHandle(mark('Plocal'))
+				.onBeforeHandle('global', mark('Pglobal'))
 				.get('/p', ok)
 			return app.use(p).use(new Elysia().use(p))
 		},
@@ -667,7 +678,7 @@ table('plugin local hooks and callback errors', [
 	{
 		name: 'named error hook at the root and in a group callback',
 		define: (app) => {
-			const audit = () => named('audit').error('global', mark('audit'))
+			const audit = () => named('audit').onError('global', mark('audit'))
 			return app
 				.use(audit())
 				.group('/g', (g: any) =>
@@ -680,12 +691,12 @@ table('plugin local hooks and callback errors', [
 		// the callback's own error hook still covers the route before it
 		name: 'callback error hook with a named global error hook',
 		define: (app) => {
-			const audit = named('audit').error('global', mark('audit'))
+			const audit = named('audit').onError('global', mark('audit'))
 			const feature = named('feature')
 				.use(audit)
 				.get('/plain', throwing)
 				.group('/g', (g: any) =>
-					g.get('/x', throwing).error(mark('cb'))
+					g.get('/x', throwing).onError(mark('cb'))
 				)
 			return app.use(audit).use(feature)
 		},
@@ -698,8 +709,8 @@ table('plugin local hooks and callback errors', [
 		define: (app) => {
 			const audit = () =>
 				named('audit')
-					.beforeHandle('global', mark('auditBH'))
-					.error('global', mark('auditERR'))
+					.onBeforeHandle('global', mark('auditBH'))
+					.onError('global', mark('auditERR'))
 			const feature = new Elysia().use(audit()).get('/f', throwing)
 			return app
 				.group('/api', (g: any) => g.use(audit()).get('/x', throwing))
@@ -724,7 +735,7 @@ table('derive, schemas and late registrations', [
 						log.push('derive')
 						return { needed: 'present' }
 					})
-					.beforeHandle('global', mark('beforeHandle'))
+					.onBeforeHandle('global', mark('beforeHandle'))
 			const child = new Elysia().use(x()).get('/x', ({ needed }: any) => {
 				log.push(needed ?? 'MISSING')
 				return 'ok'
@@ -741,7 +752,7 @@ table('derive, schemas and late registrations', [
 				markDerive('derive')
 			)
 			const root = app.use(audit)
-			audit.beforeHandle('global', mark('late-before'))
+			audit.onBeforeHandle('global', mark('late-before'))
 			const feature = named('feature').use(audit).get('/plain', ok)
 			return root.use(feature)
 		},
@@ -750,7 +761,7 @@ table('derive, schemas and late registrations', [
 	{
 		name: 'derive added later survives an outer copy of the beforeHandle',
 		define: (app) => {
-			const audit = named('late-derive').beforeHandle(
+			const audit = named('late-derive').onBeforeHandle(
 				'global',
 				mark('before')
 			)
@@ -822,7 +833,7 @@ table('schemas are never deduplicated', [
 	{
 		name: 'a global guard added to an installed plugin reaches later routes',
 		define: (app) => {
-			const audit = named('audit').beforeHandle('global', () => {})
+			const audit = named('audit').onBeforeHandle('global', () => {})
 			const root = app.use(audit)
 			audit.guard('global', {
 				query: t.Object({ token: t.String() })
@@ -898,7 +909,7 @@ table('reused objects are separate registrations', [
 		// plugins is two installations
 		name: 'unnamed helper used by two named plugins, the second late',
 		define: (app) => {
-			const helper = new Elysia().beforeHandle('global', mark('helper'))
+			const helper = new Elysia().onBeforeHandle('global', mark('helper'))
 			const auth2 = named('auth2')
 			const root = app.use(named('auth1').use(helper)).use(auth2)
 			auth2.use(helper)
@@ -924,10 +935,10 @@ table('reused objects are separate registrations', [
 		define: (app) => {
 			const fn = mark('fn')
 			const feature = new Elysia()
-				.use(named('Q').beforeHandle('global', fn))
+				.use(named('Q').onBeforeHandle('global', fn))
 				.get('/f', ok)
 
-			return app.use(named('P').beforeHandle('global', fn)).use(feature)
+			return app.use(named('P').onBeforeHandle('global', fn)).use(feature)
 		},
 		expect: { '/f': '200 fn,fn' }
 	},
@@ -935,7 +946,9 @@ table('reused objects are separate registrations', [
 		name: 'one function as derive and beforeHandle in two registrations, diamond',
 		define: (app) => {
 			const fn = markDerive('fn')
-			const p = named('P').derive('global', fn).beforeHandle('global', fn)
+			const p = named('P')
+				.derive('global', fn)
+				.onBeforeHandle('global', fn)
 			const feature = new Elysia().use(p).get('/child', ok)
 
 			return app.use(p).use(feature).get('/root', ok)
@@ -948,10 +961,12 @@ table('reused objects are separate registrations', [
 			name: `empty ${event} array`,
 			define: (app) => {
 				const feature = new Elysia()
-					.use(named('empty')[event]('global', mark('kept')))
+					.use(named('empty')[method[event]]('global', mark('kept')))
 					.get('/x', event === 'error' ? throwing : ok)
 
-				return app.use(named('empty')[event]('global', [])).use(feature)
+				return app
+					.use(named('empty')[method[event]]('global', []))
+					.use(feature)
 			},
 			expect: { '/x': `${event === 'error' ? 500 : 200} kept` }
 		})
@@ -970,19 +985,19 @@ table('derive occurrences across layers', [
 				if (c.flag) return { unexpected: true }
 			}
 			const feature = new Elysia()
-				.beforeHandle((c: any) => {
+				.onBeforeHandle((c: any) => {
 					log.push('prepare')
 					c.flag = true
 				})
 				.use(named('X').derive('global', shared))
-				.beforeHandle(mark('after'))
+				.onBeforeHandle(mark('after'))
 				.get('/x', () => {
 					log.push('handler')
 					return 'ok'
 				})
 
 			return app
-				.use(named('X').beforeHandle('global', shared))
+				.use(named('X').onBeforeHandle('global', shared))
 				.use(feature)
 		},
 		expect: { '/x': '200 shared:false,prepare,shared:true,after,handler' }
@@ -996,11 +1011,11 @@ table('derive occurrences across layers', [
 				return {}
 			}
 			const feature = new Elysia()
-				.beforeHandle((c: any) => {
+				.onBeforeHandle((c: any) => {
 					log.push('prepare')
 					c.flag = true
 				})
-				.use(named('X').beforeHandle('global', shared))
+				.use(named('X').onBeforeHandle('global', shared))
 				.get('/x', () => {
 					log.push('handler')
 					return 'ok'
@@ -1099,7 +1114,7 @@ table('a plain occurrence ahead of a derive of the same function', [
 		name: 'outer beforeHandle, inner derive responds early',
 		define: (app) =>
 			app
-				.use(named('X').beforeHandle('global', sharedUser))
+				.use(named('X').onBeforeHandle('global', sharedUser))
 				.use(
 					new Elysia()
 						.use(named('X').derive('global', sharedUser))
@@ -1139,9 +1154,9 @@ describe('scope promotion after reading routes', () => {
 	// an earlier read must not survive it
 	for (const warm of [false, true])
 		it(`root.as(global) applies the same with ${warm ? 'a warm' : 'a cold'} cache`, async () => {
-			const root = named('X').beforeHandle(mark('A'))
+			const root = named('X').onBeforeHandle(mark('A'))
 			const child = named('X')
-				.beforeHandle('global', mark('B'))
+				.onBeforeHandle('global', mark('B'))
 				.get('/x', ok)
 			root.use(child)
 			if (warm) void root.routes
@@ -1237,8 +1252,8 @@ describe('compact beforeHandle prefix', () => {
 	// in full, so a duplicate can drop
 	const prefixOf = (plugin: AnyElysia) => {
 		const app = new Elysia()
-			.use(named('audit').beforeHandle('global', mark('audit')))
-			.beforeHandle(mark('B'))
+			.use(named('audit').onBeforeHandle('global', mark('audit')))
+			.onBeforeHandle(mark('B'))
 			.use(plugin) as any
 		const route = app['~routes'].find((r: any) => r[1] === '/r')
 		const hook = composeRouteHook(
@@ -1256,7 +1271,7 @@ describe('compact beforeHandle prefix', () => {
 
 	it('stays on for an unnamed plugin', () => {
 		expect(
-			prefixOf(new Elysia().beforeHandle(mark('F')).get('/r', ok))
+			prefixOf(new Elysia().onBeforeHandle(mark('F')).get('/r', ok))
 		).toBe(2)
 	})
 
@@ -1266,12 +1281,12 @@ describe('compact beforeHandle prefix', () => {
 
 	it('stays off for a named plugin registration', () => {
 		expect(
-			prefixOf(named('feature').beforeHandle(mark('F')).get('/r', ok))
+			prefixOf(named('feature').onBeforeHandle(mark('F')).get('/r', ok))
 		).toBeUndefined()
 	})
 
 	it('stays off for a named plugin the route chain installs', () => {
-		const audit = named('audit').beforeHandle('global', mark('audit'))
+		const audit = named('audit').onBeforeHandle('global', mark('audit'))
 		expect(prefixOf(new Elysia().use(audit).get('/r', ok))).toBeUndefined()
 	})
 })

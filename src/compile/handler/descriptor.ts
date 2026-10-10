@@ -21,7 +21,7 @@ import type { CompiledCookieConfig } from '../../cookie/config'
 import { hasSyncHmac } from '../../cookie/utils'
 
 import type { TraceEvent } from '../../trace'
-import { Capture } from '../aot'
+import { inAotBuild } from '../aot'
 import {
 	frozenRootOf,
 	resolvedTraceOf,
@@ -249,7 +249,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 	const hasCookieSign = !!cookieConfig?.hasSign
 
 	const syncCookieSign =
-		hasCookieSign && hasSyncHmac && !Capture.isCapturing()
+		hasCookieSign && hasSyncHmac && !inAotBuild()
 	const asyncCookieSign = hasCookieSign && !syncCookieSign
 
 	const lazyCookieVerify =

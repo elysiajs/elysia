@@ -11,7 +11,7 @@ describe('named plugin deduplication and hook inheritance', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).transform('global', () => {})
+			}).onTransform('global', () => {})
 
 		const group = new Elysia().use(cookie({})).get('/a', () => 'Hi')
 
@@ -31,7 +31,7 @@ describe('named plugin deduplication and hook inheritance', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).transform('global', () => {})
+			}).onTransform('global', () => {})
 
 		const group = new Elysia().use(cookie()).get('/a', () => 'Hi')
 
@@ -51,7 +51,7 @@ describe('named plugin deduplication and hook inheritance', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).transform('global', () => {})
+			}).onTransform('global', () => {})
 
 		const group = new Elysia().use(cookie({})).get('/a', () => 'Hi')
 
@@ -76,7 +76,7 @@ describe('named plugin deduplication and hook inheritance', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).transform('global', () => {})
+			}).onTransform('global', () => {})
 
 		const group = new Elysia().use(cookie()).get('/a', () => 'Hi')
 
@@ -97,7 +97,7 @@ describe('named plugin deduplication and hook inheritance', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).transform('global', () => {})
+			}).onTransform('global', () => {})
 
 		const group = new Elysia().use(cookie()).get(
 			'/a',
@@ -126,11 +126,11 @@ describe('named plugin deduplication and hook inheritance', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).transform('global', () => {})
+			}).onTransform('global', () => {})
 
 		const group = new Elysia()
 			.use(cookie())
-			.transform('global', () => {
+			.onTransform('global', () => {
 				count++
 			})
 			.get('/a', () => 'Hi')
@@ -149,7 +149,7 @@ describe('named plugin deduplication and hook inheritance', () => {
 		let count = 0
 
 		const group = new Elysia()
-			.transform('global', () => {
+			.onTransform('global', () => {
 				count++
 			})
 			.get('/a', () => 'Hi')
@@ -414,7 +414,7 @@ describe('named plugin deduplication and hook inheritance', () => {
 					ip: server?.requestIP(request)
 				}
 			})
-			.beforeHandle(() => {})
+			.onBeforeHandle(() => {})
 			.get('/ip', ({ ip }) => ip)
 
 		const router1 = new Elysia({ name: 'ip1', seed: 'ip1' })

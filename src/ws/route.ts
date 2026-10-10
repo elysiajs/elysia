@@ -31,6 +31,7 @@ import {
 } from '../compile/handler'
 import {
 	Capture,
+	inAotBuild,
 	Compiled,
 	aotDriftMessage,
 	warnAotDrift
@@ -408,7 +409,7 @@ export function buildWSRoute(
 	const programId = frozenRootOf(app)['~programId']
 	const captured = Compiled.getHandler(programId, 'WS', route[1])
 	let live = false
-	if (Capture.isCapturing())
+	if (inAotBuild())
 		Capture.handler({
 			method: 'WS',
 			path: route[1],

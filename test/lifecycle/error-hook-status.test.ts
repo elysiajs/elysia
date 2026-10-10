@@ -30,7 +30,7 @@ const define =
 			: () => answers[answer]()
 
 		let base: any = app
-		if (placement === 'app') base = base.error(error)
+		if (placement === 'app') base = base.onError(error)
 
 		return base
 			.mapResponse(({ set, path }: any) => {

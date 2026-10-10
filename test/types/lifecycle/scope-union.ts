@@ -4,7 +4,7 @@ import { expectTypeOf } from 'expect-type'
 
 const withBeforeHandle = <Scope extends 'local' | 'plugin' | 'global'>(
 	scope: Scope
-) => new Elysia().beforeHandle(scope, () => 'ok' as const)
+) => new Elysia().onBeforeHandle(scope, () => 'ok' as const)
 
 const withMappedDerive = <Scope extends 'local' | 'plugin' | 'global'>(
 	scope: Scope
@@ -32,15 +32,15 @@ const withLifecycleHooks = <Scope extends 'local' | 'plugin' | 'global'>(
 	scope: Scope
 ) =>
 	new Elysia()
-		.parse(scope, () => {})
-		.transform(scope, () => {})
-		.beforeHandle(scope, () => {})
+		.onParse(scope, () => {})
+		.onTransform(scope, () => {})
+		.onBeforeHandle(scope, () => {})
 		.derive(scope, () => ({ derived: true as const }))
 		.mapDerive(scope, () => ({ mapped: true as const }))
-		.afterHandle(scope, () => {})
+		.onAfterHandle(scope, () => {})
 		.mapResponse(scope, () => {})
-		.afterResponse(scope, () => {})
-		.error(scope, () => {})
+		.onAfterResponse(scope, () => {})
+		.onError(scope, () => {})
 		.use(trace()).trace(scope, () => {})
 
 const globalLifecycle = withLifecycleHooks('global')

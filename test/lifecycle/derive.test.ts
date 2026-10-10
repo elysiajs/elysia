@@ -98,7 +98,7 @@ describe('derive', () => {
 		const order: string[] = []
 
 		const app = new Elysia()
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				order.push('app beforeHandle')
 			})
 			.derive(() => {
@@ -205,7 +205,7 @@ describe('derive', () => {
 		let isOnErrorCalled = false
 
 		const app = new Elysia()
-			.error(() => {
+			.onError(() => {
 				isOnErrorCalled = true
 			})
 			.derive(({ status }) => status(418))

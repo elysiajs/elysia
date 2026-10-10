@@ -6,7 +6,7 @@ describe('guard(scope, hook) bulk registration', () => {
 		const order: number[] = []
 
 		const a = new Elysia()
-			.beforeHandle('global', () => {
+			.onBeforeHandle('global', () => {
 				order.push(1)
 			})
 			.guard('global', {

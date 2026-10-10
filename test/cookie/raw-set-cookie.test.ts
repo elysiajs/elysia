@@ -6,7 +6,7 @@ import { Elysia } from '../../src'
 describe('raw set-cookie header next to the cookie jar', () => {
 	it('keeps a raw string set by an earlier hook', async () => {
 		const app = new Elysia()
-			.beforeHandle(({ set }) => {
+			.onBeforeHandle(({ set }) => {
 				set.headers['set-cookie'] = 'session=from-plugin; Path=/'
 			})
 			.get('/', ({ cookie: { theme } }) => {

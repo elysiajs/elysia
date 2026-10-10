@@ -74,29 +74,29 @@ const get = (path: string) => new Request(`http://localhost${path}`)
 // Register one logging hook of every per-route type, tagged
 const hooks = (app: any, tag: string, log: Log) =>
 	app
-		.parse(() => {
+		.onParse(() => {
 			log.push(`parse:${tag}`)
 		})
-		.transform(() => {
+		.onTransform(() => {
 			log.push(`transform:${tag}`)
 		})
 		.derive(() => {
 			log.push(`derive:${tag}`)
 			return {}
 		})
-		.beforeHandle(() => {
+		.onBeforeHandle(() => {
 			log.push(`beforeHandle:${tag}`)
 		})
-		.afterHandle(() => {
+		.onAfterHandle(() => {
 			log.push(`afterHandle:${tag}`)
 		})
 		.mapResponse(() => {
 			log.push(`mapResponse:${tag}`)
 		})
-		.afterResponse(() => {
+		.onAfterResponse(() => {
 			log.push(`afterResponse:${tag}`)
 		})
-		.error(() => {
+		.onError(() => {
 			log.push(`error:${tag}`)
 		})
 
@@ -311,7 +311,7 @@ for (const lane of lanes)
 							throw new MyError('x')
 						})
 					)
-					.error(MyError, () => status(404, 'p-after-use'))
+					.onError(MyError, () => status(404, 'p-after-use'))
 
 			for (const define of [
 				(base: any) => base.use(P()),
@@ -359,7 +359,7 @@ it('an after-use hook never reaches a nested static route', async () => {
 			base.use(
 				new Elysia()
 					.use(new Elysia().get('/', 'static'))
-					.beforeHandle(() => {
+					.onBeforeHandle(() => {
 						log.push('P-after')
 					})
 			),
@@ -387,14 +387,14 @@ describe('after-use hooks and plugin deduplication', () => {
 
 	const R = (name?: string, seed?: unknown, path = '/r', tag = 'R-own') =>
 		new Elysia(name ? ({ name, seed } as any) : undefined)
-			.beforeHandle(tagged(tag))
+			.onBeforeHandle(tagged(tag))
 			.get(path, () => tag)
 
 	const P = (tag: string, child: any) =>
 		new Elysia()
-			.beforeHandle(tagged(`${tag}-before`))
+			.onBeforeHandle(tagged(`${tag}-before`))
 			.use(child)
-			.beforeHandle(tagged(`${tag}-after`))
+			.onBeforeHandle(tagged(`${tag}-after`))
 
 	// Every beforeHandle a route copy runs, the compact inherited prefix first
 	const composed = (app: any) =>
@@ -488,7 +488,7 @@ describe('after-use hooks and plugin deduplication', () => {
 			'(f) a global hook on R still propagates as before',
 			(root) => {
 				const r = new Elysia({ name: 'Rg' })
-					.beforeHandle('global', tagged('R-global'))
+					.onBeforeHandle('global', tagged('R-global'))
 					.get('/r', () => 'r')
 
 				return root

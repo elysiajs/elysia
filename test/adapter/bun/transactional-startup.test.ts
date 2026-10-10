@@ -122,9 +122,9 @@ describe('Bun transactional startup', () => {
 			const order: string[] = []
 			let callbackCalled = false
 			const app = new Elysia()
-				.cleanup(() => order.push('first'))
-				.cleanup(() => order.push('second'))
-				.setup(() => {
+				.onStop(() => order.push('first'))
+				.onStop(() => order.push('second'))
+				.onStart(() => {
 					order.push('setup')
 					throw new Error('setup failed')
 				})
@@ -151,8 +151,8 @@ describe('Bun transactional startup', () => {
 
 			try {
 				app = new Elysia()
-					.cleanup(() => order.push('first'))
-					.cleanup(() => order.push('second'))
+					.onStop(() => order.push('first'))
+					.onStop(() => order.push('second'))
 					.listen(0, () => {
 						stopping = app.stop(true)
 						joined = app.stop(true)
@@ -188,8 +188,8 @@ describe('Bun transactional startup', () => {
 
 			try {
 				app = new Elysia()
-					.cleanup(() => order.push('first'))
-					.cleanup(() => order.push('second'))
+					.onStop(() => order.push('first'))
+					.onStop(() => order.push('second'))
 					.get('/', 'ready')
 					.listen(0, () => {
 						stopping = app.stop()
@@ -323,7 +323,7 @@ describe('Bun transactional startup', () => {
 			let finish!: () => void
 			const setup = new Promise<void>((resolve) => (finish = resolve))
 			const app = new Elysia()
-				.setup(() => setup)
+				.onStart(() => setup)
 				.get('/', 'ready')
 				.listen(0)
 
@@ -357,7 +357,7 @@ describe('Bun transactional startup', () => {
 			server.onStop = () => order.push('native-stop')
 
 			const app = new Elysia()
-				.cleanup(async () => {
+				.onStop(async () => {
 					order.push('cleanup-start')
 					cleanupStarted()
 					await cleanupReady
@@ -396,7 +396,7 @@ describe('Bun transactional startup', () => {
 			const stopError = (server.forceStopError = new Error('stop failed'))
 			let cleanups = 0
 			const app = new Elysia()
-				.cleanup(() => cleanups++)
+				.onStop(() => cleanups++)
 				.get('/', 'ready')
 				.listen(0)
 			const response = Promise.resolve(
@@ -427,7 +427,7 @@ describe('Bun transactional startup', () => {
 			const app = new Elysia({
 				serve: { error, routes: { '/native': native } }
 			} as any)
-				.setup(() => setupReady)
+				.onStart(() => setupReady)
 				.listen(0)
 
 			expect(server.initialOptions.routes).toEqual({})
@@ -449,7 +449,7 @@ describe('Bun transactional startup', () => {
 			const app = new Elysia({
 				serve: { error: () => userErrors++ }
 			} as any)
-				.cleanup(() => cleanups++)
+				.onStop(() => cleanups++)
 				.listen(0)
 
 			await expect(app.stop(true)).rejects.toBe(stopError)
@@ -472,12 +472,12 @@ describe('Bun transactional startup', () => {
 				(resolve) => (finishStop = resolve)
 			)
 			const app = new Elysia()
-				.setup(async () => {
+				.onStart(async () => {
 					order.push('setup-start')
 					await setup
 					order.push('setup-done')
 				})
-				.cleanup(() => order.push('cleanup'))
+				.onStop(() => order.push('cleanup'))
 				.get('/', 'ready')
 				.listen(0, () => (callbackCalled = true))
 
@@ -559,10 +559,10 @@ describe('Bun transactional startup', () => {
 		const callbacks: unknown[] = []
 		let persistentReleases = 0
 		const app = new Elysia()
-			.cleanup(() => persistentReleases++)
-			.setup((instance) => {
+			.onStop(() => persistentReleases++)
+			.onStart((instance) => {
 				const current = ++epoch
-				instance.cleanup(() => releases.push(current))
+				instance.onStop(() => releases.push(current))
 			})
 
 		try {
@@ -570,7 +570,7 @@ describe('Bun transactional startup', () => {
 			await Bun.sleep(0)
 			await app.stop(true)
 
-			expect(() => app.cleanup(() => {})).toThrow(
+			expect(() => app.onStop(() => {})).toThrow(
 				'after the app was sealed'
 			)
 
@@ -604,12 +604,12 @@ describe('Bun transactional startup', () => {
 			let callbackCalls = 0
 			const stale = () => staleRuns++
 
-			const app = new Elysia().setup((instance) => {
+			const app = new Elysia().onStart((instance) => {
 				if (++attempt !== 1) return
 
 				queueMicrotask(() => {
 					try {
-						instance.cleanup(stale)
+						instance.onStop(stale)
 					} catch (error) {
 						immediateError = error
 					}
@@ -617,7 +617,7 @@ describe('Bun transactional startup', () => {
 				void (async () => {
 					await late
 					try {
-						instance.cleanup(stale)
+						instance.onStop(stale)
 					} catch (error) {
 						delayedError = error
 					}
@@ -632,11 +632,11 @@ describe('Bun transactional startup', () => {
 
 			expect(immediateError).toBeInstanceOf(Error)
 			expect((immediateError as Error).message).toContain(
-				'after its setup epoch settled'
+				'after its onStart epoch settled'
 			)
 			expect(staleRuns).toBe(0)
 			expect(app.server).toBeUndefined()
-			expect(() => app.cleanup(() => authorRuns++)).not.toThrow()
+			expect(() => app.onStop(() => authorRuns++)).not.toThrow()
 
 			app.listen(0, () => callbackCalls++)
 			await Bun.sleep(0)
@@ -646,7 +646,7 @@ describe('Bun transactional startup', () => {
 			await Bun.sleep(0)
 			expect(delayedError).toBeInstanceOf(Error)
 			expect((delayedError as Error).message).toContain(
-				'after its setup epoch settled'
+				'after its onStart epoch settled'
 			)
 
 			await app.stop(true)
@@ -667,7 +667,7 @@ describe('Bun transactional startup', () => {
 				(resolve) => (staleStopped = resolve)
 			)
 			let attempt = 0
-			const app = new Elysia().setup((instance) => {
+			const app = new Elysia().onStart((instance) => {
 				if (++attempt !== 1) return
 
 				void (async () => {
@@ -709,7 +709,7 @@ describe('Bun transactional startup', () => {
 				(resolve) => (staleStopped = resolve)
 			)
 			let attempt = 0
-			const app = new Elysia().cleanup((instance) => {
+			const app = new Elysia().onStop((instance) => {
 				if (++attempt !== 1) return
 
 				void (async () => {
@@ -743,7 +743,7 @@ describe('Bun transactional startup', () => {
 			let targetAttempt = 0
 			let targetCleanup = 0
 			let crossAppError: unknown
-			const target = new Elysia().setup(() => {
+			const target = new Elysia().onStart(() => {
 				if (++targetAttempt === 1)
 					throw new Error('target setup failed')
 			})
@@ -753,10 +753,10 @@ describe('Bun transactional startup', () => {
 			await target.stop(true)?.catch(() => {})
 
 			const source = new Elysia()
-				.setup(() => {})
-				.cleanup(() => {
+				.onStart(() => {})
+				.onStop(() => {
 					try {
-						target.cleanup(() => targetCleanup++)
+						target.onStop(() => targetCleanup++)
 					} catch (error) {
 						crossAppError = error
 					}
@@ -799,7 +799,7 @@ describe('Bun transactional startup', () => {
 		let resource = 'open'
 		let cleanups = 0
 		const app = new Elysia()
-			.cleanup(() => {
+			.onStop(() => {
 				resource = 'closed'
 				cleanups++
 			})
@@ -834,7 +834,7 @@ describe('Bun transactional startup', () => {
 	it('retries idle connection closure before releasing the epoch', () =>
 		withServer(async (_getOptions, server) => {
 			let cleanups = 0
-			const app = new Elysia().cleanup(() => cleanups++).listen(0)
+			const app = new Elysia().onStop(() => cleanups++).listen(0)
 
 			await Bun.sleep(0)
 			const idleError = (server.idleError = new Error(
@@ -871,7 +871,7 @@ describe('Bun transactional startup', () => {
 				'graceful failed'
 			))
 			let cleanups = 0
-			const app = new Elysia().cleanup(() => cleanups++).listen(0)
+			const app = new Elysia().onStop(() => cleanups++).listen(0)
 
 			await Bun.sleep(0)
 			// A graceful stop that throws leaves the listener open, so the
@@ -888,7 +888,7 @@ describe('Bun transactional startup', () => {
 	it('escalates out of the HTTP drain instead of spinning when a force stop follows', () =>
 		withServer(async (_getOptions, server) => {
 			let cleanups = 0
-			const app = new Elysia().cleanup(() => cleanups++).listen(0)
+			const app = new Elysia().onStop(() => cleanups++).listen(0)
 			await Bun.sleep(0)
 
 			// Park the graceful attempt inside the HTTP drain: the graceful
@@ -918,7 +918,7 @@ describe('Bun transactional startup', () => {
 		withServer(async (_getOptions, server) => {
 			const gateError = new Error('gate failed')
 			let cleanups = 0
-			const app = new Elysia().cleanup(() => cleanups++).listen(0)
+			const app = new Elysia().onStop(() => cleanups++).listen(0)
 
 			await Bun.sleep(0)
 			const idleError = (server.idleError = new Error(
@@ -954,7 +954,7 @@ describe('Bun transactional startup', () => {
 				'force failed'
 			))
 			let cleanups = 0
-			const app = new Elysia().cleanup(() => cleanups++).listen(0)
+			const app = new Elysia().onStop(() => cleanups++).listen(0)
 
 			await Bun.sleep(0)
 			let failure: unknown
@@ -984,7 +984,7 @@ describe('Bun transactional startup', () => {
 				(resolve) => (finishGraceful = resolve)
 			)
 			let cleanups = 0
-			const app = new Elysia().cleanup(() => cleanups++).listen(0)
+			const app = new Elysia().onStop(() => cleanups++).listen(0)
 
 			await Bun.sleep(0)
 			const stopping = app.stop()!
@@ -1007,7 +1007,7 @@ describe('Bun transactional startup', () => {
 				const app = new Elysia()
 					.use(websocket())
 					.ws('/ws', {})
-					.cleanup(() => cleanups++)
+					.onStop(() => cleanups++)
 					.listen(0)
 
 				await Bun.sleep(0)
@@ -1047,7 +1047,7 @@ describe('Bun transactional startup', () => {
 			const app = new Elysia()
 				.use(websocket())
 				.ws('/ws', {})
-				.cleanup(() => cleanups++)
+				.onStop(() => cleanups++)
 				.listen(0)
 
 			await Bun.sleep(0)
@@ -1086,7 +1086,7 @@ describe('Bun transactional startup', () => {
 			const app = new Elysia()
 				.use(websocket())
 				.ws('/ws', {})
-				.cleanup(() => cleanups++)
+				.onStop(() => cleanups++)
 				.listen(0)
 
 			await Bun.sleep(0)
@@ -1139,7 +1139,7 @@ describe('Bun transactional startup', () => {
 			const app = new Elysia()
 				.use(websocket())
 				.ws('/ws', {})
-				.cleanup(() => cleanups++)
+				.onStop(() => cleanups++)
 				.listen(0)
 
 			await Bun.sleep(0)
@@ -1168,7 +1168,7 @@ describe('Bun transactional startup', () => {
 			const app = new Elysia()
 				.use(websocket())
 				.ws('/ws', {})
-				.cleanup(() => cleanups++)
+				.onStop(() => cleanups++)
 				.listen(0)
 
 			await Bun.sleep(0)
@@ -1208,7 +1208,7 @@ describe('Bun transactional startup', () => {
 			const app = new Elysia()
 				.use(websocket())
 				.ws('/ws', {})
-				.cleanup(() => cleanups++)
+				.onStop(() => cleanups++)
 				.listen(0)
 
 			await Bun.sleep(0)
@@ -1252,7 +1252,7 @@ describe('Bun transactional startup', () => {
 			const app = new Elysia()
 				.use(websocket())
 				.ws('/ws', {})
-				.cleanup(() => cleanups++)
+				.onStop(() => cleanups++)
 				.listen(0)
 
 			await Bun.sleep(0)
@@ -1299,7 +1299,7 @@ describe('Bun transactional startup', () => {
 			const app = new Elysia()
 				.use(websocket())
 				.ws('/ws', {})
-				.cleanup(() => order.push('cleanup'))
+				.onStop(() => order.push('cleanup'))
 				.listen(0)
 
 			await Bun.sleep(0)
@@ -1382,7 +1382,7 @@ describe('Bun transactional startup', () => {
 	it('force-closes when the retirement gate throws undefined', () =>
 		withServer(async (_getOptions, server) => {
 			let cleanups = 0
-			const app = new Elysia().cleanup(() => cleanups++).listen(0)
+			const app = new Elysia().onStop(() => cleanups++).listen(0)
 
 			await Bun.sleep(0)
 			server.reloadFailure = { error: undefined }
@@ -1405,7 +1405,7 @@ describe('Bun transactional startup', () => {
 				'force failed'
 			))
 			let cleanups = 0
-			const app = new Elysia().cleanup(() => cleanups++).listen(0)
+			const app = new Elysia().onStop(() => cleanups++).listen(0)
 
 			await Bun.sleep(0)
 			const first = app.stop(true)
@@ -1433,7 +1433,7 @@ describe('Bun transactional startup', () => {
 		withServer(async (_getOptions, server) => {
 			const reloadError = new Error('reload must not run')
 			let cleanups = 0
-			const app = new Elysia().cleanup(() => cleanups++).listen(0)
+			const app = new Elysia().onStop(() => cleanups++).listen(0)
 
 			await Bun.sleep(0)
 			const reloads = server.reloads
@@ -1458,7 +1458,7 @@ describe('Bun transactional startup', () => {
 				if (close === false) started.resolve()
 			}
 			let cleanups = 0
-			const app = new Elysia().cleanup(() => cleanups++).listen(0)
+			const app = new Elysia().onStop(() => cleanups++).listen(0)
 			await Bun.sleep(0)
 			const stopping = app.stop()!
 			process.on('unhandledRejection', onUnhandled)
@@ -1496,7 +1496,7 @@ describe('Bun transactional startup', () => {
 				if (close === false) started.resolve()
 			}
 			let cleanups = 0
-			const app = new Elysia().cleanup(() => cleanups++).listen(0)
+			const app = new Elysia().onStop(() => cleanups++).listen(0)
 			await Bun.sleep(0)
 			const stopping = app.stop()!
 
@@ -1534,7 +1534,7 @@ describe('Bun transactional startup', () => {
 			)
 			const app = new Elysia()
 				.get('/', () => resource)
-				.cleanup(() => {
+				.onStop(() => {
 					resource = 'closed'
 					cleanups++
 				})
@@ -1575,7 +1575,7 @@ describe('Bun transactional startup', () => {
 		withServer(async (_getOptions, server) => {
 			const stopError = (server.forceStopError = new Error('stop failed'))
 			let cleanups = 0
-			const app = new Elysia().cleanup(() => cleanups++).listen(0)
+			const app = new Elysia().onStop(() => cleanups++).listen(0)
 
 			const first = app.stop(true)
 			expect(app.stop(true)).toBe(first)
@@ -1603,7 +1603,7 @@ describe('Bun transactional startup', () => {
 			const cleanupError = new Error('cleanup failed')
 			let cleanups = 0
 			const app = new Elysia()
-				.cleanup(() => {
+				.onStop(() => {
 					cleanups++
 					throw cleanupError
 				})
@@ -1633,9 +1633,9 @@ describe('Bun transactional startup', () => {
 			let internalStop: Promise<void> | void
 			let laterSetupCalled = false
 			const app = new Elysia()
-				.setup((instance) => (internalStop = instance.stop()))
-				.setup(() => (laterSetupCalled = true))
-				.cleanup(() => cleanupReady)
+				.onStart((instance) => (internalStop = instance.stop()))
+				.onStart(() => (laterSetupCalled = true))
+				.onStop(() => cleanupReady)
 				.listen(0)
 
 			await Bun.sleep(0)
@@ -1668,7 +1668,7 @@ describe('Bun transactional startup', () => {
 			const order: string[] = []
 			let internalStop: Promise<void> | void
 			const app = new Elysia()
-				.setup(async (instance) => {
+				.onStart(async (instance) => {
 					await setupReady
 					// The teardown waits for every started setup, so a stop
 					// raised past this setup's first await must not be awaited
@@ -1677,7 +1677,7 @@ describe('Bun transactional startup', () => {
 					order.push('stopped-inside')
 					stoppedInside()
 					await finishReady
-					instance.cleanup(() => order.push('late-cleanup'))
+					instance.onStop(() => order.push('late-cleanup'))
 					order.push('setup-done')
 				})
 				.listen(0)
@@ -1716,8 +1716,8 @@ describe('Bun transactional startup', () => {
 			const { Elysia } = await import(${JSON.stringify(entry)})
 			const app = new Elysia()
 				.get('/', () => 'hi')
-				.setup(() => {})
-				.cleanup(() => {})
+				.onStart(() => {})
+				.onStop(() => {})
 				.listen(0)
 
 			await Bun.sleep(5)
@@ -1748,7 +1748,7 @@ describe('Bun transactional startup', () => {
 		const released = async () => {
 			let timer!: ReturnType<typeof setInterval>
 			const app = new Elysia()
-				.setup(() => {
+				.onStart(() => {
 					timer = setInterval(tick, 60_000)
 				})
 				.listen(0)
@@ -1785,7 +1785,7 @@ describe('Bun transactional startup', () => {
 					stop() {}
 				})
 			const app = setup
-				? new Elysia().setup(noopSetup).listen(0)
+				? new Elysia().onStart(noopSetup).listen(0)
 				: new Elysia().listen(0)
 			await Bun.sleep(0)
 			await app.stop(true)
@@ -1831,8 +1831,8 @@ describe('Bun transactional startup', () => {
 
 			try {
 				const app = new Elysia()
-					.setup((instance) => (internalStop = instance.stop()))
-					.cleanup(async () => {
+					.onStart((instance) => (internalStop = instance.stop()))
+					.onStop(async () => {
 						await cleanupReady
 						throw cleanupError
 					})
@@ -1892,7 +1892,7 @@ describe('Bun transactional startup', () => {
 
 			try {
 				const app = new Elysia()
-					.setup((instance) => {
+					.onStart((instance) => {
 						void (async () => {
 							await releaseReady
 							// Past its first await this task is an ordinary
@@ -1906,12 +1906,10 @@ describe('Bun transactional startup', () => {
 							stoppedInside()
 						})()
 					})
-					.cleanup(
-						(instance) => (internalForce = instance.stop(true))
-					)
-					.cleanup((instance) => instance.stop(false))
-					.cleanup((instance) => instance.stop(true))
-					.cleanup(() => {
+					.onStop((instance) => (internalForce = instance.stop(true)))
+					.onStop((instance) => instance.stop(false))
+					.onStop((instance) => instance.stop(true))
+					.onStop(() => {
 						throw cleanupError
 					})
 					.listen(0)
@@ -1957,7 +1955,7 @@ describe('Bun transactional startup', () => {
 		withServer(async (_getOptions, server) => {
 			let internalStop: Promise<void> | void
 			const app = new Elysia()
-				.cleanup((instance) => (internalStop = instance.stop()))
+				.onStop((instance) => (internalStop = instance.stop()))
 				.listen(0)
 
 			await Bun.sleep(0)
@@ -1981,7 +1979,7 @@ describe('Bun transactional startup', () => {
 			)
 			let internalStop: Promise<void> | void
 			const app = new Elysia()
-				.cleanup(async (instance) => {
+				.onStop(async (instance) => {
 					cleanupStarted()
 					await cleanupReady
 					// Past its first await this handler is an ordinary
@@ -2015,7 +2013,7 @@ describe('Bun transactional startup', () => {
 	it('abandons a never-settling setup when forced to stop', () =>
 		withServer(async () => {
 			const app = new Elysia()
-				.setup(() => new Promise<void>(() => {}))
+				.onStart(() => new Promise<void>(() => {}))
 				.get('/', 'ready')
 				.listen(0)
 
@@ -2026,7 +2024,7 @@ describe('Bun transactional startup', () => {
 	it('abandons a never-settling setup when a later stop forces', () =>
 		withServer(async () => {
 			const app = new Elysia()
-				.setup(() => new Promise<void>(() => {}))
+				.onStart(() => new Promise<void>(() => {}))
 				.get('/', 'ready')
 				.listen(0)
 
@@ -2039,7 +2037,7 @@ describe('Bun transactional startup', () => {
 		}))
 
 	// The abandoned epoch stays installed until its setup settles, so a late
-	// .cleanup() cannot slip into the next listen epoch and relisten fails
+	// .onStop() cannot slip into the next listen epoch and relisten fails
 	// loud meanwhile
 	it('keeps an abandoned setup out of the next listen epoch', () =>
 		withServer(async () => {
@@ -2058,11 +2056,11 @@ describe('Bun transactional startup', () => {
 			let epoch = 0
 
 			try {
-				const app = new Elysia().setup(async (instance) => {
+				const app = new Elysia().onStart(async (instance) => {
 					const id = epoch++
 					started[id].resolve()
 					await gates[id].promise
-					instance.cleanup(() => ran.push(`cleanup-${id}`))
+					instance.onStop(() => ran.push(`cleanup-${id}`))
 				})
 
 				app.listen(0)
@@ -2076,11 +2074,11 @@ describe('Bun transactional startup', () => {
 				gates[0].resolve()
 				await Bun.sleep(0)
 				expect(String(reported.mock.calls[0]?.[0])).toContain(
-					'setup abandoned by stop(true) failed'
+					'onStart abandoned by stop(true) failed'
 				)
 				expect(
 					(reported.mock.calls[0]?.[1] as Error)?.message
-				).toContain('.cleanup() called after its setup epoch settled')
+				).toContain('.onStop() called after its onStart epoch settled')
 
 				app.listen(0)
 				await started[1].promise
@@ -2104,7 +2102,7 @@ describe('Bun transactional startup', () => {
 
 			try {
 				const app = new Elysia()
-					.setup(() => gate.promise)
+					.onStart(() => gate.promise)
 					.get('/', 'ready')
 					.listen(0)
 
@@ -2115,7 +2113,7 @@ describe('Bun transactional startup', () => {
 				await Bun.sleep(0)
 
 				expect(reported).toHaveBeenCalledWith(
-					'[Elysia] setup abandoned by stop(true) failed:',
+					'[Elysia] onStart abandoned by stop(true) failed:',
 					failure
 				)
 			} finally {
@@ -2134,17 +2132,17 @@ describe('Bun transactional startup', () => {
 			})
 			const delayed = new Promise<void>((resolve) => (finish = resolve))
 			const app = new Elysia()
-				.setup(() => {
+				.onStart(() => {
 					order.push('reject-start')
 					return rejected
 				})
-				.setup(async (instance) => {
+				.onStart(async (instance) => {
 					order.push('delayed-start')
 					await delayed
 					order.push('acquired')
-					instance.cleanup(() => order.push('late-cleanup'))
+					instance.onStop(() => order.push('late-cleanup'))
 				})
-				.cleanup(() => order.push('cleanup'))
+				.onStop(() => order.push('cleanup'))
 				.get('/', 'ready')
 				.listen(0)
 
@@ -2212,7 +2210,7 @@ describe('Bun transactional startup', () => {
 				const order: string[] = []
 				const app = new Elysia()
 					.use(plugin)
-					.cleanup(() => order.push('cleanup'))
+					.onStop(() => order.push('cleanup'))
 					.get('/', 'ready')
 					.listen(0)
 
@@ -2247,7 +2245,7 @@ describe('Bun transactional startup', () => {
 			const app = new Elysia().use(plugin).listen(0)
 
 			const stopping = app.stop()
-			resolve(new Elysia().cleanup(() => cleanups++))
+			resolve(new Elysia().onStop(() => cleanups++))
 			await stopping
 
 			expect(cleanups).toBe(1)
@@ -2266,17 +2264,17 @@ describe('Bun transactional startup', () => {
 				(resolve) => (finishCleanup = resolve)
 			)
 			const app = new Elysia()
-				.cleanup(async () => {
+				.onStop(async () => {
 					order.push('first')
 					throw firstError
 				})
-				.cleanup(async () => {
+				.onStop(async () => {
 					order.push('second-start')
 					await cleanupReady
 					order.push('second-done')
 					throw secondError
 				})
-				.setup(() => Promise.reject(setupError))
+				.onStart(() => Promise.reject(setupError))
 				.get('/', 'ready')
 				.listen(0)
 

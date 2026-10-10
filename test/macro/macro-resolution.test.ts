@@ -949,7 +949,7 @@ describe('Scoped macro resolution across registrations', () => {
 									}
 								}
 							})
-							.beforeHandle(() => {
+							.onBeforeHandle(() => {
 								hook++
 							})
 					)

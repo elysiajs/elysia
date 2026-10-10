@@ -11,7 +11,7 @@ const callbacks = () => ({
 const registerCallbacks = (
 	app: Elysia,
 	handlers: ReturnType<typeof callbacks>
-) => app.wrap(handlers.wrap).setup(handlers.setup).cleanup(handlers.cleanup)
+) => app.wrap(handlers.wrap).onStart(handlers.setup).onStop(handlers.cleanup)
 
 describe('Plugin', () => {
 	it('await async nested plugin', async () => {
@@ -77,7 +77,7 @@ describe('Plugin', () => {
 		expect(seeded.setup).toEqual([seed.setup, duplicate.setup])
 		expect(seeded.cleanup).toEqual([seed.cleanup, duplicate.cleanup])
 
-		const empty = new Elysia().setup([]).cleanup([]).use(plugin)['~ext']!
+		const empty = new Elysia().onStart([]).onStop([]).use(plugin)['~ext']!
 		expect(empty.hoc).toEqual([duplicate.wrap])
 		expect(empty.setup).toEqual([duplicate.setup])
 		expect(empty.cleanup).toEqual([duplicate.cleanup])

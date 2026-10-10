@@ -1,6 +1,9 @@
-import { describe, it, expect } from 'bun:test'
+import { afterAll, beforeAll, describe, it, expect } from 'bun:test'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
-import { Elysia } from '../../src'
+import { Elysia, file } from '../../src'
 import { handleFile, responseToSetHeaders } from '../../src/adapter/utils'
 
 describe('file response range headers', () => {
@@ -58,6 +61,56 @@ describe('file response range headers', () => {
 
 		expect(res.headers.get('content-range')).toBeNull()
 		expect(res.headers.get('x-default')).toBe('base')
+	})
+
+	describe('empty file on disk', () => {
+		let dir: string
+		let path: string
+
+		beforeAll(() => {
+			dir = mkdtempSync(join(tmpdir(), 'elysia-empty-file-'))
+			path = join(dir, 'empty.txt')
+			writeFileSync(path, '')
+		})
+
+		afterAll(() => {
+			rmSync(dir, { recursive: true, force: true })
+		})
+
+		const routes = () =>
+			new Elysia()
+				.get('/dynamic', () => file(path))
+				.get('/static', file(path))
+
+		it('omits content-range for file() through app.handle', async () => {
+			const app = routes()
+
+			for (const route of ['/dynamic', '/static']) {
+				const res = await app.handle(route)
+
+				expect(res.status).toBe(200)
+				expect(res.headers.get('content-range')).toBeNull()
+				expect(await res.text()).toBe('')
+			}
+		})
+
+		it('omits content-range for file() through the Bun server', async () => {
+			const app = routes().listen(0)
+
+			try {
+				for (const route of ['/dynamic', '/static']) {
+					const res = await fetch(
+						`http://localhost:${app.server!.port}${route}`
+					)
+
+					expect(res.status).toBe(200)
+					expect(res.headers.get('content-range')).toBeNull()
+					expect(await res.text()).toBe('')
+				}
+			} finally {
+				await app.stop()
+			}
+		})
 	})
 })
 

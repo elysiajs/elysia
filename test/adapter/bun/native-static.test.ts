@@ -195,7 +195,7 @@ describe('Bun native static promotion', () => {
 	it('promotes routes with an error hook — no user code runs, so it can never fire', async () => {
 		let fired = 0
 		const app = new Elysia()
-			.error(() => {
+			.onError(() => {
 				fired++
 			})
 			.get('/health', 'ok')
@@ -221,7 +221,7 @@ describe('Bun native static promotion', () => {
 
 	it('validates static-value routes with schemas on the JS lane', async () => {
 		const app = new Elysia()
-			.error(() => {})
+			.onError(() => {})
 			.get('/q', { query: t.Object({ id: t.String() }) }, 'ok')
 			.listen(0)
 

@@ -37,7 +37,7 @@ for (const lane of ['jit', 'aot'])
 							})
 						)
 					})
-					.afterResponse(() => {
+					.onAfterResponse(() => {
 						events.push('afterResponse')
 					})
 					.get('/', generator)

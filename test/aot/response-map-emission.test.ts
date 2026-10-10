@@ -193,7 +193,7 @@ describe('header reads and response set handling', () => {
 	it('afterResponse observes status writeback', async () => {
 		let observed: unknown
 		const app = new Elysia()
-			.afterResponse(({ set }) => {
+			.onAfterResponse(({ set }) => {
 				observed = set.status
 			})
 			.get('/st', ({ status }) => status(418))

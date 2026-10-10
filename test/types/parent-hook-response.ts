@@ -18,8 +18,10 @@ type Denied = { 200: 'ok'; 401: 'no' }
 
 // A used route types exactly as the same route declared on the parent
 {
-	const used = new Elysia().beforeHandle(deny).use(routes())
-	const direct = new Elysia().beforeHandle(deny).get('/', () => 'ok' as const)
+	const used = new Elysia().onBeforeHandle(deny).use(routes())
+	const direct = new Elysia()
+		.onBeforeHandle(deny)
+		.get('/', () => 'ok' as const)
 
 	expectTypeOf<
 		(typeof used)['~Routes']['get']['response']
@@ -42,7 +44,7 @@ type Denied = { 200: 'ok'; 401: 'no' }
 // A status both the route and the hook serve takes either body
 {
 	const used = new Elysia()
-		.beforeHandle(deny)
+		.onBeforeHandle(deny)
 		.use(
 			new Elysia().get('/', ({ request }) =>
 				request.headers.has('x-own')
@@ -59,8 +61,8 @@ type Denied = { 200: 'ok'; 401: 'no' }
 
 // Every scope applies
 {
-	const scoped = new Elysia().beforeHandle('plugin', deny).use(routes())
-	const global = new Elysia().beforeHandle('global', deny).use(routes())
+	const scoped = new Elysia().onBeforeHandle('plugin', deny).use(routes())
+	const global = new Elysia().onBeforeHandle('global', deny).use(routes())
 
 	expectTypeOf<
 		(typeof scoped)['~Routes']['get']['response']
@@ -85,7 +87,7 @@ type Denied = { 200: 'ok'; 401: 'no' }
 	>().toEqualTypeOf<{ 200: 'ok'; 401: 'derive' }>()
 
 	const after = new Elysia()
-		.afterHandle(({ request }) =>
+		.onAfterHandle(({ request }) =>
 			request.headers.has('x-deny')
 				? status(401, 'after' as const)
 				: undefined
@@ -101,7 +103,9 @@ type Denied = { 200: 'ok'; 401: 'no' }
 // Nesting: a root's and an intermediate plugin's hooks registered before
 // their `.use()` both apply
 {
-	const root = new Elysia().beforeHandle(deny).use(new Elysia().use(routes()))
+	const root = new Elysia()
+		.onBeforeHandle(deny)
+		.use(new Elysia().use(routes()))
 
 	expectTypeOf<
 		(typeof root)['~Routes']['get']['response']
@@ -109,7 +113,7 @@ type Denied = { 200: 'ok'; 401: 'no' }
 
 	const intermediate = new Elysia().use(
 		new Elysia()
-			.beforeHandle(({ request }) =>
+			.onBeforeHandle(({ request }) =>
 				request.headers.has('x-mid')
 					? status(402, 'mid' as const)
 					: undefined
@@ -122,10 +126,10 @@ type Denied = { 200: 'ok'; 401: 'no' }
 	>().toEqualTypeOf<{ 200: 'ok'; 402: 'mid' }>()
 
 	const both = new Elysia()
-		.beforeHandle(deny)
+		.onBeforeHandle(deny)
 		.use(
 			new Elysia()
-				.beforeHandle(({ request }) =>
+				.onBeforeHandle(({ request }) =>
 					request.headers.has('x-mid')
 						? status(402, 'mid' as const)
 						: undefined
@@ -147,13 +151,13 @@ type Denied = { 200: 'ok'; 401: 'no' }
 	)
 	const standalone = new Elysia().guard({ beforeHandle: deny }).use(routes())
 	const aroundGuard = new Elysia()
-		.beforeHandle(deny)
+		.onBeforeHandle(deny)
 		.guard({}, (app) => app.use(routes()))
 	const aroundGroup = new Elysia()
-		.beforeHandle(deny)
+		.onBeforeHandle(deny)
 		.group('/g', (app) => app.use(routes()))
 	const inGroup = new Elysia().group('/g', (app) =>
-		app.beforeHandle(deny).use(routes())
+		app.onBeforeHandle(deny).use(routes())
 	)
 
 	expectTypeOf<
@@ -176,15 +180,17 @@ type Denied = { 200: 'ok'; 401: 'no' }
 // Prefixed parent, array `.use()` and an async plugin instance
 {
 	const prefixed = new Elysia({ prefix: '/api' })
-		.beforeHandle(deny)
+		.onBeforeHandle(deny)
 		.use(routes())
-	const array = new Elysia().beforeHandle(deny).use([routes()])
+	const array = new Elysia().onBeforeHandle(deny).use([routes()])
 	const prefixedArray = new Elysia({ prefix: '/api' })
-		.beforeHandle(deny)
+		.onBeforeHandle(deny)
 		.use([routes()])
-	const lazy = new Elysia().beforeHandle(deny).use(Promise.resolve(routes()))
+	const lazy = new Elysia()
+		.onBeforeHandle(deny)
+		.use(Promise.resolve(routes()))
 	const prefixedLazy = new Elysia({ prefix: '/api' })
-		.beforeHandle(deny)
+		.onBeforeHandle(deny)
 		.use(Promise.resolve(routes()))
 
 	expectTypeOf<
@@ -213,16 +219,16 @@ type Denied = { 200: 'ok'; 401: 'no' }
 			: undefined
 
 	const scoped = new Elysia()
-		.use(new Elysia().beforeHandle('plugin', forbid))
+		.use(new Elysia().onBeforeHandle('plugin', forbid))
 		.use(routes())
 	const global = new Elysia()
-		.use(new Elysia().beforeHandle('global', forbid))
+		.use(new Elysia().onBeforeHandle('global', forbid))
 		.use(routes())
 	const local = new Elysia()
-		.use(new Elysia().beforeHandle(forbid))
+		.use(new Elysia().onBeforeHandle(forbid))
 		.use(routes())
 	const array = new Elysia().use([
-		new Elysia().beforeHandle('plugin', forbid),
+		new Elysia().onBeforeHandle('plugin', forbid),
 		routes()
 	])
 
@@ -249,15 +255,15 @@ type Denied = { 200: 'ok'; 401: 'no' }
 	}
 
 	const app = new Elysia()
-		.error(MyError, () => status(418, 'parent' as const))
-		.beforeHandle(({ request }) =>
+		.onError(MyError, () => status(418, 'parent' as const))
+		.onBeforeHandle(({ request }) =>
 			request.headers.has('x-deny')
 				? status(403, 'plugin' as const)
 				: undefined
 		)
 		.use(
 			new Elysia()
-				.error(MyError, () => status(403, 'plugin' as const))
+				.onError(MyError, () => status(403, 'plugin' as const))
 				.get('/', () => new MyError('x'))
 		)
 
@@ -272,11 +278,11 @@ type Denied = { 200: 'ok'; 401: 'no' }
 // itself before it, so it can't join every route the same way. Plugin-scoped
 // and global hooks after `.use()` don't run on them at all
 {
-	const local = new Elysia().use(routes()).beforeHandle(deny)
-	const scoped = new Elysia().use(routes()).beforeHandle('plugin', deny)
-	const global = new Elysia().use(routes()).beforeHandle('global', deny)
+	const local = new Elysia().use(routes()).onBeforeHandle(deny)
+	const scoped = new Elysia().use(routes()).onBeforeHandle('plugin', deny)
+	const global = new Elysia().use(routes()).onBeforeHandle('global', deny)
 	const intermediate = new Elysia().use(
-		new Elysia().use(routes()).beforeHandle(deny)
+		new Elysia().use(routes()).onBeforeHandle(deny)
 	)
 
 	expectTypeOf<(typeof local)['~Routes']['get']['response']>().toEqualTypeOf<{
@@ -307,17 +313,17 @@ type Denied = { 200: 'ok'; 401: 'no' }
 			message() {}
 		})
 
-	const hooked = new Elysia().use(websocket()).beforeHandle(deny).use(ws())
+	const hooked = new Elysia().use(websocket()).onBeforeHandle(deny).use(ws())
 	const direct = new Elysia()
 		.use(websocket())
-		.beforeHandle(deny)
+		.onBeforeHandle(deny)
 		.ws('/ws', {
 			body: t.Object({ at: t.Date() }),
 			message() {}
 		})
 	const handled = new Elysia()
 		.use(websocket())
-		.error(MyError, () => status(418, 'parent' as const))
+		.onError(MyError, () => status(418, 'parent' as const))
 		.use(ws())
 
 	expectTypeOf<
@@ -340,9 +346,9 @@ type Denied = { 200: 'ok'; 401: 'no' }
 
 	const loose = new Elysia() as AnyElysia
 
-	const hooked = new Elysia().beforeHandle(deny).use(loose)
+	const hooked = new Elysia().onBeforeHandle(deny).use(loose)
 	const handled = new Elysia()
-		.error(MyError, () => status(418, 'parent' as const))
+		.onError(MyError, () => status(418, 'parent' as const))
 		.use(loose)
 
 	expectTypeOf<(typeof hooked)['~Routes']>().toBeAny()

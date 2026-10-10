@@ -56,20 +56,20 @@ describe('synchronous route emission', () => {
 	})
 
 	it('sync GET + sync error hook is a plain Function', async () => {
-		const app = new Elysia().error(() => {}).get('/', () => 'hi')
+		const app = new Elysia().onError(() => {}).get('/', () => 'hi')
 
 		expect(isAsync(app)).toBe(false)
 		await expect((await app.handle('/')).text()).resolves.toBe('hi')
 	})
 
 	it('sync GET + async error hook stays AsyncFunction', () => {
-		const app = new Elysia().error(async () => {}).get('/', () => 'hi')
+		const app = new Elysia().onError(async () => {}).get('/', () => 'hi')
 
 		expect(isAsync(app)).toBe(true)
 	})
 
 	it('sync GET + sync afterResponse is a plain Function', async () => {
-		const app = new Elysia().afterResponse(() => {}).get('/', () => 'hi')
+		const app = new Elysia().onAfterResponse(() => {}).get('/', () => 'hi')
 
 		expect(isAsync(app)).toBe(false)
 		await expect((await app.handle('/')).text()).resolves.toBe('hi')
@@ -77,7 +77,7 @@ describe('synchronous route emission', () => {
 
 	it('sync GET + async afterResponse stays AsyncFunction', () => {
 		const app = new Elysia()
-			.afterResponse(async () => {})
+			.onAfterResponse(async () => {})
 			.get('/', () => 'hi')
 
 		expect(isAsync(app)).toBe(true)
@@ -86,8 +86,8 @@ describe('synchronous route emission', () => {
 	it('sync GET + sync error hook + sync afterResponse stays AsyncFunction and serves 200', async () => {
 		let fired = false
 		const app = new Elysia()
-			.error(() => 'mapped-err')
-			.afterResponse(() => {
+			.onError(() => 'mapped-err')
+			.onAfterResponse(() => {
 				fired = true
 			})
 			.get('/', () => 'hi')
@@ -104,8 +104,8 @@ describe('synchronous route emission', () => {
 
 	it('error hook + afterResponse still maps a thrown error', async () => {
 		const app = new Elysia()
-			.error(() => 'mapped-err')
-			.afterResponse(() => {})
+			.onError(() => 'mapped-err')
+			.onAfterResponse(() => {})
 			.get('/', () => {
 				throw new Error('boom')
 			})
@@ -140,14 +140,14 @@ describe('synchronous route emission', () => {
 	})
 
 	it('app-level sync .parse + bodyless GET is a plain Function', async () => {
-		const app = new Elysia().parse(() => {}).get('/', () => 'hi')
+		const app = new Elysia().onParse(() => {}).get('/', () => 'hi')
 
 		expect(isAsync(app)).toBe(false)
 		await expect((await app.handle('/')).text()).resolves.toBe('hi')
 	})
 
 	it('app-level async .parse + bodyless GET is a plain Function (parse skipped)', async () => {
-		const app = new Elysia().parse(async () => {}).get('/', () => 'hi')
+		const app = new Elysia().onParse(async () => {}).get('/', () => 'hi')
 
 		expect(isAsync(app)).toBe(false)
 		await expect((await app.handle('/')).text()).resolves.toBe('hi')
@@ -156,7 +156,7 @@ describe('synchronous route emission', () => {
 	it('async .parse on a POST stays AsyncFunction and runs', async () => {
 		let ran = false
 		const app = new Elysia()
-			.parse(async () => {
+			.onParse(async () => {
 				ran = true
 				return { ok: 1 }
 			})
@@ -285,7 +285,7 @@ describe('Promise rejection from synchronous handlers', () => {
 	it('route-level error hook sees a rejection from a sync handler', async () => {
 		let seen: unknown
 		const app = new Elysia()
-			.error((c: any) => {
+			.onError((c: any) => {
 				seen = c.error
 				return new Response('handled', { status: 418 })
 			})
@@ -299,7 +299,7 @@ describe('Promise rejection from synchronous handlers', () => {
 
 	it('sync handler returning a resolving promise still maps normally', async () => {
 		const app = new Elysia()
-			.error(() => {})
+			.onError(() => {})
 			.get('/', () => Promise.resolve('ok') as any)
 
 		const res = await app.handle('/')
@@ -308,7 +308,7 @@ describe('Promise rejection from synchronous handlers', () => {
 
 	it('handles a synchronous throw when an error property return is conservatively async', async () => {
 		const app = new Elysia()
-			.error(({ error, set }: any) => {
+			.onError(({ error, set }: any) => {
 				set.status = 400
 				return (error as Error).message
 			})
@@ -326,7 +326,7 @@ describe('Promise rejection from synchronous handlers', () => {
 	// handled value runs through response validation; a naive sync drop flips it)
 	it('error hook + response schema stays AsyncFunction', () => {
 		const app = new Elysia()
-			.error(() => {})
+			.onError(() => {})
 			.get(
 				'/',
 				{
@@ -343,7 +343,7 @@ describe('synchronous afterResponse behavior', () => {
 	it('sync afterResponse fires for a plain value response', async () => {
 		let calls = 0
 		const app = new Elysia()
-			.afterResponse(() => {
+			.onAfterResponse(() => {
 				calls++
 			})
 			.get('/', () => 'hi')
@@ -358,7 +358,7 @@ describe('synchronous afterResponse behavior', () => {
 	it('generator response: tee drains and sync afterResponse fires exactly once', async () => {
 		let calls = 0
 		const app = new Elysia()
-			.afterResponse(() => {
+			.onAfterResponse(() => {
 				calls++
 			})
 			.get('/', function* () {
@@ -377,7 +377,7 @@ describe('synchronous afterResponse behavior', () => {
 	it('sync beforeHandle short-circuit + afterResponse stays sync and fires the hook', async () => {
 		let calls = 0
 		const app = new Elysia()
-			.afterResponse(() => {
+			.onAfterResponse(() => {
 				calls++
 			})
 			.get(
@@ -398,7 +398,7 @@ describe('synchronous afterResponse behavior', () => {
 	it('sync handler returning a generator-Promise still tees + fires afterResponse', async () => {
 		let calls = 0
 		const app = new Elysia()
-			.afterResponse(() => {
+			.onAfterResponse(() => {
 				calls++
 			})
 			.get(
@@ -638,7 +638,7 @@ describe('sync-first routes', () => {
 	it('answers synchronously when no callback returns a thenable', () => {
 		const app = new Elysia()
 			.derive(({ headers }) => ({ user: headers['x-user'] }))
-			.beforeHandle(({ user, status }) => {
+			.onBeforeHandle(({ user, status }) => {
 				if (!user) return status(401)
 			})
 			.get('/', ({ user }) => `hi ${user}`)
@@ -652,7 +652,7 @@ describe('sync-first routes', () => {
 	it('waits for a thenable at the point it appears', async () => {
 		const order: string[] = []
 		const app = new Elysia()
-			.beforeHandle(() =>
+			.onBeforeHandle(() =>
 				(Math.random() < 2
 					? Promise.resolve().then(() => {
 							order.push('beforeHandle')
@@ -673,7 +673,7 @@ describe('sync-first routes', () => {
 
 	it('routes a rejected thenable to the error pipeline', async () => {
 		const app = new Elysia()
-			.error(() => 'recovered')
+			.onError(() => 'recovered')
 			.get('/', { response: t.String() }, () =>
 				(Math.random() < 2
 					? Promise.reject(new Error('late'))
@@ -716,7 +716,7 @@ describe('frozen handler reconstruction', () => {
 	it('reconstructs error hooks from a frozen factory', async () => {
 		const build = () =>
 			new Elysia()
-				.error(({ error, set }: any) => {
+				.onError(({ error, set }: any) => {
 					set.status = 400
 					return (error as Error).message
 				})
@@ -737,7 +737,7 @@ describe('frozen handler reconstruction', () => {
 		const counter = { n: 0 }
 		const build = () =>
 			new Elysia()
-				.afterResponse(() => {
+				.onAfterResponse(() => {
 					counter.n++
 				})
 				.get('/', ({ query }: any) => query.q ?? 'ok') as any

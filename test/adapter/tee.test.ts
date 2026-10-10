@@ -99,7 +99,7 @@ describe('tee() bounded drain-ahead', () => {
 		let afterResponse = 0
 
 		const app = new Elysia()
-			.afterResponse(() => {
+			.onAfterResponse(() => {
 				afterResponse++
 			})
 			.get('/big', async function* () {
@@ -167,7 +167,7 @@ describe('tee() bounded drain-ahead', () => {
 		let hang!: () => void
 
 		const app = new Elysia()
-			.afterResponse(() => {
+			.onAfterResponse(() => {
 				afterResponse++
 			})
 			.get('/sse', async function* () {

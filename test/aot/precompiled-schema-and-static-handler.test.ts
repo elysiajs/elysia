@@ -159,7 +159,7 @@ describe('static-resource handlers are captured and replayed', () => {
 
 		const build = () =>
 			new Elysia()
-				.beforeHandle('global', ({ set }) => {
+				.onBeforeHandle('global', ({ set }) => {
 					set.headers['x-hook'] = '1'
 				})
 				.get('/', status(201, 'thing'))

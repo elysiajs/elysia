@@ -21,7 +21,7 @@ describe('registration footguns', () => {
 			const app = new Elysia({ as: 'global' })
 				.group('/g', (g) =>
 					g
-						.beforeHandle(() => {
+						.onBeforeHandle(() => {
 							throw new Error('GROUP-BLOCK')
 						})
 						.get('/in', () => 'in')

@@ -175,20 +175,20 @@ describe('Edge Case', () => {
 		const called: string[] = []
 
 		const inner = new Elysia()
-			.transform(() => {
+			.onTransform(() => {
 				called.push('inner')
 			})
 			.get('/a', () => 'a')
 			.get('/b', () => 'b')
 
 		const mid = new Elysia()
-			.transform(() => {
+			.onTransform(() => {
 				called.push('mid')
 			})
 			.use(inner)
 
 		const app = new Elysia()
-			.transform(() => {
+			.onTransform(() => {
 				called.push('app')
 			})
 			.use(mid)
@@ -277,7 +277,7 @@ describe('Edge Case', () => {
 	})
 
 	it('reading routes is idempotent (no hook duplication)', () => {
-		const plugin = new Elysia().transform(() => {})
+		const plugin = new Elysia().onTransform(() => {})
 		const app = new Elysia().use(plugin).get(
 			'/',
 			{

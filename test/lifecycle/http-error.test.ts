@@ -474,12 +474,12 @@ describe('HTTPError', () => {
 			['bare', (app: Elysia) => app],
 			[
 				'hook-only',
-				(app: Elysia) => app.error(() => undefined) as Elysia
+				(app: Elysia) => app.onError(() => undefined) as Elysia
 			],
 			[
 				'registered-class',
 				(app: Elysia) =>
-					app.error(Registered, () => status(400, 'other')) as Elysia
+					app.onError(Registered, () => status(400, 'other')) as Elysia
 			]
 		] as const
 
@@ -535,8 +535,8 @@ describe('HTTPError', () => {
 
 			it('adopts the tag of the error the handler intercepted', async () => {
 				const app = new Elysia()
-					.error(First, () => problem(400, { detail: 'q' }))
-					.error(Second, () => problem(400, { detail: 'q' }))
+					.onError(First, () => problem(400, { detail: 'q' }))
+					.onError(Second, () => problem(400, { detail: 'q' }))
 					.get('/first', () => new First())
 					.get('/second', () => new Second())
 
@@ -564,7 +564,7 @@ describe('HTTPError', () => {
 
 				try {
 					const app = new Elysia()
-						.error(First, () => problem(400, { detail: 'q' }))
+						.onError(First, () => problem(400, { detail: 'q' }))
 						.get('/', () => new First())
 
 					await expect(
@@ -580,7 +580,7 @@ describe('HTTPError', () => {
 
 			it('leaves an explicit type the handler set alone', async () => {
 				const app = new Elysia()
-					.error(First, () =>
+					.onError(First, () =>
 						problem(400, {
 							type: 'https://example.com/mine',
 							detail: 'q'
@@ -593,7 +593,7 @@ describe('HTTPError', () => {
 				).resolves.toMatchObject({ type: 'https://example.com/mine' })
 			})
 
-			// `.error(Class, value)` wraps a non-function into `() => value`,
+			// `.onError(Class, value)` wraps a non-function into `() => value`,
 			// so one `ElysiaStatus` instance is replayed for every request and
 			// for every class it was registered against. Adopting the tag must
 			// copy it — an in-place write would pin the first error's tag onto
@@ -602,8 +602,8 @@ describe('HTTPError', () => {
 				const shared = problem(400, { detail: 'shared' })
 
 				const app = new Elysia()
-					.error(First, shared)
-					.error(Second, shared)
+					.onError(First, shared)
+					.onError(Second, shared)
 					.get('/first', () => new First())
 					.get('/second', () => new Second())
 
@@ -626,7 +626,7 @@ describe('HTTPError', () => {
 			// A plain `status()` result is not a problem document
 			it('leaves a non-problem hook result alone', async () => {
 				const app = new Elysia()
-					.error(First, () => status(400, { type: 'about:blank' }))
+					.onError(First, () => status(400, { type: 'about:blank' }))
 					.get('/', () => new First())
 
 				await expect((await app.handle('/')).json()).resolves.toEqual({
@@ -647,8 +647,8 @@ describe('HTTPError', () => {
 			}
 
 			const app = new Elysia()
-				.error(First, problem(400, { detail: 'q' }))
-				.error(Second, problem(401, { detail: 'q' }))
+				.onError(First, problem(400, { detail: 'q' }))
+				.onError(Second, problem(401, { detail: 'q' }))
 				.get('/first', () => new First())
 				.get('/second', () => new Second())
 				.get('/bare', () => new Error('boom'))
@@ -664,7 +664,7 @@ describe('HTTPError', () => {
 		// The hook chain still wins when it does match
 		it('lets a matching hook take precedence', async () => {
 			const app = new Elysia()
-				.error(Registered, () => status(400, 'handled'))
+				.onError(Registered, () => status(400, 'handled'))
 				.get('/', () => new Registered())
 
 			const response = await app.handle('/')
@@ -677,7 +677,7 @@ describe('HTTPError', () => {
 		// to carry its own copy of that too
 		it('still honours toResponse through the hook lane', async () => {
 			const app = new Elysia()
-				.error(() => undefined)
+				.onError(() => undefined)
 				.get('/', () => {
 					throw new NotFound('missing')
 				})
@@ -694,7 +694,7 @@ describe('HTTPError', () => {
 
 	it('prefer a registered handler over self-description', async () => {
 		const app = new Elysia()
-			.error(OutOfCredit, () => status(409, 'handled'))
+			.onError(OutOfCredit, () => status(409, 'handled'))
 			.get('/', () => new OutOfCredit())
 
 		const response = await app.handle('/')
@@ -708,7 +708,7 @@ describe('HTTPError', () => {
 	// type stays the served problem
 	it('self-describe when a registered handler returns undefined', async () => {
 		const app = new Elysia()
-			.error(OutOfCredit, () => undefined)
+			.onError(OutOfCredit, () => undefined)
 			.get('/', () => new OutOfCredit())
 
 		const response = await app.handle('/')
@@ -1045,7 +1045,7 @@ describe('HTTPError', () => {
 			}
 
 			const app = new Elysia()
-				.error(() => undefined)
+				.onError(() => undefined)
 				.get('/', () => {
 					throw new Flaky()
 				})
@@ -1068,7 +1068,7 @@ describe('HTTPError', () => {
 			}
 
 			const app = new Elysia()
-				.error(() => undefined)
+				.onError(() => undefined)
 				.get('/', () => {
 					throw new Async()
 				})
@@ -1165,7 +1165,7 @@ describe('HTTPError', () => {
 			const Teapot = HTTPError.id('TEAPOT')
 
 			const app = new Elysia()
-				.error(Teapot, () => status(400, 'handled'))
+				.onError(Teapot, () => status(400, 'handled'))
 				.get('/', () => {
 					throw new Teapot()
 				})
@@ -1180,7 +1180,7 @@ describe('HTTPError', () => {
 			const Teapot = HTTPError.id('TEAPOT', 418)
 
 			const app = new Elysia()
-				.error(Teapot, () => status(400, 'handled'))
+				.onError(Teapot, () => status(400, 'handled'))
 				.get('/', () => {
 					throw new Teapot()
 				})
@@ -1510,7 +1510,7 @@ describe('HTTPError', () => {
 			// `HTTPError.id` class's is adopted
 			it('adopt the built-in tag onto a hook problem body', async () => {
 				const app = new Elysia()
-					.error(({ error }) =>
+					.onError(({ error }) =>
 						error instanceof NotFound
 							? problem(404, { detail: 'nope' })
 							: undefined
@@ -1703,7 +1703,7 @@ describe('error fallback lanes', () => {
 				if (production) process.env.NODE_ENV = 'production'
 
 				let app = new Elysia()
-				if (withHook) app = app.error(() => {}) as any
+				if (withHook) app = app.onError(() => {}) as any
 
 				app.get(
 					'/',
@@ -1732,7 +1732,7 @@ describe('error fallback lanes', () => {
 
 	it('keep set-cookie and headers when a bodyless error falls through', async () => {
 		const app = new Elysia()
-			.error(() => {})
+			.onError(() => {})
 			.get('/', ({ cookie, set }) => {
 				cookie.session.value = 'kept'
 				set.headers['x-kept'] = 'yes'
@@ -1783,7 +1783,7 @@ describe('error fallback lanes', () => {
 
 	it('never adopt a validation section as a problem type', async () => {
 		const app = new Elysia()
-			.error(() => problem(422, { detail: 'invalid' }))
+			.onError(() => problem(422, { detail: 'invalid' }))
 			.post(
 				'/',
 				{ body: t.Object({ name: t.String() }) },
@@ -1846,7 +1846,7 @@ describe('typeBase on the built-in 404 and 500 bodies', () => {
 		HTTPError.typeBase = 'https://example.com/errors'
 
 		const app = new Elysia()
-			.request(({ set }) => {
+			.onRequest(({ set }) => {
 				set.headers['x-app'] = 'yes'
 			})
 			.get('/', 'hi')
@@ -1862,7 +1862,7 @@ describe('typeBase on the built-in 404 and 500 bodies', () => {
 	it('prefixes the 404 a declining error hook falls through to', async () => {
 		HTTPError.typeBase = 'https://example.com/errors'
 
-		const app = new Elysia().get('/', 'hi').error(() => {})
+		const app = new Elysia().get('/', 'hi').onError(() => {})
 
 		await expect((await app.handle('/missing')).json()).resolves.toMatchObject(
 			{

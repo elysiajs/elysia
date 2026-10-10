@@ -30,18 +30,18 @@ describe('plugin deduplication', () => {
 		const shared = new Elysia({
 			as: 'global',
 			name: 'shared'
-		}).beforeHandle(() => {
+		}).onBeforeHandle(() => {
 			order.push(3)
 		})
 
 		const left = new Elysia({ as: 'global', name: 'left' })
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				order.push(1)
 			})
 			.use(shared)
 
 		const right = new Elysia({ as: 'global', name: 'right' })
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				order.push(2)
 			})
 			.use(shared)
@@ -63,7 +63,7 @@ describe('plugin deduplication', () => {
 				as: 'global',
 				name: '@elysiajs/cookie',
 				seed: options
-			}).beforeHandle(() => {
+			}).onBeforeHandle(() => {
 				count++
 			})
 
@@ -85,7 +85,7 @@ describe('plugin deduplication', () => {
 				as: 'global',
 				name: '@elysiajs/cookie',
 				seed: variant
-			}).beforeHandle(() => {
+			}).onBeforeHandle(() => {
 				count++
 			})
 
@@ -102,32 +102,32 @@ describe('plugin deduplication', () => {
 	it('deduplicates a shared plugin through three nesting levels', async () => {
 		const order: number[] = []
 
-		const leaf = new Elysia({ as: 'global', name: 'leaf' }).beforeHandle(
+		const leaf = new Elysia({ as: 'global', name: 'leaf' }).onBeforeHandle(
 			() => {
 				order.push(4)
 			}
 		)
 
 		const mid1 = new Elysia({ as: 'global', name: 'mid1' })
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				order.push(3)
 			})
 			.use(leaf)
 
 		const mid2 = new Elysia({ as: 'global', name: 'mid2' })
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				order.push(5)
 			})
 			.use(leaf)
 
 		const top1 = new Elysia({ as: 'global', name: 'top1' })
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				order.push(1)
 			})
 			.use(mid1)
 
 		const top2 = new Elysia({ as: 'global', name: 'top2' })
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				order.push(2)
 			})
 			.use(mid2)
@@ -145,7 +145,7 @@ describe('plugin deduplication', () => {
 	it('plugin-scoped hook stops propagating after one level', async () => {
 		const order: string[] = []
 
-		const inner = new Elysia({ name: 'inner' }).beforeHandle(
+		const inner = new Elysia({ name: 'inner' }).onBeforeHandle(
 			'plugin',
 			function innerFn() {
 				order.push('inner')
@@ -153,7 +153,7 @@ describe('plugin deduplication', () => {
 		)
 
 		const outer = new Elysia({ name: 'outer' })
-			.beforeHandle('plugin', function outerFn() {
+			.onBeforeHandle('plugin', function outerFn() {
 				order.push('outer')
 			})
 			.use(inner)
@@ -168,14 +168,15 @@ describe('plugin deduplication', () => {
 	it('global-scoped hooks propagate to root regardless of depth', async () => {
 		const order: string[] = []
 
-		const inner = new Elysia({ as: 'global', name: 'inner' }).beforeHandle(
-			() => {
-				order.push('inner')
-			}
-		)
+		const inner = new Elysia({
+			as: 'global',
+			name: 'inner'
+		}).onBeforeHandle(() => {
+			order.push('inner')
+		})
 
 		const outer = new Elysia({ as: 'global', name: 'outer' })
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				order.push('outer')
 			})
 			.use(inner)
@@ -215,7 +216,7 @@ describe('plugin deduplication', () => {
 		const plugin = new Elysia({
 			as: 'global',
 			name: 'late'
-		}).beforeHandle(() => {
+		}).onBeforeHandle(() => {
 			order.push('late')
 		})
 
@@ -236,18 +237,18 @@ describe('plugin deduplication', () => {
 	it('runs an unnamed shared plugin once for each parent', async () => {
 		const order: number[] = []
 
-		const shared = new Elysia({ as: 'global' }).beforeHandle(() => {
+		const shared = new Elysia({ as: 'global' }).onBeforeHandle(() => {
 			order.push(3)
 		})
 
 		const left = new Elysia({ as: 'global', name: 'left' })
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				order.push(1)
 			})
 			.use(shared)
 
 		const right = new Elysia({ as: 'global', name: 'right' })
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				order.push(2)
 			})
 			.use(shared)
@@ -265,10 +266,10 @@ describe('plugin deduplication', () => {
 	it('runs every anonymous plugin instance', async () => {
 		const order: number[] = []
 
-		const a = new Elysia({ as: 'global' }).beforeHandle(() => {
+		const a = new Elysia({ as: 'global' }).onBeforeHandle(() => {
 			order.push(1)
 		})
-		const b = new Elysia({ as: 'global' }).beforeHandle(() => {
+		const b = new Elysia({ as: 'global' }).onBeforeHandle(() => {
 			order.push(2)
 		})
 
@@ -370,7 +371,7 @@ describe('.has()', () => {
 	it('does not track unnamed plugins', async () => {
 		let requests = 0
 		const plugin = new Elysia()
-			.request(() => {
+			.onRequest(() => {
 				requests++
 			})
 			.get('/', () => 'ok')

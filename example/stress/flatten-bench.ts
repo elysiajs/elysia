@@ -11,7 +11,8 @@ const stop = profile(`flattenChain x${iters} (depth=${depth})`)
 
 for (let i = 0; i < iters; i++) {
 	const app = new Elysia()
-	for (let j = 0; j < depth; j++) app.beforeHandle('global', function fn() {})
+	for (let j = 0; j < depth; j++)
+		app.onBeforeHandle('global', function fn() {})
 	app.get('/r', () => 'ok')
 
 	// Trigger hook composition via routes getter (flattens appHook chain).

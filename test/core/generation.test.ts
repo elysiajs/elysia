@@ -166,19 +166,19 @@ describe('sealed generation immutability', () => {
 			['decorate', (a) => a.decorate('d', 1)],
 			['state', (a) => a.state('s', 1)],
 			['model', (a) => a.model('M', t.Object({}))],
-			['beforeHandle', (a) => a.beforeHandle(() => {})],
-			['transform', (a) => a.transform(() => {})],
-			['parse', (a) => a.parse(() => {})],
+			['onBeforeHandle', (a) => a.onBeforeHandle(() => {})],
+			['onTransform', (a) => a.onTransform(() => {})],
+			['onParse', (a) => a.onParse(() => {})],
 			['mapResponse', (a) => a.mapResponse(() => {})],
 			['guard', (a) => a.guard({ query: t.Object({}) }, (x: any) => x)],
 			['as', (a) => a.as('global')],
 			['macro', (a) => a.macro({ m: { resolve: () => ({}) } })],
-			['error', (a) => a.error(class extends Error {}, () => 'e')],
+			['onError', (a) => a.onError(class extends Error {}, () => 'e')],
 			['headers', (a) => a.headers({ 'x-a': '1' })],
 			['parser', (a) => a.parser('p', () => ({}))],
 			['wrap', (a) => a.wrap((f: any) => f)],
-			['setup', (a) => a.setup(() => {})],
-			['cleanup', (a) => a.cleanup(() => {})]
+			['onStart', (a) => a.onStart(() => {})],
+			['onStop', (a) => a.onStop(() => {})]
 		]
 
 		for (const [name, mutate] of cases) {

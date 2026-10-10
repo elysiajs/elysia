@@ -73,8 +73,8 @@ const define =
 	(handler: Function, afterResponse: boolean, error?: () => unknown) =>
 	(app: any) => {
 		let next = new Elysia({ ...app['~config'], ...config })
-		if (error) next = next.error(error as any)
-		if (afterResponse) next = next.afterResponse(() => {})
+		if (error) next = next.onError(error as any)
+		if (afterResponse) next = next.onAfterResponse(() => {})
 
 		return next.get('/', handler as any)
 	}

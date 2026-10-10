@@ -79,7 +79,7 @@ describe('route error hook merging', () => {
 					throw new Error('boom')
 				}
 			)
-			.error(() => {})
+			.onError(() => {})
 
 		const app = new Elysia().use(plugin)
 

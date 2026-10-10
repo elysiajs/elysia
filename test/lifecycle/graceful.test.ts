@@ -10,8 +10,8 @@ describe('Setup and cleanup', () => {
 		const onCleanup = () => cleanup++
 
 		const app = new Elysia()
-			.setup([onSetup, onSetup])
-			.cleanup([onCleanup, onCleanup])
+			.onStart([onSetup, onSetup])
+			.onStop([onCleanup, onCleanup])
 			.listen(0)
 
 		await Bun.sleep(0)
@@ -25,8 +25,8 @@ describe('Setup and cleanup', () => {
 		const order: string[] = []
 
 		const app = new Elysia()
-			.setup(() => order.push('setup'))
-			.cleanup(() => order.push('cleanup'))
+			.onStart(() => order.push('setup'))
+			.onStop(() => order.push('cleanup'))
 			.get('/', 'hi')
 			.listen(0)
 
@@ -42,12 +42,12 @@ describe('Setup and cleanup', () => {
 		const order: string[] = []
 
 		const plugin = new Elysia({ name: 'graceful-plugin' })
-			.setup(() => order.push('plugin-setup'))
-			.cleanup(() => order.push('plugin-cleanup'))
+			.onStart(() => order.push('plugin-setup'))
+			.onStop(() => order.push('plugin-cleanup'))
 
 		const app = new Elysia()
 			.use(plugin)
-			.setup(() => order.push('app-setup'))
+			.onStart(() => order.push('app-setup'))
 			.listen(0)
 
 		await Bun.sleep(0)
@@ -62,7 +62,7 @@ describe('Setup and cleanup', () => {
 		const order: string[] = []
 
 		const app = new Elysia()
-			.setup([() => order.push('a'), () => order.push('b')])
+			.onStart([() => order.push('a'), () => order.push('b')])
 			.listen(0)
 
 		await Bun.sleep(0)
@@ -86,7 +86,7 @@ describe('Setup and cleanup', () => {
 		const order: string[] = []
 
 		const app = new Elysia()
-			.setup(async () => {
+			.onStart(async () => {
 				await new Promise((r) => setTimeout(r, 25))
 				order.push('setup-done')
 			})
@@ -108,11 +108,11 @@ describe('Setup and cleanup', () => {
 		const order: string[] = []
 
 		const app = new Elysia()
-			.cleanup(async () => {
+			.onStop(async () => {
 				await new Promise((r) => setTimeout(r, 25))
 				order.push('first')
 			})
-			.cleanup(async () => {
+			.onStop(async () => {
 				await new Promise((r) => setTimeout(r, 1))
 				order.push('second')
 			})

@@ -6,7 +6,7 @@ describe('shared hook chains', () => {
 	it('app-level hooks apply identically across all routes (shared head)', async () => {
 		const order: string[] = []
 		const app = new Elysia()
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				order.push('before')
 			})
 			.get('/a', () => 'a')
@@ -35,7 +35,7 @@ describe('per-app macro expansion', () => {
 		let macroRan = 0
 
 		const sharedPlugin = new Elysia({ name: 'shared-plugin' })
-			.beforeHandle(() => {})
+			.onBeforeHandle(() => {})
 			.get('/plug', () => 'plug')
 
 		const macroLess = new Elysia().use(sharedPlugin).get('/a', () => 'a')
@@ -70,7 +70,7 @@ describe('per-app macro expansion', () => {
 		let macroRan = 0
 
 		const sharedPlugin = new Elysia({ name: 'shared-plugin-reverse' })
-			.beforeHandle(() => {})
+			.onBeforeHandle(() => {})
 			.get('/plug', () => 'plug')
 
 		const withMacro = new Elysia()
@@ -102,17 +102,17 @@ describe('per-app macro expansion', () => {
 describe('cached hook-chain copies', () => {
 	it('two consumers of one plugin keep independent hooks', async () => {
 		const sharedPlugin = new Elysia({ name: 'shared-hooks' })
-			.beforeHandle(() => {})
+			.onBeforeHandle(() => {})
 			.get('/p', () => 'p')
 
 		const a = new Elysia()
 			.use(sharedPlugin)
-			.afterHandle(({ responseValue }) => `${responseValue}-A`)
+			.onAfterHandle(({ responseValue }) => `${responseValue}-A`)
 			.get('/x', () => 'x')
 
 		const b = new Elysia()
 			.use(sharedPlugin)
-			.afterHandle(({ responseValue }) => `${responseValue}-B`)
+			.onAfterHandle(({ responseValue }) => `${responseValue}-B`)
 			.get('/y', () => 'y')
 
 		;(a as any).compile()

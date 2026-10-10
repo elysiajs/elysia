@@ -386,7 +386,7 @@ for (const [lane, config] of lanes)
 							},
 							handler as any
 						)
-						.afterResponse('global', () => {
+						.onAfterResponse('global', () => {
 							log.push('global')
 						})
 						.handle('/')
@@ -402,10 +402,10 @@ describe('afterResponse count (dispatch lane)', () => {
 	it('an app-level hook fires once for a pre-yield generator throw', async () => {
 		const log: string[] = []
 		const app = new Elysia()
-			.afterResponse(() => {
+			.onAfterResponse(() => {
 				log.push('afterResponse')
 			})
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				log.push(`error:${(error as Error).message}`)
 			})
 			.get('/', function* () {
@@ -423,7 +423,7 @@ describe('afterResponse count (dispatch lane)', () => {
 	it('an app-level hook fires once for an unmatched route', async () => {
 		const log: string[] = []
 		const app = new Elysia()
-			.afterResponse(() => {
+			.onAfterResponse(() => {
 				log.push('afterResponse')
 			})
 			.get('/', () => 'ok')

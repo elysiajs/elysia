@@ -35,7 +35,7 @@ describe('handler result processing', () => {
 
 	it('routes a rejected handler Promise through a synchronous error hook', async () => {
 		const app = new Elysia()
-			.error(() => new Response('handled', { status: 500 }))
+			.onError(() => new Response('handled', { status: 500 }))
 			.get('/', { beforeHandle: () => {} }, () =>
 				Promise.reject(new Error('boom'))
 			)

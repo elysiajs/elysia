@@ -53,7 +53,7 @@ table('a callback keeps its hooks inside', [
 		// never the parent's later routes or a later sibling group
 		name: 'global plugin used in a group callback',
 		define: (app) => {
-			const audit = named('audit').beforeHandle('global', mark('audit'))
+			const audit = named('audit').onBeforeHandle('global', mark('audit'))
 			return app
 				.group('/a', (g: any) => g.use(audit).get('/x', ok))
 				.get('/root', ok)
@@ -67,8 +67,8 @@ table('a callback keeps its hooks inside', [
 			app
 				.guard({}, (g: any) =>
 					g
-						.beforeHandle('plugin', mark('plugin'))
-						.afterHandle('global', mark('global'))
+						.onBeforeHandle('plugin', mark('plugin'))
+						.onAfterHandle('global', mark('global'))
 						.get('/x', ok)
 				)
 				.get('/root', ok),
@@ -96,7 +96,7 @@ table('a callback keeps its hooks inside', [
 		define: (app) =>
 			app
 				.group('/a', (g: any) =>
-					g.use(named('r').request(mark('request'))).get('/x', ok)
+					g.use(named('r').onRequest(mark('request'))).get('/x', ok)
 				)
 				.get('/root', ok),
 		expect: {
@@ -112,7 +112,7 @@ table("a named plugin's request hook runs once per app", [
 		// a factory builds a fresh instance: one installation per name
 		name: 'factory plugin in a callback, then the parent',
 		define: (app) => {
-			const factory = () => named('r').request(mark('request'))
+			const factory = () => named('r').onRequest(mark('request'))
 			return app
 				.group('/a', (g: any) => g.use(factory()).get('/x', ok))
 				.use(factory())
@@ -123,7 +123,7 @@ table("a named plugin's request hook runs once per app", [
 	{
 		name: 'factory plugin in two callbacks and a nested plugin',
 		define: (app) => {
-			const factory = () => named('r').request(mark('request'))
+			const factory = () => named('r').onRequest(mark('request'))
 			return app
 				.group('/a', (g: any) => g.use(factory()).get('/x', ok))
 				.group('/b', (g: any) => g.use(factory()).get('/y', ok))
@@ -135,7 +135,7 @@ table("a named plugin's request hook runs once per app", [
 		// an unnamed plugin used twice is two installations (Elysia 1)
 		name: 'unnamed plugin in a callback, then the parent',
 		define: (app) => {
-			const plugin = new Elysia().request(mark('request'))
+			const plugin = new Elysia().onRequest(mark('request'))
 			return app
 				.group('/a', (g: any) => g.use(plugin).get('/x', ok))
 				.use(plugin)
@@ -151,8 +151,8 @@ table('a plugin a callback installed installs again outside it', [
 		name: 'named plugin in a group callback, then the parent',
 		define: (app) => {
 			const p = named('p')
-				.beforeHandle('plugin', mark('pBH'))
-				.error('plugin', mark('pERR'))
+				.onBeforeHandle('plugin', mark('pBH'))
+				.onError('plugin', mark('pERR'))
 				.get('/p', throwing)
 			return app
 				.group('/a', (g: any) => g.use(p))
@@ -183,7 +183,7 @@ table('callback error hooks run per registration', [
 		define: (app) => {
 			const f = mark('f')
 			return app.group('/g', (g: any) =>
-				g.get('/x', throwing).error(f).error(f)
+				g.get('/x', throwing).onError(f).onError(f)
 			)
 		},
 		expect: { '/g/x': '500 f,f' }
@@ -195,7 +195,7 @@ table('callback error hooks run per registration', [
 		define: (app) => {
 			const f = mark('f')
 			return app.group('/g', (g: any) =>
-				g.error(f).get('/x', throwing).error(f)
+				g.onError(f).get('/x', throwing).onError(f)
 			)
 		},
 		expect: { '/g/x': '500 f,f' }
@@ -205,8 +205,8 @@ table('callback error hooks run per registration', [
 		define: (app) => {
 			const f = mark('f')
 			return app
-				.error(f)
-				.group('/g', (g: any) => g.get('/x', throwing).error(f))
+				.onError(f)
+				.group('/g', (g: any) => g.get('/x', throwing).onError(f))
 		},
 		expect: { '/g/x': '500 f,f' }
 	},
@@ -216,7 +216,7 @@ table('callback error hooks run per registration', [
 		name: 'unnamed plugin with an error hook before its route',
 		define: (app) => {
 			const plugin = new Elysia()
-				.error('global', mark('f'))
+				.onError('global', mark('f'))
 				.get('/u', throwing)
 			return app.group('/g', (g: any) => g.use(plugin))
 		},
@@ -227,7 +227,7 @@ table('callback error hooks run per registration', [
 		// callback's after the route
 		name: 'unnamed plugin used by the parent and after the route',
 		define: (app) => {
-			const plugin = new Elysia().error('global', mark('f'))
+			const plugin = new Elysia().onError('global', mark('f'))
 			return app
 				.use(plugin)
 				.group('/g', (g: any) => g.get('/x', throwing).use(plugin))
@@ -240,7 +240,7 @@ table('callback error hooks run per registration', [
 		define: (app) => {
 			const plugin = new Elysia()
 				.get('/u', throwing)
-				.error('global', mark('f'))
+				.onError('global', mark('f'))
 			return app.group('/g', (g: any) => g.use(plugin))
 		},
 		expect: { '/g/u': '500 f' }
@@ -251,8 +251,8 @@ table('callback error hooks run per registration', [
 			const f = mark('f')
 			return app.group('/a', (a: any) =>
 				a
-					.group('/b', (b: any) => b.get('/x', throwing).error(f))
-					.error(f)
+					.group('/b', (b: any) => b.get('/x', throwing).onError(f))
+					.onError(f)
 			)
 		},
 		expect: { '/a/b/x': '500 f,f' }
@@ -339,10 +339,10 @@ table('named plugin identity is its exact name and seed', [
 		name: 'two names whose 32-bit hashes collide',
 		define: (app) =>
 			app
-				.use(named('p1uzx').beforeHandle('global', mark('x')))
-				.use(named('pc2ad').beforeHandle('global', mark('y')))
-				.use(named('p1unw').beforeHandle('global', mark('z')))
-				.use(named('pywba').beforeHandle('global', mark('w')))
+				.use(named('p1uzx').onBeforeHandle('global', mark('x')))
+				.use(named('pc2ad').onBeforeHandle('global', mark('y')))
+				.use(named('p1unw').onBeforeHandle('global', mark('z')))
+				.use(named('pywba').onBeforeHandle('global', mark('w')))
 				.get('/', ok),
 		expect: { '/': '200 x,y,z,w' }
 	},
@@ -350,8 +350,8 @@ table('named plugin identity is its exact name and seed', [
 		name: 'a name that reads like name + seed',
 		define: (app) =>
 			app
-				.use(named('a_1').beforeHandle('global', mark('x')))
-				.use(named('a', 1).beforeHandle('global', mark('y')))
+				.use(named('a_1').onBeforeHandle('global', mark('x')))
+				.use(named('a', 1).onBeforeHandle('global', mark('y')))
 				.get('/', ok),
 		expect: { '/': '200 x,y' }
 	},
@@ -359,10 +359,10 @@ table('named plugin identity is its exact name and seed', [
 		name: 'a falsy seed is a seed',
 		define: (app) =>
 			app
-				.use(named('a').beforeHandle('global', mark('x')))
-				.use(named('a', 0).beforeHandle('global', mark('y')))
-				.use(named('a', '1').beforeHandle('global', mark('z')))
-				.use(named('a', 1).beforeHandle('global', mark('w')))
+				.use(named('a').onBeforeHandle('global', mark('x')))
+				.use(named('a', 0).onBeforeHandle('global', mark('y')))
+				.use(named('a', '1').onBeforeHandle('global', mark('z')))
+				.use(named('a', 1).onBeforeHandle('global', mark('w')))
 				.get('/', ok),
 		expect: { '/': '200 x,y,z,w' }
 	},
@@ -370,8 +370,8 @@ table('named plugin identity is its exact name and seed', [
 		name: 'the same name and seed install once',
 		define: (app) =>
 			app
-				.use(named('a', { v: 1 }).beforeHandle('global', mark('x')))
-				.use(named('a', { v: 1 }).beforeHandle('global', mark('y')))
+				.use(named('a', { v: 1 }).onBeforeHandle('global', mark('x')))
+				.use(named('a', { v: 1 }).onBeforeHandle('global', mark('y')))
 				.get('/', ok),
 		expect: { '/': '200 x' }
 	}

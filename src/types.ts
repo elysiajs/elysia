@@ -502,7 +502,7 @@ export interface EphemeralType {
 	schema: MetadataBase['schema']
 	schemas: MetadataBase['schema']
 	response: PossibleResponse
-	// `.error(Class, handler)` entries, channeled by scope like schemas:
+	// `.onError(Class, handler)` entries, channeled by scope like schemas:
 	// local → Volatile, 'plugin' → Ephemeral, 'global' → Definitions
 	error: ErrorDefinition[]
 }
@@ -2281,7 +2281,7 @@ type SelfDescribedResponse<E> = ServedAtStatus<
 
 /**
  * Response of an error that reached the error pipeline without a matching
- * `.error(Class, handler)`.
+ * `.onError(Class, handler)`.
  *
  * A self-describing error maps to its annotated `status` and knobs,
  * anything else is served as an unhandled 500
@@ -2508,7 +2508,7 @@ type ErrorFallbackStatus<E> =
 
 /**
  * `Definitions['error']` / `EphemeralType['error']` entry registered by an
- * `.error(Class, handler)` call
+ * `.onError(Class, handler)` call
  */
 export type ErrorDefinitionEntry<
 	E extends abstract new (...args: any) => Error,
@@ -2589,7 +2589,7 @@ export type UnhandledReturnedErrorOf<
 	: UnhandledReturnedError<T, Errors>
 
 /**
- * Returned errors a `.error(Class, handler)` already consumed, each paired
+ * Returned errors a `.onError(Class, handler)` already consumed, each paired
  * with the response that handler contributed. Carried on the route under
  * `~handled` so a parent handler registered before `.use()`, which runs first
  * at runtime, can take the error over
@@ -2808,7 +2808,7 @@ type MergeStatusUnion<U> = {
 
 /**
  * Map `Error` instances in a handler's return type to the response of their
- * matching `.error(Class, handler)`. Returned errors are forwarded to the
+ * matching `.onError(Class, handler)`. Returned errors are forwarded to the
  * error pipeline at runtime, so they never appear in the 200 response
  */
 export type ExtractReturnedError<
@@ -3101,6 +3101,10 @@ export type GlobalHookReturn<
 	Ephemeral,
 	Volatile
 >
+
+// 1.x `{ as }` hook scope, `'scoped'` is `'plugin'`
+export type LegacyScope<As extends 'local' | 'scoped' | 'global'> =
+	As extends 'scoped' ? 'plugin' : As
 
 export type ScopedHookReturn<
 	HookScope extends EventScope,

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'bun:test'
 describe('transform', () => {
 	it('converts path params in an app hook', async () => {
 		const app = new Elysia()
-			.transform(({ params }) => {
+			.onTransform(({ params }) => {
 				const p = params as { id?: string | number } | null
 				if (p?.id) p.id = +p.id
 			})
@@ -39,7 +39,7 @@ describe('transform', () => {
 		const app = new Elysia()
 			.group('/scoped/id/:id', (app) =>
 				app
-					.transform(({ params }) => {
+					.onTransform(({ params }) => {
 						// @ts-ignore
 						if (params.id) params.id = +params.id
 					})
@@ -55,7 +55,7 @@ describe('transform', () => {
 	})
 
 	it('propagates global transforms out of plugins', async () => {
-		const transformId = new Elysia().transform('global', ({ params }) => {
+		const transformId = new Elysia().onTransform('global', ({ params }) => {
 			const p = params as { id?: string | number } | null
 			if (p?.id) p.id = +p.id
 		})
@@ -73,10 +73,10 @@ describe('transform', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.transform(() => {
+			.onTransform(() => {
 				order.push('A')
 			})
-			.transform(() => {
+			.onTransform(() => {
 				order.push('B')
 			})
 			.get('/', () => '')
@@ -88,7 +88,7 @@ describe('transform', () => {
 
 	it('runs app transforms before route-local transforms', async () => {
 		const app = new Elysia()
-			.transform(({ params }) => {
+			.onTransform(({ params }) => {
 				const p = params as { id?: string | number } | null
 				if (p?.id) p.id = +p.id
 			})
@@ -116,11 +116,11 @@ describe('transform', () => {
 
 	it('accepts multiple app transforms', async () => {
 		const app = new Elysia()
-			.transform(({ params }) => {
+			.onTransform(({ params }) => {
 				const p = params as { id?: string | number } | null
 				if (p?.id) p.id = +p.id
 			})
-			.transform(({ params }) => {
+			.onTransform(({ params }) => {
 				const p = params as { id?: string | number } | null
 				if (p?.id && typeof p.id === 'number') p.id = p.id + 1
 			})
@@ -221,7 +221,7 @@ describe('transform', () => {
 	})
 
 	it('runs a global plugin transform on parent routes', async () => {
-		const transformId = new Elysia().transform('global', ({ params }) => {
+		const transformId = new Elysia().onTransform('global', ({ params }) => {
 			const p = params as { name?: string } | null
 			if (p?.name === 'Fubuki') p.name = 'Cat'
 		})
@@ -236,7 +236,7 @@ describe('transform', () => {
 	})
 
 	it('keeps a local transform inside its plugin', async () => {
-		const transformId = new Elysia().transform(({ params }) => {
+		const transformId = new Elysia().onTransform(({ params }) => {
 			const p = params as { name?: string } | null
 			if (p?.name === 'Fubuki') p.name = 'Cat'
 		})
@@ -254,7 +254,7 @@ describe('transform', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.transform('global', ({ path }) => {
+			.onTransform('global', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -270,7 +270,7 @@ describe('transform', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.transform('local', ({ path }) => {
+			.onTransform('local', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -286,7 +286,7 @@ describe('transform', () => {
 		let total = 0
 
 		const app = new Elysia()
-			.transform([
+			.onTransform([
 				() => {
 					total++
 				},

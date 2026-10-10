@@ -9,7 +9,7 @@ const deny = ({ request }: { request: Request }) =>
 // An inherited auth hook guarding a WS route that lives in a plugin
 export const app = new Elysia()
 	.use(websocket())
-	.beforeHandle(deny)
+	.onBeforeHandle(deny)
 	.use(
 		new Elysia()
 			.get('/http', () => 'ok')

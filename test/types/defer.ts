@@ -94,15 +94,15 @@ import { expectTypeOf } from 'expect-type'
 
 // `defer` is a context member, so every lifecycle hook can queue one too.
 {
-	new Elysia().transform(({ defer }) => {
+	new Elysia().onTransform(({ defer }) => {
 		expectTypeOf(defer(() => {})).toEqualTypeOf<MaybePromise<void>>()
 	})
 
-	new Elysia().beforeHandle(({ defer }) => {
+	new Elysia().onBeforeHandle(({ defer }) => {
 		expectTypeOf(defer(() => {})).toEqualTypeOf<MaybePromise<void>>()
 	})
 
-	new Elysia().afterHandle(({ defer }) => {
+	new Elysia().onAfterHandle(({ defer }) => {
 		expectTypeOf(defer(() => {})).toEqualTypeOf<MaybePromise<void>>()
 	})
 
@@ -110,12 +110,12 @@ import { expectTypeOf } from 'expect-type'
 		expectTypeOf(defer(() => {})).toEqualTypeOf<MaybePromise<void>>()
 	})
 
-	new Elysia().error(({ defer }) => {
+	new Elysia().onError(({ defer }) => {
 		expectTypeOf(defer(() => {})).toEqualTypeOf<MaybePromise<void>>()
 	})
 
 	// including `afterResponse` itself, which runs on the same queue
-	new Elysia().afterResponse(({ defer }) => {
+	new Elysia().onAfterResponse(({ defer }) => {
 		expectTypeOf(defer(() => {})).toEqualTypeOf<MaybePromise<void>>()
 	})
 }

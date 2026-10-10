@@ -102,7 +102,7 @@ describe('Stop', () => {
 		const app = new Elysia({
 			serve: { routes: { '/native': new Response('native') } }
 		} as any)
-			.setup(() => setupReady)
+			.onStart(() => setupReady)
 			.listen(0)
 		const port = app.server!.port
 
@@ -149,7 +149,7 @@ describe('Stop', () => {
 		let cleanups = 0
 		const app = new Elysia()
 			.get('/health', () => resource)
-			.cleanup(() => {
+			.onStop(() => {
 				resource = 'closed'
 				cleanups++
 			})
@@ -221,7 +221,7 @@ describe('Stop', () => {
 				await release
 				return 'done'
 			})
-			.cleanup(() => {
+			.onStop(() => {
 				order.push('cleanup')
 				cleanups++
 			})
@@ -309,7 +309,7 @@ describe('Stop', () => {
 				order.push('http-end')
 				return 'done'
 			})
-			.cleanup(() => order.push('cleanup'))
+			.onStop(() => order.push('cleanup'))
 			.listen(0)
 		const server = app.server!
 		const port = server.port
@@ -364,7 +364,7 @@ describe('Stop', () => {
 					await never
 				}
 			})
-			.cleanup(() => cleanups++)
+			.onStop(() => cleanups++)
 			.listen(0)
 		const ws = newWebsocket(app.server!)
 

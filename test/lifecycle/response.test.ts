@@ -7,10 +7,10 @@ describe('afterResponse', () => {
 		let isAfterResponseCalled = false
 
 		const app = new Elysia()
-			.afterResponse(() => {
+			.onAfterResponse(() => {
 				isAfterResponseCalled = true
 			})
-			.error(() => {
+			.onError(() => {
 				return new Response('a', {
 					status: 401,
 					headers: {
@@ -28,7 +28,7 @@ describe('afterResponse', () => {
 	it('runs for a missing route without an error hook', async () => {
 		let isAfterResponseCalled = false
 
-		const app = new Elysia().afterResponse(() => {
+		const app = new Elysia().onAfterResponse(() => {
 			isAfterResponseCalled = true
 		})
 
@@ -42,10 +42,10 @@ describe('afterResponse', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.afterResponse(() => {
+			.onAfterResponse(() => {
 				order.push('A')
 			})
-			.afterResponse(() => {
+			.onAfterResponse(() => {
 				order.push('B')
 			})
 			.get('/', () => '')
@@ -59,7 +59,7 @@ describe('afterResponse', () => {
 	it('appends callbacks from context in registration order', async () => {
 		const order: string[] = []
 		const app = new Elysia()
-			.afterResponse(() => order.push('hook'))
+			.onAfterResponse(() => order.push('hook'))
 			.get('/', ({ defer }) => {
 				defer(async ({ responseValue }) => {
 					await Promise.resolve()
@@ -129,7 +129,7 @@ describe('afterResponse', () => {
 	it('receives a typed responseValue through a global plugin hook', async () => {
 		let type = ''
 
-		const afterResponse = new Elysia().afterResponse(
+		const afterResponse = new Elysia().onAfterResponse(
 			'global',
 			({ responseValue }) => {
 				type = typeof responseValue
@@ -157,7 +157,7 @@ describe('afterResponse', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.afterResponse('global', ({ path }) => {
+			.onAfterResponse('global', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -174,7 +174,7 @@ describe('afterResponse', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.afterResponse('local', ({ path }) => {
+			.onAfterResponse('local', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -244,7 +244,7 @@ describe('afterResponse drain boundary', () => {
 		try {
 			const calls: string[] = []
 
-			const app = new Elysia().afterResponse(({ defer }) => {
+			const app = new Elysia().onAfterResponse(({ defer }) => {
 				defer(() => {
 					calls.push('outer')
 					if (calls.length < 4) defer(() => calls.push('nested'))
@@ -267,7 +267,7 @@ describe('afterResponse drain boundary', () => {
 		const calls: string[] = []
 
 		const app = new Elysia()
-			.afterResponse(({ defer }) => {
+			.onAfterResponse(({ defer }) => {
 				calls.push('hook')
 				defer(() => calls.push('deferred'))
 			})
@@ -284,7 +284,7 @@ describe('afterResponse drain boundary', () => {
 	it('runs defer() registered by a static hook on the interpreted lane', async () => {
 		const calls: string[] = []
 
-		const app = new Elysia().afterResponse(({ defer }) => {
+		const app = new Elysia().onAfterResponse(({ defer }) => {
 			calls.push('hook')
 			defer(() => calls.push('deferred'))
 		})
@@ -300,14 +300,14 @@ describe('afterResponse drain boundary', () => {
 		const interpreted: string[] = []
 
 		const app = new Elysia()
-			.afterResponse(async ({ defer }) => {
+			.onAfterResponse(async ({ defer }) => {
 				await Bun.sleep(1)
 				jit.push('hook')
 				defer(() => jit.push('deferred'))
 			})
 			.get('/', () => 'ok')
 
-		const fallthrough = new Elysia().afterResponse(async ({ defer }) => {
+		const fallthrough = new Elysia().onAfterResponse(async ({ defer }) => {
 			await Bun.sleep(1)
 			interpreted.push('hook')
 			defer(() => interpreted.push('deferred'))
@@ -336,9 +336,9 @@ describe('afterResponse drain boundary', () => {
 				c.defer(() => order.push('deferred'))
 			})
 
-		const app = new Elysia().afterResponse(hook(jit)).get('/', () => 'ok')
+		const app = new Elysia().onAfterResponse(hook(jit)).get('/', () => 'ok')
 
-		const fallthrough = new Elysia().afterResponse(hook(interpreted))
+		const fallthrough = new Elysia().onAfterResponse(hook(interpreted))
 
 		await Promise.all([app.handle('/'), fallthrough.handle('/missing')])
 		await Bun.sleep(10)
@@ -355,15 +355,15 @@ describe('afterResponse drain boundary', () => {
 		// an unawaited call reorders the drain to b, c, a
 		const build = (order: string[]) =>
 			new Elysia()
-				.afterResponse(() =>
+				.onAfterResponse(() =>
 					Bun.sleep(5).then(() => {
 						order.push('a')
 					})
 				)
-				.afterResponse(() => {
+				.onAfterResponse(() => {
 					order.push('b')
 				})
-				.afterResponse(async () => {
+				.onAfterResponse(async () => {
 					await Bun.sleep(1)
 					order.push('c')
 				})
@@ -388,11 +388,11 @@ describe('afterResponse drain boundary', () => {
 		// returns a number, pinning that a non-promise return stays ignored.
 		const build = (order: string[]) =>
 			new Elysia()
-				.afterResponse(() => {
+				.onAfterResponse(() => {
 					order.push('a')
 				})
-				.afterResponse(() => order.push('b'))
-				.afterResponse(() => {
+				.onAfterResponse(() => order.push('b'))
+				.onAfterResponse(() => {
 					order.push('c')
 				})
 
@@ -426,7 +426,7 @@ describe('afterResponse after errors', () => {
 	})
 
 	const app = new Elysia()
-		.afterResponse(() => {
+		.onAfterResponse(() => {
 			isOnResponseCalled = true
 			onResponseCalledCounter++
 		})
@@ -481,11 +481,11 @@ describe('afterResponse after errors', () => {
 		async ({ withOnError }) => {
 			let counter = 0
 
-			const app = new Elysia().afterResponse(() => {
+			const app = new Elysia().onAfterResponse(() => {
 				counter++
 			})
 
-			if (withOnError) app.error(() => {})
+			if (withOnError) app.onError(() => {})
 
 			const req = new Request('http://localhost/notFound')
 			await app.handle(req)
@@ -504,10 +504,10 @@ describe('afterResponse after errors', () => {
 			let counter = 0
 
 			const app = new Elysia()
-				.error(() => {
+				.onError(() => {
 					return onErrorReturnsValue
 				})
-				.afterResponse(() => {
+				.onAfterResponse(() => {
 					counter++
 				})
 				.get('/error', () => {

@@ -13,7 +13,7 @@ describe('HTTP routing with WebSocket routes', () => {
 		const app = new Elysia()
 			.use(websocket())
 			.ws('/ws', { message() {} })
-			.request(() => {})
+			.onRequest(() => {})
 			.get('/ok', () => 'ok')
 
 		const res = await app.handle('/ok')
@@ -38,7 +38,7 @@ describe('HTTP routing with WebSocket routes', () => {
 		const app = new Elysia()
 			.use(websocket())
 			.ws('/ws', { message() {} })
-			.request(() => {})
+			.onRequest(() => {})
 			.get('/id/:id', ({ params }) => params.id)
 
 		const res = await app.handle('/id/42')
@@ -50,7 +50,7 @@ describe('HTTP routing with WebSocket routes', () => {
 		const app = new Elysia()
 			.use(websocket())
 			.ws('/ws', { message() {} })
-			.request(() => {})
+			.onRequest(() => {})
 			.get('/ok', () => 'ok')
 
 		const res = await app.handle('/missing')
@@ -62,7 +62,7 @@ describe('WebSocket route hook snapshots', () => {
 	it('runs a plugin-local beforeHandle registered before the route', async () => {
 		let ran = 0
 		const plugin = new Elysia()
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				ran++
 				return new Response('blocked', { status: 403 })
 			})
@@ -82,7 +82,7 @@ describe('WebSocket route hook snapshots', () => {
 		const app = new Elysia()
 			.use(websocket())
 			.ws('/ws', { message() {} })
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				leaked++
 				return new Response('blocked', { status: 403 })
 			})
@@ -96,7 +96,7 @@ describe('WebSocket route hook snapshots', () => {
 		let ran = 0
 		const app = new Elysia().group('/api', (a) =>
 			a
-				.beforeHandle(() => {
+				.onBeforeHandle(() => {
 					ran++
 					return new Response('nope', { status: 401 })
 				})

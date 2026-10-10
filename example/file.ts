@@ -10,7 +10,7 @@ new Elysia()
 	.headers({
 		server: 'Elysia'
 	})
-	.request(({ request }) => {
+	.onRequest(({ request }) => {
 		console.log(request.method, request.url)
 	})
 	.get('/', Page)

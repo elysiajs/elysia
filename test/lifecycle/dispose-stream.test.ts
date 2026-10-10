@@ -62,7 +62,7 @@ describe('resources outlive a returned ReadableStream', () => {
 		const log: string[] = []
 		const resource = { closed: false }
 		const app = new Elysia()
-			.afterResponse(() => {
+			.onAfterResponse(() => {
 				resource.closed = true
 				log.push('afterResponse')
 			})
@@ -104,7 +104,7 @@ describe('resources outlive a returned ReadableStream', () => {
 	})
 
 	it('keeps an sse stream an event stream', async () => {
-		const app = new Elysia().afterResponse(() => {}).get('/sse', () =>
+		const app = new Elysia().onAfterResponse(() => {}).get('/sse', () =>
 			sse(
 				new ReadableStream({
 					start(controller) {
@@ -143,7 +143,7 @@ describe('resources outlive a returned ReadableStream', () => {
 	it('releases when a hook replaces the stream', async () => {
 		const log: string[] = []
 		const app = new Elysia()
-			.afterResponse(() => {
+			.onAfterResponse(() => {
 				log.push('afterResponse')
 			})
 			.mapResponse(() => new Response('replaced'))
@@ -158,7 +158,7 @@ describe('resources outlive a returned ReadableStream', () => {
 	// `bytes()` promises the exact stream reaches the response
 	it('leaves a bytes() stream certified', async () => {
 		const app = new Elysia()
-			.afterResponse(() => {})
+			.onAfterResponse(() => {})
 			.get('/bin', () =>
 				bytes(
 					new ReadableStream<Uint8Array>({
@@ -227,14 +227,14 @@ describe('resources outlive a returned ReadableStream', () => {
 		const log: string[] = []
 		let saved: unknown
 		const app = new Elysia()
-			.error(({ status }) => status(200, saved as any))
-			.afterResponse(() => {
+			.onError(({ status }) => status(200, saved as any))
+			.onAfterResponse(() => {
 				log.push('afterResponse')
 			})
-			.afterHandle(({ responseValue }) => {
+			.onAfterHandle(({ responseValue }) => {
 				saved = responseValue
 			})
-			.afterHandle(() => {
+			.onAfterHandle(() => {
 				throw new Error('recover')
 			})
 			.get('/', async function* () {
@@ -256,7 +256,7 @@ describe('resources outlive a returned ReadableStream', () => {
 	it('keeps a long stream a mapResponse hook wraps', async () => {
 		const log: string[] = []
 		const app = new Elysia()
-			.afterResponse(() => {
+			.onAfterResponse(() => {
 				log.push('afterResponse')
 			})
 			.mapResponse(

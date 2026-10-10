@@ -3,9 +3,9 @@ import { Elysia } from '../../src'
 import { describe, expect, it } from 'bun:test'
 
 describe('Promise-returning hooks', () => {
-	it('.request() returning a Promise<undefined> continues to the handler', async () => {
+	it('.onRequest() returning a Promise<undefined> continues to the handler', async () => {
 		const app = new Elysia()
-			.request(() => new Promise<void>((resolve) => resolve()) as any)
+			.onRequest(() => new Promise<void>((resolve) => resolve()) as any)
 			.get('/', () => 'handler')
 
 		const res = await app.handle('/')
@@ -14,9 +14,9 @@ describe('Promise-returning hooks', () => {
 		await expect(res.text()).resolves.toBe('handler')
 	})
 
-	it('.request() returning a resolved value short-circuits with that value', async () => {
+	it('.onRequest() returning a resolved value short-circuits with that value', async () => {
 		const app = new Elysia()
-			.request(() => new Promise<string>((resolve) => resolve('early')))
+			.onRequest(() => new Promise<string>((resolve) => resolve('early')))
 			.get('/', () => 'handler')
 
 		const res = await app.handle('/')
@@ -59,7 +59,7 @@ describe('Promise-returning hooks', () => {
 
 	it('error hook returning a Promise<undefined> falls back to the real error', async () => {
 		const app = new Elysia()
-			.error(() => new Promise<void>((resolve) => resolve()) as any)
+			.onError(() => new Promise<void>((resolve) => resolve()) as any)
 			.get('/', () => {
 				throw new Error('boom')
 			})
@@ -74,7 +74,7 @@ describe('Promise-returning hooks', () => {
 
 	it('error hook returning a resolved value uses that as the error response', async () => {
 		const app = new Elysia()
-			.error(() => new Promise<string>((resolve) => resolve('handled')))
+			.onError(() => new Promise<string>((resolve) => resolve('handled')))
 			.get('/', () => {
 				throw new Error('boom')
 			})

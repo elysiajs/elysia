@@ -108,7 +108,7 @@ corpus.push({
 	define: (app) =>
 		app
 			.headers({ 'x-static': 'promoted' })
-			.error(() => {})
+			.onError(() => {})
 			.get('/native/error-hook', 'literal'),
 	requests: [
 		{ id: 'literal', make: get('/native/error-hook') },
@@ -582,7 +582,7 @@ corpus.push({
 	tags: ['safe-for-socket', 'error'],
 	define: (app) =>
 		(app as any)
-			.error(TeapotError, ({ error, set }: any) => {
+			.onError(TeapotError, ({ error, set }: any) => {
 				set.status = 418
 				return { handled: (error as TeapotError).code }
 			})
@@ -643,7 +643,7 @@ corpus.push({
 	tags: ['safe-for-socket', 'lifecycle'],
 	define: (app) =>
 		app
-			.request(({ request }: any) => {
+			.onRequest(({ request }: any) => {
 				if (new URL(request.url).pathname === '/req-gate')
 					return 'REQ-GATED'
 			})
@@ -701,7 +701,7 @@ corpus.push({
 	id: 'scoped-ordering',
 	tags: ['safe-for-socket', 'plugin', 'lifecycle'],
 	define: (app) => {
-		const scoped = new Elysia().beforeHandle('plugin', ({ set }) => {
+		const scoped = new Elysia().onBeforeHandle('plugin', ({ set }) => {
 			set.headers['x-scoped'] = 'yes'
 		})
 		return app.use(scoped).get('/after-scoped', () => 'ok')
@@ -1126,7 +1126,7 @@ corpus.push({
 	tags: ['safe-for-socket', 'lifecycle'],
 	define: (app) =>
 		app
-			.afterHandle(({ response }: any) =>
+			.onAfterHandle(({ response }: any) =>
 				typeof response === 'string' ? response + '!' : undefined
 			)
 			.get('/a2', () => 'x')
@@ -1198,11 +1198,11 @@ corpus.push({
 			.get('/early', () => new Quack())
 			.use(
 				new Elysia()
-					.error(LocalQuack, () => status(418, 'local quack'))
+					.onError(LocalQuack, () => status(418, 'local quack'))
 					.get('/local', () => new LocalQuack())
 			)
 			.get('/value', () => new LocalQuack())
-			.error(Quack, () => status(418, 'quack'))
+			.onError(Quack, () => status(418, 'quack'))
 			.get('/sync', () => new Quack())
 			.get('/promise', () => Promise.resolve(new Quack()))
 			.get(

@@ -134,7 +134,7 @@ describe('EncodeFrom error path', () => {
 		let caught: { isValidation?: boolean; status?: number } | null = null
 
 		const app = new Elysia()
-			.error(({ error, set }) => {
+			.onError(({ error, set }) => {
 				caught = {
 					isValidation: error instanceof ValidationError,
 					status: set.status as number

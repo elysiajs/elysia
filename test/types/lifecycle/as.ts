@@ -45,7 +45,9 @@ class MyError extends Error {
 // `.as('global')` exposes error handlers at every nesting depth.
 {
 	const plugin = new Elysia()
-		.error(MyError, ({ error }) => status(404, { message: error.message }))
+		.onError(MyError, ({ error }) =>
+			status(404, { message: error.message })
+		)
 		.as('global')
 
 	const app = new Elysia()

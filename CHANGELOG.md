@@ -23,15 +23,13 @@ Breaking Change:
 - `NotFoundError` renamed to `NotFound`
 - `config.encodeSchema` is always enabled. Can't support both in a type-safe manner.
 - `derive` now run in `beforeHandle`. `resolve` is removed
-- rename `on<event>()` lifecycle methods to `<event>()` instead
-- `onStart` renamed to `setup`, `onStop` renamed to `cleanup`.
-- rename `.onError()` to `.error()`. `error(Error, fn)` registers a per-class handler, `error(fn)` registers the general error handler
-- inline `{ as: 'global' }` to literal instead
+- `.onError(Error, fn)` registers a per-class handler, replacing the 1.x `.error({ CODE: Class })` dictionary; `.onError(fn)` registers the general error handler
+- pass the hook scope as a literal first argument instead of `{ as: 'global' }`; the 1.x `{ as }` object is deprecated but still accepted by the hook methods, with a one-time warning
 - rename `scoped` scope to `plugin`
 - remove `.on` due to unsound type safety
 - remove deprecated `set.redirect`, use `redirect()` instead
 - remove deprecated `response`, use `responseValue`
-- remove deprecated `contentType`, use `context.contentType`
+- remove deprecated `contentType` 2nd parameter of `parse` and `.parser()` handlers, use `context.contentType`
 - remove the `{ as: 'append' | 'override' }` object form of `.decorate()` / `.state()`, use the literal instead
 - `t.Transform` renamed to `t.Codec` (TypeBox 1.0 alignment)
 - removed `t.Recursive`, `t.Not`, `t.RegExp` (TypeBox 1.0 alignment), use `t.Ref`/self-reference for recursion and `t.String({ pattern })` for regex constraints
@@ -50,7 +48,7 @@ Breaking Change:
 - remove package subpaths `elysia/type-system` (import from `elysia`), `elysia/type-system/utils`, `elysia/universal/env` (`env` is in `elysia` and `elysia/universal`), `elysia/universal/server` (types are in `elysia/universal`), `elysia/adapter/web-standard/handler`, `elysia/cookies`, `elysia/parse-query` and `elysia/sucrose`; importing them throws `ERR_PACKAGE_PATH_NOT_EXPORTED`
 - no longer importable: `hasTypes`, `hasProperty`, `hasReadableEnv`, `ServerOptions`, `mapResponse`, `mapCompactResponse`, `errorToResponse`, `serializeCookie`, `signCookie`, `unsignCookie`, the `Cookie` class value (`elysia` exports it as a type), `parseQuery`, `parseQueryFromURL`, `sucrose` and its helpers (`separateFunction`, `bracketPairRange`, `findAlias`, … were removed outright; trace-phase inference now uses the token-based inference)
 - remove `name`, `runtime`, `isWebStandard` and `websocket` from `ElysiaAdapterOptions` (never read); a custom adapter passing them as an object literal must drop them
-- remove the literal-scope overloads of `.parse()`, `.transform()`, `.mapResponse()`, `.afterResponse()` and `.trace()`; the generic scope overload covers them with the same inferred types
+- remove the literal-scope overloads of `.onParse()`, `.onTransform()`, `.mapResponse()`, `.onAfterResponse()` and `.trace()`; the generic scope overload covers them with the same inferred types
 - AOT plugin `transform` hook and the rspack loader are now synchronous
 - AOT: `compileToSource` / `captureArtifacts` drop the `register` option and always emit the self-registering manifest (the `export const validators` / `handlers` / `groups` / `groupOf` / default-export form is gone)
 - AOT: remove `CompiledProgramRegistration.bf` and the `Compiled.reconstruct` getter (the setter stays)
@@ -87,15 +85,16 @@ Behavior Change:
 - `stop(true)` no longer waits on an async plugin that never settles
 - `app.fetch` now holds a request until pending async plugins settle, so fetch-only deployments (Workers, Vercel, `export default { fetch: app.fetch }`) no longer 404 a plugin's routes on a cold start (1.x did); a function captured before settling forwards to the settled handler. `app.handle` still dispatches to the partial app while a plugin is pending, so a plugin can call it on its own app during setup
 - `context.route` is set only for dynamic routes; on a static route it is `undefined`, use `context.path` (1.x always set it)
-- an unknown hook or guard scope (1.x `{ as: 'scoped' }`, `'scoped'`, …) now throws at registration instead of silently registering the hook as `local`
+- an unknown hook or guard scope (1.x `'scoped'`, `.guard({ as })`, …) now throws at registration instead of silently registering the hook as `local`
+- `.as()` now throws on a scope other than `'plugin'` / `'global'`: a 1.x `.as('scoped')`, an `.as('local')` or a typo silently lifted every hook into the parent
 - a `.guard()` / `.group()` `schema` other than `'merge'` / `'override'` now throws at registration: a 1.x `schema: 'standalone'` silently fell back to `override`, dropping the guard's own validation on routes with a schema
-- the error thrown when registering on a sealed app names the method that was called (`.get()`, `.beforeHandle()`) and what sealed it (first request, `listen` or `compile`)
+- the error thrown when registering on a sealed app names the method that was called (`.get()`, `.onBeforeHandle()`) and what sealed it (first request, `listen` or `compile`)
 - `context.path` is now readonly, and its notice now fires only when a request hook actually changes the value
 - Validation error `payload.expected` values are shared and deeply frozen
 - Schemas are cloned on first registration and reused by identity
 - Signed-cookie verification now defaults to `verify: 'lazy'`
-- Values returned early from `request()` hooks now pass through `mapResponse` before they are sent.
-- [Type] instance-level `.parse()` and `.transform()` no longer inherit ANY guard input schema — its context is typed as raw, pre-validation values (path params from the instance prefix are kept)
+- Values returned early from `onRequest()` hooks now pass through `mapResponse` before they are sent.
+- [Type] instance-level `.onParse()` and `.onTransform()` no longer inherit ANY guard input schema — its context is typed as raw, pre-validation values (path params from the instance prefix are kept)
 - `ws.body` is always set on the message lane; it was skipped when a heuristic guessed the handler never read it, which missed indirect reads
 - a compiled TypeBox validator passed as a schema now throws a descriptive error at registration instead of a warning followed by the generic unsupported-schema error
 - `t.ArrayBuffer` / `t.Uint8Array` report a wrong-type value once instead of twice in the validation `errors`
@@ -123,7 +122,7 @@ Behavior Change:
 - `file()` responses resolve their `content-type` from the file extension, case-insensitively
 - synchronous Standard Schema validators no longer force async route emission
 - Bun native static-route `Response` objects are no longer retained on the base Elysia instance during router build
-- `.decorate()` values are not disposed on `stop()`, the app does not own values it was handed; release them with `.cleanup()`
+- `.decorate()` values are not disposed on `stop()`, the app does not own values it was handed; release them with `.onStop()`
 - a `.group()` / `.guard()` callback keeps its hooks, schemas and `derive` to the routes it produces: a `plugin` or `global` hook registered or `.use()`d inside no longer reaches the parent's later routes or sibling callbacks; only `request` hooks run app-wide. This matches 1.x, except that 1.x also let a callback's `mapResponse` reach the parent
 - a named plugin `.use()`d inside a `.group()` / `.guard()` callback is installed again by a later `.use()` outside it (its routes at that path, its hooks on later routes), as in 1.x; `app.has(plugin)` is `false` for a plugin used only inside a callback. Unlike 1.x, a named plugin's `request` hook runs once per app however many callbacks and `.use()` calls bring it (1.x added it again for each callback)
 - a named plugin's identity is its `name` plus its serialized `seed`: a falsy `seed` (`0`, `''`, `false`, `null`) is a seed, `{ name: 'a_1' }` is not `{ name: 'a', seed: 1 }`, and `seed: '1'` is not `seed: 1`. This matches 1.x except for `seed: ''`, which 1.x treated as no seed
@@ -133,7 +132,7 @@ Behavior Change:
 - `.state(key, object)` on a key inherited from a plugin merges into that shared object, so the plugin and its other consumers see the merged keys (unchanged from 1.x: the store is shared state)
 - a named plugin's hooks run once per route at the position of its outermost `.use()`, as in 1.x: a named plugin `.use()`d by both an app and one of its plugins ran its hooks twice on routes inside that plugin's `.group()` / `.guard()` callbacks, and late on its other routes. An unnamed plugin `.use()`d at two levels runs its hooks at each, as in 1.x
 - a `.group()` / `.guard()` callback shares the parent's `decorate`, `state`, `model`, `headers` and `parser` tables instead of copying them: a write inside the callback reaches the parent at once and stays if the callback throws. 1.x shared `decorate`, `state` and `model` this way; sharing `headers` and `parser` too is new. Writing through a callback instance kept past its callback throws the same error as the app once the app is sealed (first request, `listen` or `compile`)
-- `.error([fn, fn])` registers its handlers; the one-argument array form was silently ignored, leaving the error unhandled. The 1.x `.error({ CODE: Class })` dictionary now throws at registration instead of registering nothing
+- `.onError([fn, fn])` registers its handlers; the one-argument array form was silently ignored, leaving the error unhandled. Passing the 1.x `.error({ CODE: Class })` dictionary to `.onError()` now throws at registration instead of registering nothing
 - `secrets` is no longer a typed or forwarded property of `cookie.<name>`, and the cookie mutation APIs `set()`, `update()` and the `cookie` setter reject an object with a `secrets` key (a type error, and a throw at runtime) instead of sending the cookie unsigned. An updater callback now receives a copy, so a rejected update leaves the cookie unchanged. Signing comes only from the app or route cookie config
 - `t.UnionEnum` no longer sets an implicit `default` of its first value: a missing required field is now a `422` instead of being filled with that value, a missing optional field stays absent, and the schema no longer carries `default` (visible in OpenAPI output). Pass `default` explicitly to keep the old behaviour
 - `app.routes[i].hooks.response` and a macro `introspect` now get a copy of the route's status map (an empty `response: {}` stays the route's own), since equal maps are shared: a write no longer reaches other routes (an `introspect` write to a guard's map used to reach every route of the guard), and a write through `app.routes` no longer changes the route's validation. A `schema: 'merge'` guard's map (`hooks.schemas[i].response`) is frozen, not copied: an `introspect` writing into it now throws, failing the route's compile and `app.routes`
@@ -155,7 +154,7 @@ Improvement:
 - an app whose named plugins reach routes through several paths compiles faster (a 4,000-route bench: 290 ms to 190 ms)
 - a route's response validators are bound per declared status when it compiles instead of kept in an object keyed by status, which JSC sizes to the largest status: −2.8 KB retained per route with a response schema, −5.4 KB with a `{ 200, 404 }` map or under a shared `{ 401, 403 }` guard, and −5 to −28 ns per request
 - [Type] `.macro()` definitions infer each macro's schema from the definition record instead of five reverse-mapped channels: ~8.7k fewer instantiations per macro (repo type benchmark −13%)
-- an `.error()` hook no longer disqualifies static-literal `GET` routes from Bun native static promotion: those routes are now promoted even when a global or route-local `.error()` hook exists, because no user code runs on a promoted route and the hook can therefore never fire for it. `afterResponse`, `mapResponse`, `parse`, `transform`, schemas, `trace` and every other hook still keep the route on the JS lane. Since Bun's native static table now serves more routes, be aware that a promoted route answers `HEAD` (200) and conditional `GET` (`If-None-Match` matching Bun's `etag` -> 304) natively, without reaching the JS lane or your `.error()` hook (see Known issue)
+- an `.onError()` hook no longer disqualifies static-literal `GET` routes from Bun native static promotion: those routes are now promoted even when a global or route-local `.onError()` hook exists, because no user code runs on a promoted route and the hook can therefore never fire for it. `afterResponse`, `mapResponse`, `parse`, `transform`, schemas, `trace` and every other hook still keep the route on the JS lane. Since Bun's native static table now serves more routes, be aware that a promoted route answers `HEAD` (200) and conditional `GET` (`If-None-Match` matching Bun's `etag` -> 304) natively, without reaching the JS lane or your `.onError()` hook (see Known issue)
 - a route's `response` status map is kept frozen, and routes declaring equal maps (same statuses and schemas) share one container while it stays in the bounded snapshot cache, instead of a writable copy per route that JSC sized to the largest status: a route with `{ 200: t.String(), 404: t.String() }` retains 447 B instead of 5.8 KB, and about 5 KB less when every route's map differs
 
 Bug fix:
@@ -187,8 +186,8 @@ Bug fix:
 - Bun native static routes were never installed when every static response was synchronous
 - error-path `mapResponse` codegen assigned an undeclared `tmp`, leaking the mapped response onto `globalThis`
 - schema-less body routes now treat `Transfer-Encoding` as body-present before touching `request.body`, preserving the fast framing-header path for chunked/proxy-framed requests without `Content-Length`
-- signed cookies were sent unsigned from a route with an `afterResponse` hook, a `defer()` call or a context passed to a helper, and from error responses of routes without an `.error()` hook, so the next request rejected them with `400`; every response now signs them exactly once
-- a signed cookie written by an app-level `.error()` hook registered after the route, or by a root `mapResponse` on the error response of a route without its own `.error()` hook (e.g. a sliding-session refresh), was sent unsigned and rejected on the next request; it is now signed after every hook ran, and those hooks read the plain value instead of the signed one
+- signed cookies were sent unsigned from a route with an `afterResponse` hook, a `defer()` call or a context passed to a helper, and from error responses of routes without an `.onError()` hook, so the next request rejected them with `400`; every response now signs them exactly once
+- a signed cookie written by an app-level `.onError()` hook registered after the route, or by a root `mapResponse` on the error response of a route without its own `.onError()` hook (e.g. a sliding-session refresh), was sent unsigned and rejected on the next request; it is now signed after every hook ran, and those hooks read the plain value instead of the signed one
 - when signing a cookie failed (e.g. a rejected WebCrypto `sign()`), the cookie was sent unsigned on every lane, including the success path; a cookie meant to be signed is now dropped from that response instead
 - `verify: 'lazy'` (the default) now holds on AOT builds and WebCrypto runtimes (and WebSocket upgrades there): they rejected an invalid signed cookie with `400` at request entry even when nothing read it, where the Bun JIT only rejects on first read
 - a returned stream or generator is now stopped when the request aborts before it is sent: its own `cancel` / `finally` runs, and the request's `derive` values are disposed instead of waiting forever
@@ -200,10 +199,10 @@ Bug fix:
 - under `bun --hot`, the validator cache idle timer kept every previous reload's module graph alive for 60 s (~1.7 MB per reload)
 - the `afterResponse` trace on a router miss (`404`) reported ~0 ms instead of the hooks' duration
 - [Type] returning `status('Not Found', …)` against a response map declaring `404` was rejected
-- `stop(true)` hung on a `setup()` that never settles; it now abandons it like a pending async plugin (a failed startup still waits for every started setup before cleanup). Until the abandoned setup settles, `listen()` on the same app throws, a late `.cleanup()` from it throws, and its late failure is reported with `console.error`
+- `stop(true)` hung on an `onStart()` that never settles; it now abandons it like a pending async plugin (a failed startup still waits for every started setup before cleanup). Until the abandoned setup settles, `listen()` on the same app throws, a late `.onStop()` from it throws, and its late failure is reported with `console.error`
 - a static `file()` value (or an `ElysiaFile` subclass) was served as JSON `{"path":"…"}`, disclosing its absolute server path, when the route had an `afterHandle` / `mapResponse` hook and the file was not prepared at startup (any non-Bun runtime, or a route with a `response` schema); it is now served as the file
 - a static `status(code, value)` route with a string, number or boolean `value` was served as `application/octet-stream` on Bun whenever a hook wrote `set.headers` or a cookie; it now gets `text/plain;charset=utf-8` like the same value returned from a function
-- a named `set.status` (`set.status = 'Created'`) skipped response validation and redaction, so the body was sent with the fields its schema removes; a handler's response is now validated by the schema of the code it is sent with, on the JIT, `.compile()` and AOT replay (a response produced by an `.error()` hook is still not validated, as before)
+- a named `set.status` (`set.status = 'Created'`) skipped response validation and redaction, so the body was sent with the fields its schema removes; a handler's response is now validated by the schema of the code it is sent with, on the JIT, `.compile()` and AOT replay (a response produced by an `.onError()` hook is still not validated, as before)
 - a shared resource returned by a `derive` was disposed after every request when it sat in a `decorate` / `state` object under a symbol key or a non-enumerable property (of a plain object or a class instance), was a symbol-keyed decorator, was reached first through a deeper path, or was put there after registration; the tables are now marked again when the app is sealed and the walk covers those keys. Elysia never calls a getter to decide what is shared, so a root-level resource reached only through a getter is still disposed: hold it in a data property
 - a plugin's `decorate` values lost their symbol and non-enumerable keys, and their read-only / frozen state, in every app that `.use()`d the plugin; the per-app copy now keeps them (a plugin getter is still read once at `.use()`)
 - decorating a `Buffer`, typed array or `DataView` walked every byte, at `.decorate()` and again on the first request (a 1 MB `Buffer`: about 0.5 s and 250 MB); views are no longer walked, so a resource stored as a property of a view is not recognized as shared
@@ -215,7 +214,7 @@ Bug fix:
 Chore:
 - declare the minimum supported Node.js version (`engines.node`) and test it in CI
 - `build()` loads the TypeBox graph once when any route carries a TypeBox schema (~100 ms at boot, flat in route count), so the first schema-bearing request no longer stalls the event loop; schema-less, Standard-Schema-only and AOT apps are unaffected
-- a `listen()` boot that fails after the server bound (rejected async plugin, `setup()` or `build()` throw) is rolled back, logged once as `[Elysia] listen() failed:` and sets `process.exitCode = 1`
+- a `listen()` boot that fails after the server bound (rejected async plugin, `onStart()` or `build()` throw) is rolled back, logged once as `[Elysia] listen() failed:` and sets `process.exitCode = 1`
 
 Known issue:
 - `t.ObjectString` with an optional or coercing inner field drops those fields on the default `normalize`, use `normalize: 'typebox'` until the next `exact-mirror` release

@@ -132,7 +132,7 @@ describe('mapDerive', () => {
 		const stack: number[] = []
 
 		const app = new Elysia()
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				stack.push(1)
 			})
 			.mapDerive(() => {

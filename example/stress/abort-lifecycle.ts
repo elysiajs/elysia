@@ -8,11 +8,11 @@ const warmupSize = 2_000
 
 const apps = {
 	plain: new Elysia().get('/', () => 'ok'),
-	request: new Elysia().request(() => {}).get('/', () => 'ok'),
-	beforeHandle: new Elysia().beforeHandle(() => {}).get('/', () => 'ok'),
+	request: new Elysia().onRequest(() => {}).get('/', () => 'ok'),
+	beforeHandle: new Elysia().onBeforeHandle(() => {}).get('/', () => 'ok'),
 	combined: new Elysia()
-		.request(() => {})
-		.beforeHandle(() => {})
+		.onRequest(() => {})
+		.onBeforeHandle(() => {})
 		.get('/', () => 'ok')
 }
 

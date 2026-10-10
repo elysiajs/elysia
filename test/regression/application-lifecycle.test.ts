@@ -7,11 +7,11 @@ describe('server shutdown', () => {
 		const order: string[] = []
 
 		const app = new Elysia()
-			.cleanup(async () => {
+			.onStop(async () => {
 				await new Promise((resolve) => setTimeout(resolve, 20))
 				order.push('first')
 			})
-			.cleanup(async () => {
+			.onStop(async () => {
 				await new Promise((resolve) => setTimeout(resolve, 5))
 				order.push('second')
 			})
@@ -32,7 +32,7 @@ describe('server shutdown', () => {
 	it('waits for an asynchronous server stop before cleanup', async () => {
 		const order: string[] = []
 
-		const app = new Elysia().cleanup(() => {
+		const app = new Elysia().onStop(() => {
 			order.push('cleanup')
 		})
 
@@ -52,11 +52,11 @@ describe('server shutdown', () => {
 		const order: string[] = []
 		const cleanupError = new Error('cleanup failed')
 		const app = new Elysia()
-			.cleanup(() => {
+			.onStop(() => {
 				order.push('first')
 				throw cleanupError
 			})
-			.cleanup(() => order.push('second'))
+			.onStop(() => order.push('second'))
 
 		;(app as any).server = { stop() {} }
 
@@ -77,11 +77,11 @@ describe('server shutdown', () => {
 		const firstError = new Error('first cleanup failed')
 		const secondError = new Error('second cleanup failed')
 		const app = new Elysia()
-			.cleanup(() => {
+			.onStop(() => {
 				order.push('first')
 				throw firstError
 			})
-			.cleanup(async () => {
+			.onStop(async () => {
 				order.push('second')
 				throw secondError
 			})

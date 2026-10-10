@@ -142,9 +142,9 @@ describe('HTTP request lifecycle', () => {
 		})
 	})
 
-	it('an .error() hook can recover a thrown error into a 200 response', async () => {
+	it('an .onError() hook can recover a thrown error into a 200 response', async () => {
 		const app = new Elysia()
-			.error(({ error }: any) => {
+			.onError(({ error }: any) => {
 				if ((error as Error).message === 'recoverable')
 					return new Response('handled', { status: 200 })
 				return undefined
@@ -221,10 +221,10 @@ describe('HTTP request lifecycle', () => {
 		expect(order).toEqual(['beforeHandle', 'afterHandle'])
 	})
 
-	it('a .request() response short-circuits before route handling', async () => {
+	it('a .onRequest() response short-circuits before route handling', async () => {
 		const seen: string[] = []
 		const app = new Elysia()
-			.request(({ request }) => {
+			.onRequest(({ request }) => {
 				seen.push('request')
 				if (new URL(request.url).pathname === '/gate') return 'GATED'
 			})
@@ -238,11 +238,11 @@ describe('HTTP request lifecycle', () => {
 		expect(seen).toEqual(['request'])
 	})
 
-	it('a .request() response runs mapResponse hooks', async () => {
+	it('a .onRequest() response runs mapResponse hooks', async () => {
 		const ran: string[] = []
 		const app = new Elysia()
-			// `.request()` context exposes `path` at runtime; PreContext omits it.
-			.request((ctx: any) => {
+			// `.onRequest()` context exposes `path` at runtime; PreContext omits it.
+			.onRequest((ctx: any) => {
 				if (ctx.path === '/gate') return 'GATED'
 			})
 			.mapResponse(({ responseValue }: any) => {

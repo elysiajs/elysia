@@ -36,7 +36,7 @@ const withApps = async (
 
 describe('native static promotion with an error hook', () => {
 	it('promotes a static literal behind a global error hook', () => {
-		const app = new Elysia().error(() => {}).get('/', 'ok')
+		const app = new Elysia().onError(() => {}).get('/', 'ok')
 
 		expect(collectStaticRoutes(app as any)?.['/']?.GET).toBeInstanceOf(
 			Response
@@ -55,7 +55,9 @@ describe('native static promotion with an error hook', () => {
 		// Only `error` is known to be unobservable.
 		const local = (hook: Record<string, unknown>) =>
 			collectStaticRoutes(
-				new Elysia().error(() => {}).get('/', hook as any, 'ok') as any
+				new Elysia()
+					.onError(() => {})
+					.get('/', hook as any, 'ok') as any
 			)?.['/']?.GET
 
 		expect(local({ afterResponse: () => {} })).toBeUndefined()
@@ -68,8 +70,8 @@ describe('native static promotion with an error hook', () => {
 		expect(
 			collectStaticRoutes(
 				new Elysia()
-					.error(() => {})
-					.request(() => {})
+					.onError(() => {})
+					.onRequest(() => {})
 					.get('/', 'ok') as any
 			)
 		).toBeUndefined()
@@ -82,7 +84,7 @@ describe('native static promotion with an error hook', () => {
 			(app) =>
 				app
 					.headers({ 'x-app': 'elysia' })
-					.error(({ request }) => {
+					.onError(({ request }) => {
 						seen.push(
 							request.method + ' ' + new URL(request.url).pathname
 						)
@@ -118,7 +120,7 @@ describe('native static promotion with an error hook', () => {
 		await withApps(
 			(app) =>
 				app
-					.error(({ request }) => {
+					.onError(({ request }) => {
 						seen.push(request.method)
 					})
 					.get('/', 'ok'),

@@ -197,7 +197,7 @@ describe('Response ownership', () => {
 
 	it('routes a consumed owned Response through error hooks', async () => {
 		const app = new Elysia()
-			.error(({ set }) => {
+			.onError(({ set }) => {
 				set.status = 409
 				return 'caught'
 			})
@@ -225,7 +225,7 @@ describe('Response ownership', () => {
 	it('routes a locked owned Response that needs patching through error hooks', async () => {
 		let reader!: ReadableStreamDefaultReader<Uint8Array<ArrayBuffer>>
 		const app = new Elysia()
-			.error(({ set }) => {
+			.onError(({ set }) => {
 				set.status = 409
 				return 'caught'
 			})

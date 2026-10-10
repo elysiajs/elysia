@@ -255,7 +255,7 @@ describe('Native Static Response', () => {
 		it('excludes routes with an app-level request hook', async () => {
 			let called = 0
 			const app = new Elysia()
-				.request(() => {
+				.onRequest(() => {
 					called++
 				})
 				.get('/', 'ok')
@@ -291,7 +291,7 @@ describe('Native Static Response', () => {
 		})
 
 		it('collects a genuinely bare static route with an error hook', async () => {
-			const app = new Elysia().error(() => {}).get('/', 'ok')
+			const app = new Elysia().onError(() => {}).get('/', 'ok')
 
 			await expectResponseText(route(app, '/'), 'ok')
 		})

@@ -19,7 +19,7 @@ describe('Coercion - Numeric -> Number', () => {
 
 	it('handle property', async () => {
 		const numberApp = new Elysia()
-			.error(({ error }) =>
+			.onError(({ error }) =>
 				error instanceof ValidationError ? 'VALIDATION' : 'OTHER'
 			)
 			.get(
@@ -37,7 +37,7 @@ describe('Coercion - Numeric -> Number', () => {
 			)
 
 		const numericApp = new Elysia()
-			.error(({ error }) =>
+			.onError(({ error }) =>
 				error instanceof ValidationError ? 'VALIDATION' : 'OTHER'
 			)
 			.get(

@@ -46,7 +46,7 @@ const define = (
 		let app: any = base
 
 		if (shape === 'tracer') app = app.use(trace()).trace(() => {})
-		if (placement === 'app') app = app.afterResponse(afterResponse)
+		if (placement === 'app') app = app.onAfterResponse(afterResponse)
 
 		return app.get(
 			'/',

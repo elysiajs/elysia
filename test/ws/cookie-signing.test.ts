@@ -199,7 +199,7 @@ const exits: Exit[] = [
 		'user-42',
 		(app, cookie) =>
 			app
-				.request(({ set }: any) => {
+				.onRequest(({ set }: any) => {
 					set.cookie = { session: { value: 'user-42' } }
 				})
 				.ws('/p', {

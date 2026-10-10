@@ -239,7 +239,7 @@ describe('Map Response', () => {
 		}
 
 		const app = new Elysia()
-			.error(() => new CustomClass('aru'))
+			.onError(() => new CustomClass('aru'))
 			.mapResponse(({ responseValue }) => {
 				if (responseValue instanceof CustomClass)
 					return new Response(responseValue.name)
@@ -256,7 +256,7 @@ describe('Map Response', () => {
 	// https://github.com/elysiajs/elysia/issues/965
 	it('mapResponse with after handle using responseValue', async () => {
 		const app = new Elysia()
-			.afterHandle(() => {})
+			.onAfterHandle(() => {})
 			.mapResponse((context) => {
 				return new Response(context.responseValue + '')
 			})
@@ -269,7 +269,7 @@ describe('Map Response', () => {
 
 	it('mapResponse with onError', async () => {
 		const app = new Elysia()
-			.error(() => {})
+			.onError(() => {})
 			.mapResponse(() => {})
 			.get('/', () => 'ok')
 
@@ -299,13 +299,13 @@ describe('Map Response', () => {
 				let called = false
 				const app = new Elysia()
 
-				if (mode === 'asynchronous') app.request(async () => 'early')
+				if (mode === 'asynchronous') app.onRequest(async () => 'early')
 				else {
 					if (mode === 'traced')
 						app.use(trace()).trace(({ onRequest }) =>
 							onRequest(() => {})
 						)
-					app.request(() => 'early')
+					app.onRequest(() => 'early')
 				}
 
 				app.mapResponse(() => {
@@ -320,7 +320,7 @@ describe('Map Response', () => {
 
 		it('allows mapResponse to replace the early response', async () => {
 			const app = new Elysia()
-				.request(() => 'raw')
+				.onRequest(() => 'raw')
 				.mapResponse(({ responseValue }) => {
 					if (responseValue === 'raw') return new Response('mapped')
 				})
@@ -335,7 +335,7 @@ describe('Map Response', () => {
 			let seen: unknown
 
 			const app = new Elysia()
-				.request(() => ({ key: 'val' }))
+				.onRequest(() => ({ key: 'val' }))
 				.mapResponse(({ responseValue }) => {
 					seen = responseValue
 				})
@@ -351,18 +351,18 @@ describe('Map Response', () => {
 			async (mode) => {
 				const app = new Elysia()
 
-				if (mode === 'asynchronous') app.request(async () => {})
+				if (mode === 'asynchronous') app.onRequest(async () => {})
 				else if (mode === 'traced')
 					app.use(trace()).trace(({ onRequest }) =>
 						onRequest(() => {})
 					)
 
-				app.request(() => 'early')
+				app.onRequest(() => 'early')
 					.mapResponse(async ({ responseValue }) => {
 						if (responseValue === 'early')
 							throw new Error(`map failed: ${mode}`)
 					})
-					.error(({ error }) => error.message)
+					.onError(({ error }) => error.message)
 					.get('/', () => 'unreachable')
 
 				const response = await app.handle('/')

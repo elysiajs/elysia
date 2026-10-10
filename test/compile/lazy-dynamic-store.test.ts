@@ -90,7 +90,7 @@ describe('lazy dynamic route store', () => {
 	it('sends a first-hit compile failure through the error hook', async () => {
 		let caught: unknown
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				caught = error
 				return 'handled'
 			})

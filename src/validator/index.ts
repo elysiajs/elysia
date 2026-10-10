@@ -10,7 +10,7 @@ import type { CoerceOption } from '../type/coerce'
 import { clearCoerceLeafCache, clearSharedReferenceCaches, nonAdditionalProperties } from '../type/shared'
 import {
 	Compiled,
-	Capture,
+	inAotBuild,
 	type ProgramId,
 	type ValidatorSlot
 } from '../compile/aot'
@@ -157,11 +157,11 @@ export abstract class Validator {
 					options?.app?.['~programId']
 				)
 
-			const appSpecific = appHasFrozen || Capture.isCapturing()
+			const appSpecific = appHasFrozen || inAotBuild()
 			const app = options?.app
 
 			const bypassCache =
-				(!!aot && !!slot && Capture.isCapturing()) ||
+				(!!aot && !!slot && inAotBuild()) ||
 				(appHasFrozen && options?.normalize !== 'typebox') ||
 				(appSpecific && !app)
 

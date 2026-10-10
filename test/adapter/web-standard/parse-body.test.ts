@@ -210,7 +210,7 @@ describe('exact content-type dispatch and schema contract', () => {
 
 			it('fails open for custom parsers and mixed schemas', async () => {
 				const custom = new Elysia({ precompile })
-					.parse(({ contentType }) => {
+					.onParse(({ contentType }) => {
 						if (contentType === 'application/jwt')
 							return { ok: true }
 					})

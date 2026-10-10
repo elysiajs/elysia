@@ -492,7 +492,7 @@ export interface CapturedHandler {
 }
 
 function captureHandler(v: CapturedHandler) {
-	if (!isValidatorCapturing()) return
+	if (!inAotBuild()) return
 
 	const session = activeSession
 	if (!session) return
@@ -505,7 +505,7 @@ function captureSet(
 ) {
 	const { method, path, slot } = loc
 
-	if (!isValidatorCapturing()) return
+	if (!inAotBuild()) return
 
 	const capture = activeSession?.capture
 	if (!capture) return
@@ -526,7 +526,7 @@ const captureGet = (loc: {
 
 const isAotBuildEnv = () => !!env.ELYSIA_AOT_BUILD
 
-const isValidatorCapturing = () => {
+export function inAotBuild() {
 	if (activeSession?.capture === undefined && !isAotBuildEnv()) return false
 	if (captureImpl === undefined) throw aotActivationError()
 
@@ -537,7 +537,6 @@ export const Capture = {
 	set: captureSet,
 	get: captureGet,
 	handler: captureHandler,
-	isCapturing: isValidatorCapturing,
 	isAotBuildEnv: isAotBuildEnv
 } as const
 

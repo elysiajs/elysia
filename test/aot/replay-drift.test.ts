@@ -71,7 +71,7 @@ const drifted: Row[] = [
 	{
 		why: 'a root beforeHandle reaches a route built without hooks',
 		build: () => new Elysia().get('/s', secret),
-		runtime: () => new Elysia().beforeHandle(deny).get('/s', secret),
+		runtime: () => new Elysia().onBeforeHandle(deny).get('/s', secret),
 		requests: [['/s']]
 	},
 	{
@@ -79,7 +79,7 @@ const drifted: Row[] = [
 		build: () => new Elysia().get('/s', secret),
 		runtime: () =>
 			new Elysia()
-				.use(new Elysia().beforeHandle('global', deny))
+				.use(new Elysia().onBeforeHandle('global', deny))
 				.get('/s', secret),
 		requests: [['/s']]
 	},
@@ -91,7 +91,7 @@ const drifted: Row[] = [
 				.post('/p', ({ body }: any) => body),
 		runtime: () =>
 			new Elysia()
-				.beforeHandle(deny)
+				.onBeforeHandle(deny)
 				.get('/s', 'SECRET')
 				.post('/p', ({ body }: any) => body),
 		requests: [['/s'], ['/p', json({ a: 1 })]]
@@ -223,7 +223,7 @@ const drifted: Row[] = [
 		runtime: () =>
 			new Elysia().use(
 				new Elysia()
-					.error(() => new Response('REDACTED', { status: 500 }))
+					.onError(() => new Response('REDACTED', { status: 500 }))
 					.get('/s', { beforeHandle: [noop] }, throwing)
 			),
 		requests: [['/s']]
@@ -239,7 +239,7 @@ const drifted: Row[] = [
 		runtime: () =>
 			new Elysia()
 				// a registered non-Error class: the typed API takes Error subclasses
-				.error(Internal as any, () => status(418, 'handled'))
+				.onError(Internal as any, () => status(418, 'handled'))
 				.get('/s', { beforeHandle: [noop] }, () => new Internal()),
 		requests: [['/s']]
 	},
@@ -248,12 +248,12 @@ const drifted: Row[] = [
 		why: 'a derive prepended at runtime feeds the handler, not the response',
 		build: () =>
 			new Elysia()
-				.beforeHandle(noop)
+				.onBeforeHandle(noop)
 				.get('/s', (c: any) => 'who=' + c.who),
 		runtime: () =>
 			new Elysia()
 				.derive(() => ({ who: 'alice', token: 'tok' }))
-				.beforeHandle(noop)
+				.onBeforeHandle(noop)
 				.get('/s', (c: any) => 'who=' + c.who),
 		requests: [['/s']]
 	},
@@ -261,7 +261,7 @@ const drifted: Row[] = [
 		why: 'a beforeHandle swapped for a derive is not served as the response',
 		build: () =>
 			new Elysia()
-				.beforeHandle(noop)
+				.onBeforeHandle(noop)
 				.get('/s', (c: any) => 'who=' + c.who),
 		runtime: () =>
 			new Elysia()
@@ -273,7 +273,7 @@ const drifted: Row[] = [
 		why: 'a derive swapped for a denying beforeHandle denies',
 		build: () =>
 			new Elysia().derive(() => ({ who: 'a' })).get('/s', secret),
-		runtime: () => new Elysia().beforeHandle(deny).get('/s', secret),
+		runtime: () => new Elysia().onBeforeHandle(deny).get('/s', secret),
 		requests: [['/s']]
 	},
 	// sync at build, async at runtime

@@ -125,7 +125,7 @@ describe('generated afterResponse drain reports failures', () => {
 
 		const reported = await capture(async () => {
 			const app = new Elysia()
-				.afterResponse(() => {
+				.onAfterResponse(() => {
 					throw new Error('post-boom')
 				})
 				.get('/', () => 'ok')

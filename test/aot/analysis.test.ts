@@ -172,7 +172,7 @@ describe('Static code analysis', () => {
 
 	it('parse custom parser with schema', async () => {
 		const app = new Elysia()
-			.parse(({ contentType }) => {
+			.onParse(({ contentType }) => {
 				if (contentType === 'application/elysia') return 'hi'
 			})
 			.post(

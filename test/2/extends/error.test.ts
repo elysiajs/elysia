@@ -27,8 +27,8 @@ class OtherError extends Error {
 describe('error handlers', () => {
 	it('runs only the handler registered for the error class', async () => {
 		const app = new Elysia()
-			.error(CustomError, () => 'custom')
-			.error(OtherError, () => 'other')
+			.onError(CustomError, () => 'custom')
+			.onError(OtherError, () => 'other')
 			.get('/custom', () => {
 				throw new CustomError('A')
 			})
@@ -46,7 +46,7 @@ describe('error handlers', () => {
 
 	it('maps status() returned by an error handler', async () => {
 		const app = new Elysia()
-			.error(CustomError, ({ error }) => status(418, error.message))
+			.onError(CustomError, ({ error }) => status(418, error.message))
 			.get('/', () => {
 				throw new CustomError('A')
 			})
@@ -59,7 +59,7 @@ describe('error handlers', () => {
 
 	it('routes a returned error through its handler', async () => {
 		const app = new Elysia()
-			.error(CustomError, ({ error }) => status(418, error.message))
+			.onError(CustomError, ({ error }) => status(418, error.message))
 			.get('/', () => new CustomError('A'))
 
 		const response = await app.handle('/')
@@ -72,7 +72,7 @@ describe('error handlers', () => {
 		let ranAfterHandle = false
 
 		const app = new Elysia()
-			.error(CustomError, ({ error }) => status(418, error.message))
+			.onError(CustomError, ({ error }) => status(418, error.message))
 			.get(
 				'/',
 				{
@@ -91,7 +91,7 @@ describe('error handlers', () => {
 
 	it('routes an error returned by an async handler', async () => {
 		const app = new Elysia()
-			.error(CustomError, ({ error }) => status(418, error.message))
+			.onError(CustomError, ({ error }) => status(418, error.message))
 			.get('/', async () => new CustomError('A'))
 
 		const response = await app.handle('/')
@@ -102,7 +102,7 @@ describe('error handlers', () => {
 
 	it('routes a static error value through its handler', async () => {
 		const app = new Elysia()
-			.error(CustomError, ({ error }) => status(418, error.message))
+			.onError(CustomError, ({ error }) => status(418, error.message))
 			.get('/', new CustomError('A'))
 
 		const response = await app.handle('/')
@@ -143,15 +143,15 @@ describe('error handlers', () => {
 
 	it('runs matching superclass handlers in registration order', async () => {
 		const parentFirst = new Elysia()
-			.error(CustomError, () => 'parent')
-			.error(ChildError, () => 'child')
+			.onError(CustomError, () => 'parent')
+			.onError(ChildError, () => 'child')
 			.get('/', () => {
 				throw new ChildError('A')
 			})
 
 		const childFirst = new Elysia()
-			.error(ChildError, () => 'child')
-			.error(CustomError, () => 'parent')
+			.onError(ChildError, () => 'child')
+			.onError(CustomError, () => 'parent')
 			.get('/', () => {
 				throw new ChildError('A')
 			})
@@ -166,8 +166,8 @@ describe('error handlers', () => {
 
 	it('falls through when an error handler returns undefined', async () => {
 		const app = new Elysia()
-			.error(ChildError, () => {})
-			.error(CustomError, () => 'parent')
+			.onError(ChildError, () => {})
+			.onError(CustomError, () => 'parent')
 			.get('/', () => {
 				throw new ChildError('A')
 			})
@@ -179,7 +179,7 @@ describe('error handlers', () => {
 
 	it("uses the error's declared status for plain handler returns", async () => {
 		const app = new Elysia()
-			.error(NotFound, ({ error }) => error.message)
+			.onError(NotFound, ({ error }) => error.message)
 			.get('/', () => {
 				throw new NotFound()
 			})
@@ -193,9 +193,9 @@ describe('error handlers', () => {
 	it('applies plugin error handlers according to their scope', async () => {
 		const handler = () => 'handled'
 
-		const local = new Elysia().error(CustomError, handler)
-		const plugin = new Elysia().error('plugin', CustomError, handler)
-		const global = new Elysia().error('global', CustomError, handler)
+		const local = new Elysia().onError(CustomError, handler)
+		const plugin = new Elysia().onError('plugin', CustomError, handler)
+		const global = new Elysia().onError('global', CustomError, handler)
 
 		const route = () => {
 			throw new CustomError('A')
@@ -226,7 +226,7 @@ describe('error handlers', () => {
 
 	it('supports narrowing a catch-all handler with instanceof', async () => {
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				if (error instanceof CustomError) return 'custom'
 			})
 			.get('/custom', () => {
@@ -252,7 +252,7 @@ describe('error handlers', () => {
 
 	it('instance-level onError does not clobber route-level error handler', async () => {
 		const plugin = new Elysia()
-			.error(() => {})
+			.onError(() => {})
 			.get(
 				'/boom',
 				{
@@ -272,7 +272,7 @@ describe('error handlers', () => {
 
 	it('onError maps a Blob response and honors its Range request', async () => {
 		const app = new Elysia()
-			.error(() => new Blob(['error-asset'], { type: 'text/plain' }))
+			.onError(() => new Blob(['error-asset'], { type: 'text/plain' }))
 			.get('/boom', () => {
 				throw new Error('x')
 			})

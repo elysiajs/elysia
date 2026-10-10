@@ -179,7 +179,7 @@ describe('Bun async modules', () => {
 		expect(settled).toBe(false)
 
 		let cleaned = 0
-		release(new Elysia().cleanup(() => cleaned++))
+		release(new Elysia().onStop(() => cleaned++))
 		await stopping
 
 		expect(settled).toBe(true)

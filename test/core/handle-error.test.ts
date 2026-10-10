@@ -55,7 +55,7 @@ describe('Handle Error', () => {
 	it('use custom error', async () => {
 		const res = await new Elysia()
 			.get('/', () => 'Hi')
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				if (error instanceof NotFound)
 					return new Response("I'm a teapot", {
 						status: 418
@@ -69,7 +69,7 @@ describe('Handle Error', () => {
 
 	it('inject headers to error', async () => {
 		const app = new Elysia()
-			.request(({ set }) => {
+			.onRequest(({ set }) => {
 				set.headers['Access-Control-Allow-Origin'] = '*'
 			})
 			.get('/', () => {
@@ -84,7 +84,7 @@ describe('Handle Error', () => {
 
 	it('transform any to error', async () => {
 		const app = new Elysia()
-			.error(async ({ set }) => {
+			.onError(async ({ set }) => {
 				set.status = 418
 
 				return 'aw man'
@@ -105,7 +105,7 @@ describe('Handle Error', () => {
 				.get('/inner', () => {
 					throw new Error('A')
 				})
-				.error(() => {
+				.onError(() => {
 					return 'handled'
 				})
 		)
@@ -126,7 +126,7 @@ describe('Handle Error', () => {
 
 					throw new Error('A')
 				})
-				.error(() => {
+				.onError(() => {
 					return 'handled'
 				})
 		)
@@ -167,7 +167,7 @@ describe('Handle Error', () => {
 
 	it('error hook returning a value overrides a thrown Response', async () => {
 		const app = new Elysia()
-			.error(() => 'handled')
+			.onError(() => 'handled')
 			.get('/', () => {
 				throw new Response('Not Found :(', {
 					status: 404,
@@ -202,14 +202,14 @@ describe('Handle Error', () => {
 			}
 		}
 
-		const errors = new Elysia().error(
+		const errors = new Elysia().onError(
 			'global',
 			APIError,
 			({ error }) => error.name
 		)
 
 		const requestHandler = new Elysia()
-			.transform(() => {
+			.onTransform(() => {
 				throw new APIError(403, 'Not authorized')
 			})
 			.get('/', () => 'a')
@@ -599,7 +599,7 @@ describe('Handle Error', () => {
 		}
 
 		const app = new Elysia()
-			.error(() => {})
+			.onError(() => {})
 			.get('/', () => {
 				throw new AsyncError('boom')
 			})
@@ -620,7 +620,7 @@ describe('Handle Error', () => {
 		}
 
 		const app = new Elysia()
-			.error(() => {})
+			.onError(() => {})
 			.get('/', () => {
 				throw new SyncError('boom')
 			})
@@ -639,7 +639,7 @@ describe('Handle Error', () => {
 		}
 
 		const app = new Elysia()
-			.error(() => {})
+			.onError(() => {})
 			.get('/', () => {
 				throw new BrokenAsyncError('original error')
 			})
@@ -692,7 +692,7 @@ describe('Handle Error', () => {
 
 	it('send set-cookie header when error is thrown with onError hook', async () => {
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				return error.message
 			})
 			.get('/', ({ cookie }) => {
@@ -781,7 +781,7 @@ describe('Handle Error', () => {
 					let app = new Elysia()
 
 					if (withHook)
-						app = app.error(({ set }) => {
+						app = app.onError(({ set }) => {
 							set.headers['x-error-hook'] = 'declined'
 						}) as typeof app
 

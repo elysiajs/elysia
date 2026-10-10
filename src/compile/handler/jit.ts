@@ -67,7 +67,7 @@ import {
 import { ELYSIA_TYPES } from '../../type/constants'
 import type { TraceEvent } from '../../trace'
 import { Reconstruct } from './reconstruct'
-import { Capture } from '../aot'
+import { Capture, inAotBuild } from '../aot'
 import { JITProbe } from '../jit-probe'
 
 import { requestId, evictOldestHalf, fnv1a } from '../../utils'
@@ -220,7 +220,7 @@ function parse(
 				if (child) code += child.begin
 
 				code +=
-					`_bp=ho.parse[${i}](c,ct)\n` +
+					`_bp=ho.parse[${i}](c)\n` +
 					awaitGuard(parser as Function, true, '_bp', arm) +
 					`c.body=_bp\n`
 				code += 'hasBody=c.body!==undefined\n'
@@ -694,7 +694,7 @@ export function compileHandlerJit(
 	}
 
 	if (hasHeaders) {
-		if (captureHeaderShorthand === undefined && Capture.isCapturing())
+		if (captureHeaderShorthand === undefined && inAotBuild())
 			code += plain(
 				`c.headers=c.request.headers.toJSON?.()??Object.fromEntries(c.request.headers)\n`
 			)
@@ -825,7 +825,7 @@ export function compileHandlerJit(
 	const responseMap = res.map
 	const responseCompact = compactEligible ? res.compact : undefined
 	const portableCompact =
-		compactEligible && (Capture.isAotBuildEnv() || Capture.isCapturing())
+		compactEligible && (Capture.isAotBuildEnv() || inAotBuild())
 	const hasSet = !compactEligible || (!responseCompact && !portableCompact)
 
 	if (hasSet) link(responseMap, 'rm')

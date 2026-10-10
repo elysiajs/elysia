@@ -37,7 +37,7 @@ describe('signed cookies on every compiled lane', () => {
 	it('signs on the afterResponse lane', async () => {
 		const app = withMe(
 			new Elysia(config)
-				.afterResponse(() => {})
+				.onAfterResponse(() => {})
 				.post('/login', ({ cookie: { session } }) => {
 					session.value = 'user-42'
 
@@ -139,7 +139,7 @@ describe('signed cookies on every compiled lane', () => {
 	it('signs on the afterResponse lane when the handler throws', async () => {
 		const app = withMe(
 			new Elysia(config)
-				.afterResponse(() => {})
+				.onAfterResponse(() => {})
 				.get('/login', ({ cookie: { session } }) => {
 					session.value = 'user-42'
 
@@ -153,7 +153,7 @@ describe('signed cookies on every compiled lane', () => {
 	it('signs once when an error hook handles the error', async () => {
 		const app = withMe(
 			new Elysia(config)
-				.error(() => 'handled')
+				.onError(() => 'handled')
 				.get('/login', ({ cookie: { session } }) => {
 					session.value = 'user-42'
 
@@ -191,7 +191,7 @@ describe('signed cookies on every compiled lane', () => {
 		let seen: unknown
 		const app = withMe(
 			new Elysia(config)
-				.error(({ cookie }: any) => {
+				.onError(({ cookie }: any) => {
 					seen = cookie.session.value
 					cookie.session.value = 'from-error'
 
@@ -213,7 +213,7 @@ describe('signed cookies on every compiled lane', () => {
 	it('signs a cookie written by an error hook that declines the error', async () => {
 		const app = withMe(
 			new Elysia(config)
-				.error(({ cookie }: any) => {
+				.onError(({ cookie }: any) => {
 					if (cookie?.session) cookie.session.value = 'from-error'
 				})
 				.get('/login', ({ cookie: { session } }) => {
@@ -269,14 +269,14 @@ describe('signed cookies on every compiled lane', () => {
 						sign: ['session']
 					}
 				})
-					.error(({ error }: any) => {
+					.onError(({ error }: any) => {
 						if (
 							writer === 'hook after a throwing hook' &&
 							!(error instanceof TypeError)
 						)
 							throw new TypeError('again')
 					})
-					.error(({ cookie }: any) => {
+					.onError(({ cookie }: any) => {
 						if (writer !== 'handler') write(cookie)
 
 						return 'handled'
@@ -330,7 +330,7 @@ describe('signed cookies on every compiled lane', () => {
 						sign: ['session']
 					}
 				})
-					.error(({ cookie }: any) => {
+					.onError(({ cookie }: any) => {
 						if (++calls === 1)
 							throw status(code as any, 'first answer')
 
@@ -386,7 +386,7 @@ describe('signed cookies on every compiled lane', () => {
 					const app = new Elysia({
 						cookie: { secrets: 'secret', sign: ['session'] }
 					})
-						.error(({ cookie }: any) => {
+						.onError(({ cookie }: any) => {
 							calls++
 							const throwing = lane === 'after a throwing hook'
 							if (throwing && calls === 1)
@@ -443,8 +443,8 @@ describe('signed cookies on every compiled lane', () => {
 			for (const stream of [false, true]) {
 				const instance = await lane.make((app: any) =>
 					new Elysia({ ...app['~config'], ...config })
-						.error(() => status(200, 'handled'))
-						.afterResponse(stream ? () => {} : [])
+						.onError(() => status(200, 'handled'))
+						.onAfterResponse(stream ? () => {} : [])
 						.get(
 							'/',
 							stream
@@ -493,7 +493,7 @@ describe('signed cookies on every compiled lane', () => {
 	it('fails closed on a frozen cookie bag', async () => {
 		const digest = (Bun as any).CryptoHasher.prototype.digest
 		const app = new Elysia(config)
-			.error(() => status(200, 'handled'))
+			.onError(() => status(200, 'handled'))
 			.get('/', ({ cookie, set }: any) => {
 				cookie.session.value = 'user-42'
 				Object.freeze(set.cookie)
@@ -524,7 +524,7 @@ describe('signed cookies on every compiled lane', () => {
 		for (const name of ['~signFailed', 'regular'])
 			for (const answer of ['returns', 'throws']) {
 				const app = new Elysia(config)
-					.error(() => {
+					.onError(() => {
 						if (answer === 'throws') throw status(418, 'teapot')
 
 						return status(418, 'teapot')

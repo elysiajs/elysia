@@ -151,7 +151,7 @@ describe('supported subclass response metadata', () => {
 	// runtime; non-Bun runtimes never prepare a file (see the Node smoke test)
 	it.each(
 		(['ordinary', 'subclass'] as const).flatMap((kind) =>
-			(['afterHandle', 'mapResponse'] as const).map((hook) => ({
+			(['onAfterHandle', 'mapResponse'] as const).map((hook) => ({
 				kind,
 				hook
 			}))
@@ -633,7 +633,7 @@ describe('Web Standard - Map Response', () => {
 
 	it('respect set.headers on string response', async () => {
 		const app = new Elysia()
-			.afterHandle(({ set }) => {
+			.onAfterHandle(({ set }) => {
 				set.headers['content-type'] = 'text/html; charset=utf8'
 
 				return '<h1>Hina</h1>'
@@ -736,7 +736,7 @@ describe('Web Standard - Map Response with untouched set', () => {
 		let observed: unknown
 
 		const app = new Elysia()
-			.afterResponse(({ set }) => {
+			.onAfterResponse(({ set }) => {
 				observed = set.status
 			})
 			.get('/', () => Promise.resolve(status(418, 'teapot')))

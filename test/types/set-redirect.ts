@@ -5,17 +5,17 @@ import { Elysia } from '../../src'
 // deprecated `never` so editors strike it through with the migration hint
 // instead of reporting an unknown property
 new Elysia()
-	.request(({ set }) => {
+	.onRequest(({ set }) => {
 		// @ts-expect-error a URL is not assignable to the removed key
 		set.redirect = '/login'
 		set.redirect satisfies undefined
 	})
-	.beforeHandle(({ set }) => {
+	.onBeforeHandle(({ set }) => {
 		// @ts-expect-error a URL is not assignable to the removed key
 		set.redirect = '/login'
 		set.redirect satisfies undefined
 	})
-	.error(({ set }) => {
+	.onError(({ set }) => {
 		// @ts-expect-error a URL is not assignable to the removed key
 		set.redirect = '/login'
 	})

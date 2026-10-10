@@ -83,7 +83,7 @@ describe('WebSocket event dispatch', () => {
 
 	it('applies mapResponse to values returned by error handlers', async () => {
 		const app = new Elysia()
-			.error(() => {
+			.onError(() => {
 				return 'caught'
 			})
 			.use(websocket()).ws('/ws', {

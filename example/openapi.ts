@@ -30,13 +30,13 @@ export const app = new Elysia()
 			derive: () => ({ a: 'a' })
 		}
 	})
-	.error(({ status }) => {
+	.onError(({ status }) => {
 		if (Math.random() < 0.05) return status(400)
 	})
 	.derive(({ status }) => {
 		if (Math.random() < 0.05) return status(401)
 	})
-	.beforeHandle([
+	.onBeforeHandle([
 		({ status }) => {
 			if (Math.random() < 0.05) return status(402)
 		},

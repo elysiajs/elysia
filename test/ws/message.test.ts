@@ -557,7 +557,7 @@ describe('WebSocket message', () => {
 
 	it('handle error with onError', async () => {
 		const app = new Elysia()
-			.error(() => {
+			.onError(() => {
 				return 'caught'
 			})
 			.use(websocket()).ws('/ws', {
@@ -586,7 +586,7 @@ describe('WebSocket message', () => {
 
 	it('handle validation error with onError', async () => {
 		const app = new Elysia()
-			.error(() => {
+			.onError(() => {
 				return 'caught'
 			})
 			.use(websocket()).ws('/ws', {
@@ -739,7 +739,7 @@ describe('WebSocket sync dispatch path', () => {
 
 		try {
 			const app = new Elysia()
-				.error(() => 'sync-throw-caught')
+				.onError(() => 'sync-throw-caught')
 				.use(websocket()).ws('/ws', {
 					message() {
 						throw new Error('boom')

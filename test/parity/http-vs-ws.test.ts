@@ -641,7 +641,7 @@ describe('problem members are read once', () => {
 		}
 
 		const response = await new Elysia()
-			.error(() => problem(409))
+			.onError(() => problem(409))
 			.get('/', () => {
 				throw new ForeignFlip('flip-message')
 			})

@@ -6,7 +6,13 @@ import { mapResponse } from '../../adapter/web-standard/handler'
 import { ElysiaFile } from '../../universal/file'
 import { ElysiaStatus } from '../../error'
 
-import { Capture, Compiled, aotDriftMessage, warnAotDrift } from '../aot'
+import {
+	Capture,
+	Compiled,
+	aotDriftMessage,
+	inAotBuild,
+	warnAotDrift
+} from '../aot'
 import { frozenRootOf } from '../../generation'
 import { isResponseParam, resolveHandlerParams } from './params'
 import { compileHandlerJit, createInlineHandler, targetsBun } from './jit'
@@ -446,7 +452,7 @@ export function composeRouteHook(
 	const compactPrefix =
 		allowCompactPrefix &&
 		instance !== root &&
-		!Capture.isCapturing() &&
+		!inAotBuild() &&
 		!Capture.isAotBuildEnv() &&
 		resolve === undefined &&
 		isCompactBeforeHandleOnly(localHook as any) &&
@@ -964,7 +970,7 @@ export function compileHandler(
 	const isPromiseHandler = !isHandleFunction && handler instanceof Promise
 
 	let shape: number | undefined
-	if (reconstructed || Capture.isCapturing()) {
+	if (reconstructed || inAotBuild()) {
 		shape = routeShape(hook, handler, root)
 
 		// drifted or unprovable: compile live
@@ -1014,7 +1020,7 @@ export function compileHandler(
 		!root['~hasTrace'] &&
 		!isNotEmpty(frozenRoot['~ext']?.headers) &&
 		!Capture.isAotBuildEnv() &&
-		!Capture.isCapturing()
+		!inAotBuild()
 	) {
 		// A forged own `toString` makes sucrose widen every channel
 		let isContextFree = false

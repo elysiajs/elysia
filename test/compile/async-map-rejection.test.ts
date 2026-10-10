@@ -86,7 +86,7 @@ for (const rejection of rejectionCases)
 			const { adapter, onError, seen } = setup()
 			const app = new Elysia({ adapter })
 				.get('/', () => routeValue)
-				.error(onError)
+				.onError(onError)
 
 			const response = await app.handle(new Request('http://localhost/'))
 
@@ -97,7 +97,7 @@ for (const rejection of rejectionCases)
 		it('handles a response-map rejection on a route with beforeHandle', async () => {
 			const { adapter, mapError, onError, seen } = setup()
 			const app = new Elysia({ adapter })
-				.error(onError)
+				.onError(onError)
 				.get('/', { beforeHandle() {} }, () => routeValue)
 
 			await expectHandled(app, mapError, seen)
@@ -106,7 +106,7 @@ for (const rejection of rejectionCases)
 		it('handles a response-map rejection when the handler reads context', async () => {
 			const { adapter, mapError, onError, seen } = setup()
 			const app = new Elysia({ adapter })
-				.error(onError)
+				.onError(onError)
 				.get('/', ({ headers }) => {
 					void headers
 
@@ -119,7 +119,7 @@ for (const rejection of rejectionCases)
 		it('handles a response-map rejection when the handler mutates set', async () => {
 			const { adapter, mapError, onError, seen } = setup()
 			const app = new Elysia({ adapter })
-				.error(onError)
+				.onError(onError)
 				.get('/', ({ set }) => {
 					set.headers['x-test'] = 'set'
 

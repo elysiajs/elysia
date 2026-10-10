@@ -2,7 +2,7 @@ import '../../src/compile/aot-capture' // installs captureImpl
 import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia } from '../../src'
 import { Validator } from '../../src/validator'
-import { Compiled, Capture } from '../../src/compile/aot'
+import { Compiled, inAotBuild } from '../../src/compile/aot'
 import {
 	endValidatorCapture,
 	endHandlerCapture
@@ -29,7 +29,7 @@ describe('capture cleanup', () => {
 
 		await expect(captureArtifacts(bad as any)).rejects.toThrow()
 
-		expect(Capture.isCapturing()).toBe(false)
+		expect(inAotBuild()).toBe(false)
 	})
 
 	it('allows a subsequent capture after a failure', async () => {
@@ -66,6 +66,6 @@ describe('capture cleanup', () => {
 		const err = (rejected[0] as PromiseRejectedResult).reason
 		expect(err?.message ?? String(err)).toContain('already active')
 
-		expect(Capture.isCapturing()).toBe(false)
+		expect(inAotBuild()).toBe(false)
 	})
 })

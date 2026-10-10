@@ -5,7 +5,7 @@ const get = () => new Request('http://localhost/')
 
 const throwing = (mut: (e: any) => void) =>
 	new Elysia()
-		.error(() => {})
+		.onError(() => {})
 		.get('/', () => {
 			const e: any = new Error('secret: db password is hunter2')
 			mut(e)
@@ -25,7 +25,7 @@ class ThrowingToResponse extends Error {
 
 const compiledThrow = () =>
 	new Elysia()
-		.error(() => {})
+		.onError(() => {})
 		.get('/', () => {
 			throw new ThrowingToResponse()
 		})

@@ -13,7 +13,7 @@ const build = () => {
 		.guard({
 			headers: t.Object({ authorization: t.Optional(t.String()) })
 		})
-		.beforeHandle(() => {})
+		.onBeforeHandle(() => {})
 		.get('/', () => 'ok')
 		.get('/health', () => ({ ok: true }))
 

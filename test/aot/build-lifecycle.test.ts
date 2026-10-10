@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'bun:test'
 import { env } from '../../src/universal'
-import { Capture } from '../../src/compile/aot'
+import { Capture, inAotBuild } from '../../src/compile/aot'
 
 describe('isAotBuildEnv predicate', () => {
 	const original = env.ELYSIA_AOT_BUILD
@@ -31,7 +31,7 @@ describe('isAotBuildEnv predicate', () => {
 	})
 })
 
-describe('Capture.isCapturing', () => {
+describe('inAotBuild', () => {
 	const original = env.ELYSIA_AOT_BUILD
 
 	afterEach(() => {
@@ -41,12 +41,12 @@ describe('Capture.isCapturing', () => {
 
 	it('returns false when env not set and no programmatic capture', () => {
 		delete env.ELYSIA_AOT_BUILD
-		expect(Capture.isCapturing()).toBe(false)
+		expect(inAotBuild()).toBe(false)
 	})
 
 	it('returns true when env var is set', () => {
 		env.ELYSIA_AOT_BUILD = '1'
-		expect(Capture.isCapturing()).toBe(true)
+		expect(inAotBuild()).toBe(true)
 	})
 })
 

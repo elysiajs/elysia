@@ -58,7 +58,7 @@ describe('Cookie Per-field Configuration', () => {
 		const secret = 'Fischl von Luftschloss Narfidort'
 
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				if (error instanceof InvalidCookie)
 					return new Response('bad-sig', { status: 401 })
 				throw error

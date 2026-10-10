@@ -6,7 +6,7 @@ const createPlugins = (total: number) => {
 
 	for (let i = 0; i < total; i++)
 		plugins[i] = new Elysia()
-			.beforeHandle('plugin', () => {})
+			.onBeforeHandle('plugin', () => {})
 			.get(`/r${i}`, () => 'ok')
 
 	return plugins

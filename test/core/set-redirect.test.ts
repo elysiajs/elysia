@@ -86,7 +86,7 @@ describe('set.redirect is loud in development', () => {
 		'throws on the dispatch lane (a request hook writes set.redirect)',
 		async () => {
 			const app = new Elysia()
-				.request(secret)
+				.onRequest(secret)
 				.get('/secret', () => 'plain')
 
 			await expectLoud(await app.handle(req()))
@@ -107,7 +107,7 @@ describe('set.redirect is loud in development', () => {
 		'throws on the JIT codegen lane (a lifecycle hook leaves the inline path)',
 		async () => {
 			const app = new Elysia()
-				.beforeHandle(() => {})
+				.onBeforeHandle(() => {})
 				.get('/secret', secret)
 			app.compile()
 
@@ -132,7 +132,7 @@ describe('set.redirect is loud in development', () => {
 		async () => {
 			let errors = 0
 			const app = new Elysia()
-				.error(() => {
+				.onError(() => {
 					errors++
 				})
 				.get('/secret', secret)

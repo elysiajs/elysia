@@ -148,7 +148,7 @@ describe('Headers-instance response metadata', () => {
 
 	it('preserves hook headers and the problem content type on 404', async () => {
 		const app = new Elysia()
-			.request(({ set }) => {
+			.onRequest(({ set }) => {
 				set.headers = new Headers({ 'x-foo': '1' }) as any
 			})
 			.get('/exists', () => 'ok')

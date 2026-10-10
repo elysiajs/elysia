@@ -16,7 +16,7 @@ describe('Response Headers', () => {
 
 	it('add headers from hook', async () => {
 		const app = new Elysia()
-			.transform(({ set }) => {
+			.onTransform(({ set }) => {
 				set.headers['x-powered-by'] = 'Elysia'
 			})
 			.get('/', () => 'Hi')
@@ -27,7 +27,7 @@ describe('Response Headers', () => {
 
 	it('add headers from plugin', async () => {
 		const plugin = (app: Elysia) =>
-			app.transform(({ set }) => {
+			app.onTransform(({ set }) => {
 				set.headers['x-powered-by'] = 'Elysia'
 			})
 
@@ -39,7 +39,7 @@ describe('Response Headers', () => {
 
 	it('add headers to Response', async () => {
 		const app = new Elysia()
-			.transform(({ set }) => {
+			.onTransform(({ set }) => {
 				set.headers['x-powered-by'] = 'Elysia'
 			})
 			.get('/', () => new Response('Hi'))

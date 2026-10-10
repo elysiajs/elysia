@@ -3,7 +3,7 @@ import { describe, expect, it, afterEach } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
-import { Compiled, Capture } from '../../src/compile/aot'
+import { Compiled, inAotBuild } from '../../src/compile/aot'
 import {
 	endValidatorCapture,
 	endHandlerCapture
@@ -139,12 +139,12 @@ describe('compiled signed-cookie handlers', () => {
 	})
 
 	it('stays async for WebCrypto portability under AOT capture', () => {
-		expect(Capture.isCapturing()).toBe(false)
+		expect(inAotBuild()).toBe(false)
 
 		const prev = process.env.ELYSIA_AOT_BUILD
 		process.env.ELYSIA_AOT_BUILD = '1'
 		try {
-			expect(Capture.isCapturing()).toBe(true)
+			expect(inAotBuild()).toBe(true)
 
 			const { name, source } = compileRoute(signedApp())
 

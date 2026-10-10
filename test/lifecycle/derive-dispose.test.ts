@@ -317,7 +317,7 @@ describe('derive dispose', () => {
 
 		const app = new Elysia()
 			.derive(() => ({ db: disposable(log, 'db') }))
-			.error(() => 'handled')
+			.onError(() => 'handled')
 			.get('/', () => {
 				throw new Error('boom')
 			})
@@ -333,7 +333,7 @@ describe('derive dispose', () => {
 
 		const app = new Elysia()
 			.derive(() => ({ db: disposable(log, 'db') }))
-			.error(() => new Response('from-hook'))
+			.onError(() => new Response('from-hook'))
 			.get('/', () => {
 				throw new Error('boom')
 			})
@@ -349,7 +349,7 @@ describe('derive dispose', () => {
 
 		const app = new Elysia()
 			.derive(() => ({ db: disposable(log, 'db') }))
-			.error(() => {
+			.onError(() => {
 				throw new Error('hook failed')
 			})
 			.get('/', () => {
@@ -368,7 +368,7 @@ describe('derive dispose', () => {
 
 		const app = new Elysia()
 			.derive(() => ({ db: disposable(log, 'db') }))
-			.beforeHandle(() => 'short')
+			.onBeforeHandle(() => 'short')
 			.get('/', () => {
 				handlerRan = true
 				return 'never'
@@ -529,7 +529,7 @@ describe('derive dispose', () => {
 			.get('/', { response: t.String() }, () => 'ok')
 
 		const withAfterResponse = new Elysia()
-			.afterResponse(() => {})
+			.onAfterResponse(() => {})
 			.get('/', { response: t.String() }, () => 'ok')
 
 		const derived = source(withDerive)
@@ -544,7 +544,7 @@ describe('derive dispose', () => {
 
 	it('emits no disposal machinery on a route without derive', () => {
 		const plain = source(
-			new Elysia().beforeHandle(() => {}).get('/', () => 'ok')
+			new Elysia().onBeforeHandle(() => {}).get('/', () => 'ok')
 		)
 
 		expect(plain).not.toContain('dds(')
@@ -608,8 +608,8 @@ describe('derive dispose: derive-only guard', () => {
 	it('leaves a non-derive route abort arm untouched', () => {
 		const emitted = source(
 			new Elysia()
-				.afterResponse(() => {})
-				.beforeHandle(() => {})
+				.onAfterResponse(() => {})
+				.onBeforeHandle(() => {})
 				.get('/', () => 'ok')
 		)
 
@@ -828,10 +828,10 @@ describe('derive dispose: under a real server', () => {
 
 		await abortDuringErrorHook(
 			new Elysia()
-				.afterResponse(() => {
+				.onAfterResponse(() => {
 					log.push('afterResponse')
 				})
-				.error(async () => {
+				.onError(async () => {
 					await Bun.sleep(30)
 					return 'handled'
 				})
@@ -853,10 +853,10 @@ describe('derive dispose: under a real server', () => {
 		await abortDuringErrorHook(
 			new Elysia()
 				.derive(() => ({ tx: disposable(log, 'tx') }))
-				.afterResponse(() => {
+				.onAfterResponse(() => {
 					log.push('afterResponse')
 				})
-				.error(async () => {
+				.onError(async () => {
 					await Bun.sleep(30)
 					return 'handled'
 				})

@@ -106,7 +106,7 @@ describe('sucrose', () => {
 			}
 		})
 			.get('/', () => 'hello')
-			.beforeHandle(({ cookie: { session }, error }) => {
+			.onBeforeHandle(({ cookie: { session }, error }) => {
 				if (!session.value) return error(401, 'Unauthorized')
 			})
 
@@ -269,7 +269,7 @@ describe('sucrose', () => {
 
 	it('infer server', async () => {
 		const app = new Elysia({ precompile: true })
-			.request(({ server }) => {})
+			.onRequest(({ server }) => {})
 			.get('/', () => 'Hello, World!')
 
 		const response = await app.handle(new Request('http://localhost:3000'))
@@ -279,7 +279,7 @@ describe('sucrose', () => {
 
 	it('not death lock on empty', async () => {
 		const app = new Elysia({ precompile: true })
-			.request((c) => {})
+			.onRequest((c) => {})
 			.get('/', () => 'Hello, World!')
 
 		const response = await app.handle(new Request('http://localhost:3000'))

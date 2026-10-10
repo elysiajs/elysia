@@ -89,6 +89,16 @@ export type TraceProcess<
 	? Prettify<
 			{
 				/**
+				 * Per-request id, the same value as the trace lifecycle's `id`.
+				 * Useful for log correlation.
+				 */
+				id: string
+				/**
+				 * Lifecycle event this process belongs to. An `onEvent` child
+				 * reports the event of the group that contains it
+				 */
+				event: TraceEvent
+				/**
 				 * Function name
 				 */
 				name: string
@@ -243,9 +253,7 @@ class TraceRecorder {
 			get error() {
 				if (slot.errorPromise) return slot.errorPromise
 				if (slot.ended)
-					return (slot.errorPromise = Promise.resolve(
-						slot.endError
-					))
+					return (slot.errorPromise = Promise.resolve(slot.endError))
 
 				const { promise, resolve } =
 					Promise.withResolvers<Error | null>()

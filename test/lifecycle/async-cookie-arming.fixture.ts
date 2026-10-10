@@ -20,7 +20,7 @@ for (const mode of ['lazy', 'eager', 'frozen']) {
 		const build = () => {
 			const app = new Elysia({
 				cookie: { sign: ['id'], secrets: 'secret' }
-			}).transform((c: any) => {
+			}).onTransform((c: any) => {
 				context = c
 				assert.equal(c['~sig'], undefined)
 				if (scenario !== 'success') {
@@ -28,8 +28,8 @@ for (const mode of ['lazy', 'eager', 'frozen']) {
 					throw new Error('original')
 				}
 			})
-			if (scenario === 'handled') app.error(() => 'handled')
-			if (scenario === 'fallback') app.error(() => {})
+			if (scenario === 'handled') app.onError(() => 'handled')
+			if (scenario === 'fallback') app.onError(() => {})
 			return app.get('/', ({ cookie }) => {
 				// Raw verification was awaited before reaching this handler.
 				assert.equal(context['~sig'] instanceof AbortSignal, true)

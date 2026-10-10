@@ -295,9 +295,9 @@ describe('inlined route registration parity', () => {
 		expect(hooked.length).toBe(5)
 		expect(hooked[4]).toBeDefined()
 
-		const chained = new Elysia().beforeHandle(() => {}).get('/a', handler)[
-			'~routes'
-		][0]
+		const chained = new Elysia()
+			.onBeforeHandle(() => {})
+			.get('/a', handler)['~routes'][0]
 		expect(chained.length).toBe(6)
 		expect(chained[4]).toBeUndefined()
 		expect(chained[5]).toBeDefined()
@@ -347,17 +347,31 @@ describe('inlined route registration parity', () => {
 		const app = new Elysia().get('/a', handler)
 		app.compile()
 
-		expect(() => app.request(() => {})).toThrow(
-			'[Elysia] .request() called after the app was sealed'
+		expect(() => app.onRequest(() => {})).toThrow(
+			'[Elysia] .onRequest() called after the app was sealed'
 		)
-		expect(() => app.beforeHandle(() => {})).toThrow(
-			'[Elysia] .beforeHandle() called after the app was sealed'
+		expect(() => app.onBeforeHandle(() => {})).toThrow(
+			'[Elysia] .onBeforeHandle() called after the app was sealed'
 		)
-		expect(() => app.afterResponse(() => {})).toThrow(
-			'[Elysia] .afterResponse() called after the app was sealed'
+		expect(() => app.onAfterResponse(() => {})).toThrow(
+			'[Elysia] .onAfterResponse() called after the app was sealed'
 		)
 		expect(() => app.mapResponse(() => {})).toThrow(
 			'[Elysia] .mapResponse() called after the app was sealed'
 		)
+
+		// the message names the public method, not the event key it registers
+		for (const [name, register] of [
+			['onParse', () => app.onParse(() => {})],
+			['onTransform', () => app.onTransform(() => {})],
+			['onAfterHandle', () => app.onAfterHandle(() => {})],
+			['onError', () => app.onError(() => {})],
+			['onStart', () => app.onStart(() => {})],
+			['onStop', () => app.onStop(() => {})],
+			['trace', () => app.trace(() => {})]
+		] as const)
+			expect(register).toThrow(
+				`[Elysia] .${name}() called after the app was sealed`
+			)
 	})
 })

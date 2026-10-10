@@ -14,8 +14,8 @@ describe('hook order across child instances', () => {
 			.guard({}, (app) => app.get('/guarded', () => 'ok'))
 			.get('/own', () => 'ok')
 			.use(child)
-			.afterHandle(hook('local-late'))
-			.afterHandle('global', hook('global-late'))
+			.onAfterHandle(hook('local-late'))
+			.onAfterHandle('global', hook('global-late'))
 			.get('/late', () => 'ok')
 
 		return { app, log }

@@ -81,7 +81,7 @@ const build = (
 		case 'headers':
 			return app.headers({ 'x-default': 'yes' }).get('/', () => 'ok')
 		case 'afterHandle':
-			return app.afterHandle(() => 'ok').get('/', () => 'before hook')
+			return app.onAfterHandle(() => 'ok').get('/', () => 'before hook')
 		case 'mapResponse':
 			return app.mapResponse(() => 'ok').get('/', () => 'before hook')
 	}
@@ -241,7 +241,7 @@ describe('optional adapter compact mapper', () => {
 		const failure = new Error('handler failure')
 		const observed: unknown[] = []
 		const app = new Elysia({ adapter })
-			.error(({ error, set }) => {
+			.onError(({ error, set }) => {
 				observed.push(error)
 				set.status = 418
 				return 'caught'

@@ -66,14 +66,14 @@ describe('macro beforeHandle lifecycle order', () => {
 				executionOrder.push('resolve1')
 				return { val1: 1 }
 			})
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				executionOrder.push('beforeHandle1')
 			})
 			.derive(() => {
 				executionOrder.push('resolve2')
 				return { val2: 2 }
 			})
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				executionOrder.push('beforeHandle2')
 			})
 			.get('/', () => 'ok')
@@ -120,7 +120,7 @@ describe('macro beforeHandle lifecycle order', () => {
 
 		const app = new Elysia()
 			.use(authPlugin)
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				// @ts-ignore
 				errorMessage = error.message
 				return errorMessage

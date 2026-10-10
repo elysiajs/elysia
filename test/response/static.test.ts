@@ -13,7 +13,7 @@ describe('Static Content', () => {
 
 	it('handle onRequest', async () => {
 		const app = new Elysia()
-			.request(() => 'request')
+			.onRequest(() => 'request')
 			.get('/', 'Static Content')
 
 		const response = await app.handle('/').then((x) => x.text())
@@ -86,8 +86,8 @@ describe('Static Content', () => {
 
 	it('handle error thrown from request hook before routing', async () => {
 		const app = new Elysia()
-			.error(() => 'handled')
-			.request(() => {
+			.onError(() => 'handled')
+			.onRequest(() => {
 				throw new Error('error')
 			})
 			.get('/', 'Static Content')
@@ -130,7 +130,7 @@ describe('static status() content-type', () => {
 	} as const
 
 	const build = () => {
-		let app: any = new Elysia().beforeHandle('global', ({ set }) => {
+		let app: any = new Elysia().onBeforeHandle('global', ({ set }) => {
 			set.headers['x-hook'] = '1'
 		})
 		for (const [name, [make]] of Object.entries(values))

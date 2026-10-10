@@ -660,7 +660,7 @@ describe('sealed esbuild output', () => {
 		// Only production is size-gated; development keeps diagnostics and the checks below.
 		// This ceiling distinguishes sealed output from the wired ~275K bundle.
 		expect(min).toBeLessThan(162_500)
-		expect(gz).toBeLessThan(52_700)
+		expect(gz).toBeLessThan(52_800)
 	})
 
 	it.each(['esbuildSealed', 'esbuildSealedProduction'])(

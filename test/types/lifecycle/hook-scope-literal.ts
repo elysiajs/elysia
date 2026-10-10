@@ -14,30 +14,30 @@ type WideParams = { [name: string]: string | undefined }
 const app = new Elysia({ prefix: '/:id' })
 
 // parse
-app.parse(({ params }) => {
+app.onParse(({ params }) => {
 	expectTypeOf(params).toEqualTypeOf<LocalParams>()
 })
-app.parse('local', ({ params }) => {
+app.onParse('local', ({ params }) => {
 	expectTypeOf(params).toEqualTypeOf<LocalParams>()
 })
-app.parse('plugin', ({ params }) => {
+app.onParse('plugin', ({ params }) => {
 	expectTypeOf(params).toEqualTypeOf<WideParams>()
 })
-app.parse('global', ({ params }) => {
+app.onParse('global', ({ params }) => {
 	expectTypeOf(params).toEqualTypeOf<WideParams>()
 })
 
 // transform
-app.transform(({ params }) => {
+app.onTransform(({ params }) => {
 	expectTypeOf(params).toEqualTypeOf<LocalParams>()
 })
-app.transform('local', ({ params }) => {
+app.onTransform('local', ({ params }) => {
 	expectTypeOf(params).toEqualTypeOf<LocalParams>()
 })
-app.transform('plugin', ({ params }) => {
+app.onTransform('plugin', ({ params }) => {
 	expectTypeOf(params).toEqualTypeOf<WideParams>()
 })
-app.transform('global', ({ params }) => {
+app.onTransform('global', ({ params }) => {
 	expectTypeOf(params).toEqualTypeOf<WideParams>()
 })
 
@@ -56,16 +56,16 @@ app.mapResponse('global', ({ params }) => {
 })
 
 // afterResponse
-app.afterResponse(({ params }) => {
+app.onAfterResponse(({ params }) => {
 	expectTypeOf(params).toEqualTypeOf<LocalParams>()
 })
-app.afterResponse('local', ({ params }) => {
+app.onAfterResponse('local', ({ params }) => {
 	expectTypeOf(params).toEqualTypeOf<LocalParams>()
 })
-app.afterResponse('plugin', ({ params }) => {
+app.onAfterResponse('plugin', ({ params }) => {
 	expectTypeOf(params).toEqualTypeOf<WideParams>()
 })
-app.afterResponse('global', ({ params }) => {
+app.onAfterResponse('global', ({ params }) => {
 	expectTypeOf(params).toEqualTypeOf<WideParams>()
 })
 
@@ -77,4 +77,4 @@ traced.trace('global', () => {})
 // @ts-expect-error not an EventScope
 traced.trace('scoped', () => {})
 // @ts-expect-error not an EventScope
-app.parse('scoped', () => {})
+app.onParse('scoped', () => {})

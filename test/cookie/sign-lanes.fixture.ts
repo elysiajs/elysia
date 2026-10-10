@@ -1,4 +1,4 @@
-// The error lane signs on every lane: a root `.error()` and a root
+// The error lane signs on every lane: a root `.onError()` and a root
 // `mapResponse` both run after the route's own exit, so they must still sign
 // what they write, with the first (current) secret, and read the value the
 // route wrote. Each is registered before the route: a hook reaches only the
@@ -77,7 +77,7 @@ const throwing = ({ cookie: { session } }: any) => {
 	let seen: unknown
 	const app = make(() =>
 		new Elysia(config)
-			.error(({ cookie }: any) => {
+			.onError(({ cookie }: any) => {
 				seen = cookie.session.value
 				cookie.session.value = 'from-error'
 				return 'handled'
@@ -93,7 +93,7 @@ const throwing = ({ cookie: { session } }: any) => {
 {
 	const app = make(() =>
 		new Elysia(config)
-			.error(({ cookie }: any) => {
+			.onError(({ cookie }: any) => {
 				cookie.session.value = 'from-error'
 			})
 			.get('/', throwing)
@@ -135,7 +135,7 @@ for (const async of [false, true]) {
 		new Elysia({
 			cookie: { secrets: ['new-secret', 'old-secret'], sign: ['session'] }
 		})
-			.error(({ cookie }: any) => {
+			.onError(({ cookie }: any) => {
 				seen = cookie.session.value
 				cookie.session.update({ maxAge: 10 })
 				return 'handled'
@@ -186,7 +186,7 @@ for (const async of [false, true]) {
 		),
 		'local error hook': make(() =>
 			new Elysia(config)
-				.error(() => 'handled')
+				.onError(() => 'handled')
 				.get('/', ({ cookie }: any) => {
 					write(cookie)
 					throw new Error('boom')
@@ -194,7 +194,7 @@ for (const async of [false, true]) {
 		),
 		'error hook writes': make(() =>
 			new Elysia(config)
-				.error(({ cookie }: any) => {
+				.onError(({ cookie }: any) => {
 					write(cookie)
 					return 'handled'
 				})
@@ -213,7 +213,7 @@ for (const async of [false, true]) {
 		),
 		'validation error, error hook': make(() =>
 			new Elysia(config)
-				.error(() => 'handled')
+				.onError(() => 'handled')
 				.get('/', { response: invalid }, (({ cookie }: any) => {
 					write(cookie)
 					return { ok: 'no' }
@@ -222,7 +222,7 @@ for (const async of [false, true]) {
 		// the hook writes nothing, so nothing is left to sign
 		'hook answers after the success lane failed': make(() =>
 			new Elysia(config)
-				.error(() => 'handled')
+				.onError(() => 'handled')
 				.get('/', ({ cookie }: any) => {
 					write(cookie)
 					return 'ok'
@@ -235,7 +235,7 @@ for (const async of [false, true]) {
 	const replacing = (replacement: () => unknown) =>
 		make(() =>
 			new Elysia(config)
-				.error(({ cookie, set }: any) => {
+				.onError(({ cookie, set }: any) => {
 					write(cookie)
 					queueMicrotask(() => {
 						set.cookie = replacement()

@@ -47,8 +47,8 @@ describe('Macro introspect', () => {
 				.get('/', { last: true }, () => 'ok')
 			const app =
 				when === 'before'
-					? new Elysia().afterHandle(parent).use(child)
-					: new Elysia().use(child).afterHandle(parent)
+					? new Elysia().onAfterHandle(parent).use(child)
+					: new Elysia().use(child).onAfterHandle(parent)
 
 			await app.handle('/')
 			expect(seen.includes(parent)).toBe(sees)
@@ -99,7 +99,7 @@ describe('Macro introspect', () => {
 				}
 			})
 			.get('/', { last: true }, () => 'ok')
-		const app = new Elysia().afterHandle('global', inherited).use(child)
+		const app = new Elysia().onAfterHandle('global', inherited).use(child)
 
 		await app.handle('/')
 		expect(seen).toContain(inherited)
@@ -297,7 +297,7 @@ describe('Macro introspect', () => {
 				})
 				.get('/', { last: true, tag: true }, () => 'ok')
 
-			return new Elysia().afterHandle(push(log, 'parent')).use(child)
+			return new Elysia().onAfterHandle(push(log, 'parent')).use(child)
 		}
 
 		it('runs the reordered hooks from the reconstructed factory', async () => {

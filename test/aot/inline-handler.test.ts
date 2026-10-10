@@ -89,7 +89,7 @@ describe('inline handler fast path (no new Function eval)', () => {
 
 	it('a returned Error reaches an error hook (set.status writeback intact)', async () => {
 		const app = new Elysia()
-			.error(({ error, set }) => {
+			.onError(({ error, set }) => {
 				set.status = 418
 				return 'caught:' + (error as Error).message
 			})

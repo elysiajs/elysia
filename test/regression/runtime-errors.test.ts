@@ -4,9 +4,12 @@ import { Elysia, t } from '../../src'
 import { ValidationError } from '../../src/error'
 
 describe('runtime error responses', () => {
-	it('uses .error(Error, handler) as a catch-all class mapping', async () => {
+	it('uses .onError(Error, handler) as a catch-all class mapping', async () => {
 		const app = new Elysia()
-			.error(Error, ({ error }) => `caught: ${(error as Error).message}`)
+			.onError(
+				Error,
+				({ error }) => `caught: ${(error as Error).message}`
+			)
 			.get('/boom', () => {
 				throw new Error('kaboom')
 			})

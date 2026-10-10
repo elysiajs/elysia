@@ -61,14 +61,14 @@ const routes = (plugin = new Elysia()) =>
 const shapes: Array<[name: string, build: () => AnyElysia, prefix?: string]> = [
 	[
 		'a root hook registered before .use()',
-		() => new Elysia().use(websocket()).beforeHandle(deny).use(routes())
+		() => new Elysia().use(websocket()).onBeforeHandle(deny).use(routes())
 	],
 	[
 		'a global hook from an anonymous plugin',
 		() =>
 			new Elysia()
 				.use(websocket())
-				.use(new Elysia().beforeHandle('global', deny))
+				.use(new Elysia().onBeforeHandle('global', deny))
 				.use(routes())
 	],
 	[
@@ -76,7 +76,9 @@ const shapes: Array<[name: string, build: () => AnyElysia, prefix?: string]> = [
 		() =>
 			new Elysia()
 				.use(websocket())
-				.use(new Elysia({ name: 'auth' }).beforeHandle('global', deny))
+				.use(
+					new Elysia({ name: 'auth' }).onBeforeHandle('global', deny)
+				)
 				.use(routes())
 	],
 	[
@@ -84,7 +86,7 @@ const shapes: Array<[name: string, build: () => AnyElysia, prefix?: string]> = [
 		() =>
 			new Elysia()
 				.use(websocket())
-				.use(new Elysia().beforeHandle('plugin', deny))
+				.use(new Elysia().onBeforeHandle('plugin', deny))
 				.use(routes())
 	],
 	[
@@ -92,7 +94,7 @@ const shapes: Array<[name: string, build: () => AnyElysia, prefix?: string]> = [
 		() =>
 			new Elysia()
 				.use(websocket())
-				.beforeHandle(deny)
+				.onBeforeHandle(deny)
 				.use(new Elysia().use(routes()))
 	],
 	[
@@ -100,14 +102,14 @@ const shapes: Array<[name: string, build: () => AnyElysia, prefix?: string]> = [
 		() =>
 			new Elysia()
 				.use(websocket())
-				.use(new Elysia().beforeHandle(deny).use(routes()))
+				.use(new Elysia().onBeforeHandle(deny).use(routes()))
 	],
 	[
 		'a global hook on an intermediate plugin',
 		() =>
 			new Elysia()
 				.use(websocket())
-				.use(new Elysia().beforeHandle('global', deny).use(routes()))
+				.use(new Elysia().onBeforeHandle('global', deny).use(routes()))
 	],
 	[
 		'a guard without a callback',
@@ -122,15 +124,15 @@ const shapes: Array<[name: string, build: () => AnyElysia, prefix?: string]> = [
 		() =>
 			new Elysia()
 				.use(websocket())
-				.beforeHandle(deny)
-				.use(routes(new Elysia().beforeHandle(() => {})))
+				.onBeforeHandle(deny)
+				.use(routes(new Elysia().onBeforeHandle(() => {})))
 	],
 	[
 		'a root hook under precompile',
 		() =>
 			new Elysia({ precompile: true })
 				.use(websocket())
-				.beforeHandle(deny)
+				.onBeforeHandle(deny)
 				.use(routes())
 	],
 	[
@@ -138,7 +140,7 @@ const shapes: Array<[name: string, build: () => AnyElysia, prefix?: string]> = [
 		() =>
 			new Elysia({ precompile: true })
 				.use(websocket())
-				.use(new Elysia().beforeHandle('global', deny))
+				.use(new Elysia().onBeforeHandle('global', deny))
 				.use(routes())
 	],
 	// Never compacted (a macro or scoped child anywhere in the app, a derive
@@ -176,7 +178,7 @@ const shapes: Array<[name: string, build: () => AnyElysia, prefix?: string]> = [
 			new Elysia()
 				.use(websocket())
 				.derive(() => ({ user: 'alice' }))
-				.beforeHandle(deny)
+				.onBeforeHandle(deny)
 				.use(routes())
 	]
 ]
@@ -220,7 +222,7 @@ describe('WebSocket inherited beforeHandle enforcement', () => {
 		const app = new Elysia()
 			.use(websocket())
 			.use(routes())
-			.beforeHandle(deny)
+			.onBeforeHandle(deny)
 			.listen(0)
 
 		try {
@@ -238,7 +240,7 @@ describe('WebSocket inherited beforeHandle enforcement', () => {
 	it('runs an inherited beforeHandle on every message frame', async () => {
 		const app = new Elysia()
 			.use(websocket())
-			.beforeHandle(({ body }: { body?: unknown }) =>
+			.onBeforeHandle(({ body }: { body?: unknown }) =>
 				body === 'forbidden' ? 'refused' : undefined
 			)
 			.use(routes())
@@ -272,7 +274,7 @@ describe('WebSocket inherited beforeHandle enforcement', () => {
 
 		const app = new Elysia()
 			.use(websocket())
-			.beforeHandle(deny)
+			.onBeforeHandle(deny)
 			.use(
 				new Elysia().ws('/ws', {
 					open() {
@@ -320,7 +322,7 @@ describe('route introspection of an inherited beforeHandle', () => {
 	// other consumer composes the flat hook, or a tool auditing or running
 	// hooks from `app.routes` sees a plugin route with no auth hook at all
 	it('lists the inherited hook on a plugin route', () => {
-		const app = new Elysia().beforeHandle(deny).use(routes())
+		const app = new Elysia().onBeforeHandle(deny).use(routes())
 
 		const http = app.routes.find((route) => route.path === '/http')!
 		const beforeHandle = [http.hooks.beforeHandle ?? []].flat()

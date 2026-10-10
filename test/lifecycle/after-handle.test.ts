@@ -4,7 +4,7 @@ import { describe, expect, it } from 'bun:test'
 
 describe('afterHandle', () => {
 	it('replaces a response from an app hook', async () => {
-		const app = new Elysia().afterHandle(() => 'A').get('/', () => 'NOOP')
+		const app = new Elysia().onAfterHandle(() => 'A').get('/', () => 'NOOP')
 
 		const res = await app.handle('/').then((x) => x.text())
 
@@ -28,7 +28,7 @@ describe('afterHandle', () => {
 	})
 
 	it('propagates global hooks out of plugins', async () => {
-		const transformType = new Elysia().afterHandle(
+		const transformType = new Elysia().onAfterHandle(
 			'global',
 			// @ts-ignore
 			({ responseValue }) => {
@@ -47,9 +47,11 @@ describe('afterHandle', () => {
 
 	it('keeps local hooks inside plugins', async () => {
 		// @ts-ignore
-		const transformType = new Elysia().afterHandle(({ responseValue }) => {
-			if (responseValue === 'string') return 'number'
-		})
+		const transformType = new Elysia().onAfterHandle(
+			({ responseValue }) => {
+				if (responseValue === 'string') return 'number'
+			}
+		)
 
 		const app = new Elysia()
 			.use(transformType)
@@ -64,10 +66,10 @@ describe('afterHandle', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.afterHandle(() => {
+			.onAfterHandle(() => {
 				order.push('A')
 			})
-			.afterHandle(() => {
+			.onAfterHandle(() => {
 				order.push('B')
 			})
 			.get('/', () => '')
@@ -98,7 +100,7 @@ describe('afterHandle', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.afterHandle('global', ({ path }) => {
+			.onAfterHandle('global', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -114,7 +116,7 @@ describe('afterHandle', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.afterHandle('local', ({ path }) => {
+			.onAfterHandle('local', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -130,7 +132,7 @@ describe('afterHandle', () => {
 		let total = 0
 
 		const app = new Elysia()
-			.afterHandle([
+			.onAfterHandle([
 				() => {
 					total++
 				},

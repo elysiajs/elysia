@@ -6,7 +6,7 @@ import { describe, expect, it } from 'bun:test'
 describe('request hooks', () => {
 	it('inject headers to response', async () => {
 		const app = new Elysia()
-			.request(({ set }) => {
+			.onRequest(({ set }) => {
 				set.headers['Access-Control-Allow-Origin'] = '*'
 			})
 			.get('/', () => 'hi')
@@ -17,10 +17,10 @@ describe('request hooks', () => {
 	})
 
 	it('registered by plugins apply to parent routes', async () => {
-		const plain = new Elysia().request(({ set }) => {
+		const plain = new Elysia().onRequest(({ set }) => {
 			set.headers['x-plain'] = 'yes'
 		})
-		const local = new Elysia().request(({ set }) => {
+		const local = new Elysia().onRequest(({ set }) => {
 			set.headers['x-local'] = 'yes'
 		})
 
@@ -37,7 +37,7 @@ describe('request hooks', () => {
 
 	it('handle async', async () => {
 		const app = new Elysia()
-			.request(async ({ set }) => {
+			.onRequest(async ({ set }) => {
 				await Bun.sleep(5)
 				set.headers.name = 'llama'
 			})
@@ -50,7 +50,7 @@ describe('request hooks', () => {
 
 	it('early return', async () => {
 		const app = new Elysia()
-			.request(({ set }) => {
+			.onRequest(({ set }) => {
 				set.status = 401
 				return 'Unauthorized'
 			})
@@ -68,7 +68,7 @@ describe('request hooks', () => {
 		let total = 0
 
 		const app = new Elysia()
-			.request([
+			.onRequest([
 				() => {
 					total++
 				},
@@ -89,7 +89,7 @@ describe('request hooks', () => {
 		let handlerCalled = false
 
 		const app = new Elysia()
-			.request([
+			.onRequest([
 				() => {
 					controller.abort()
 				},
@@ -116,7 +116,7 @@ describe('request hooks', () => {
 		let handlerCalled = false
 
 		const app = new Elysia()
-			.request([
+			.onRequest([
 				async () => {
 					controller.abort()
 					await Promise.resolve()
@@ -148,7 +148,7 @@ describe('request hooks', () => {
 			.trace(({ onRequest }) => {
 				onRequest(() => {})
 			})
-			.request([
+			.onRequest([
 				async () => {
 					controller.abort()
 					await Promise.resolve()
@@ -174,10 +174,10 @@ describe('request hooks', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.request(() => {
+			.onRequest(() => {
 				order.push('A')
 			})
-			.request(() => {
+			.onRequest(() => {
 				order.push('B')
 			})
 			.get('/', () => '')
@@ -192,7 +192,7 @@ describe('request hooks', () => {
 
 		const app = new Elysia()
 			// @ts-ignore
-			.request(({ qi }) => {
+			.onRequest(({ qi }) => {
 				queryIndex = qi
 			})
 			.get('/', () => 'ok')

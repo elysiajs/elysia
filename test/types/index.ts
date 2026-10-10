@@ -523,13 +523,13 @@ app.derive(({ headers }) => {
 		expectTypeOf<typeof b>().toBeString()
 	})
 	// Derived values are unavailable during request hooks.
-	.request((context) => {
+	.onRequest((context) => {
 		expectTypeOf<
 			'b' extends keyof typeof context ? true : false
 		>().toEqualTypeOf<false>()
 	})
 	// Derived values are available during transform hooks.
-	.transform((context) => {
+	.onTransform((context) => {
 		expectTypeOf<
 			'b' extends keyof typeof context ? true : false
 		>().toEqualTypeOf<true>()
@@ -1182,13 +1182,13 @@ const a = app
 		expectTypeOf<typeof b>().toBeString()
 	})
 	// A prior derive is visible during transform.
-	.transform((context) => {
+	.onTransform((context) => {
 		expectTypeOf<
 			'b' extends keyof typeof context ? true : false
 		>().toEqualTypeOf<true>()
 	})
 	// Derived values remain visible to beforeHandle.
-	.beforeHandle((context) => {
+	.onBeforeHandle((context) => {
 		expectTypeOf<
 			'b' extends keyof typeof context ? true : false
 		>().toEqualTypeOf<true>()
@@ -2021,7 +2021,7 @@ type a = keyof {}
 // ? params in local lifecycle should follow path prefix
 {
 	new Elysia()
-		.parse(({ params }) => {
+		.onParse(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<
 				Record<string, string>
 			>()
@@ -2040,17 +2040,17 @@ type a = keyof {}
 
 			return {}
 		})
-		.transform(({ params }) => {
+		.onTransform(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<
 				Record<string, string>
 			>()
 		})
-		.beforeHandle(({ params }) => {
+		.onBeforeHandle(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<
 				Record<string, string>
 			>()
 		})
-		.afterHandle(({ params }) => {
+		.onAfterHandle(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<
 				Record<string, string>
 			>()
@@ -2060,7 +2060,7 @@ type a = keyof {}
 				Record<string, string>
 			>()
 		})
-		.afterResponse(({ params }) => {
+		.onAfterResponse(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<
 				Record<string, string>
 			>()
@@ -2070,7 +2070,7 @@ type a = keyof {}
 // ? params in local lifecycle should follow path prefix
 {
 	new Elysia({ prefix: '/:id' })
-		.parse(({ params }) => {
+		.onParse(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{ id: string }>()
 		})
 		.derive(({ params }) => {
@@ -2083,19 +2083,19 @@ type a = keyof {}
 
 			return {}
 		})
-		.transform(({ params }) => {
+		.onTransform(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{ id: string }>()
 		})
-		.beforeHandle(({ params }) => {
+		.onBeforeHandle(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{ id: string }>()
 		})
-		.afterHandle(({ params }) => {
+		.onAfterHandle(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{ id: string }>()
 		})
 		.mapResponse(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{ id: string }>()
 		})
-		.afterResponse(({ params }) => {
+		.onAfterResponse(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{ id: string }>()
 		})
 }
@@ -2103,7 +2103,7 @@ type a = keyof {}
 // ? params in local lifecycle should respect global scope
 {
 	new Elysia({ prefix: '/:id' })
-		.parse('global', ({ params }) => {
+		.onParse('global', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
@@ -2122,17 +2122,17 @@ type a = keyof {}
 
 			return {}
 		})
-		.transform('global', ({ params }) => {
+		.onTransform('global', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
 		})
-		.beforeHandle('global', ({ params }) => {
+		.onBeforeHandle('global', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
 		})
-		.afterHandle('global', ({ params }) => {
+		.onAfterHandle('global', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
@@ -2142,7 +2142,7 @@ type a = keyof {}
 				[name: string]: string | undefined
 			}>()
 		})
-		.afterResponse('global', ({ params }) => {
+		.onAfterResponse('global', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
@@ -2152,7 +2152,7 @@ type a = keyof {}
 // ? params in local lifecycle should respect scoped scope
 {
 	new Elysia({ prefix: '/:id' })
-		.parse('plugin', ({ params }) => {
+		.onParse('plugin', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
@@ -2171,17 +2171,17 @@ type a = keyof {}
 
 			return {}
 		})
-		.transform('plugin', ({ params }) => {
+		.onTransform('plugin', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
 		})
-		.beforeHandle('plugin', ({ params }) => {
+		.onBeforeHandle('plugin', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
 		})
-		.afterHandle('plugin', ({ params }) => {
+		.onAfterHandle('plugin', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
@@ -2191,7 +2191,7 @@ type a = keyof {}
 				[name: string]: string | undefined
 			}>()
 		})
-		.afterResponse('plugin', ({ params }) => {
+		.onAfterResponse('plugin', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()
@@ -2206,7 +2206,7 @@ type a = keyof {}
 				startTime: performance.now()
 			}
 		})
-		.afterResponse((ctx) => {
+		.onAfterResponse((ctx) => {
 			expectTypeOf<typeof ctx>().not.toBeNever()
 			expectTypeOf<(typeof ctx)['startTime']>().toBeNumber()
 		})
@@ -2518,14 +2518,14 @@ type a = keyof {}
 
 // onError should have status
 {
-	new Elysia().error(({ status }) => {
+	new Elysia().onError(({ status }) => {
 		status(200)
 	})
 }
 
 // onAfterHandle should have response
 {
-	new Elysia().afterHandle('plugin', ({ responseValue }) => responseValue)
+	new Elysia().onAfterHandle('plugin', ({ responseValue }) => responseValue)
 }
 
 /* Neither `a` or `b` exist at the type level, even though they do exist at runtime */
@@ -2728,7 +2728,7 @@ type a = keyof {}
 
 			return { auth: { id: 1 } }
 		})
-		.beforeHandle(({ auth }) => {
+		.onBeforeHandle(({ auth }) => {
 			expectTypeOf<typeof auth>().toEqualTypeOf<{
 				readonly id: 1
 			} | null>()
@@ -2746,7 +2746,7 @@ type a = keyof {}
 
 			return { auth: { id: 1 } }
 		})
-		.beforeHandle(({ auth }) => {
+		.onBeforeHandle(({ auth }) => {
 			expectTypeOf<typeof auth>().toEqualTypeOf<{
 				readonly id: 1
 			} | null>()
@@ -2764,7 +2764,7 @@ type a = keyof {}
 				id: t.String()
 			})
 		})
-		.transform(({ params, body }) => {
+		.onTransform(({ params, body }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<
 				Record<string, string>
 			>()
@@ -2776,12 +2776,12 @@ type a = keyof {}
 // transform should cast params to unknown when scope is over local
 {
 	new Elysia({ prefix: '/:id' })
-		.transform(({ params }) => {
+		.onTransform(({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				id: string
 			}>()
 		})
-		.transform('plugin', ({ params }) => {
+		.onTransform('plugin', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				[name: string]: string | undefined
 			}>()

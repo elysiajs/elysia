@@ -81,14 +81,14 @@ describe('AOT: observed stream exits', () => {
 		let saved: unknown
 		const app = frozen(() =>
 			new Elysia()
-				.error(({ status }) => status(200, saved as any))
-				.afterResponse(() => {
+				.onError(({ status }) => status(200, saved as any))
+				.onAfterResponse(() => {
 					log.push('afterResponse')
 				})
-				.afterHandle(({ responseValue }) => {
+				.onAfterHandle(({ responseValue }) => {
 					saved = responseValue
 				})
-				.afterHandle(() => {
+				.onAfterHandle(() => {
 					throw new Error('recover')
 				})
 				.get('/', async function* () {

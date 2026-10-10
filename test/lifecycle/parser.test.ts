@@ -6,7 +6,7 @@ import { post, json } from '../utils'
 describe('Parser', () => {
 	it('handle onParse', async () => {
 		const app = new Elysia()
-			.parse(({ contentType }) => {
+			.onParse(({ contentType }) => {
 				switch (contentType) {
 					case 'application/Elysia':
 						return 'A'
@@ -30,7 +30,7 @@ describe('Parser', () => {
 
 	it('overwrite default parser', async () => {
 		const app = new Elysia()
-			.parse(({ contentType }) => {
+			.onParse(({ contentType }) => {
 				switch (contentType) {
 					case 'text/plain':
 						return 'Overwrited'
@@ -143,10 +143,10 @@ describe('Parser', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.parse('global', ({ path }) => {
+			.onParse('global', ({ path }) => {
 				order.push('A')
 			})
-			.parse('global', ({ path }) => {
+			.onParse('global', ({ path }) => {
 				order.push('B')
 			})
 			.post('/', ({ body }) => 'NOOP')
@@ -157,7 +157,7 @@ describe('Parser', () => {
 	})
 
 	it('inherits plugin', async () => {
-		const plugin = new Elysia().parse('global', () => 'Kozeki Ui')
+		const plugin = new Elysia().onParse('global', () => 'Kozeki Ui')
 
 		const app = new Elysia().use(plugin).post('/', ({ body }) => body)
 
@@ -166,7 +166,7 @@ describe('Parser', () => {
 	})
 
 	it('not inherits plugin on local', async () => {
-		const plugin = new Elysia().parse(() => 'Kozeki Ui')
+		const plugin = new Elysia().onParse(() => 'Kozeki Ui')
 
 		const app = new Elysia().use(plugin).post('/', ({ body }) => body)
 
@@ -181,7 +181,7 @@ describe('Parser', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.parse('global', ({ path }) => {
+			.onParse('global', ({ path }) => {
 				called.push(path)
 			})
 			.post('/inner', () => 'NOOP')
@@ -200,7 +200,7 @@ describe('Parser', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.parse('local', ({ path }) => {
+			.onParse('local', ({ path }) => {
 				called.push(path)
 			})
 			.post('/inner', () => 'NOOP')
@@ -219,7 +219,7 @@ describe('Parser', () => {
 		let total = 0
 
 		const app = new Elysia()
-			.parse([
+			.onParse([
 				() => {
 					total++
 				},
@@ -501,7 +501,7 @@ describe('Parser', () => {
 		let parseError = false
 
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				parseError = error instanceof ParseError
 			})
 			.post(
@@ -533,7 +533,7 @@ describe('Parser', () => {
 			.post('/before', ({ body }) => body)
 			.group('/g', (g) =>
 				g
-					.parse(() => ({ hijacked: true }))
+					.onParse(() => ({ hijacked: true }))
 					.post('/x', ({ body }) => body)
 			)
 			.post('/after', ({ body }) => body)

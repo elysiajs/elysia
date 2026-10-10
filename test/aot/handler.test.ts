@@ -27,7 +27,7 @@ afterEach(() => {
 // Force the generated-handler path rather than the inline fast path.
 const build = () =>
 	new Elysia()
-		.beforeHandle(() => {})
+		.onBeforeHandle(() => {})
 		.post(
 			'/x',
 			{
@@ -87,7 +87,7 @@ describe('AOT handler freeze', () => {
 		const previousNodeEnv = process.env.NODE_ENV
 		const buildError = () =>
 			new Elysia()
-				.error(() => {})
+				.onError(() => {})
 				.get('/status', () => {
 					const error: any = new Error('upstream unavailable')
 					error.status = 503
@@ -148,7 +148,7 @@ describe('AOT handler freeze', () => {
 describe('AOT handler emit dedup', () => {
 	it('shares the factory and alias across same-code routes, the wrapper per route shape', async () => {
 		const app = new Elysia()
-			.beforeHandle(() => {})
+			.onBeforeHandle(() => {})
 			.post(
 				'/a',
 				{
@@ -187,7 +187,7 @@ describe('AOT handler emit dedup', () => {
 
 		// the same schema three times is one shape: one wrapper
 		const same = new Elysia()
-			.beforeHandle(() => {})
+			.onBeforeHandle(() => {})
 			.post(
 				'/a',
 				{ body: t.Object({ a: t.String() }) },
@@ -306,7 +306,7 @@ describe('sync/async compilation gating', () => {
 	it('keeps a sync value-returning error hook synchronous', () => {
 		const handlers = capture(
 			new Elysia()
-				.error(() => 'oops')
+				.onError(() => 'oops')
 				.get('/x', () => {
 					throw new Error('boom')
 				}) as any
@@ -331,7 +331,7 @@ describe('sync/async compilation gating', () => {
 	it('promotes an error hook that returns new Promise() to async', () => {
 		const handlers = capture(
 			new Elysia()
-				.error(() => new Promise<void>((resolve) => resolve()) as any)
+				.onError(() => new Promise<void>((resolve) => resolve()) as any)
 				.get('/x', () => {
 					throw new Error('boom')
 				}) as any

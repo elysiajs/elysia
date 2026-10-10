@@ -5,7 +5,7 @@ import { describe, expect, it } from 'bun:test'
 describe('beforeHandle', () => {
 	it('an app hook can short-circuit the route handler', async () => {
 		const app = new Elysia()
-			.beforeHandle(({ params }) => {
+			.onBeforeHandle(({ params }) => {
 				const { name } = params as { name?: string }
 				if (name === 'Fubuki') return 'Cat'
 			})
@@ -36,7 +36,7 @@ describe('beforeHandle', () => {
 		const app = new Elysia()
 			.group('/type', (app) =>
 				app
-					.beforeHandle(({ params }) => {
+					.onBeforeHandle(({ params }) => {
 						const { name } = params as { name?: string }
 						if (name === 'fubuki') return 'cat'
 					})
@@ -52,7 +52,7 @@ describe('beforeHandle', () => {
 	})
 
 	it('propagates global hooks out of plugins', async () => {
-		const transformId = new Elysia().beforeHandle(
+		const transformId = new Elysia().onBeforeHandle(
 			'global',
 			({ params: { name } }) => {
 				if (name === 'Fubuki') return 'Cat'
@@ -69,7 +69,7 @@ describe('beforeHandle', () => {
 	})
 
 	it('keeps local hooks inside plugins', async () => {
-		const beforeHandle = new Elysia().beforeHandle(
+		const beforeHandle = new Elysia().onBeforeHandle(
 			({ params: { name } }) => {
 				if (name === 'Fubuki') return 'Cat'
 			}
@@ -88,10 +88,10 @@ describe('beforeHandle', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				order.push('A')
 			})
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				order.push('B')
 			})
 			.get('/', () => '')
@@ -103,7 +103,7 @@ describe('beforeHandle', () => {
 
 	it('runs app hooks before route-local hooks', async () => {
 		const app = new Elysia()
-			.beforeHandle(({ params }) => {
+			.onBeforeHandle(({ params }) => {
 				const { name } = params as { name?: string }
 				if (name === 'fubuki') return 'cat'
 			})
@@ -126,11 +126,11 @@ describe('beforeHandle', () => {
 
 	it('accepts multiple app hooks', async () => {
 		const app = new Elysia()
-			.beforeHandle(({ params }) => {
+			.onBeforeHandle(({ params }) => {
 				const { name } = params as { name?: string }
 				if (name === 'fubuki') return 'cat'
 			})
-			.beforeHandle(({ params }) => {
+			.onBeforeHandle(({ params }) => {
 				const { name } = params as { name?: string }
 				if (name === 'korone') return 'dog'
 			})
@@ -163,11 +163,11 @@ describe('beforeHandle', () => {
 
 	it('runs afterHandle after a beforeHandle short-circuit', async () => {
 		const app = new Elysia()
-			.beforeHandle(({ params }) => {
+			.onBeforeHandle(({ params }) => {
 				const { name } = params as { name?: string }
 				if (name === 'Fubuki') return 'Cat'
 			})
-			.afterHandle((context) => {
+			.onAfterHandle((context) => {
 				// @ts-ignore
 				if (context.responseValue === 'Cat') return 'Not cat'
 			})
@@ -182,7 +182,7 @@ describe('beforeHandle', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.beforeHandle('global', ({ path }) => {
+			.onBeforeHandle('global', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -198,7 +198,7 @@ describe('beforeHandle', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.beforeHandle('local', ({ path }) => {
+			.onBeforeHandle('local', ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')

@@ -248,7 +248,7 @@ describe('Standard Schema Merge', () => {
 
 	it('validate multiple schema together', async () => {
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				if (!(error instanceof ValidationError)) console.log(error)
 			})
 			.guard({

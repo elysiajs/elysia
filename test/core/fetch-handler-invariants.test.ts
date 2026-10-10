@@ -4,7 +4,7 @@ import { describe, expect, it } from 'bun:test'
 
 describe('fetch handler', () => {
 	it('returns 404 for an unmatched static-only app with a request hook', async () => {
-		const app = new Elysia().request(() => {}).get('/exists', () => 'hi')
+		const app = new Elysia().onRequest(() => {}).get('/exists', () => 'hi')
 
 		const res = await app.handle('/nope')
 
@@ -19,7 +19,7 @@ describe('fetch handler', () => {
 
 	it('keeps HTTP 500 when an error hook returns a plain object with a status property', async () => {
 		const app = new Elysia()
-			.error(() => ({ status: 'pending', message: 'retry' }))
+			.onError(() => ({ status: 'pending', message: 'retry' }))
 			.get('/', () => {
 				throw new Error('boom')
 			})
@@ -35,7 +35,7 @@ describe('fetch handler', () => {
 
 	it('uses an explicit status returned from an error hook', async () => {
 		const app = new Elysia()
-			.error(({ status }) => status(418, 'teapot'))
+			.onError(({ status }) => status(418, 'teapot'))
 			.get('/', () => {
 				throw new Error('boom')
 			})
@@ -50,11 +50,11 @@ describe('fetch handler', () => {
 		let ran = false
 
 		const app = new Elysia()
-			.request(({ set }) => {
+			.onRequest(({ set }) => {
 				set.status = 418
 				return 'sc'
 			})
-			.afterResponse(() => {
+			.onAfterResponse(() => {
 				ran = true
 			})
 			.get('/x', () => 'real')
@@ -70,11 +70,11 @@ describe('fetch handler', () => {
 		let ran = false
 
 		const app = new Elysia()
-			.request(async ({ set }) => {
+			.onRequest(async ({ set }) => {
 				set.status = 418
 				return 'sc'
 			})
-			.afterResponse(() => {
+			.onAfterResponse(() => {
 				ran = true
 			})
 			.get('/x', () => 'real')
@@ -101,7 +101,7 @@ describe('fetch handler', () => {
 
 	it('includes request-hook headers in the default 404 response', async () => {
 		const app = new Elysia()
-			.request(({ set }) => {
+			.onRequest(({ set }) => {
 				set.headers['x-from-hook'] = 'yes'
 			})
 			.get('/exists', () => 'hi')
@@ -115,11 +115,11 @@ describe('fetch handler', () => {
 		let observed: number | undefined
 
 		const app = new Elysia()
-			.error(({ set }) => {
+			.onError(({ set }) => {
 				set.status = 418
 				return 'teapot'
 			})
-			.afterResponse(({ set }) => {
+			.onAfterResponse(({ set }) => {
 				observed = set.status as number
 			})
 			.get('/x', () => 'real')

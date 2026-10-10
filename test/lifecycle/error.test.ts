@@ -21,7 +21,7 @@ describe('Error lifecycle', () => {
 	it('use custom 404', async () => {
 		const app = new Elysia()
 			.get('/', () => 'hello')
-			.error(({ error, set }) => {
+			.onError(({ error, set }) => {
 				if (error instanceof NotFound) {
 					set.status = 404
 
@@ -38,7 +38,7 @@ describe('Error lifecycle', () => {
 
 	it('handle parse error', async () => {
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				if (error instanceof ParseError) return 'Why you no proper type'
 			})
 			.post('/', () => {
@@ -61,7 +61,7 @@ describe('Error lifecycle', () => {
 
 	it('custom validation error', async () => {
 		const app = new Elysia()
-			.error(({ error, set }) => {
+			.onError(({ error, set }) => {
 				if (error instanceof ValidationError) {
 					set.status = 400
 
@@ -101,7 +101,7 @@ describe('Error lifecycle', () => {
 	// '~' sequence is part of the key and must pass through undecoded
 	it('ValidationError.all reports the path of TypeBox issues', async () => {
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				if (error instanceof ValidationError)
 					return error.all.map((i) => i.path)
 			})
@@ -141,7 +141,7 @@ describe('Error lifecycle', () => {
 	})
 
 	it('inherits plugin', async () => {
-		const plugin = new Elysia().error('global', () => 'hi')
+		const plugin = new Elysia().onError('global', () => 'hi')
 
 		const app = new Elysia().use(plugin).get('/', () => {
 			throw new Error('')
@@ -152,7 +152,7 @@ describe('Error lifecycle', () => {
 	})
 
 	it('not inherits plugin on local', async () => {
-		const plugin = new Elysia().error(() => 'hi')
+		const plugin = new Elysia().onError(() => 'hi')
 
 		const app = new Elysia().use(plugin).get('/', () => {
 			throw new Error('')
@@ -164,7 +164,7 @@ describe('Error lifecycle', () => {
 
 	it('custom 500', async () => {
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				if (error instanceof InternalServerError) {
 					return 'UwU'
 				}
@@ -181,7 +181,7 @@ describe('Error lifecycle', () => {
 
 	it('defaults set.status = 200 in an error handler to HTTP 500', async () => {
 		const app = new Elysia()
-			.error(({ set }) => {
+			.onError(({ set }) => {
 				set.status = 200
 
 				return 'recovered?'
@@ -198,7 +198,7 @@ describe('Error lifecycle', () => {
 
 	it('respects an explicit status() recovery from an error handler', async () => {
 		const app = new Elysia()
-			.error(({ status }) => status(200, 'recovered'))
+			.onError(({ status }) => status(200, 'recovered'))
 			.get('/', () => {
 				throw new Error('boom')
 			})
@@ -253,10 +253,10 @@ describe('Error lifecycle', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.error(() => {
+			.onError(() => {
 				order.push('A')
 			})
-			.error(() => {
+			.onError(() => {
 				order.push('B')
 			})
 			.get('/', () => {
@@ -272,7 +272,7 @@ describe('Error lifecycle', () => {
 		const order = <string[]>[]
 
 		const plugin = new Elysia()
-			.error(() => {
+			.onError(() => {
 				order.push('plugin')
 
 				return 'plugin'
@@ -283,7 +283,7 @@ describe('Error lifecycle', () => {
 
 		const app = new Elysia()
 			.use(plugin)
-			.error(() => {
+			.onError(() => {
 				order.push('outer')
 
 				return 'outer'
@@ -302,7 +302,7 @@ describe('Error lifecycle', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.error('global', ({ path }) => {
+			.onError('global', ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -324,7 +324,7 @@ describe('Error lifecycle', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.error('local', ({ path }) => {
+			.onError('local', ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -352,10 +352,10 @@ describe('Error lifecycle', () => {
 		}
 
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				if (error instanceof SomeCustomError) return error.asJSON()
 			})
-			.request(() => {
+			.onRequest(() => {
 				throw new SomeCustomError()
 			})
 			.get('/', () => '')
@@ -373,7 +373,7 @@ describe('Error lifecycle', () => {
 		const app = new Elysia({
 			cookie: { secrets: 'secrets', sign: ['session'] }
 		})
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				if (error instanceof InvalidCookie)
 					return 'Where is the signature?'
 			})
@@ -395,7 +395,7 @@ describe('Error lifecycle', () => {
 		let i = 0
 
 		const plugin = new Elysia()
-			.error(() => {
+			.onError(() => {
 				i++
 			})
 			.get('/', ({ status }) => {
@@ -411,7 +411,7 @@ describe('Error lifecycle', () => {
 	})
 
 	it('404 should parse query if infer', async () => {
-		const app = new Elysia().error(({ query }) => query)
+		const app = new Elysia().onError(({ query }) => query)
 
 		const response = await app.handle(
 			new Request('http://localhost?hello=world')
@@ -482,7 +482,7 @@ describe('Error lifecycle', () => {
 
 	it('handle custom error message globally', async () => {
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				if (error instanceof ValidationError)
 					return error.detail(error.message)
 			})
@@ -517,7 +517,7 @@ describe('Error lifecycle', () => {
 
 	it('ValidationError.detail only handle custom error', async () => {
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				if (error instanceof ValidationError)
 					return error.detail(error.message)
 			})
@@ -550,7 +550,7 @@ describe('Error lifecycle', () => {
 
 	it('ValidationError.all works with Zod validators', async () => {
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				if (error instanceof ValidationError) {
 					const errors = error.all
 
@@ -583,7 +583,7 @@ describe('Error lifecycle', () => {
 
 	it('ValidationError.all provides error details with Zod validators', async () => {
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				if (error instanceof ValidationError) {
 					const errors = error.all
 
@@ -638,7 +638,7 @@ describe('Lazy validation error enumeration', () => {
 
 		try {
 			const app = new Elysia()
-				.error(() => 'expected a number')
+				.onError(() => 'expected a number')
 				.post(
 					'/',
 					{
@@ -728,7 +728,7 @@ describe('Lazy validation error enumeration', () => {
 		})
 
 		const silent = new Elysia()
-			.error(() => 'constant')
+			.onError(() => 'constant')
 			.post('/', { body: schema }, ({ body }) => body)
 
 		await silent.handle('/', json({ x: 'a' }))
@@ -885,7 +885,7 @@ describe('Validation error payload echo limits', () => {
 		let captured: ValidationError | undefined
 
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				if (error instanceof ValidationError) captured = error
 			})
 			.post(

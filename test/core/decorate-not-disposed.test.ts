@@ -4,7 +4,7 @@ import { Elysia } from '../../src'
 
 // The app does not own a value it was handed: `.decorate(pool)` is a borrow,
 // often of a module singleton other apps (or tests) still use, so `stop()`
-// never disposes it. The owner releases it explicitly with `.cleanup()`.
+// never disposes it. The owner releases it explicitly with `.onStop()`.
 // Derive values are different - the derive minted them per request - and stay
 // disposed (test/lifecycle/derive-dispose.test.ts)
 const handed = (log: string[]) => ({
@@ -18,13 +18,13 @@ const handed = (log: string[]) => ({
 })
 
 describe('decorate is not disposed on stop', () => {
-	it('leaves it to .cleanup() on a listening app', async () => {
+	it('leaves it to .onStop() on a listening app', async () => {
 		const log: string[] = []
 		const pool = handed(log)
 
 		const app = new Elysia()
 			.decorate('db', pool)
-			.cleanup(() => {
+			.onStop(() => {
 				log.push('cleanup')
 			})
 			.get('/', ({ db }) => db.query())
@@ -41,7 +41,7 @@ describe('decorate is not disposed on stop', () => {
 
 		const app = new Elysia()
 			.decorate('db', handed(log))
-			.cleanup(() => {
+			.onStop(() => {
 				log.push('cleanup')
 			})
 		// adapters without their own stop (e.g. Node) run the generic lane

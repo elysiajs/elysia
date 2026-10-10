@@ -9,7 +9,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).transform('global', () => {})
+			}).onTransform('global', () => {})
 
 		const group = new Elysia().use(cookie({})).get('/a', () => 'Hi')
 
@@ -30,7 +30,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).transform('global', () => {})
+			}).onTransform('global', () => {})
 
 		const group = new Elysia().use(cookie()).get('/a', () => 'Hi')
 
@@ -51,7 +51,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).transform('global', () => {})
+			}).onTransform('global', () => {})
 
 		const group = new Elysia().use(cookie({})).get('/a', () => 'Hi')
 
@@ -77,7 +77,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).transform('global', () => {})
+			}).onTransform('global', () => {})
 
 		const group = new Elysia().use(cookie()).get('/a', () => 'Hi')
 
@@ -99,7 +99,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).transform('global', () => {})
+			}).onTransform('global', () => {})
 
 		const group = new Elysia().use(cookie()).get(
 			'/a',
@@ -130,7 +130,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).transform('global', () => {
+			}).onTransform('global', () => {
 				called++
 			})
 
@@ -149,7 +149,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).transform('global', [
+			}).onTransform('global', [
 				() => {
 					called++
 				},
@@ -171,11 +171,11 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).transform('global', () => {})
+			}).onTransform('global', () => {})
 
 		const group = new Elysia()
 			.use(cookie())
-			.transform('global', () => {
+			.onTransform('global', () => {
 				count++
 			})
 			.get('/a', () => 'Hi')
@@ -249,18 +249,18 @@ describe('Checksum', () => {
 		let b = 0
 
 		const plugin = new Elysia()
-			.beforeHandle('global', () => {
+			.onBeforeHandle('global', () => {
 				x++
 			})
 			.group('/v1', (app) =>
 				app
-					.beforeHandle(() => {
+					.onBeforeHandle(() => {
 						a++
 					})
 					.get('', () => 'A')
 					.group('/v1', (app) =>
 						app
-							.beforeHandle(() => {
+							.onBeforeHandle(() => {
 								b++
 							})
 							.get('/', () => 'B')
@@ -377,7 +377,7 @@ describe('Checksum', () => {
 					ip: server?.requestIP(request)
 				}
 			})
-			.beforeHandle(() => {})
+			.onBeforeHandle(() => {})
 			.get('/ip', ({ ip }) => ip)
 
 		const router1 = new Elysia({ name: 'ip1', seed: 'ip1' })

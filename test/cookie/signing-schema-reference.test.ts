@@ -876,7 +876,7 @@ describe('cookie signing config reached through a schema reference', () => {
 	it('signs a model cookie on error responses', async () => {
 		const app = new Elysia()
 			.model({ Session: kinds[0]![1]() })
-			.error(({ cookie, path }: any) => {
+			.onError(({ cookie, path }: any) => {
 				if (path !== '/hook') return
 				cookie.session.value = 'u1'
 				return new Response('handled', { status: 418 })

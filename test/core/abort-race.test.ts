@@ -19,7 +19,7 @@ import { origin } from '../../src/adapter/origin'
 // every scenario below runs real `Bun.serve` traffic and tries to break it.
 //
 // Probe points, and why they are the honest ones:
-//   * A request-lane hook (`.request()`) runs before any codegen-emitted site,
+//   * A request-lane hook (`.onRequest()`) runs before any codegen-emitted site,
 //     and the FIRST route-chain hook (`.derive()`) runs immediately after the
 //     route's entry probe and before every other one, so
 //     `context['~sig'] === undefined` there means, and only means, "this
@@ -203,14 +203,14 @@ describe('abort provenance window under concurrency', () => {
 							)
 						: next(request, server)
 			)
-			.request((context: any) => {
+			.onRequest((context: any) => {
 				classified.set(idOf(context.request), classify(context))
 			})
-			.beforeHandle((context: any) => {
+			.onBeforeHandle((context: any) => {
 				if (context.request.headers.get('x-abort') === '1')
 					controllers.get(idOf(context.request))!.abort()
 			})
-			.beforeHandle((context: any) => {
+			.onBeforeHandle((context: any) => {
 				sideEffect.add(idOf(context.request))
 			})
 			.get('/', () => 'ok')
@@ -302,13 +302,13 @@ describe('abort provenance window under concurrency', () => {
 
 				return next(request, server)
 			})
-			.request((context: any) => {
+			.onRequest((context: any) => {
 				delayedClass.set(idOf(context.request), classify(context))
 			})
 			.get('/', () => 'ok')
 
 		const pristineApp = new Elysia()
-			.request((context: any) => {
+			.onRequest((context: any) => {
 				pristineClass.set(idOf(context.request), classify(context))
 			})
 			.get('/', () => 'ok')
@@ -363,7 +363,7 @@ describe('abort provenance window under concurrency', () => {
 		const nestedIds: string[] = []
 
 		const app = new Elysia()
-			.request((context: any) => {
+			.onRequest((context: any) => {
 				const id = idOf(context.request)
 				classified.set(id, classify(context))
 

@@ -28,7 +28,7 @@ class OtherError extends Error {
 
 // Handler context narrows `error` to the registered class.
 {
-	new Elysia().error(MyError, ({ error }) => {
+	new Elysia().onError(MyError, ({ error }) => {
 		expectTypeOf(error).toEqualTypeOf<MyError>()
 	})
 }
@@ -36,7 +36,9 @@ class OtherError extends Error {
 // A returned error maps to its registered handler response.
 {
 	const app = new Elysia()
-		.error(MyError, ({ error }) => status(404, { message: error.message }))
+		.onError(MyError, ({ error }) =>
+			status(404, { message: error.message })
+		)
 		.get('/', () => new MyError('Hello Error'))
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
@@ -47,7 +49,9 @@ class OtherError extends Error {
 // Successful and handled-error responses remain distinct.
 {
 	const app = new Elysia()
-		.error(MyError, ({ error }) => status(404, { message: error.message }))
+		.onError(MyError, ({ error }) =>
+			status(404, { message: error.message })
+		)
 		.get('/', () =>
 			Math.random() > 0.5 ? ('ok' as const) : new MyError('x')
 		)
@@ -68,8 +72,8 @@ class OtherError extends Error {
 	}
 
 	const app = new Elysia()
-		.error(FirstError, () => problem(400, { detail: 'first' }))
-		.error(SecondError, () => problem(401, { detail: 'second' }))
+		.onError(FirstError, () => problem(400, { detail: 'first' }))
+		.onError(SecondError, () => problem(401, { detail: 'second' }))
 		.get('/', () => {
 			if (Math.random() > 0.5) return new FirstError()
 			if (Math.random() > 0.5) return new SecondError()
@@ -82,8 +86,8 @@ class OtherError extends Error {
 	>().toEqualTypeOf<200 | 400 | 401>()
 
 	const firstOnly = new Elysia()
-		.error(FirstError, () => problem(400, { detail: 'first' }))
-		.error(SecondError, () => problem(401, { detail: 'second' }))
+		.onError(FirstError, () => problem(400, { detail: 'first' }))
+		.onError(SecondError, () => problem(401, { detail: 'second' }))
 		.get('/', () =>
 			Math.random() > 0.5 ? new FirstError() : ('ok' as const)
 		)
@@ -108,7 +112,9 @@ class OtherError extends Error {
 // Resolving one returned error keeps the remaining error at 500.
 {
 	const app = new Elysia()
-		.error(MyError, ({ error }) => status(404, { message: error.message }))
+		.onError(MyError, ({ error }) =>
+			status(404, { message: error.message })
+		)
 		.get('/', () =>
 			Math.random() > 0.5 ? new MyError('x') : new OtherError('x')
 		)
@@ -158,7 +164,9 @@ class OtherError extends Error {
 // A registered class handler must not capture data shaped like an `Error`.
 {
 	const app = new Elysia()
-		.error(MyError, ({ error }) => status(404, { message: error.message }))
+		.onError(MyError, ({ error }) =>
+			status(404, { message: error.message })
+		)
 		.get('/', () => ({ id: 1, name: 'Alice', message: 'hi' }))
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
@@ -169,7 +177,7 @@ class OtherError extends Error {
 	class BareError extends Error {}
 
 	const bare = new Elysia()
-		.error(BareError, () => status(400, 'bare'))
+		.onError(BareError, () => status(400, 'bare'))
 		.get('/', () => ({ id: 1, name: 'Alice', message: 'hi' }))
 
 	expectTypeOf<(typeof bare)['~Routes']['get']['response']>().toEqualTypeOf<{
@@ -180,7 +188,7 @@ class OtherError extends Error {
 // `ZodError` declares `stack`, so it still routes to its registered handler.
 {
 	const app = new Elysia()
-		.error(ZodError, () => status(418, 'quack'))
+		.onError(ZodError, () => status(418, 'quack'))
 		.get('/', () => new ZodError([]))
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
@@ -191,7 +199,7 @@ class OtherError extends Error {
 // The reported repro, verbatim: the route's type always claimed 418, the
 // runtime now agrees (it used to serve the ZodError as `200 []`)
 {
-	const errorHandler = new Elysia().error('global', ZodError, ({ error }) =>
+	const errorHandler = new Elysia().onError('global', ZodError, ({ error }) =>
 		status(418, `quack! ${error.message}`)
 	)
 
@@ -204,7 +212,7 @@ class OtherError extends Error {
 
 // Same claim through the 2-arg class registration on an `as: 'global'` plugin
 {
-	const errorHandler = new Elysia({ as: 'global' }).error(
+	const errorHandler = new Elysia({ as: 'global' }).onError(
 		ZodError,
 		({ error }) => status(418, `quack! ${error.message}`)
 	)
@@ -225,7 +233,7 @@ class OtherError extends Error {
 	}
 
 	const app = new Elysia()
-		.error(Problem, () => status(418, 'problem'))
+		.onError(Problem, () => status(418, 'problem'))
 		.get('/', () => new Problem())
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
@@ -241,7 +249,7 @@ class OtherError extends Error {
 	}
 
 	const app = new Elysia()
-		.error(Bare, () => status(418, 'bare'))
+		.onError(Bare, () => status(418, 'bare'))
 		.get('/', () => new Bare())
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
@@ -252,7 +260,7 @@ class OtherError extends Error {
 // Plain handler returns use the error's status, or 500 by default.
 {
 	const app = new Elysia()
-		.error(MyError, ({ error }) => error.message)
+		.onError(MyError, ({ error }) => error.message)
 		.get('/', () => new MyError('x'))
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
@@ -261,7 +269,7 @@ class OtherError extends Error {
 }
 {
 	const app = new Elysia()
-		.error(NotFound, ({ error }) => error.message)
+		.onError(NotFound, ({ error }) => error.message)
 		.get('/', () => new NotFound())
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
@@ -272,8 +280,8 @@ class OtherError extends Error {
 // The first matching class handler determines the response.
 {
 	const app = new Elysia()
-		.error(MyError, () => status(418, 'parent' as const))
-		.error(ChildError, () => status(403, 'child' as const))
+		.onError(MyError, () => status(418, 'parent' as const))
+		.onError(ChildError, () => status(403, 'child' as const))
 		.get('/', () => new ChildError('x'))
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
@@ -284,7 +292,9 @@ class OtherError extends Error {
 // Local error handlers apply only to routes on the same instance.
 {
 	const plugin = new Elysia()
-		.error(MyError, ({ error }) => status(404, { message: error.message }))
+		.onError(MyError, ({ error }) =>
+			status(404, { message: error.message })
+		)
 		.get('/inner', () => new MyError('x'))
 
 	const app = new Elysia().use(plugin).get('/outer', () => new MyError('x'))
@@ -305,7 +315,7 @@ class OtherError extends Error {
 
 // Plugin-scoped handlers apply to the immediate consumer only.
 {
-	const plugin = new Elysia().error('plugin', MyError, ({ error }) =>
+	const plugin = new Elysia().onError('plugin', MyError, ({ error }) =>
 		status(404, { message: error.message })
 	)
 
@@ -331,7 +341,7 @@ class OtherError extends Error {
 
 // Global handlers apply at every nesting depth.
 {
-	const plugin = new Elysia().error('global', MyError, ({ error }) =>
+	const plugin = new Elysia().onError('global', MyError, ({ error }) =>
 		status(404, { message: error.message })
 	)
 
@@ -344,10 +354,10 @@ class OtherError extends Error {
 	}>()
 }
 
-// Catch-all `.error(fn)` handlers do not add route response types.
+// Catch-all `.onError(fn)` handlers do not add route response types.
 {
 	const app = new Elysia()
-		.error(({ error }) => {
+		.onError(({ error }) => {
 			expectTypeOf(error).toEqualTypeOf<unknown>()
 		})
 		.get('/', () => 'hi' as const)
@@ -362,7 +372,9 @@ class OtherError extends Error {
 	const routes = new Elysia().get('/', () => new MyError('x'))
 
 	const app = new Elysia()
-		.error(MyError, ({ error }) => status(404, { message: error.message }))
+		.onError(MyError, ({ error }) =>
+			status(404, { message: error.message })
+		)
 		.use(routes)
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
@@ -379,7 +391,9 @@ class OtherError extends Error {
 {
 	const sameInstance = new Elysia()
 		.get('/', () => new MyError('x'))
-		.error(MyError, ({ error }) => status(404, { message: error.message }))
+		.onError(MyError, ({ error }) =>
+			status(404, { message: error.message })
+		)
 
 	expectTypeOf<
 		(typeof sameInstance)['~Routes']['get']['response']
@@ -392,7 +406,9 @@ class OtherError extends Error {
 
 	const afterUse = new Elysia()
 		.use(new Elysia().get('/', () => new MyError('x')))
-		.error(MyError, ({ error }) => status(404, { message: error.message }))
+		.onError(MyError, ({ error }) =>
+			status(404, { message: error.message })
+		)
 
 	expectTypeOf<
 		(typeof afterUse)['~Routes']['get']['response']
@@ -402,9 +418,11 @@ class OtherError extends Error {
 
 	// A catch-all registered before the route doesn't change that
 	const afterOwnHook = new Elysia()
-		.error(() => {})
+		.onError(() => {})
 		.get('/', () => new MyError('x'))
-		.error(MyError, ({ error }) => status(404, { message: error.message }))
+		.onError(MyError, ({ error }) =>
+			status(404, { message: error.message })
+		)
 
 	expectTypeOf<
 		(typeof afterOwnHook)['~Routes']['get']['response']
@@ -415,7 +433,7 @@ class OtherError extends Error {
 	// Nor does a late catch-all add its response
 	const lateCatchAll = new Elysia()
 		.get('/', () => new MyError('x'))
-		.error(() => status(418, 'late' as const))
+		.onError(() => status(418, 'late' as const))
 
 	expectTypeOf<
 		(typeof lateCatchAll)['~Routes']['get']['response']
@@ -424,7 +442,7 @@ class OtherError extends Error {
 	}>()
 
 	// Nor does a plugin used later that brings its own handler
-	const handlerPlugin = new Elysia().error('global', MyError, () =>
+	const handlerPlugin = new Elysia().onError('global', MyError, () =>
 		status(418, 'plugin' as const)
 	)
 
@@ -454,8 +472,8 @@ class OtherError extends Error {
 // same class still answers
 {
 	const before = new Elysia()
-		.error(MyError, () => {})
-		.error(MyError, () => status(418, 'next' as const))
+		.onError(MyError, () => {})
+		.onError(MyError, () => status(418, 'next' as const))
 		.get('/', () => new MyError('x'))
 
 	expectTypeOf<
@@ -469,10 +487,10 @@ class OtherError extends Error {
 
 	// What it answers when it does answer stays
 	const sometimes = new Elysia()
-		.error(MyError, ({ error }) =>
+		.onError(MyError, ({ error }) =>
 			error.message ? status(409, 'own' as const) : undefined
 		)
-		.error(MyError, () => status(418, 'next' as const))
+		.onError(MyError, () => status(418, 'next' as const))
 		.get('/', () => new MyError('x'))
 
 	expectTypeOf<
@@ -484,7 +502,7 @@ class OtherError extends Error {
 
 	// With nothing after it, the error stays unhandled and is served as one
 	const alone = new Elysia()
-		.error(MyError, () => {})
+		.onError(MyError, () => {})
 		.get('/', () => new MyError('x'))
 
 	expectTypeOf<(typeof alone)['~Routes']['get']['response']>().toEqualTypeOf<{
@@ -502,11 +520,11 @@ class OtherError extends Error {
 // Mirrored at runtime by test/lifecycle/nested-hook-order.test.ts
 {
 	const routes = new Elysia()
-		.error(MyError, () => status(403, 'plugin' as const))
+		.onError(MyError, () => status(403, 'plugin' as const))
 		.get('/', () => new MyError('x'))
 
 	const before = new Elysia()
-		.error(MyError, () => status(418, 'parent' as const))
+		.onError(MyError, () => status(418, 'parent' as const))
 		.use(routes)
 
 	expectTypeOf<
@@ -520,7 +538,7 @@ class OtherError extends Error {
 
 	const after = new Elysia()
 		.use(routes)
-		.error(MyError, () => status(418, 'parent' as const))
+		.onError(MyError, () => status(418, 'parent' as const))
 
 	expectTypeOf<(typeof after)['~Routes']['get']['response']>().toEqualTypeOf<{
 		403: 'plugin'
@@ -528,7 +546,7 @@ class OtherError extends Error {
 
 	// A parent handler for another class leaves the plugin's handler alone
 	const other = new Elysia()
-		.error(OtherError, () => status(418, 'parent' as const))
+		.onError(OtherError, () => status(418, 'parent' as const))
 		.use(routes)
 
 	expectTypeOf<(typeof other)['~Routes']['get']['response']>().toEqualTypeOf<{
@@ -537,7 +555,7 @@ class OtherError extends Error {
 
 	// A child-class parent handler doesn't match the base-class error
 	const child = new Elysia()
-		.error(ChildError, () => status(418, 'parent' as const))
+		.onError(ChildError, () => status(418, 'parent' as const))
 		.use(routes)
 
 	expectTypeOf<(typeof child)['~Routes']['get']['response']>().toEqualTypeOf<{
@@ -546,17 +564,17 @@ class OtherError extends Error {
 
 	// A base-class parent handler does
 	const base = new Elysia()
-		.error(Error, () => status(418, 'parent' as const))
+		.onError(Error, () => status(418, 'parent' as const))
 		.use(routes)
 
 	expectTypeOf<(typeof base)['~Routes']['get']['response']>().toEqualTypeOf<{
 		418: 'parent'
 	}>()
 
-	// A catch-all `.error(fn)` runs first too, but may return nothing for an
+	// A catch-all `.onError(fn)` runs first too, but may return nothing for an
 	// error and fall through to the plugin's handler, so both can respond
 	const catchAll = new Elysia()
-		.error(() => status(418, 'catch-all' as const))
+		.onError(() => status(418, 'catch-all' as const))
 		.use(routes)
 
 	expectTypeOf<
@@ -568,11 +586,11 @@ class OtherError extends Error {
 
 	// Plugin handler registered after its route
 	const late = new Elysia()
-		.error(MyError, () => status(418, 'parent' as const))
+		.onError(MyError, () => status(418, 'parent' as const))
 		.use(
 			new Elysia()
 				.get('/', () => new MyError('x'))
-				.error(MyError, () => status(403, 'plugin' as const))
+				.onError(MyError, () => status(403, 'plugin' as const))
 		)
 
 	expectTypeOf<(typeof late)['~Routes']['get']['response']>().toEqualTypeOf<{
@@ -581,7 +599,7 @@ class OtherError extends Error {
 
 	// Global and plugin-scoped parent handlers take over too
 	const global = new Elysia()
-		.error('global', MyError, () => status(418, 'parent' as const))
+		.onError('global', MyError, () => status(418, 'parent' as const))
 		.use(routes)
 
 	expectTypeOf<
@@ -591,7 +609,7 @@ class OtherError extends Error {
 	}>()
 
 	const scoped = new Elysia()
-		.error('plugin', MyError, () => status(418, 'parent' as const))
+		.onError('plugin', MyError, () => status(418, 'parent' as const))
 		.use(routes)
 
 	expectTypeOf<
@@ -602,7 +620,7 @@ class OtherError extends Error {
 
 	// Inside a group
 	const grouped = new Elysia()
-		.error(MyError, () => status(418, 'parent' as const))
+		.onError(MyError, () => status(418, 'parent' as const))
 		.group('/g', (app) => app.use(routes))
 
 	expectTypeOf<
@@ -615,14 +633,14 @@ class OtherError extends Error {
 // Only the taken-over error moves; the plugin keeps the rest
 {
 	const routes = new Elysia()
-		.error(MyError, () => status(403, 'same' as const))
-		.error(OtherError, () => status(403, 'same' as const))
+		.onError(MyError, () => status(403, 'same' as const))
+		.onError(OtherError, () => status(403, 'same' as const))
 		.get('/', () =>
 			Math.random() > 0.5 ? new MyError('x') : new OtherError('y')
 		)
 
 	const app = new Elysia()
-		.error(MyError, () => status(418, 'parent' as const))
+		.onError(MyError, () => status(418, 'parent' as const))
 		.use(routes)
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
@@ -631,7 +649,7 @@ class OtherError extends Error {
 	}>()
 
 	const mixed = new Elysia()
-		.error(MyError, () => status(403, 'plugin' as const))
+		.onError(MyError, () => status(403, 'plugin' as const))
 		.get('/', () =>
 			Math.random() > 0.5
 				? new MyError('x')
@@ -641,8 +659,8 @@ class OtherError extends Error {
 		)
 
 	const app2 = new Elysia()
-		.error(MyError, () => status(418, 'parent' as const))
-		.error(OtherError, () => status(409, 'other' as const))
+		.onError(MyError, () => status(418, 'parent' as const))
+		.onError(OtherError, () => status(409, 'other' as const))
 		.use(mixed)
 
 	expectTypeOf<(typeof app2)['~Routes']['get']['response']>().toEqualTypeOf<{
@@ -703,7 +721,7 @@ class OtherError extends Error {
 
 	// A parent handler removes the matched error and adds its response.
 	const resolved = new Elysia()
-		.error(MyError, () => 'handled' as const)
+		.onError(MyError, () => 'handled' as const)
 		.use(used)
 
 	expectTypeOf<

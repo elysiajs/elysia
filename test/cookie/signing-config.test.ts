@@ -174,7 +174,7 @@ describe('cookie signing configuration', () => {
 	it('rejects a per-cookie secrets write through set() and update()', async () => {
 		const errors: string[] = []
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				errors.push((error as Error).message)
 			})
 			.get('/set', ({ cookie }) => {

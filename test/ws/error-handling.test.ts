@@ -52,7 +52,7 @@ describe('WebSocket errors thrown by error hooks', () => {
 		}
 
 		const app = new Elysia()
-			.error((_ctx: any) => {
+			.onError((_ctx: any) => {
 				throw new Error('secondary hook failure')
 			})
 			.use(websocket()).ws('/ws', {
@@ -258,7 +258,7 @@ describe('WebSocket production validation errors without error hooks', () => {
 describe('WebSocket upgrade validation error responses', () => {
 	it('uses the status and text body returned by the error hook', async () => {
 		const app = new Elysia()
-			.error(({ error }: any) => {
+			.onError(({ error }: any) => {
 				if (error instanceof ValidationError)
 					return status(401, 'denied')
 			})
@@ -290,7 +290,7 @@ describe('WebSocket upgrade validation error responses', () => {
 
 	it('uses the status and JSON body returned by the error hook', async () => {
 		const app = new Elysia()
-			.error(({ error }: any) => {
+			.onError(({ error }: any) => {
 				if (error instanceof ValidationError)
 					return status(403, { msg: 'forbidden' })
 			})
@@ -408,7 +408,7 @@ describe('WebSocket self-describing errors', () => {
 	// ElysiaWS wraps an ElysiaStatus as `{ status, error }` on the wire
 	it('adopts the error type into a problem returned by an error hook', async () => {
 		const app = new Elysia()
-			.error(() => problem(402, { detail: 'from hook' }))
+			.onError(() => problem(402, { detail: 'from hook' }))
 			.use(websocket()).ws('/ws', {
 				message() {
 					throw new OutOfCredit()
@@ -510,8 +510,8 @@ describe('WebSocket error hook registered after the route', () => {
 			for (const error of [undefined, () => {}]) {
 				const app = (
 					hook === 'later'
-						? routes(new Elysia(), error).error(onValidation)
-						: routes(new Elysia().error(onValidation), error)
+						? routes(new Elysia(), error).onError(onValidation)
+						: routes(new Elysia().onError(onValidation), error)
 				).listen(0)
 
 				try {
@@ -535,7 +535,7 @@ describe('WebSocket error hook registered after the route', () => {
 					throw new Late()
 				}
 			})
-			.error(Late, () => status(418, 'late'))
+			.onError(Late, () => status(418, 'late'))
 			.listen(0)
 
 		let ws: WebSocket | undefined
@@ -562,12 +562,12 @@ describe('WebSocket error hook registered after the route', () => {
 		for (const precompile of [false, true]) {
 			const app = new Elysia({ precompile })
 				.use(websocket())
-				.error(({ error }: any) => {
+				.onError(({ error }: any) => {
 					if (error instanceof RangeError)
 						throw new TypeError('secondary')
 				})
-				.error(TypeError, () => status(418, 'caught secondary'))
-				.beforeHandle(() => {
+				.onError(TypeError, () => status(418, 'caught secondary'))
+				.onBeforeHandle(() => {
 					throw new RangeError('original')
 				})
 				.get('/http', () => 'ok')

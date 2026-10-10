@@ -17,8 +17,8 @@ let stopping: Promise<void> | undefined
 let app: Elysia
 
 app = new Elysia()
-	.setup(() => setup.promise.then(() => {}))
-	.cleanup(() => {
+	.onStart(() => setup.promise.then(() => {}))
+	.onStop(() => {
 		cleaned = true
 	})
 	.get('/', () => {

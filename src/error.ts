@@ -1139,7 +1139,7 @@ export type TaggedHTTPError<Type extends string, Annotation = {}> = {
  * Self-describing HTTP error
  *
  * Annotate `status`, `headers` and `value` on the subclass and Elysia maps
- * the instance to a response on its own, no `.error(Class, handler)` needed
+ * the instance to a response on its own, no `.onError(Class, handler)` needed
  *
  * Everything an owned `HTTPError` serves is an RFC 9457 problem document:
  * `type` is the problem type carried on the wire, and the body (or the error

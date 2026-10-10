@@ -44,9 +44,9 @@ describe('a CRLF-poisoned header never escapes app.handle', () => {
 		expect(res.headers.has('x-injected')).toBe(false)
 	})
 
-	it('a throwing .error() hook degrades to 500 instead of rejecting', async () => {
+	it('a throwing .onError() hook degrades to 500 instead of rejecting', async () => {
 		const app = new Elysia()
-			.error(() => {
+			.onError(() => {
 				throw new Error('hook throws')
 			})
 			.get('/', () => {

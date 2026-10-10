@@ -9,7 +9,7 @@
 //    the plugin's own hooks,
 //    root hooks registered after .use]
 //
-// An app-wide observer registered before `.use()` (Sentry-style `.error(fn)`)
+// An app-wide observer registered before `.use()` (Sentry-style `.onError(fn)`)
 // must see every error, including ones a nested plugin handles. Nesting
 // depth, an intermediate plugin that only has `.derive`, a guard or a group
 // must not move root hooks behind the plugin's own.
@@ -88,32 +88,32 @@ const get = (path: string) => new Request(`http://localhost${path}`)
 // Register one logging hook of every type, tagged
 const hooks = (app: any, tag: string, log: Log) =>
 	app
-		.request(() => {
+		.onRequest(() => {
 			log.push(`request:${tag}`)
 		})
-		.parse(() => {
+		.onParse(() => {
 			log.push(`parse:${tag}`)
 		})
-		.transform(() => {
+		.onTransform(() => {
 			log.push(`transform:${tag}`)
 		})
 		.derive(() => {
 			log.push(`derive:${tag}`)
 			return {}
 		})
-		.beforeHandle(() => {
+		.onBeforeHandle(() => {
 			log.push(`beforeHandle:${tag}`)
 		})
-		.afterHandle(() => {
+		.onAfterHandle(() => {
 			log.push(`afterHandle:${tag}`)
 		})
 		.mapResponse(() => {
 			log.push(`mapResponse:${tag}`)
 		})
-		.afterResponse(() => {
+		.onAfterResponse(() => {
 			log.push(`afterResponse:${tag}`)
 		})
-		.error(() => {
+		.onError(() => {
 			log.push(`error:${tag}`)
 		})
 
@@ -277,11 +277,11 @@ for (const lane of lanes)
 					lane,
 					(base) =>
 						shape.mount(
-							base.error(({ error }: any) => {
+							base.onError(({ error }: any) => {
 								seen.push((error as Error).message)
 							}),
 							new Elysia()
-								.error(MyError, () => status(403, 'plugin'))
+								.onError(MyError, () => status(403, 'plugin'))
 								.get('/', () => new MyError('boom')),
 							[]
 						),
@@ -330,7 +330,7 @@ for (const lane of lanes)
 // Type-level counterpart: test/types/error.ts
 const routes = () =>
 	new Elysia()
-		.error(MyError, () => status(403, 'plugin'))
+		.onError(MyError, () => status(403, 'plugin'))
 		.get('/', () => new MyError('x'))
 
 const cases: [
@@ -342,41 +342,42 @@ const cases: [
 	[
 		'parent handler before .use takes over',
 		(base) =>
-			base.error(MyError, () => status(418, 'parent')).use(routes()),
+			base.onError(MyError, () => status(418, 'parent')).use(routes()),
 		[418, 'parent']
 	],
 	[
 		'parent handler after .use keeps the plugin handler',
 		(base) =>
-			base.use(routes()).error(MyError, () => status(418, 'parent')),
+			base.use(routes()).onError(MyError, () => status(418, 'parent')),
 		[403, 'plugin']
 	],
 	[
 		'parent handler for another class leaves the plugin alone',
 		(base) =>
-			base.error(OtherError, () => status(418, 'parent')).use(routes()),
+			base.onError(OtherError, () => status(418, 'parent')).use(routes()),
 		[403, 'plugin']
 	],
 	[
 		'child-class parent handler does not match',
 		(base) =>
-			base.error(ChildError, () => status(418, 'parent')).use(routes()),
+			base.onError(ChildError, () => status(418, 'parent')).use(routes()),
 		[403, 'plugin']
 	],
 	[
 		'base-class parent handler matches',
-		(base) => base.error(Error, () => status(418, 'parent')).use(routes()),
+		(base) =>
+			base.onError(Error, () => status(418, 'parent')).use(routes()),
 		[418, 'parent']
 	],
 	[
 		'plugin handler registered after its route',
 		(base) =>
 			base
-				.error(MyError, () => status(418, 'parent'))
+				.onError(MyError, () => status(418, 'parent'))
 				.use(
 					new Elysia()
 						.get('/', () => new MyError('x'))
-						.error(MyError, () => status(403, 'plugin'))
+						.onError(MyError, () => status(403, 'plugin'))
 				),
 		[418, 'parent']
 	],
@@ -384,7 +385,7 @@ const cases: [
 		'global parent handler',
 		(base) =>
 			base
-				.error('global', MyError, () => status(418, 'parent'))
+				.onError('global', MyError, () => status(418, 'parent'))
 				.use(routes()),
 		[418, 'parent']
 	],
@@ -392,7 +393,7 @@ const cases: [
 		'plugin-scoped parent handler',
 		(base) =>
 			base
-				.error('plugin', MyError, () => status(418, 'parent'))
+				.onError('plugin', MyError, () => status(418, 'parent'))
 				.use(routes()),
 		[418, 'parent']
 	],
@@ -400,7 +401,7 @@ const cases: [
 		'inside a group',
 		(base) =>
 			(base as any)
-				.error(MyError, () => status(418, 'parent'))
+				.onError(MyError, () => status(418, 'parent'))
 				.group('/g', (app: any) => app.use(routes())),
 		[418, 'parent'],
 		'/g'
@@ -409,24 +410,24 @@ const cases: [
 		'inside a guard',
 		(base) =>
 			(base as any)
-				.error(MyError, () => status(418, 'parent'))
+				.onError(MyError, () => status(418, 'parent'))
 				.guard({}, (app: any) => app.use(routes())),
 		[418, 'parent']
 	],
 	[
 		'array .use',
 		(base) =>
-			base.error(MyError, () => status(418, 'parent')).use([routes()]),
+			base.onError(MyError, () => status(418, 'parent')).use([routes()]),
 		[418, 'parent']
 	],
 	[
 		'grandparent before .use of a plugin with its own handler',
 		(base) =>
 			base
-				.error(MyError, () => status(451, 'grandparent'))
+				.onError(MyError, () => status(451, 'grandparent'))
 				.use(
 					new Elysia()
-						.error(MyError, () => status(418, 'parent'))
+						.onError(MyError, () => status(418, 'parent'))
 						.use(routes())
 				),
 		[451, 'grandparent']
@@ -435,7 +436,7 @@ const cases: [
 		'grandparent before .use of a plugin with no hooks',
 		(base) =>
 			base
-				.error(MyError, () => status(451, 'grandparent'))
+				.onError(MyError, () => status(451, 'grandparent'))
 				.use(new Elysia().use(routes())),
 		[451, 'grandparent']
 	],
@@ -443,7 +444,7 @@ const cases: [
 		'grandparent before .use of a plugin with only .derive',
 		(base) =>
 			base
-				.error(MyError, () => status(451, 'grandparent'))
+				.onError(MyError, () => status(451, 'grandparent'))
 				.use(new Elysia().derive(() => ({ a: 1 })).use(routes())),
 		[451, 'grandparent']
 	],
@@ -451,10 +452,10 @@ const cases: [
 		'grandparent before .use of a plugin handling an unhandled route',
 		(base) =>
 			base
-				.error(MyError, () => status(451, 'grandparent'))
+				.onError(MyError, () => status(451, 'grandparent'))
 				.use(
 					new Elysia()
-						.error(MyError, () => status(418, 'parent'))
+						.onError(MyError, () => status(418, 'parent'))
 						.use(new Elysia().get('/', () => new MyError('x')))
 				),
 		[451, 'grandparent']
@@ -475,11 +476,11 @@ for (const lane of lanes)
 				lane,
 				(base) =>
 					base
-						.error(MyError, () => status(418, 'parent'))
+						.onError(MyError, () => status(418, 'parent'))
 						.use(
 							new Elysia()
-								.error(MyError, () => status(403, 'same'))
-								.error(OtherError, () => status(403, 'same'))
+								.onError(MyError, () => status(403, 'same'))
+								.onError(OtherError, () => status(403, 'same'))
 								.get('/:kind', ({ params }) =>
 									params.kind === 'my'
 										? new MyError('x')

@@ -9,10 +9,10 @@ describe('afterResponse after thrown errors', () => {
 			(resolve) => (complete = resolve)
 		)
 		const app = new Elysia()
-			.request(() => {
+			.onRequest(() => {
 				throw new Error('boom')
 			})
-			.afterResponse(() => {
+			.onAfterResponse(() => {
 				complete(true)
 			})
 			.get('/x', () => 'x')
@@ -26,15 +26,15 @@ describe('afterResponse after thrown errors', () => {
 		let complete!: (status: number) => void
 		const completed = new Promise<number>((resolve) => (complete = resolve))
 		const app = new Elysia()
-			.error(async () => {
+			.onError(async () => {
 				await Promise.resolve()
 				return new Response('teapot', { status: 418 })
 			})
-			.request(async () => {
+			.onRequest(async () => {
 				await Promise.resolve()
 				throw new Error('boom')
 			})
-			.afterResponse((ctx) => {
+			.onAfterResponse((ctx) => {
 				complete(ctx.set.status as number)
 			})
 			.get('/y', () => 'y')
@@ -48,11 +48,11 @@ describe('afterResponse after thrown errors', () => {
 		let complete!: (status: number) => void
 		const completed = new Promise<number>((resolve) => (complete = resolve))
 		const app = new Elysia()
-			.error(async () => {
+			.onError(async () => {
 				await Promise.resolve()
 				return new Response('teapot', { status: 418 })
 			})
-			.afterResponse((ctx) => {
+			.onAfterResponse((ctx) => {
 				complete(ctx.set.status as number)
 			})
 			.get('/z', () => {

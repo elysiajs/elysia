@@ -11,8 +11,8 @@ const SAMPLES = 9
 const plugins = Array.from({ length: LARGE }, () =>
 	new Elysia()
 		.wrap((next) => next)
-		.setup(() => {})
-		.cleanup(() => {})
+		.onStart(() => {})
+		.onStop(() => {})
 )
 const smallPlugins = plugins.slice(0, SMALL)
 

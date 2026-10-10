@@ -91,7 +91,7 @@ describe('problem()', () => {
 
 	it('serializes a thrown problem through an error hook', async () => {
 		const app = new Elysia()
-			.error(() => {})
+			.onError(() => {})
 			.get('/', () => {
 				throw problem({ status: 418, detail: 'teapot' })
 			})
@@ -108,7 +108,7 @@ describe('problem()', () => {
 
 	it('serializes a problem returned by an error hook', async () => {
 		const app = new Elysia()
-			.error(({ error }: { error: unknown }) =>
+			.onError(({ error }: { error: unknown }) =>
 				problem({ status: 500, detail: (error as Error).message })
 			)
 			.get('/', () => {

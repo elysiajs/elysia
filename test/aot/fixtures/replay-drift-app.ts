@@ -5,7 +5,7 @@ import { Elysia, t } from '../../../src'
 const drift = !!process.env.REPLAY_DRIFT
 
 export const app = new Elysia()
-if (drift) app.beforeHandle(() => new Response('DENIED', { status: 401 }))
+if (drift) app.onBeforeHandle(() => new Response('DENIED', { status: 401 }))
 
 app.get('/secret', () => 'SECRET').post(
 	'/body',

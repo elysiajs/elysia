@@ -26,7 +26,7 @@ describe('response lifecycle resources', () => {
 			let ran = false
 
 			const app = new Elysia()
-				.afterResponse(() => {
+				.onAfterResponse(() => {
 					ran = true
 				})
 				.get('/', () => 'ok')

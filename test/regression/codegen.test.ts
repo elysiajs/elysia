@@ -227,7 +227,7 @@ describe('AOT query parsing', () => {
 describe('fetch-level error fallback for compiled routes', () => {
 	it('maps an async handler exception through the application error hook', async () => {
 		const app = new Elysia()
-			.error(({ error, set }: any) => {
+			.onError(({ error, set }: any) => {
 				set.status = 418
 				return (error as Error).message
 			})
@@ -249,7 +249,7 @@ describe('fetch-level error fallback for compiled routes', () => {
 
 	it('returns 500 when the application error hook also throws', async () => {
 		const app = new Elysia()
-			.error(() => {
+			.onError(() => {
 				throw new Error('error hook itself throws')
 			})
 			.post('/', { body: t.Object({ n: t.Number() }) }, () => {
@@ -305,7 +305,7 @@ describe('request abort short-circuits lifecycle hooks', () => {
 		expect(plainSrc).not.toContain('ea(c)')
 
 		const hooked = new Elysia()
-			.beforeHandle(() => {})
+			.onBeforeHandle(() => {})
 			.get('/hooked', () => 'ok')
 		const hookedSrc = compileHandler(
 			hooked['~routes']![0] as any,
@@ -326,9 +326,9 @@ describe('request abort short-circuits lifecycle hooks', () => {
 		// suspend cannot observe an abort either, so it must not pay the
 		// (lazy, ~214ns on Bun) `request.signal` getter.
 		const app = new Elysia()
-			.transform(() => {})
+			.onTransform(() => {})
 			.guard({ beforeHandle: () => {} })
-			.beforeHandle(() => {})
+			.onBeforeHandle(() => {})
 			.get('/sync', () => 'ok')
 
 		const src = compileHandler(app['~routes']![0] as any, app).toString()
@@ -349,8 +349,8 @@ describe('request abort short-circuits lifecycle hooks', () => {
 
 	it('arms at each suspension boundary in an async route', () => {
 		const app = new Elysia()
-			.transform(async () => {})
-			.beforeHandle(() => {})
+			.onTransform(async () => {})
+			.onBeforeHandle(() => {})
 			.get('/async', () => 'ok')
 
 		const src = compileHandler(app['~routes']![0] as any, app).toString()
@@ -366,10 +366,10 @@ describe('request abort short-circuits lifecycle hooks', () => {
 
 	it('emits no abort machinery at all when `abortSignal` is disabled', () => {
 		const withAbort = new Elysia()
-			.beforeHandle(() => {})
+			.onBeforeHandle(() => {})
 			.get('/x', () => 'ok')
 		const without = new Elysia({ abortSignal: false })
-			.beforeHandle(() => {})
+			.onBeforeHandle(() => {})
 			.get('/x', () => 'ok')
 
 		const src = compileHandler(
@@ -394,11 +394,11 @@ describe('request abort short-circuits lifecycle hooks', () => {
 		let beforeHandleCalled = false
 
 		const app = new Elysia()
-			.transform(async () => {
+			.onTransform(async () => {
 				controller.abort()
 				await Promise.resolve()
 			})
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				beforeHandleCalled = true
 			})
 			.get('/', () => 'ok')
@@ -452,6 +452,14 @@ describe('request abort short-circuits lifecycle hooks', () => {
 // bounded by the nesting the compiler emits.
 describe('thousands of hooks of one kind', () => {
 	const N = 5000
+	// hook kind -> the builder method that registers it
+	const method = {
+		beforeHandle: 'onBeforeHandle',
+		afterHandle: 'onAfterHandle',
+		mapResponse: 'mapResponse',
+		transform: 'onTransform',
+		derive: 'derive'
+	} as const
 
 	for (const lane of [jitHandle, precompileHandle, aotReconstructHandle]) {
 		for (const kind of [
@@ -466,7 +474,7 @@ describe('thousands of hooks of one kind', () => {
 
 				const instance = await lane.make((app) => {
 					for (let i = 0; i < N; i++)
-						(app as any)[kind](() => {
+						(app as any)[method[kind]](() => {
 							count++
 						})
 
@@ -500,7 +508,7 @@ describe('thousands of hooks of one kind', () => {
 			const instance = await lane
 				.make((app) => {
 					for (let i = 0; i < N; i++)
-						app.error(({ error }) => {
+						app.onError(({ error }) => {
 							count++
 
 							if (i === N - 1) return (error as Error).message
@@ -548,7 +556,7 @@ describe('thousands of hooks of one kind', () => {
 
 				const instance = await lane.make((app) => {
 					for (let i = 0; i < N; i++)
-						(app as any)[kind](() => {
+						(app as any)[method[kind]](() => {
 							count++
 
 							if (i === N / 2) return 'stop'

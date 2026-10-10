@@ -153,7 +153,7 @@ const scenarios: Scenario[] = [
 		build: (_, run) => {
 			const site = bareSiteOf(run)
 
-			return new Elysia().error(site('error', () => 'recovered')).get(
+			return new Elysia().onError(site('error', () => 'recovered')).get(
 				'/',
 				site('handler', () => 'ok')
 			)
@@ -164,7 +164,7 @@ const scenarios: Scenario[] = [
 		emits: ['if(_rk>=2)throw _le', 'return _t(c,2,_r,undefined,e'],
 		sites: ['handler', 'error'],
 		build: (site) =>
-			new Elysia().error(site('error', () => 'recovered')).get(
+			new Elysia().onError(site('error', () => 'recovered')).get(
 				'/',
 				site('handler', () => 'ok')
 			)
@@ -175,8 +175,8 @@ const scenarios: Scenario[] = [
 		sites: ['handler', 'e0', 'e1'],
 		build: (site) =>
 			new Elysia()
-				.error(site('e0', () => undefined))
-				.error(site('e1', (c) => `recovered ${c.error?.message}`))
+				.onError(site('e0', () => undefined))
+				.onError(site('e1', (c) => `recovered ${c.error?.message}`))
 				.get(
 					'/',
 					site('handler', () => 'ok')
@@ -189,9 +189,9 @@ const scenarios: Scenario[] = [
 		headers: { 'x-user': 'a' },
 		build: (site) =>
 			new Elysia()
-				.error(site('error', () => 'recovered'))
+				.onError(site('error', () => 'recovered'))
 				.derive(site('derive', (c) => ({ user: c.headers['x-user'] })))
-				.beforeHandle(
+				.onBeforeHandle(
 					site('bh', (c) => (c.user ? undefined : c.status(401)))
 				)
 				.get(
@@ -208,7 +208,7 @@ const scenarios: Scenario[] = [
 		build: (site) =>
 			new Elysia()
 				.mapDerive(site('derive', () => ({ user: 'u' })))
-				.beforeHandle(
+				.onBeforeHandle(
 					site('bh', (c) => (c.user === 'u' ? undefined : 'lost'))
 				)
 				.get(
@@ -263,7 +263,7 @@ const scenarios: Scenario[] = [
 		sites: ['handler', 'ah'],
 		build: (site, run) =>
 			new Elysia()
-				.afterResponse(() => {
+				.onAfterResponse(() => {
 					run.log.push('afterResponse')
 				})
 				.get(
@@ -313,7 +313,7 @@ const scenarios: Scenario[] = [
 		sites: ['bh', 'handler', 'ah', 'mr'],
 		build: (site, run) =>
 			new Elysia()
-				.afterResponse(() => {
+				.onAfterResponse(() => {
 					run.log.push('afterResponse')
 				})
 				.get(
@@ -361,7 +361,7 @@ const scenarios: Scenario[] = [
 		sites: ['bh', 'error'],
 		build: (site) =>
 			new Elysia()
-				.error(site('error', () => 'recovered'))
+				.onError(site('error', () => 'recovered'))
 				.get(
 					'/',
 					{ beforeHandle: site('bh', () => undefined) },
@@ -501,7 +501,7 @@ describe('async tail', () => {
 		const sources: string[] = []
 		setOnEmit((code) => sources.push(code))
 		const app = new Elysia()
-			.error(() => Promise.resolve('recovered') as any)
+			.onError(() => Promise.resolve('recovered') as any)
 			.mapResponse(() => undefined)
 			.get('/', () => Promise.reject(new Error('late')) as any)
 

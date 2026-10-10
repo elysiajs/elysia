@@ -22,20 +22,20 @@ await probe('noHook', new Elysia().get('/rs', schema, bad))
 await probe(
 	'hookReturnsValue',
 	new Elysia()
-		.error(({ error }: any) => ({ oops: (error as Error).message }))
+		.onError(({ error }: any) => ({ oops: (error as Error).message }))
 		.get('/rs', schema, bad)
 )
 
 await probe(
 	'hookReadsSetStatus',
 	new Elysia()
-		.error(({ set }: any) => ({ sawStatus: set.status }))
+		.onError(({ set }: any) => ({ sawStatus: set.status }))
 		.get('/rs', schema, bad)
 )
 
 await probe(
 	'hookReturnsUndefined',
-	new Elysia().error(() => {}).get('/rs', schema, bad)
+	new Elysia().onError(() => {}).get('/rs', schema, bad)
 )
 
 await probe(
@@ -48,7 +48,7 @@ await probe(
 await probe(
 	'requestViolation',
 	new Elysia()
-		.error(({ error }: any) => ({ oops: (error as Error).message }))
+		.onError(({ error }: any) => ({ oops: (error as Error).message }))
 		.get('/rs', { query: t.Object({ n: t.Number() }) } as any, () => 'ok')
 )
 

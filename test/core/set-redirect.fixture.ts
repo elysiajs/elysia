@@ -18,7 +18,7 @@ const out: Record<string, { status: number; body: string }> = {}
 
 out.dispatch = await report(
 	await new Elysia()
-		.request(secret)
+		.onRequest(secret)
 		.get('/secret', () => 'plain')
 		.handle('/secret')
 )
@@ -30,7 +30,7 @@ out.dispatch = await report(
 }
 
 {
-	const app = new Elysia().beforeHandle(() => {}).get('/secret', secret)
+	const app = new Elysia().onBeforeHandle(() => {}).get('/secret', secret)
 	;(app as any).compile()
 	out.jit = await report(await app.handle('/secret'))
 }

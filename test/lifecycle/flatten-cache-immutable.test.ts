@@ -7,10 +7,10 @@ describe('Inherited plugin hook isolation', () => {
 		const trace: string[] = []
 
 		const plugin = new Elysia()
-			.transform('global', ({ path }) => {
+			.onTransform('global', ({ path }) => {
 				trace.push(`transform:${path}`)
 			})
-			.beforeHandle('global', ({ path }) => {
+			.onBeforeHandle('global', ({ path }) => {
 				trace.push(`before:${path}`)
 			})
 
@@ -21,7 +21,7 @@ describe('Inherited plugin hook isolation', () => {
 			.get('/c', () => 'c')
 			.guard({}, (guarded) =>
 				guarded
-					.beforeHandle(({ path }) => {
+					.onBeforeHandle(({ path }) => {
 						trace.push(`local-before:${path}`)
 					})
 					.get('/d', () => 'd')

@@ -80,7 +80,7 @@ function useHookPlugins(
 	hook: () => void
 ) {
 	for (let i = 0; i < PLUGINS; i++) {
-		const plugin = new Elysia({ as: 'plugin' }).beforeHandle(hook)
+		const plugin = new Elysia({ as: 'plugin' }).onBeforeHandle(hook)
 
 		app.use(plugin)
 		refs.push(new WeakRef(plugin))

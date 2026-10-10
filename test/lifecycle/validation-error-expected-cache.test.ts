@@ -10,7 +10,7 @@ describe('ValidationError expected values', () => {
 		let mutationApplied: boolean | undefined
 
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				if (!(error instanceof ValidationError)) return
 
 				const expected = error.payload.expected as Expected
@@ -47,7 +47,7 @@ describe('ValidationError expected values', () => {
 		let expected: unknown
 
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				if (error instanceof ValidationError)
 					expected = error.payload.expected
 			})

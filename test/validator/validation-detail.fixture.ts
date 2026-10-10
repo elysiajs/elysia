@@ -33,7 +33,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 		let calls = 0
 		let captured: ValidationError | undefined
 		const response = await new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				if (error instanceof ValidationError) {
 					captured = error
 					return error.toResponse()
@@ -98,7 +98,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 
 	maskedErrorDetail: () =>
 		new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				if (error instanceof ValidationError)
 					return error.detail(error.message)
 			})
@@ -115,7 +115,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 
 	unsafeErrorDetail: () =>
 		new Elysia({ allowUnsafeValidationDetails: true })
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				if (error instanceof ValidationError)
 					return error.detail(error.message)
 			})

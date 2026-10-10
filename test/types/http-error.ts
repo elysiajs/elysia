@@ -7,7 +7,7 @@ import type { StatusMap } from '../../src/constants'
 import { expectTypeOf } from 'expect-type'
 
 // A self-describing error maps to the RFC 9457 problem document it actually
-// serves, at its own status, without `.error()`.
+// serves, at its own status, without `.onError()`.
 
 class OutOfCredit extends HTTPError<'OUT_OF_CREDIT'> {
 	type = 'OUT_OF_CREDIT' as const
@@ -86,7 +86,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 // Registering a handler replaces the self-described response.
 {
 	const app = new Elysia()
-		.error(OutOfCredit, () => status(409, 'handled' as const))
+		.onError(OutOfCredit, () => status(409, 'handled' as const))
 		.get('/', () => new OutOfCredit())
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
@@ -100,7 +100,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 // An explicit response sharing the error's status survives the replacement.
 {
 	const app = new Elysia()
-		.error(OutOfCredit, () => status(409, 'handled' as const))
+		.onError(OutOfCredit, () => status(409, 'handled' as const))
 		.get('/', () =>
 			Math.random() > 0.5 ? new OutOfCredit() : status(402, 'explicit')
 		)
@@ -115,7 +115,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 // problem document.
 {
 	const app = new Elysia()
-		.error(OutOfCredit, () => undefined)
+		.onError(OutOfCredit, () => undefined)
 		.get('/', () => new OutOfCredit())
 
 	type Response = (typeof app)['~Routes']['get']['response']
@@ -536,7 +536,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	class Denied extends HTTPError.id('DENIED', 400) {}
 
 	const app = new Elysia()
-		.error(Denied, () => problem(400, { detail: 'q' }))
+		.onError(Denied, () => problem(400, { detail: 'q' }))
 		.get('/', () => new Denied())
 
 	expectTypeOf<
@@ -674,7 +674,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	}
 
 	const app = new Elysia()
-		.error(Flaky, () => undefined)
+		.onError(Flaky, () => undefined)
 		.get('/', () => new Flaky())
 
 	type Response = (typeof app)['~Routes']['get']['response']
@@ -692,7 +692,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	}
 
 	const app = new Elysia()
-		.error(Flaky, () => status(409, 'handled' as const))
+		.onError(Flaky, () => status(409, 'handled' as const))
 		.get('/', () => new Flaky())
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
@@ -721,8 +721,8 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	}
 
 	const app = new Elysia()
-		.error(Error1, problem(400, { detail: 'q' }))
-		.error(Error2, problem(401, { detail: 'q' }))
+		.onError(Error1, problem(400, { detail: 'q' }))
+		.onError(Error2, problem(401, { detail: 'q' }))
 		.get('/', (): Error1 | Error2 | Error | 'ok' => {
 			if (Math.random() > 0.25) return new Error1()
 			if (Math.random() > 0.25) return new Error2()
@@ -748,7 +748,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	class Error1 extends HTTPError.id('error1') {}
 
 	const app = new Elysia()
-		.error(Error1, () => problem(400, { detail: 'q' }))
+		.onError(Error1, () => problem(400, { detail: 'q' }))
 		.get('/', (): Error1 | Error | 'ok' => {
 			if (Math.random() > 0.5) return new Error1()
 			if (Math.random() > 0.5) return new Error()

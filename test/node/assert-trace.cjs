@@ -24,7 +24,7 @@ module.exports = async (Elysia, trace, format) => {
 						detail.onEvent((child) => watch('child', child))
 					})
 				})
-				.beforeHandle(() => {})
+				.onBeforeHandle(() => {})
 				.get('/', () => {
 					handled++
 					if (fail) throw failure

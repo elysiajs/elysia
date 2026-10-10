@@ -209,7 +209,7 @@ describe('Mount', () => {
 
 		const app = new Elysia()
 			.use((app) =>
-				app.beforeHandle(({ set }) => {
+				app.onBeforeHandle(({ set }) => {
 					set.headers['access-control-allow-origin'] = '*'
 				})
 			)

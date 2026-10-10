@@ -13,11 +13,13 @@ describe('plugin seed identity', () => {
 
 		for (const seed of seeds)
 			app.use(
-				new Elysia({ as: 'global', name: 'seeded', seed }).beforeHandle(
-					() => {
-						count++
-					}
-				)
+				new Elysia({
+					as: 'global',
+					name: 'seeded',
+					seed
+				}).onBeforeHandle(() => {
+					count++
+				})
 			)
 
 		await app.get('/', () => 'ok').handle('/')

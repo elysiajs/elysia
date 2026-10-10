@@ -117,7 +117,7 @@ describe('application default headers', () => {
 		let request = 0
 		const app = new Elysia()
 			.headers({ 'x-default': 'base' })
-			.request(({ set }) => {
+			.onRequest(({ set }) => {
 				if (request++ === 0) set.headers['x-first'] = 'yes'
 			})
 			.get('/', () => 'ok')
@@ -130,7 +130,7 @@ describe('application default headers', () => {
 		const seen: object[] = []
 		const app = new Elysia()
 			.headers({ 'x-default': 'base' })
-			.request(({ set }) => {
+			.onRequest(({ set }) => {
 				seen.push(set.headers)
 			})
 			.get('/', ({ set }) => {
@@ -162,7 +162,7 @@ describe('application default headers', () => {
 	it('preserves header mutations made by error hooks', async () => {
 		const errorApp = new Elysia()
 			.headers({ 'x-default': 'base' })
-			.error(({ set }) => {
+			.onError(({ set }) => {
 				set.headers['x-error'] = 'yes'
 				return 'caught'
 			})

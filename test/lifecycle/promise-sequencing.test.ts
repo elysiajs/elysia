@@ -72,10 +72,10 @@ for (const mode of ['lazy', 'eager', 'frozen'])
 								})
 							})
 						if (phase === 'request' || phase === 'tracedRequest')
-							app.request([hook, next])
+							app.onRequest([hook, next])
 						const error = phase === 'error' || phase === 'notFound'
 						if (error)
-							app.error(hook).error(() => {
+							app.onError(hook).onError(() => {
 								next()
 								return 'handled'
 							})
@@ -127,7 +127,7 @@ for (const mode of ['lazy', 'eager', 'frozen'])
 							}
 				const app = buildMode(mode, () =>
 					new Elysia()
-						.request(() => promise(undefined))
+						.onRequest(() => promise(undefined))
 						.post(
 							'/',
 							{
@@ -181,8 +181,8 @@ for (const mode of ['lazy', 'eager', 'frozen'])
 			const p = runInNewContext('Promise.resolve(undefined)')
 			const app = buildMode(mode, () =>
 				new Elysia()
-					.error(() => p)
-					.error(() => 'handled')
+					.onError(() => p)
+					.onError(() => 'handled')
 					.get('/', () => {
 						throw new Error('original')
 					})
@@ -202,7 +202,7 @@ for (const mode of ['lazy', 'eager', 'frozen'])
 			})
 			const app = buildMode(mode, () =>
 				new Elysia()
-					.afterResponse(({ responseValue }) => {
+					.onAfterResponse(({ responseValue }) => {
 						values.push(responseValue)
 						finished()
 					})
@@ -224,8 +224,8 @@ for (const mode of ['lazy', 'eager', 'frozen'])
 				const app = buildMode(mode, () => {
 					const app = new Elysia()
 					if (path === 'headers') app.headers({ 'x-default': 'yes' })
-					if (path === 'before') app.beforeHandle(() => {})
-					if (path === 'error') app.error(() => 'caught')
+					if (path === 'before') app.onBeforeHandle(() => {})
+					if (path === 'error') app.onError(() => 'caught')
 					return app.get(
 						'/',
 						path === 'set'
@@ -264,7 +264,7 @@ for (const mode of ['lazy', 'eager', 'frozen'])
 			})
 			const app = buildMode(mode, () =>
 				new Elysia()
-					.error(({ error }) => error.message)
+					.onError(({ error }) => error.message)
 					.get('/', { transform: () => p }, () => 'wrong')
 			)
 			const pending = app.handle('/')
@@ -282,7 +282,7 @@ for (const mode of ['lazy', 'eager', 'frozen'])
 			}
 			const app = buildMode(mode, () =>
 				new Elysia()
-					.error(({ error }) => error.message)
+					.onError(({ error }) => error.message)
 					.get('/', { beforeHandle: () => value }, () => 'wrong')
 			)
 			const response = await app.handle('/')
@@ -306,7 +306,7 @@ for (const mode of ['lazy', 'eager', 'frozen'])
 				]
 				const app = buildMode(mode, () => {
 					const app = new Elysia()
-					if (phase === 'request') app.request(hooks)
+					if (phase === 'request') app.onRequest(hooks)
 					return app.get(
 						'/',
 						phase === 'request' ? {} : { [phase]: hooks },
@@ -323,10 +323,10 @@ for (const mode of ['lazy', 'eager', 'frozen'])
 it('keeps proved non-returning hooks and a hook-free route synchronous', () => {
 	const calls: string[] = []
 	const app = new Elysia()
-		.request(() => {
+		.onRequest(() => {
 			calls.push('request')
 		})
-		.beforeHandle(function before() {
+		.onBeforeHandle(function before() {
 			calls.push('before')
 		})
 		.get('/', () => 'ok')
@@ -343,10 +343,10 @@ it('awaits cross-realm promises in an eager compact beforeHandle prefix', async 
 	const p = runInNewContext('Promise.resolve(undefined)')
 	const calls: string[] = []
 	const first = new Elysia()
-		.beforeHandle('plugin', (() => p).bind(null))
+		.onBeforeHandle('plugin', (() => p).bind(null))
 		.get('/first', () => 'first')
 	const second = new Elysia()
-		.beforeHandle('plugin', () => {
+		.onBeforeHandle('plugin', () => {
 			calls.push('second')
 		})
 		.get('/second', () => 'second')
@@ -395,6 +395,14 @@ const nativeDispatch = (app: any, init: RequestInit = {}, path = '/') => {
 	}
 	return { pending, reads: () => reads }
 }
+
+// phase name -> the builder method that registers it
+const method = {
+	transform: 'onTransform',
+	beforeHandle: 'onBeforeHandle',
+	afterHandle: 'onAfterHandle',
+	mapResponse: 'mapResponse'
+} as const
 
 for (const mode of ['lazy', 'eager', 'frozen'])
 	describe(`${mode} native await boundaries`, () => {
@@ -469,19 +477,22 @@ for (const mode of ['lazy', 'eager', 'frozen'])
 								phase === 'request' ||
 								phase === 'tracedRequest'
 							)
-								app.request([hook, follow])
+								app.onRequest([hook, follow])
 							else if (phase === 'derive')
-								app.derive(hook as any).beforeHandle(follow)
+								app.derive(hook as any).onBeforeHandle(follow)
 							else if (phase === 'handler')
-								app.afterHandle(follow)
+								app.onAfterHandle(follow)
 							else if (phase === 'parse')
-								app.parse(hook).beforeHandle(follow)
+								app.onParse(hook).onBeforeHandle(follow)
 							else if (phase === 'error')
-								app.error(hook).error(() => {
+								app.onError(hook).onError(() => {
 									follow()
 									return 'ok'
 								})
-							else (app as any)[phase]([hook, follow])
+							else
+								(app as any)[
+									method[phase as keyof typeof method]
+								]([hook, follow])
 							const handler =
 								phase === 'handler'
 									? hook
@@ -567,7 +578,7 @@ for (const mode of ['lazy', 'eager', 'frozen'])
 								}
 							}
 						})
-							.beforeHandle(() => {
+							.onBeforeHandle(() => {
 								next = true
 							})
 							.post(
@@ -602,7 +613,7 @@ for (const mode of ['lazy', 'eager', 'frozen'])
 		it('keeps skipped default parsing cold', async () => {
 			const app = buildMode(mode, () =>
 				new Elysia()
-					.beforeHandle(() => {})
+					.onBeforeHandle(() => {})
 					.post('/', ({ body }) =>
 						body === undefined ? 'ok' : 'wrong'
 					)
@@ -664,7 +675,7 @@ for (const mode of ['lazy', 'eager', 'frozen'])
 						...(slot === 'body' ? { parse: () => ({ n: 1 }) } : {})
 					}
 					const app = buildMode(mode, () => {
-						const app = new Elysia().transform((c) => {
+						const app = new Elysia().onTransform((c) => {
 							context = c
 						})
 						const handler =
@@ -701,9 +712,9 @@ for (const mode of ['lazy', 'eager', 'frozen'])
 		it('does not arm disabled cancellation even after awaiting lifecycle hooks', async () => {
 			const app = buildMode(mode, () =>
 				new Elysia({ abortSignal: false })
-					.request(async () => {})
-					.transform(async () => {})
-					.beforeHandle(async () => {})
+					.onRequest(async () => {})
+					.onTransform(async () => {})
+					.onBeforeHandle(async () => {})
 					.get('/', async () => 'ok')
 			)
 			const controller = new AbortController()
@@ -737,12 +748,12 @@ for (const mode of ['lazy', 'eager', 'frozen']) {
 				new Elysia()
 					.use(
 						new Elysia()
-							.beforeHandle('plugin', hook)
+							.onBeforeHandle('plugin', hook)
 							.get('/first', () => 'first')
 					)
 					.use(
 						new Elysia()
-							.beforeHandle('plugin', () => {
+							.onBeforeHandle('plugin', () => {
 								next = true
 								order.push('second')
 							})
@@ -768,7 +779,7 @@ for (const mode of ['lazy', 'eager', 'frozen']) {
 	it(`${mode} arms the selected synchronous EncodeFrom branch in a mixed response table`, async () => {
 		const app = buildMode(mode, () =>
 			new Elysia()
-				.beforeHandle(() => {})
+				.onBeforeHandle(() => {})
 				.get(
 					'/',
 					{

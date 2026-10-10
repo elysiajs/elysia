@@ -39,7 +39,7 @@ describe('NODE_ENV=production', () => {
 		let own = false
 		let enumerable = false
 		const app = new Elysia()
-			.request((context) => {
+			.onRequest((context) => {
 				own = Object.hasOwn(context, 'path')
 				enumerable = Object.keys(context).includes('path')
 			})

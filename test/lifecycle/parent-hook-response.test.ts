@@ -52,24 +52,24 @@ const denied: Case[2] = [
 const cases: Case[] = [
 	[
 		'local beforeHandle before .use',
-		() => new Elysia().beforeHandle(deny).use(routes()),
+		() => new Elysia().onBeforeHandle(deny).use(routes()),
 		denied
 	],
 	[
 		'plugin-scoped beforeHandle before .use',
-		() => new Elysia().beforeHandle('plugin', deny).use(routes()),
+		() => new Elysia().onBeforeHandle('plugin', deny).use(routes()),
 		denied
 	],
 	[
 		'global beforeHandle before .use',
-		() => new Elysia().beforeHandle('global', deny).use(routes()),
+		() => new Elysia().onBeforeHandle('global', deny).use(routes()),
 		denied
 	],
 	[
 		'a status both the route and the hook serve',
 		() =>
 			new Elysia()
-				.beforeHandle(deny)
+				.onBeforeHandle(deny)
 				.use(
 					new Elysia().get('/', ({ request }) =>
 						request.headers.has('x-own') ? status(401, 'own') : 'ok'
@@ -101,7 +101,7 @@ const cases: Case[] = [
 		'afterHandle returning a status before .use',
 		() =>
 			new Elysia()
-				.afterHandle(({ request }) =>
+				.onAfterHandle(({ request }) =>
 					request.headers.has('x-deny')
 						? status(401, 'after')
 						: undefined
@@ -114,13 +114,15 @@ const cases: Case[] = [
 	],
 	[
 		'root before .use of a plugin that uses the routes',
-		() => new Elysia().beforeHandle(deny).use(new Elysia().use(routes())),
+		() => new Elysia().onBeforeHandle(deny).use(new Elysia().use(routes())),
 		denied
 	],
 	[
 		'intermediate plugin before its own .use',
 		() =>
-			new Elysia().use(new Elysia().beforeHandle(midDeny).use(routes())),
+			new Elysia().use(
+				new Elysia().onBeforeHandle(midDeny).use(routes())
+			),
 		[
 			[{}, 200, 'ok'],
 			[{ 'x-mid': '1' }, 402, 'mid']
@@ -130,8 +132,8 @@ const cases: Case[] = [
 		'root and intermediate plugin before .use',
 		() =>
 			new Elysia()
-				.beforeHandle(deny)
-				.use(new Elysia().beforeHandle(midDeny).use(routes())),
+				.onBeforeHandle(deny)
+				.use(new Elysia().onBeforeHandle(midDeny).use(routes())),
 		[
 			[{}, 200, 'ok'],
 			[{ 'x-deny': '1' }, 401, 'no'],
@@ -155,7 +157,7 @@ const cases: Case[] = [
 		'hook before a guard wrapping .use',
 		() =>
 			new Elysia()
-				.beforeHandle(deny)
+				.onBeforeHandle(deny)
 				.guard({}, (app) => app.use(routes())),
 		denied
 	],
@@ -163,7 +165,7 @@ const cases: Case[] = [
 		'hook before a group wrapping .use',
 		() =>
 			new Elysia()
-				.beforeHandle(deny)
+				.onBeforeHandle(deny)
 				.group('/g', (app) => app.use(routes())),
 		denied,
 		'/g'
@@ -172,38 +174,39 @@ const cases: Case[] = [
 		'hook inside a group before .use',
 		() =>
 			new Elysia().group('/g', (app) =>
-				app.beforeHandle(deny).use(routes())
+				app.onBeforeHandle(deny).use(routes())
 			),
 		denied,
 		'/g'
 	],
 	[
 		'prefixed parent',
-		() => new Elysia({ prefix: '/api' }).beforeHandle(deny).use(routes()),
+		() => new Elysia({ prefix: '/api' }).onBeforeHandle(deny).use(routes()),
 		denied,
 		'/api'
 	],
 	[
 		'array .use',
-		() => new Elysia().beforeHandle(deny).use([routes()]),
+		() => new Elysia().onBeforeHandle(deny).use([routes()]),
 		denied
 	],
 	[
 		'prefixed parent, array .use',
-		() => new Elysia({ prefix: '/api' }).beforeHandle(deny).use([routes()]),
+		() =>
+			new Elysia({ prefix: '/api' }).onBeforeHandle(deny).use([routes()]),
 		denied,
 		'/api'
 	],
 	[
 		'async plugin instance',
-		() => new Elysia().beforeHandle(deny).use(Promise.resolve(routes())),
+		() => new Elysia().onBeforeHandle(deny).use(Promise.resolve(routes())),
 		denied
 	],
 	[
 		'prefixed parent, async plugin instance',
 		() =>
 			new Elysia({ prefix: '/api' })
-				.beforeHandle(deny)
+				.onBeforeHandle(deny)
 				.use(Promise.resolve(routes())),
 		denied,
 		'/api'
@@ -212,7 +215,7 @@ const cases: Case[] = [
 		"earlier sibling's plugin-scoped hook",
 		() =>
 			new Elysia()
-				.use(new Elysia().beforeHandle('plugin', forbid))
+				.use(new Elysia().onBeforeHandle('plugin', forbid))
 				.use(routes()),
 		[
 			[{}, 200, 'ok'],
@@ -223,7 +226,7 @@ const cases: Case[] = [
 		"earlier sibling's global hook",
 		() =>
 			new Elysia()
-				.use(new Elysia().beforeHandle('global', forbid))
+				.use(new Elysia().onBeforeHandle('global', forbid))
 				.use(routes()),
 		[
 			[{}, 200, 'ok'],
@@ -232,14 +235,15 @@ const cases: Case[] = [
 	],
 	[
 		"earlier sibling's local hook doesn't reach",
-		() => new Elysia().use(new Elysia().beforeHandle(forbid)).use(routes()),
+		() =>
+			new Elysia().use(new Elysia().onBeforeHandle(forbid)).use(routes()),
 		[[{ 'x-sibling': '1' }, 200, 'ok']]
 	],
 	[
 		"earlier array sibling's plugin-scoped hook",
 		() =>
 			new Elysia().use([
-				new Elysia().beforeHandle('plugin', forbid),
+				new Elysia().onBeforeHandle('plugin', forbid),
 				routes()
 			]),
 		[
@@ -251,15 +255,15 @@ const cases: Case[] = [
 		"parent class handler takes over, parent hook's response stays",
 		() =>
 			new Elysia()
-				.error(MyError, () => status(418, 'parent'))
-				.beforeHandle(({ request }) =>
+				.onError(MyError, () => status(418, 'parent'))
+				.onBeforeHandle(({ request }) =>
 					request.headers.has('x-deny')
 						? status(403, 'plugin')
 						: undefined
 				)
 				.use(
 					new Elysia()
-						.error(MyError, () => status(403, 'plugin'))
+						.onError(MyError, () => status(403, 'plugin'))
 						.get('/', () => new MyError('x'))
 				),
 		[
@@ -270,17 +274,17 @@ const cases: Case[] = [
 	// test/types/error.ts: a catch-all before `.use` types as a union with
 	// the plugin's own handler, since it may fall through
 	[
-		'catch-all .error(fn) before .use',
+		'catch-all .onError(fn) before .use',
 		() =>
 			new Elysia()
-				.error(({ request }) =>
+				.onError(({ request }) =>
 					request.headers.has('x-deny')
 						? status(418, 'catch-all')
 						: undefined
 				)
 				.use(
 					new Elysia()
-						.error(MyError, () => status(403, 'plugin'))
+						.onError(MyError, () => status(403, 'plugin'))
 						.get('/', () => new MyError('x'))
 				),
 		[
@@ -293,22 +297,22 @@ const cases: Case[] = [
 	// scope
 	[
 		"local hook after .use doesn't reach",
-		() => new Elysia().use(routes()).beforeHandle(deny),
+		() => new Elysia().use(routes()).onBeforeHandle(deny),
 		[[{ 'x-deny': '1' }, 200, 'ok']]
 	],
 	[
 		"intermediate plugin's local hook after its .use doesn't reach",
-		() => new Elysia().use(new Elysia().use(routes()).beforeHandle(deny)),
+		() => new Elysia().use(new Elysia().use(routes()).onBeforeHandle(deny)),
 		[[{ 'x-deny': '1' }, 200, 'ok']]
 	],
 	[
 		"plugin-scoped hook after .use doesn't reach",
-		() => new Elysia().use(routes()).beforeHandle('plugin', deny),
+		() => new Elysia().use(routes()).onBeforeHandle('plugin', deny),
 		[[{ 'x-deny': '1' }, 200, 'ok']]
 	],
 	[
 		"global hook after .use doesn't reach",
-		() => new Elysia().use(routes()).beforeHandle('global', deny),
+		() => new Elysia().use(routes()).onBeforeHandle('global', deny),
 		[[{ 'x-deny': '1' }, 200, 'ok']]
 	]
 ]
@@ -368,7 +372,7 @@ describe('parent hook responses on used routes', () => {
 			await upgrade(
 				new Elysia()
 					.use(websocket())
-					.beforeHandle(deny)
+					.onBeforeHandle(deny)
 					.ws('/ws', { message() {} })
 			)
 		).toEqual([401, 'no', true])
@@ -377,7 +381,7 @@ describe('parent hook responses on used routes', () => {
 			await upgrade(
 				new Elysia()
 					.use(websocket())
-					.beforeHandle(deny)
+					.onBeforeHandle(deny)
 					.use(new Elysia().ws('/ws', { message() {} }))
 			)
 		).toEqual([401, 'no', true])

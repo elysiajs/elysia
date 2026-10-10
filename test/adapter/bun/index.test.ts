@@ -54,12 +54,12 @@ describe('Bun adapter', () => {
 			.headers({
 				'x-header': 'test'
 			})
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				caughtError = error as Error
 
 				return 'handled'
 			})
-			.request(({ set }) => {
+			.onRequest(({ set }) => {
 				set.status = 400
 
 				throw new Error('A')

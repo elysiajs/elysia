@@ -28,7 +28,7 @@ describe('abort short-circuit', () => {
 		let handlerCalled = false
 
 		const app = new Elysia()
-			.request(async () => {
+			.onRequest(async () => {
 				await Promise.resolve()
 			})
 			.get('/', () => {
@@ -45,7 +45,7 @@ describe('abort short-circuit', () => {
 		const controller = new AbortController()
 
 		const app = new Elysia()
-			.request(async () => {
+			.onRequest(async () => {
 				controller.abort()
 				await Promise.resolve()
 			})
@@ -77,7 +77,7 @@ describe('abort short-circuit', () => {
 		let handlerCalled = false
 
 		const app = new Elysia()
-			.request(() => {})
+			.onRequest(() => {})
 			.get('/', () => {
 				handlerCalled = true
 
@@ -96,11 +96,11 @@ describe('abort short-circuit', () => {
 		let handlerCalled = false
 
 		const app = new Elysia()
-			.request(async () => {
+			.onRequest(async () => {
 				await Promise.resolve()
 				controller.abort()
 			})
-			.request(() => {
+			.onRequest(() => {
 				secondHookCalled = true
 			})
 			.get('/', () => {
@@ -132,7 +132,7 @@ describe('abort signal arming', () => {
 		let armedInHandler: unknown = 'unset'
 
 		const app = new Elysia()
-			.beforeHandle((context: any) => {
+			.onBeforeHandle((context: any) => {
 				armedInHook = context['~sig']
 			})
 			.get('/', (context: any) => {
@@ -163,7 +163,7 @@ describe('abort signal arming', () => {
 			}
 		}
 
-		const app = new Elysia().beforeHandle(() => {}).get('/', () => 'ok')
+		const app = new Elysia().onBeforeHandle(() => {}).get('/', () => 'ok')
 
 		void app.fetch
 
@@ -187,10 +187,10 @@ describe('abort signal arming', () => {
 		let armedAfterAwait: unknown = 'unset'
 
 		const app = new Elysia()
-			.transform(async () => {
+			.onTransform(async () => {
 				await Promise.resolve()
 			})
-			.beforeHandle((context: any) => {
+			.onBeforeHandle((context: any) => {
 				armedAfterAwait = context['~sig']
 			})
 			.get('/', () => 'ok')
@@ -208,10 +208,10 @@ describe('abort signal arming', () => {
 		let secondHookCalled = false
 
 		const app = new Elysia()
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				controller.abort()
 			})
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				secondHookCalled = true
 			})
 			.get('/', () => 'ok')
@@ -241,10 +241,10 @@ describe('abort signal arming', () => {
 						server
 					)
 			)
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				controller.abort()
 			})
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				secondHookCalled = true
 			})
 			.get('/', () => 'ok')
@@ -319,11 +319,11 @@ describe('hook-less routes never observe abort', () => {
 	it('still short-circuits the same route once it has a beforeHandle', async () => {
 		// the contrast that makes the test above a decision and not an
 		// accident: adding one hook restores eager arming at route entry, on
-		// the same in-process lane, with no `.request()` hook to arm ahead of it
+		// the same in-process lane, with no `.onRequest()` hook to arm ahead of it
 		let handlerCalled = false
 
 		const app = new Elysia()
-			.beforeHandle(() => {})
+			.onBeforeHandle(() => {})
 			.get('/', () => {
 				handlerCalled = true
 
@@ -345,8 +345,8 @@ describe('abortSignal: false', () => {
 		let handlerCalled = false
 
 		const app = new Elysia({ abortSignal: false })
-			.request(() => {})
-			.beforeHandle(() => {})
+			.onRequest(() => {})
+			.onBeforeHandle(() => {})
 			.get('/', () => {
 				handlerCalled = true
 				return 'ran'

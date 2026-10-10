@@ -124,9 +124,9 @@ describe('trace', () => {
 			}
 
 		const plugin = new Elysia()
-			.request(() => {})
-			.transform(() => {})
-			.error(() => {})
+			.onRequest(() => {})
+			.onTransform(() => {})
+			.onError(() => {})
 			.use(trace())
 			.trace(
 				'plugin',
@@ -638,5 +638,98 @@ describe('trace', () => {
 		expect(response.headers.get('content-type')).not.toContain(
 			'application/json'
 		)
+	})
+
+	it('gives every process the lifecycle request id and its event', async () => {
+		// a listener correlates a span with its request through `event.id`, and
+		// tells which lifecycle it is in through `event.event`
+		const lifecycleIds: string[] = []
+		let seen: Record<string, string[]> = {}
+		let events: Record<string, string[]> = {}
+		let settled!: () => void
+
+		const record = (
+			name: string,
+			process: { id: string; event: string }
+		) => {
+			;(seen[name] ??= []).push(process.id)
+			;(events[name] ??= []).push(process.event)
+		}
+
+		const app = new Elysia()
+			.use(trace())
+			.trace(
+				({
+					id,
+					onRequest,
+					onBeforeHandle,
+					onHandle,
+					onAfterHandle,
+					onAfterResponse,
+					onError
+				}) => {
+					lifecycleIds.push(id)
+
+					onRequest((event) => record('onRequest', event))
+					onBeforeHandle((event) => {
+						record('onBeforeHandle', event)
+						event.onEvent((child) =>
+							record('onBeforeHandle child', child)
+						)
+					})
+					onHandle((event) => record('onHandle', event))
+					onAfterHandle((event) => record('onAfterHandle', event))
+					onError((event) => record('onError', event))
+					onAfterResponse((event) => {
+						record('onAfterResponse', event)
+						settled()
+					})
+				}
+			)
+			.onBeforeHandle(function check() {})
+			.get('/', () => 'hi')
+			.get('/error', () => {
+				throw new Error('boom')
+			})
+
+		const request = async (path: string) => {
+			lifecycleIds.length = 0
+			seen = {}
+			events = {}
+
+			const done = new Promise<void>((resolve) => (settled = resolve))
+			await app.handle(path)
+			await done
+
+			return { id: lifecycleIds[0], seen, events }
+		}
+
+		const ok = await request('/')
+		expect(ok.id).toBeString()
+		expect(ok.id).not.toBe('')
+		expect(ok.seen).toEqual({
+			onRequest: [ok.id],
+			onBeforeHandle: [ok.id],
+			'onBeforeHandle child': [ok.id],
+			onHandle: [ok.id],
+			onAfterHandle: [ok.id],
+			onAfterResponse: [ok.id]
+		})
+		// a child reports the event of the group it belongs to
+		expect(ok.events).toEqual({
+			onRequest: ['request'],
+			onBeforeHandle: ['beforeHandle'],
+			'onBeforeHandle child': ['beforeHandle'],
+			onHandle: ['handle'],
+			onAfterHandle: ['afterHandle'],
+			onAfterResponse: ['afterResponse']
+		})
+
+		const failed = await request('/error')
+		expect(failed.id).not.toBe(ok.id)
+		expect(failed.seen.onError).toEqual([failed.id])
+		expect(failed.seen.onAfterResponse).toEqual([failed.id])
+		expect(failed.events.onError).toEqual(['error'])
+		expect(failed.events.onAfterResponse).toEqual(['afterResponse'])
 	})
 })

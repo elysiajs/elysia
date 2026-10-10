@@ -14,7 +14,7 @@ describe('afterResponse trace on a router miss', () => {
 					onStop(({ elapsed }) => resolve(elapsed))
 				})
 			})
-			.afterResponse(async () => {
+			.onAfterResponse(async () => {
 				await Bun.sleep(20)
 			})
 			.get('/', () => 'hit')

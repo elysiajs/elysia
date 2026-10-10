@@ -368,7 +368,7 @@ describe('model reference pre-scan', () => {
 		const app = new Elysia().guard({ query: 'OlderGhost' as any })
 
 		for (let i = 0; i < 200; i++)
-			app.beforeHandle(i % 2 ? 'plugin' : 'global', () => {})
+			app.onBeforeHandle(i % 2 ? 'plugin' : 'global', () => {})
 
 		app.get('/older', () => 'x')
 
@@ -382,7 +382,7 @@ describe('model reference pre-scan', () => {
 			.guard({ query: 'CombineGhost' as any })
 			.get('/combine', () => 'x')
 
-		const app = new Elysia().beforeHandle('plugin', () => {}).use(child)
+		const app = new Elysia().onBeforeHandle('plugin', () => {}).use(child)
 
 		expect(() => app.compile()).toThrow(
 			/Unknown model reference "CombineGhost"/
@@ -391,7 +391,7 @@ describe('model reference pre-scan', () => {
 
 	it('finds a ref on the over side of an absorbed hook chain', () => {
 		const child = new Elysia()
-			.beforeHandle('plugin', () => {})
+			.onBeforeHandle('plugin', () => {})
 			.get('/over', () => 'x')
 
 		const app = new Elysia().guard({ query: 'OverGhost' as any }).use(child)
@@ -404,7 +404,7 @@ describe('model reference pre-scan', () => {
 	it('memoizes a deep no-ref propagated chain as false', () => {
 		const app = new Elysia()
 
-		for (let i = 0; i < 500; i++) app.beforeHandle('plugin', () => {})
+		for (let i = 0; i < 500; i++) app.onBeforeHandle('plugin', () => {})
 
 		app.get('/deep', () => 'x')
 

@@ -32,13 +32,13 @@ import { Prettify } from '../../../src/types'
 // Type soundness of lifecycle event in local
 {
 	const app = new Elysia()
-		.error(({ status }) => {
+		.onError(({ status }) => {
 			if (Math.random() > 0.05) return status(400)
 		})
 		.derive(({ status }) => {
 			if (Math.random() > 0.05) return status(401)
 		})
-		.beforeHandle([
+		.onBeforeHandle([
 			({ status }) => {
 				if (Math.random() > 0.05) return status(402)
 			},
@@ -98,13 +98,13 @@ import { Prettify } from '../../../src/types'
 // Type soundness of lifecycle event in scoped
 {
 	const app = new Elysia()
-		.error(({ status }) => {
+		.onError(({ status }) => {
 			if (Math.random() > 0.05) return status(400)
 		})
 		.derive(({ status }) => {
 			if (Math.random() > 0.05) return status(401)
 		})
-		.beforeHandle([
+		.onBeforeHandle([
 			({ status }) => {
 				if (Math.random() > 0.05) return status(402)
 			},
@@ -165,13 +165,13 @@ import { Prettify } from '../../../src/types'
 // Type soundness of lifecycle event in global
 {
 	const app = new Elysia()
-		.error(({ status }) => {
+		.onError(({ status }) => {
 			if (Math.random() > 0.05) return status(400)
 		})
 		.derive(({ status }) => {
 			if (Math.random() > 0.05) return status(401)
 		})
-		.beforeHandle([
+		.onBeforeHandle([
 			({ status }) => {
 				if (Math.random() > 0.05) return status(402)
 			},
@@ -243,7 +243,7 @@ import { Prettify } from '../../../src/types'
 				derive: () => ({ a: 'a' as const })
 			}
 		})
-		.error(({ status }) => {
+		.onError(({ status }) => {
 			if (Math.random() < 0.05) return status(400)
 		})
 		.derive(({ status }) => {
@@ -253,7 +253,7 @@ import { Prettify } from '../../../src/types'
 				b: 'b' as const
 			}
 		})
-		.beforeHandle([
+		.onBeforeHandle([
 			({ status }) => {
 				if (Math.random() < 0.05) return status(402)
 			},
@@ -855,7 +855,7 @@ import { Prettify } from '../../../src/types'
 // Reconcile response
 {
 	const app = new Elysia()
-		.beforeHandle(({ status }) =>
+		.onBeforeHandle(({ status }) =>
 			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
 		)
 		.get('/', ({ status }) =>
@@ -871,10 +871,10 @@ import { Prettify } from '../../../src/types'
 // onBeforeHandle
 {
 	const app = new Elysia()
-		.beforeHandle(({ status }) =>
+		.onBeforeHandle(({ status }) =>
 			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
 		)
-		.beforeHandle([
+		.onBeforeHandle([
 			({ status }) =>
 				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
 			({ status }) =>
@@ -892,10 +892,10 @@ import { Prettify } from '../../../src/types'
 // onBeforeHandle scoped
 {
 	const app = new Elysia()
-		.beforeHandle('plugin', ({ status }) =>
+		.onBeforeHandle('plugin', ({ status }) =>
 			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
 		)
-		.beforeHandle('plugin', [
+		.onBeforeHandle('plugin', [
 			({ status }) =>
 				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
 			({ status }) =>
@@ -913,10 +913,10 @@ import { Prettify } from '../../../src/types'
 // onBeforeHandle global
 {
 	const app = new Elysia()
-		.beforeHandle('global', ({ status }) =>
+		.onBeforeHandle('global', ({ status }) =>
 			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
 		)
-		.beforeHandle('global', [
+		.onBeforeHandle('global', [
 			({ status }) =>
 				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
 			({ status }) =>
@@ -934,10 +934,10 @@ import { Prettify } from '../../../src/types'
 // onAfterHandle local
 {
 	const app = new Elysia()
-		.afterHandle(({ status }) =>
+		.onAfterHandle(({ status }) =>
 			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
 		)
-		.afterHandle([
+		.onAfterHandle([
 			({ status }) =>
 				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
 			({ status }) =>
@@ -955,10 +955,10 @@ import { Prettify } from '../../../src/types'
 // onAfterHandle scoped
 {
 	const app = new Elysia()
-		.afterHandle('plugin', ({ status }) =>
+		.onAfterHandle('plugin', ({ status }) =>
 			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
 		)
-		.afterHandle('plugin', [
+		.onAfterHandle('plugin', [
 			({ status }) =>
 				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
 			({ status }) =>
@@ -976,10 +976,10 @@ import { Prettify } from '../../../src/types'
 // onAfterHandle global
 {
 	const app = new Elysia()
-		.afterHandle('global', ({ status }) =>
+		.onAfterHandle('global', ({ status }) =>
 			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
 		)
-		.afterHandle('global', [
+		.onAfterHandle('global', [
 			({ status }) =>
 				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
 			({ status }) =>
@@ -997,10 +997,10 @@ import { Prettify } from '../../../src/types'
 // onError local
 {
 	const app = new Elysia()
-		.error(({ status }) =>
+		.onError(({ status }) =>
 			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
 		)
-		.error([
+		.onError([
 			({ status }) =>
 				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
 			({ status }) =>
@@ -1018,10 +1018,10 @@ import { Prettify } from '../../../src/types'
 // onError scoped
 {
 	const app = new Elysia()
-		.error('plugin', ({ status }) =>
+		.onError('plugin', ({ status }) =>
 			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
 		)
-		.error('plugin', [
+		.onError('plugin', [
 			({ status }) =>
 				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
 			({ status }) =>
@@ -1039,10 +1039,10 @@ import { Prettify } from '../../../src/types'
 // onError global
 {
 	const app = new Elysia()
-		.error('global', ({ status }) =>
+		.onError('global', ({ status }) =>
 			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
 		)
-		.error('global', [
+		.onError('global', [
 			({ status }) =>
 				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
 			({ status }) =>
@@ -1617,7 +1617,7 @@ import { Prettify } from '../../../src/types'
 // merge possible path
 {
 	const app = new Elysia()
-		.beforeHandle(({ status }) => {
+		.onBeforeHandle(({ status }) => {
 			if (Math.random() > 0.05) return 'fouco' as const
 			if (Math.random() > 0.05) return 'sartre' as const
 			if (Math.random() > 0.05) return status(404, 'lilith')

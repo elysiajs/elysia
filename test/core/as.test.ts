@@ -81,7 +81,7 @@ describe('as', () => {
 			.guard({
 				response: t.Number()
 			})
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				called++
 			})
 			// @ts-expect-error
@@ -113,7 +113,7 @@ describe('as', () => {
 			.guard({
 				response: t.Number()
 			})
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				called++
 			})
 			// @ts-expect-error
@@ -125,7 +125,7 @@ describe('as', () => {
 			.guard({
 				response: t.Boolean()
 			})
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				called++
 			})
 			.get('/plugin', () => true)
@@ -152,7 +152,7 @@ describe('as', () => {
 			.guard({
 				response: t.Number()
 			})
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				called++
 			})
 			// @ts-expect-error
@@ -164,7 +164,7 @@ describe('as', () => {
 			.guard('plugin', {
 				response: t.String()
 			})
-			.beforeHandle('plugin', () => {
+			.onBeforeHandle('plugin', () => {
 				called++
 			})
 			.get('/plugin', () => 'ok')
@@ -188,7 +188,7 @@ describe('as', () => {
 			.guard({
 				response: t.Number()
 			})
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				called++
 			})
 			// @ts-expect-error
@@ -219,7 +219,7 @@ describe('as', () => {
 			.guard({
 				response: t.Number()
 			})
-			.beforeHandle(() => {
+			.onBeforeHandle(() => {
 				called++
 			})
 			// @ts-expect-error

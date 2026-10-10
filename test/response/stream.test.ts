@@ -602,7 +602,7 @@ describe('Stream', () => {
 		let errorStatus: number | undefined
 
 		const app = new Elysia()
-			.error(({ error }) => {
+			.onError(({ error }) => {
 				onErrorCalled = true
 				errorStatus = (error as any)?.status
 			})
@@ -624,15 +624,15 @@ describe('Stream', () => {
 	it('handle sse with plugin global hooks and trace', async () => {
 		const PluginA = () =>
 			new Elysia({ name: 'PluginA' })
-				.beforeHandle(() => {})
-				.afterHandle(() => {})
-				.parse(() => {})
-				.transform(() => {})
-				.error(() => {})
-				.afterResponse(() => {})
-				.setup(() => {})
-				.cleanup(() => {})
-				.request(() => {})
+				.onBeforeHandle(() => {})
+				.onAfterHandle(() => {})
+				.onParse(() => {})
+				.onTransform(() => {})
+				.onError(() => {})
+				.onAfterResponse(() => {})
+				.onStart(() => {})
+				.onStop(() => {})
+				.onRequest(() => {})
 				.use(trace())
 				.trace(() => {})
 				.as('global')

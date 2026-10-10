@@ -7,7 +7,7 @@ describe('afterResponse status', () => {
 		let status: number
 
 		const app = new Elysia()
-			.afterResponse(({ set }) => {
+			.onAfterResponse(({ set }) => {
 				status = set.status as number
 			})
 			.get('/error', (c) => c.status(401, { error: 'Unauthorized' }))
@@ -22,7 +22,7 @@ describe('afterResponse status', () => {
 	it('observes the default status for a missing route', async () => {
 		let status: number
 
-		const app = new Elysia().afterResponse(({ set }) => {
+		const app = new Elysia().onAfterResponse(({ set }) => {
 			status = set.status as number
 		})
 
