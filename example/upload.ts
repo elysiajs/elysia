@@ -2,19 +2,23 @@ import { Elysia, t } from '../src'
 import { upload } from '../test/utils'
 
 const app = new Elysia()
-	.post('/single', ({ body: { file } }) => file, {
-		body: t.Object({
-			file: t.File()
-		})
-	})
+	.post(
+		'/single',
+		{
+			body: t.Object({
+				file: t.File()
+			})
+		},
+		({ body: { file } }) => file
+	)
 	.post(
 		'/multiple',
-		({ body: { files } }) => files.reduce((a, b) => a + b.size, 0),
 		{
 			body: t.Object({
 				files: t.Files()
 			})
-		}
+		},
+		({ body: { files } }) => files.reduce((a, b) => a + b.size, 0)
 	)
 	.listen(3000)
 

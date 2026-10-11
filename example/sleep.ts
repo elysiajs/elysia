@@ -1,4 +1,5 @@
-const sleep = (time: number) => new Promise(resolve => setTimeout(resolve, time))
+const sleep = (time: number) =>
+	new Promise((resolve) => setTimeout(resolve, time))
 
 Bun.serve({
 	port: 3000,
