@@ -1,22 +1,10 @@
-import { Elysia, t } from '../src'
+import { Elysia, HTTPError, t } from '../src'
+
+class CustomError extends HTTPError.id('NAME', 418) {}
 
 new Elysia()
-	.post(
-		'/',
-		{
-			body: t.Object({
-				username: t.String(),
-				password: t.String(),
-				nested: t.Optional(
-					t.Object({
-						hi: t.String()
-					})
-				)
-			}),
-			error({ error }) {
-				console.log(error)
-			}
-		},
-		({ body }) => body
-	)
+	.onError('global', CustomError, () => ({
+		Phoebe: 'Chupi'
+	}))
+	.get('/', () => new CustomError())
 	.listen(3000)

@@ -2478,6 +2478,7 @@ export class Elysia<
 						]
 					}
 				>
+
 	onError<
 		const S extends EventScope,
 		const E extends AnyErrorConstructor &

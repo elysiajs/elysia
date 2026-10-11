@@ -8,7 +8,12 @@ import {
 	type ObservableCorpusEntry
 } from './corpus'
 import { lanePairs, type LanePair, type Observe } from './lanes'
-import { snapshot, comparators, formatMismatch } from './compare'
+import {
+	snapshot,
+	comparators,
+	formatMismatch,
+	type ResponseSnapshot
+} from './compare'
 
 const entryInPair = (entry: ObservableCorpusEntry, pair: LanePair) =>
 	!pair.requiresTag || entry.tags.includes(pair.requiresTag)
@@ -18,6 +23,17 @@ const requestInPair = (request: CorpusRequest, pair: LanePair) =>
 	(pair.oracle.transport === 'handle' ||
 		!(request.tags ?? []).includes('handle-only')) &&
 	!(request.excludeLanePairs ?? []).includes(pair.id)
+
+// Bun >= 1.4.3 resets the socket when a response stream errors, so a listen
+// lane's fetch can reject before any response arrives. Keep that as a snapshot
+// so the two lanes are still compared instead of failing on the oracle.
+const transportFailure = (error: unknown): ResponseSnapshot => ({
+	status: 0,
+	headers: [],
+	setCookie: [],
+	body: new Uint8Array(0),
+	bodyError: `transport: ${(error as any)?.code ?? error}`
+})
 
 // Run every disposer before reporting their failures.
 const disposeAll = async (
@@ -74,20 +90,24 @@ for (const pair of lanePairs) {
 							}
 
 							entry.recorder?.reset()
-							const oracleRes = await oracle.handle(
-								request.make()
-							)
+							const oracleRes = await oracle
+								.handle(request.make())
+								.catch(transportFailure)
 							const oracleObs = oracle.observe?.()
 
 							entry.recorder?.reset()
-							const candidateRes = await candidate.handle(
-								request.make()
-							)
+							const candidateRes = await candidate
+								.handle(request.make())
+								.catch(transportFailure)
 							const candidateObs = candidate.observe?.()
 
 							const [oSnap, cSnap] = await Promise.all([
-								snapshot(oracleRes),
-								snapshot(candidateRes)
+								oracleRes instanceof Response
+									? snapshot(oracleRes)
+									: oracleRes,
+								candidateRes instanceof Response
+									? snapshot(candidateRes)
+									: candidateRes
 							])
 
 							const respMismatch = comparators.response(

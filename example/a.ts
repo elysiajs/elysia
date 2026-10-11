@@ -1,15 +1,7 @@
-import { Elysia, macroType, t, type MacroTypeLambda } from '../src'
-
-interface Role extends MacroTypeLambda {
-	output: Record<'role', this['input']>
-}
+import { Elysia } from '../src'
 
 new Elysia()
-	.macro({
-		role: (role: 'admin' | 'member') => ({
-			$type: macroType<Role>(),
-			derive: () => ({ role })
-		})
+	.onBeforeHandle('global', () => {
+		console.log("morning")
 	})
-	.get('/admin', { role: 'admin' }, ({ role }) => role)
-	.get('/member', { role: 'member' }, ({ role }) => role)
+	.listen(3000)

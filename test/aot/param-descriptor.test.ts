@@ -37,7 +37,7 @@ const descriptorNames = () =>
 	new Set(
 		[
 			...paramsSource.matchAll(
-				/^\t([a-z0-9]+): (?:\(|staticCloneResolver,?$)/gm
+				/^\t\t([a-z0-9]+): (?:\(|staticCloneResolver,?$)/gm
 			)
 		].map((match) => match[1]!)
 	)
