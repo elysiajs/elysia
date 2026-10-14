@@ -99,6 +99,8 @@ export const mergeDeep = <
 			continue
 		}
 
+		if ((target as any)[key] === value) continue
+
 		if (!Object.isFrozen(target[key]))
 			try {
 				target[key as keyof typeof target] = mergeDeep(
