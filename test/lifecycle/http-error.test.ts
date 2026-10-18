@@ -29,10 +29,7 @@ class OutOfCredit extends HTTPError<'OUT_OF_CREDIT'> {
 	type = 'OUT_OF_CREDIT' as const
 	override readonly status = 402
 	override readonly headers = { 'x-credit': '0' }
-
-	detail() {
-		return 'Out of credit'
-	}
+	override readonly detail = 'Out of credit'
 }
 
 describe('HTTPError', () => {
@@ -79,10 +76,7 @@ describe('HTTPError', () => {
 		class Denied extends HTTPError<'https://example.com/errors/denied'> {
 			type = 'https://example.com/errors/denied' as const
 			override readonly status = 402
-
-			detail() {
-				return 'no funds'
-			}
+			override readonly detail = 'no funds'
 		}
 
 		const app = new Elysia().get('/', () => {
@@ -126,24 +120,19 @@ describe('HTTPError', () => {
 
 	// A string or array body is served as the `detail` member verbatim, never
 	// spread into the envelope, which would produce `{"0":…}` garbage for
-	// an array
+	// an array. `HTTPError` types `detail` a string, so the array comes from
+	// an error implementing the contract on its own
 	it('serve a non-object body as `detail`', async () => {
 		class StringBody extends HTTPError<'STRING_BODY'> {
 			type = 'STRING_BODY' as const
 			override readonly status = 409
-
-			detail() {
-				return 'conflicting write'
-			}
+			override readonly detail = 'conflicting write'
 		}
 
-		class ArrayBody extends HTTPError<'ARRAY_BODY'> {
+		class ArrayBody extends Error {
 			type = 'ARRAY_BODY' as const
-			override readonly status = 422
-
-			detail() {
-				return ['name', 'email']
-			}
+			readonly status = 422
+			readonly detail = ['name', 'email']
 		}
 
 		const app = new Elysia()
@@ -168,13 +157,16 @@ describe('HTTPError', () => {
 		})
 	})
 
+	// Structured data moved off `detail` (now a string) rides as extension
+	// members of the `problem()` an async `value` resolves
 	it('await a promised body', async () => {
 		class Deferred extends HTTPError<'DEFERRED'> {
 			type = 'DEFERRED' as const
 			override readonly status = 409
 
-			async detail() {
-				return { deferred: true }
+			async value() {
+				await Bun.sleep(1)
+				return problem(409, { type: 'DEFERRED', deferred: true })
 			}
 		}
 
@@ -185,10 +177,13 @@ describe('HTTPError', () => {
 		const response = await app.handle('/')
 
 		expect(response.status).toBe(409)
+		expect(response.headers.get('content-type')).toStartWith(
+			'application/problem+json'
+		)
 		await expect(response.json()).resolves.toEqual({
 			type: 'DEFERRED',
 			title: 'Conflict',
-			detail: { deferred: true },
+			deferred: true,
 			status: 409
 		})
 	})
@@ -196,14 +191,14 @@ describe('HTTPError', () => {
 	// A rejected body must not escape as an unhandled rejection, the sync
 	// error lane returns the promise without awaiting it
 	it('serve 500 when a promised body rejects', async () => {
-		let detailRan = false
+		let valueRan = false
 
 		class Broken extends HTTPError<'BROKEN'> {
 			type = 'BROKEN' as const
 			override readonly status = 409
 
-			async detail(): Promise<unknown> {
-				detailRan = true
+			async value(): Promise<unknown> {
+				valueRan = true
 				throw new Error('body failed')
 			}
 		}
@@ -227,7 +222,7 @@ describe('HTTPError', () => {
 
 			// Without this the check below passes even if the rejecting body
 			// was never produced, since nothing rejected means nothing leaked
-			expect(detailRan).toBe(true)
+			expect(valueRan).toBe(true)
 
 			// Bounded wait for the negative observation only: let any leaked
 			// rejection reach the process listener
@@ -246,7 +241,7 @@ describe('HTTPError', () => {
 			override readonly status = 409
 			override readonly headers = { 'set-cookie': 'session=leak' }
 
-			async detail(): Promise<unknown> {
+			async value(): Promise<unknown> {
 				throw new Error('body failed')
 			}
 		}
@@ -268,7 +263,7 @@ describe('HTTPError', () => {
 			type = 'EMPTY' as const
 			override readonly status = 410
 
-			async detail() {
+			async value() {
 				return undefined
 			}
 		}
@@ -294,13 +289,11 @@ describe('HTTPError', () => {
 		class Maybe extends HTTPError<'MAYBE'> {
 			type = 'MAYBE' as const
 			override readonly status = 404
+			override readonly detail: string | undefined
 
-			constructor(public present: boolean) {
+			constructor(present: boolean) {
 				super('absent')
-			}
-
-			detail() {
-				return this.present ? 'present' : undefined
+				this.detail = present ? 'present' : undefined
 			}
 		}
 
@@ -331,8 +324,8 @@ describe('HTTPError', () => {
 			override readonly status = 402
 			override readonly headers = { 'x-credit': '0' }
 
-			detail(): unknown {
-				throw new Error('detail failed')
+			value(): unknown {
+				throw new Error('value failed')
 			}
 		}
 
@@ -356,10 +349,7 @@ describe('HTTPError', () => {
 		class Denied extends HTTPError<'DENIED'> {
 			type = 'DENIED' as const
 			override readonly status = 'Payment Required'
-
-			detail() {
-				return 'Out of credit'
-			}
+			override readonly detail = 'Out of credit'
 		}
 
 		const app = new Elysia()
@@ -463,9 +453,7 @@ describe('HTTPError', () => {
 		class Unmatched extends HTTPError.id('UNMATCHED', "I'm a teapot") {}
 
 		class Bodied extends HTTPError.id('BODIED', 409) {
-			detail() {
-				return 'annotated'
-			}
+			override readonly detail = 'annotated'
 		}
 
 		class Registered extends HTTPError.id('REGISTERED', 400) {}
@@ -725,8 +713,8 @@ describe('HTTPError', () => {
 		})
 	})
 
-	// Both knobs are methods so they can be `async` — a getter can return a
-	// promise but cannot be declared `async get`
+	// `value` is a method so it can be `async` — a getter can return a
+	// promise but cannot be declared `async get`. `detail` is plain data
 	describe('the detail and value knobs', () => {
 		it('runs the method per serve, with `this` bound to the error', async () => {
 			class Owed extends HTTPError.id('OWED', 402) {
@@ -734,7 +722,7 @@ describe('HTTPError', () => {
 					super('owed')
 				}
 
-				detail() {
+				value() {
 					return `${this.who} is out of credit`
 				}
 			}
@@ -743,22 +731,17 @@ describe('HTTPError', () => {
 				throw new Owed(params.who)
 			})
 
-			await expect(
-				(await app.handle('/alice')).json()
-			).resolves.toMatchObject({
-				type: 'OWED',
-				detail: 'alice is out of credit'
-			})
-			await expect(
-				(await app.handle('/bob')).json()
-			).resolves.toMatchObject({
-				detail: 'bob is out of credit'
-			})
+			await expect((await app.handle('/alice')).text()).resolves.toBe(
+				'alice is out of credit'
+			)
+			await expect((await app.handle('/bob')).text()).resolves.toBe(
+				'bob is out of credit'
+			)
 		})
 
 		it('awaits an async method', async () => {
 			class Deferred extends HTTPError.id('DEFERRED', 409) {
-				async detail() {
+				async value() {
 					await Bun.sleep(1)
 					return { deferred: true }
 				}
@@ -771,11 +754,61 @@ describe('HTTPError', () => {
 			const response = await app.handle('/')
 
 			expect(response.status).toBe(409)
-			await expect(response.json()).resolves.toMatchObject({
-				type: 'DEFERRED',
-				detail: { deferred: true }
-			})
+			await expect(response.json()).resolves.toEqual({ deferred: true })
 		})
+
+		// The `detail()` method form is gone: a function `detail` is never
+		// invoked, sync or async, so it can neither run side effects nor
+		// throw its way to a 500. It annotates nothing and the message is
+		// served, exactly as for an error that annotated nothing
+		for (const hooked of [false, true])
+			it(`never invokes a \`detail\` method${hooked ? ', through the error-hook lane' : ''}`, async () => {
+				let invoked = 0
+
+				class Removed extends HTTPError.id('REMOVED', 402) {
+					// @ts-expect-error `detail` is a string, not a method
+					detail() {
+						invoked++
+						throw new Error('detail must not run')
+					}
+				}
+
+				class RemovedAsync extends HTTPError.id('REMOVED_ASYNC', 402) {
+					// @ts-expect-error `detail` is a string, not a method
+					async detail() {
+						invoked++
+						return 'must not be served'
+					}
+				}
+
+				const app = (
+					hooked
+						? new Elysia().onError(() => undefined)
+						: new Elysia()
+				)
+					.get('/sync', () => {
+						throw new Removed('the message')
+					})
+					.get('/async', () => new RemovedAsync('the message'))
+
+				for (const [path, type] of [
+					['/sync', 'REMOVED'],
+					['/async', 'REMOVED_ASYNC']
+				] as const) {
+					const response = await app.handle(path)
+
+					expect(response.status).toBe(402)
+					await expect(response.json()).resolves.toEqual({
+						type,
+						code: type,
+						title: 'Payment Required',
+						detail: 'the message',
+						status: 402
+					})
+				}
+
+				expect(invoked).toBe(0)
+			})
 
 		// Calling a stranger's function is side-effect surface — it may consume
 		// a stream or do IO — so it takes the same problem claim the shaping
@@ -810,7 +843,7 @@ describe('HTTPError', () => {
 				type = 'IMPL_FN' as const
 				readonly status = 403
 
-				detail() {
+				value() {
 					return 'forbidden'
 				}
 			}
@@ -819,12 +852,10 @@ describe('HTTPError', () => {
 				throw new ImplFn('m')
 			})
 
-			await expect((await app.handle('/')).json()).resolves.toMatchObject(
-				{
-					type: 'IMPL_FN',
-					detail: 'forbidden'
-				}
-			)
+			const response = await app.handle('/')
+
+			expect(response.status).toBe(403)
+			await expect(response.text()).resolves.toBe('forbidden')
 		})
 
 		it('serves 500 when the method throws', async () => {
@@ -869,12 +900,10 @@ describe('HTTPError', () => {
 
 		it('prefers `value` over `detail`', async () => {
 			class Both extends HTTPError.id('BOTH', 402) {
+				override readonly detail = 'loser'
+
 				value() {
 					return { winner: 'value' }
-				}
-
-				detail() {
-					return 'loser'
 				}
 			}
 
@@ -888,25 +917,21 @@ describe('HTTPError', () => {
 		})
 
 		// `undefined` is the fall-through signal at every tier, and the chain
-		// has to survive both knobs being async
+		// has to survive `value` being async
 		it('falls from an undefined value through to detail', async () => {
 			class Falls extends HTTPError.id('FALLS', 402) {
+				override readonly detail = 'fell through'
+
 				value() {
 					return undefined
-				}
-
-				detail() {
-					return 'fell through'
 				}
 			}
 
 			class AsyncFalls extends HTTPError.id('ASYNC_FALLS', 402) {
+				override readonly detail = 'fell through'
+
 				async value() {
 					return undefined
-				}
-
-				async detail() {
-					return 'fell through'
 				}
 			}
 
@@ -928,7 +953,7 @@ describe('HTTPError', () => {
 			}
 		})
 
-		// The execution gate covers both knobs identically
+		// A function `detail` is never invoked, claimed or not
 		it('never invokes a function detail on an unclaimed duck error', async () => {
 			let invoked = false
 
@@ -952,6 +977,61 @@ describe('HTTPError', () => {
 			await expect(response.text()).resolves.toBe('plain message')
 		})
 
+		// `detail` is plain data, a promised one included: never awaited, it
+		// is served as the Promise serializes, never as what it settles to.
+		// A rejected one neither fails the request nor falls back to the
+		// message, and nothing Elysia hangs off it may reject unhandled
+		it('never awaits a promised detail', async () => {
+			class Pending extends Error {
+				type = 'PENDING' as const
+				readonly status = 409
+
+				constructor(readonly detail: Promise<unknown>) {
+					super('the message')
+				}
+			}
+
+			// handled up front, so a rejection left over is one Elysia derived
+			const rejected = Promise.reject(new Error('rejected-marker'))
+			rejected.catch(() => {})
+
+			const app = new Elysia()
+				.get('/resolved', () => {
+					throw new Pending(
+						Promise.resolve({ marker: 'resolved-marker' })
+					)
+				})
+				.get('/rejected', () => {
+					throw new Pending(rejected)
+				})
+
+			const unhandled: unknown[] = []
+			const trap = (reason: unknown) => unhandled.push(reason)
+			process.on('unhandledRejection', trap)
+
+			try {
+				for (const path of ['/resolved', '/rejected']) {
+					const response = await app.handle(path)
+					const body = await response.text()
+
+					expect(response.status).toBe(409)
+					expect(body).not.toContain('marker')
+					expect(JSON.parse(body)).toEqual({
+						type: 'PENDING',
+						title: 'Conflict',
+						detail: {},
+						status: 409
+					})
+				}
+
+				// Bounded wait for the negative observation only
+				await Bun.sleep(10)
+				expect(unhandled).toEqual([])
+			} finally {
+				process.off('unhandledRejection', trap)
+			}
+		})
+
 		// A value annotation is inert data, so it participates even unclaimed
 		it('still honours a value detail on an unclaimed duck error', async () => {
 			class ForeignValue extends Error {
@@ -968,26 +1048,6 @@ describe('HTTPError', () => {
 				title: 'Forbidden',
 				detail: { why: 'inert data' },
 				status: 403
-			})
-		})
-
-		it('serves 500 when `detail` throws', async () => {
-			class Exploding extends HTTPError.id('EXPLODING', 402) {
-				detail(): unknown {
-					throw new Error('detail failed')
-				}
-			}
-
-			const app = new Elysia().get('/', () => {
-				throw new Exploding()
-			})
-
-			const response = await app.handle('/')
-
-			expect(response.status).toBe(500)
-			await expect(response.json()).resolves.toMatchObject({
-				status: 500,
-				title: 'Internal Server Error'
 			})
 		})
 
@@ -1064,8 +1124,8 @@ describe('HTTPError', () => {
 		// The JIT emits a separate catch block for routes carrying error hooks
 		it('serves method bodies through the error-hook lane', async () => {
 			class Async extends HTTPError.id('ASYNC', 409) {
-				async detail() {
-					return 'via hooks'
+				async value() {
+					return problem(409, { type: 'ASYNC', detail: 'via hooks' })
 				}
 			}
 
@@ -1077,7 +1137,6 @@ describe('HTTPError', () => {
 
 			await expect((await app.handle('/')).json()).resolves.toEqual({
 				type: 'ASYNC',
-				code: 'ASYNC',
 				title: 'Conflict',
 				detail: 'via hooks',
 				status: 409
@@ -1136,6 +1195,123 @@ describe('HTTPError', () => {
 				detail: 'no funds',
 				status: 402
 			})
+		})
+
+		// RFC 9457 `detail` is optional and `""` says nothing, so an error given
+		// no message serves none. An explicit `''` was given, so it is served
+		// as-is: `Error` only defines an own `message` for one passed
+		for (const production of [false, true])
+			for (const returned of [false, true])
+				it(`serve \`detail\` only for a given message (${production ? 'production' : 'development'}, ${returned ? 'returned' : 'thrown'})`, async () => {
+					if (production) process.env.NODE_ENV = 'production'
+
+					class OutOfCredit extends HTTPError.id(
+						'OUT_OF_CREDIT',
+						402
+					) {}
+
+					const serve = async (error: OutOfCredit) => {
+						const app = new Elysia().get('/', () => {
+							if (returned) return error
+
+							throw error
+						})
+
+						const response = await app.handle('/')
+						expect(response.status).toBe(402)
+
+						return response.json()
+					}
+
+					const envelope = {
+						type: 'OUT_OF_CREDIT',
+						code: 'OUT_OF_CREDIT',
+						title: 'Payment Required',
+						status: 402
+					}
+
+					expect(await serve(new OutOfCredit())).toEqual(envelope)
+					expect(await serve(new OutOfCredit(''))).toEqual({
+						...envelope,
+						detail: ''
+					})
+					expect(await serve(new OutOfCredit('no funds'))).toEqual({
+						...envelope,
+						detail: 'no funds'
+					})
+				})
+
+		// A constructor of its own that forwards nothing, or `undefined`,
+		// gave no message either
+		it('serve no `detail` from a constructor forwarding no message', async () => {
+			class Bare extends HTTPError.id('BARE', 409) {
+				constructor() {
+					super()
+				}
+			}
+
+			class Forwarded extends HTTPError.id('FORWARDED', 409) {
+				constructor(message?: string) {
+					super(message)
+				}
+			}
+
+			const app = new Elysia()
+				.get('/bare', () => new Bare())
+				.get('/forwarded', () => {
+					throw new Forwarded()
+				})
+
+			await expect((await app.handle('/bare')).json()).resolves.toEqual({
+				type: 'BARE',
+				code: 'BARE',
+				title: 'Conflict',
+				status: 409
+			})
+			await expect(
+				(await app.handle('/forwarded')).json()
+			).resolves.toEqual({
+				type: 'FORWARDED',
+				code: 'FORWARDED',
+				title: 'Conflict',
+				status: 409
+			})
+		})
+
+		// No own `message` is not enough to drop it: one a subclass defines
+		// on its prototype was given all the same
+		it('serve a message defined on the prototype as `detail`', async () => {
+			class Described extends HTTPError.id('DESCRIBED', 409) {}
+			Described.prototype.message = 'described by the class'
+
+			const app = new Elysia().get('/', () => new Described())
+
+			await expect((await app.handle('/')).json()).resolves.toEqual({
+				type: 'DESCRIBED',
+				code: 'DESCRIBED',
+				title: 'Conflict',
+				detail: 'described by the class',
+				status: 409
+			})
+		})
+
+		// A `mapResponse` hook sees the body before it is serialized, so the
+		// left-out `detail` must be absent there too, not an `undefined` member
+		it('leave `detail` off the body a mapResponse hook sees', async () => {
+			class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {}
+
+			let seen: any
+
+			const app = new Elysia()
+				.mapResponse(({ responseValue }) => {
+					seen = responseValue
+				})
+				.get('/', () => new OutOfCredit())
+
+			await app.handle('/')
+
+			expect(seen?.response).toMatchObject({ type: 'OUT_OF_CREDIT' })
+			expect(Object.hasOwn(seen.response, 'detail')).toBe(false)
 		})
 
 		// A status name resolves to the same numeric literal as the number

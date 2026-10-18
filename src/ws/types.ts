@@ -207,8 +207,12 @@ export type WSLocalHook<
 
 	parse?: MaybeArray<WSParseHandler<Schema>>
 	transform?: MaybeArray<TransformHandler<Schema, Singleton>>
-	beforeHandle?: MaybeArray<OptionalHandler<Schema, Singleton>>
-	afterHandle?: MaybeArray<OptionalHandler<Schema, Singleton>>
+	beforeHandle?: MaybeArray<
+		OptionalHandler<Schema, Singleton, undefined, 'local', never>
+	>
+	afterHandle?: MaybeArray<
+		OptionalHandler<Schema, Singleton, undefined, 'local', never>
+	>
 	mapResponse?: MaybeArray<MapResponse<Schema, Singleton>>
 	afterResponse?: MaybeArray<AfterResponseHandler<Schema, Singleton>>
 	error?: MaybeArray<ErrorHandler<[], Schema, Singleton>>

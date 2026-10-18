@@ -480,7 +480,7 @@ const touch = new Elysia({ name: 'touch' }).macro({
 			},
 			() => 'ok'
 		)
-		.method(
+		.route(
 			'SEARCH',
 			'/search/:id',
 			{

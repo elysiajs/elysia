@@ -67,9 +67,16 @@ const fn = (src: string) =>
  * registering it, so a test can inspect or spy on it before claiming.
  * Imports become parameters; the `Compiled` stub also swallows the
  * `Compiled.reconstruct = Reconstruct` wiring (installed above already).
+ *
+ * A multi-app module registers one manifest per app `name`: pass `key` to
+ * pick one. Without it the module must register exactly one, so a test never
+ * reads an arbitrary app's manifest.
  */
-export const evalRegistration = (src: string): CompiledProgramRegistration => {
-	let registration: CompiledProgramRegistration | undefined
+export const evalRegistration = (
+	src: string,
+	key?: string
+): CompiledProgramRegistration => {
+	const registrations = new Map<string, CompiledProgramRegistration>()
 	new Function(
 		'Compiled',
 		'Reconstruct',
@@ -81,8 +88,11 @@ export const evalRegistration = (src: string): CompiledProgramRegistration => {
 		src.replace(/^import .*$/gm, '').replace(/^export const /gm, 'const ')
 	)(
 		{
-			register(m: CompiledProgramRegistration) {
-				registration = m
+			register(m: CompiledProgramRegistration, k = '') {
+				if (registrations.has(k))
+					throw new Error(`manifest registered "${k}" twice`)
+
+				registrations.set(k, m)
 			}
 		},
 		undefined,
@@ -92,8 +102,19 @@ export const evalRegistration = (src: string): CompiledProgramRegistration => {
 		Format,
 		Hashing
 	)
+	if (key === undefined && registrations.size > 1)
+		throw new Error(
+			`manifest registers ${[...registrations.keys()].join(', ')}, pass the key to read`
+		)
+
+	const registration =
+		key === undefined
+			? registrations.values().next().value
+			: registrations.get(key)
 	if (!registration)
-		throw new Error('manifest did not call Compiled.register')
+		throw new Error(
+			`manifest did not call Compiled.register${key === undefined ? '' : ` for "${key}"`}`
+		)
 
 	return registration
 }

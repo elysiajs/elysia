@@ -994,7 +994,8 @@ import { Prettify } from '../../../src/types'
 	}>()
 }
 
-// onError local
+// onError local. Only `status()` joins every route: a plain value is served
+// at the status of the error it caught, see test/types/error.ts
 {
 	const app = new Elysia()
 		.onError(({ status }) =>
@@ -1008,7 +1009,6 @@ import { Prettify } from '../../../src/types'
 		])
 
 	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
-		200: 'fouco' | 'sartre' | 'lilith'
 		401: 'fouco'
 		404: 'lilith'
 		418: 'sartre'
@@ -1029,7 +1029,6 @@ import { Prettify } from '../../../src/types'
 		])
 
 	expectTypeOf<(typeof app)['~Ephemeral']['response']>().toEqualTypeOf<{
-		200: 'fouco' | 'sartre' | 'lilith'
 		401: 'fouco'
 		404: 'lilith'
 		418: 'sartre'
@@ -1050,7 +1049,6 @@ import { Prettify } from '../../../src/types'
 		])
 
 	expectTypeOf<(typeof app)['~Metadata']['response']>().toEqualTypeOf<{
-		200: 'fouco' | 'sartre' | 'lilith'
 		401: 'fouco'
 		404: 'lilith'
 		418: 'sartre'

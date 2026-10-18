@@ -180,8 +180,10 @@ export interface HandlerManifest {
 }
 
 export interface CompiledSnapshot {
-	registered: CompiledProgramRegistration | undefined
-	claimed: WeakRef<ProgramId> | undefined
+	registered:
+		| Record<string, CompiledProgramRegistration | undefined>
+		| undefined
+	claimed: Record<string, WeakRef<ProgramId> | undefined> | undefined
 	programs: WeakMap<ProgramId, CompiledProgram>
 }
 
@@ -260,43 +262,44 @@ export function warnAotDrift(method: string, path: string) {
 	console.warn(aotDriftMessage(method, path) + ', compiled at runtime')
 }
 
-// build registry
-let registered: CompiledProgramRegistration | undefined
-// prevent a 2nd Elysia app from claiming the same process (AOT build is one per process)
-let claimed: WeakRef<ProgramId> | undefined
+// build registry by instance name
+let registered:
+	| Record<string, CompiledProgramRegistration | undefined>
+	| undefined
+let claimed: Record<string, WeakRef<ProgramId> | undefined> | undefined
 let programs = new WeakMap<ProgramId, CompiledProgram>()
 
 const programFor = (id?: ProgramId) => (id ? programs.get(id) : undefined)
 
 export abstract class Compiled {
-	static register(manifest: CompiledProgramRegistration) {
-		registered = manifest
-		claimed = undefined
+	static register(manifest: CompiledProgramRegistration, key = '') {
+		;(registered ??= nullObject())[key] = manifest
+		claimed ??= nullObject()
 	}
 
-	static claim(id: ProgramId, fingerprint: AotFingerprint): boolean {
-		if (!registered || claimed) return false
+	static claim(id: ProgramId, fingerprint: AotFingerprint, key = '') {
+		const manifest = registered?.[key]
+		if (!manifest) {
+			// the same app rebuilding keeps its claim
+			if (claimed && claimed[key]?.deref() !== id && !isAotBuildEnv())
+				throw new Error(
+					`[elysia-aot] App "${key}" has no AOT manifest. Name and export it, .mount() ones too`
+				)
 
-		const manifest = registered
+			return false
+		}
+
 		if (manifest.fingerprint.abi !== fingerprint.abi)
 			throw new Error(`[elysia-aot] Mismatch fingerprint`)
 
-		claimed = new WeakRef(id)
-		registered = undefined
+		claimed![key] = new WeakRef(id)
+		registered![key] = undefined
 		programs.set(id, {
 			...manifest,
 			builtGroups: new Set()
 		})
+
 		return true
-	}
-
-	static assertUncontested(id: ProgramId) {
-		if (claimed === undefined || claimed.deref() === id || isAotBuildEnv())
-			return
-
-		throw new Error(
-			'[elysia-aot] A second Elysia app built a router in this process. An AOT build seals one app per process.'
-		)
 	}
 
 	static set reconstruct(impl: ReconstructImpl | undefined) {

@@ -36,7 +36,8 @@ declare const makePlugin: () => ResolvePlugin
 	})
 }
 
-// Synchronous functional plugin
+// Synchronous functional plugin: a factory ignoring `app` returns a new
+// instance, used as a plugin
 {
 	new Elysia()
 		.use(() => makePlugin())

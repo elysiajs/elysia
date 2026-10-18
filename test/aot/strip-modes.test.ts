@@ -294,32 +294,32 @@ describe('automatic AOT stripping', () => {
 		await expect(res.text()).resolves.toBe('true,false')
 	})
 
-	// A mounted sub-app is a second Elysia with its own router build. The
-	// manifest is one flat method+path table bound to whichever app builds
-	// first, so `.mount()` is unrepresentable rather than merely mis-ordered:
-	// `sub.fetch` makes the sub-app steal the parent's frozen validators,
-	// `sub.handle` leaves the mounted routes with no frozen entry at all.
-	// Refusing the build is the only outcome that is neither a 500 in
-	// production nor a silent validation bypass.
-	it('refuses to build an app that mounts a sub-app', async () => {
-		await expect(
-			generateCompiledArtifacts(
-				'test/aot/fixtures/strip-auto-mount-app.ts',
-				{ strip: 'auto' }
+	// `.mount()` of a plain fetch function (better-auth's `auth.handler`) builds
+	// no Elysia router, so it can't claim a manifest: the build must not refuse
+	// it, and the frozen validators keep guarding the parent's own routes in
+	// every strip mode
+	it.each([['auto'], [true], [false]] as const)(
+		'builds and serves a plain-function mount with strip: %p',
+		async (strip) => {
+			const text = await build(
+				'test/aot/fixtures/strip-auto-plain-mount-app.ts',
+				strip
 			)
-		).rejects.toThrow('mounts a sub-app')
-
-		// the refusal is a property of manifest binding, not of stripping
-		await expect(
-			generateCompiledArtifacts(
-				'test/aot/fixtures/strip-auto-mount-app.ts',
-				{ strip: false }
+			expect(text.includes('handler compiler JIT was stripped')).toBe(
+				strip !== false
 			)
-		).rejects.toThrow('mounts a sub-app')
 
-		// and it fails the bundler build, not just the low-level API
-		await expect(
-			build('test/aot/fixtures/strip-auto-mount-app.ts', 'auto')
-		).rejects.toThrow('mounts a sub-app')
-	})
+			const app = await load(text)
+			const mounted = await app.handle('/auth/sign-in')
+			expect(mounted.status).toBe(200)
+			await expect(mounted.text()).resolves.toBe('auth /sign-in')
+
+			expect(
+				(await app.handle('/user', json({ name: 'a' }))).status
+			).toBe(200)
+			expect((await app.handle('/user', json({ name: 1 }))).status).toBe(
+				422
+			)
+		}
+	)
 })

@@ -4,7 +4,7 @@ import { Elysia } from '../../src'
 
 describe('custom HTTP methods', () => {
 	it('matches an uppercase request when the registered method is lowercase', async () => {
-		const app = new Elysia().method('purge', '/cache', () => 'purged')
+		const app = new Elysia().route('purge', '/cache', () => 'purged')
 
 		const response = await app.handle(
 			new Request('http://localhost/cache', { method: 'PURGE' })

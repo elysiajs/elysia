@@ -3,6 +3,7 @@
 
 import {
 	Elysia,
+	HTTPError,
 	t,
 	status,
 	redirect,
@@ -1210,6 +1211,12 @@ corpus.push({
 				{ beforeHandle: () => new Quack() },
 				() => 'unreached'
 			)
+			.get('/derive', { derive: () => new Quack() }, () => 'unreached')
+			.get(
+				'/derive-value',
+				{ derive: () => new LocalQuack() },
+				({ name }: any) => name
+			)
 			.get('/static', new Quack() as any),
 	requests: [
 		{ id: 'early', make: get('/early') },
@@ -1218,7 +1225,72 @@ corpus.push({
 		{ id: 'sync', make: get('/sync') },
 		{ id: 'promise', make: get('/promise') },
 		{ id: 'before', make: get('/before') },
+		{ id: 'derive', make: get('/derive') },
+		{ id: 'derive-value', make: get('/derive-value') },
 		{ id: 'static', make: get('/static') }
+	]
+})
+
+// A derive's returned error answers like a beforeHandle's on every lane, an
+// HTTPError's own problem document or the `.onError(Class)` answer
+class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {}
+
+corpus.push({
+	id: 'derive-returned-error',
+	tags: ['safe-for-socket', 'error'],
+	define: (app) =>
+		(app as any)
+			.derive(({ path }: any) =>
+				path.startsWith('/deny') ? new OutOfCredit() : { user: 'u' }
+			)
+			.get('/deny', () => 'unreached')
+			.mapDerive(async ({ path }: any) =>
+				path.startsWith('/map') ? new OutOfCredit() : { user: 'mapped' }
+			)
+			.get('/map', () => 'unreached')
+			.get('/ok', ({ user }: any) => user)
+			.onError(OutOfCredit, () => status(418, 'teapot'))
+			.get('/deny/handled', () => 'unreached'),
+	requests: [
+		{ id: 'deny', make: get('/deny') },
+		{ id: 'map', make: get('/map') },
+		{ id: 'ok', make: get('/ok') },
+		{ id: 'handled', make: get('/deny/handled') }
+	]
+})
+
+// An afterHandle's returned error goes through the error pipeline like the
+// handler's, and an error hook's returned error is served at its own status
+// undispatched, on every lane
+corpus.push({
+	id: 'hook-returned-error',
+	tags: ['safe-for-socket', 'error'],
+	define: (app) =>
+		(app as any)
+			.get('/after', { afterHandle: () => new OutOfCredit() }, () => 'ok')
+			.get(
+				'/after/async',
+				{ afterHandle: async () => new OutOfCredit() },
+				() => 'ok'
+			)
+			.get('/hook', { error: () => new OutOfCredit() }, () => {
+				throw new Error('caught')
+			})
+			.get('/hook/plain', { error: () => new Error('again') }, () => {
+				throw new OutOfCredit()
+			})
+			.onError(OutOfCredit, () => status(418, 'teapot'))
+			.get(
+				'/after/handled',
+				{ afterHandle: () => new OutOfCredit() },
+				() => 'ok'
+			),
+	requests: [
+		{ id: 'after', make: get('/after') },
+		{ id: 'after-async', make: get('/after/async') },
+		{ id: 'hook', make: get('/hook') },
+		{ id: 'hook-plain', make: get('/hook/plain') },
+		{ id: 'after-handled', make: get('/after/handled') }
 	]
 })
 

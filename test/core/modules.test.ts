@@ -1,9 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Elysia } from '../../src'
+import { Elysia, t } from '../../src'
 import { clearContextCache, createContext } from '../../src/context'
 
 import { describe, expect, it } from 'bun:test'
 import { sleep } from 'bun'
+
+import { post } from '../utils'
 
 const asyncPlugin = async (app: Elysia) => app.get('/async', () => 'async')
 const lazyPlugin = import('../modules')
@@ -196,12 +198,16 @@ describe('Modules', () => {
 		})
 	})
 
-	it('preserves async router-build failures across modules reads', async () => {
+	// an app that served before its module settled rebuilds at settle, so
+	// the failure of that rebuild is what modules reports
+	it('preserves async router-build failures across modules reads after serving', async () => {
 		let resolvePlugin!: (plugin: Elysia) => void
 		const plugin = new Promise<Elysia>((resolve) => {
 			resolvePlugin = resolve
 		})
 		const app = new Elysia().use(plugin)
+
+		expect((await app.handle('/')).status).toBe(404)
 
 		const waiting = [app.modules, app.modules]
 		resolvePlugin(
@@ -232,11 +238,11 @@ describe('Modules', () => {
 		['undefined', undefined],
 		['null', null]
 	] as const)(
-		'preserves a %s async router-build failure across modules reads',
+		'preserves a %s async router-build failure across modules reads after serving',
 		async (_name, failure) => {
-			let resolvePlugin!: (plugin: Elysia) => void
+			let resolvePlugin!: (plugin: (app: Elysia) => Elysia) => void
 			let macroCalls = 0
-			const plugin = new Promise<Elysia>((resolve) => {
+			const plugin = new Promise<(app: Elysia) => Elysia>((resolve) => {
 				resolvePlugin = resolve
 			})
 			const app = new Elysia()
@@ -246,12 +252,17 @@ describe('Modules', () => {
 						throw failure
 					}
 				})
-				.get('/bad', { lateFailure: true }, () => 'bad')
 				.use(plugin)
+
+			// served before settling, so the failing route arrives with the
+			// module and fails the rebuild at settle
+			expect((await app.handle('/')).status).toBe(404)
 			const waiting = [app.modules, app.modules]
 
 			expect(macroCalls).toBe(0)
-			resolvePlugin(new Elysia())
+			resolvePlugin((app) =>
+				app.get('/bad', { lateFailure: true } as any, () => 'bad')
+			)
 
 			for (const result of await Promise.allSettled(waiting)) {
 				expect(result.status).toBe('rejected')
@@ -267,9 +278,10 @@ describe('Modules', () => {
 	)
 
 	// Nothing is built while a plugin is pending, so a captured early fetch
-	// cannot keep serving a stale compiled slot: when the final rebuild fails
-	// it fails loud, the same way a fresh app.handle() does
-	it('fails a captured early fetch loud when the final async rebuild fails', async () => {
+	// cannot keep serving a stale compiled slot. An app that has not served
+	// does not build at settle either: modules resolves and the failure
+	// surfaces on every request, the same as a sync app with the same route
+	it('fails a captured early fetch loud when the deferred first build fails', async () => {
 		let resolvePlugin!: (plugin: (app: Elysia) => Elysia) => void
 		const plugin = new Promise<(app: Elysia) => Elysia>((resolve) => {
 			resolvePlugin = resolve
@@ -293,7 +305,7 @@ describe('Modules', () => {
 			})
 		)
 		const [modules] = await Promise.allSettled([app.modules])
-		expect(modules.status).toBe('rejected')
+		expect(modules.status).toBe('fulfilled')
 
 		await expect(early).rejects.toThrow('MissingLateModel')
 		await expect(
@@ -303,6 +315,29 @@ describe('Modules', () => {
 		).rejects.toThrow('MissingLateModel')
 		await expect(app.handle('/stable/3')).rejects.toThrow(
 			'MissingLateModel'
+		)
+	})
+
+	// A consumed plugin is built by its parent. Built on its own at settle it
+	// lacked the parent's models (and, under AOT, the manifest), so its
+	// modules rejected and the parent dropped its routes
+	it('does not build a consumed async plugin on its own', async () => {
+		const routes = new Elysia().post(
+			'/state',
+			{ body: 'body' } as any,
+			({ body }) => body
+		)
+		const app = new Elysia()
+			.model({ body: t.Object({ theme: t.String() }) })
+			.use(new Elysia({ name: 'api' }).use(Promise.resolve(routes)))
+
+		await app.modules
+
+		const ok = await app.handle(post('/state', { theme: 'x' }))
+		expect(ok.status).toBe(200)
+		expect(await ok.json()).toEqual({ theme: 'x' })
+		expect((await app.handle(post('/state', { theme: 1 }))).status).toBe(
+			422
 		)
 	})
 

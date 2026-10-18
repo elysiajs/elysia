@@ -1140,54 +1140,36 @@ export type TaggedHTTPError<Type extends string, Annotation = {}> = {
 /**
  * Self-describing HTTP error
  *
- * Annotate `status`, `headers` and `value` on the subclass and Elysia maps
- * the instance to a response on its own, no `.onError(Class, handler)` needed
+ * Set `status`, `headers`, `detail`, `extension` and `value` to map to response
  *
- * Everything an owned `HTTPError` serves is an RFC 9457 problem document:
- * `type` is the problem type carried on the wire, and the body (or the error
- * message, when there is none) becomes `detail`, an object nested verbatim
- * and never merged into the envelope
+ * Send RFC 9457 problem document by default that can be overridden by `value()`
  *
- * - `detail()` - the common case. Whatever it returns becomes the `detail`
- *   member of the problem document, verbatim, objects included. The envelope
- *   still carries `type`, `status` and an auto-filled `title`
- * - `value()` - the escape hatch. Whatever it returns replaces the *whole*
- *   response: no envelope, no `application/problem+json`. The annotated
- *   `status` and `headers` still apply, only the content is yours
+ * - `detail` - add `detail` field to the problem document
+ * - `extension()` - add extension members to the problem document
+ * - `value()` - override the whole response, return `problem()` to keep the shape
  *
- * `value` wins over `detail`, `detail` over the error message. A knob
- * returning `undefined` falls through to the next one.
+ * `value` wins over `detail`, `detail` over an `extension()` string `detail`,
+ * that over message. A `value` returning `undefined` falls
+ * through to the next one. A response that depends on the request belongs in
+ * `.onError(Class, handler)`
  *
  * @example
  * ```ts
- * class OutOfCredit extends HTTPError<'OUT_OF_CREDIT'> {
- * 	type = 'OUT_OF_CREDIT' as const
- * 	override readonly status = 402
- *
- * 	detail() {
- * 		return { balance: 0, currency: 'usd' }
- * 	}
- * }
- * // → { type: 'OUT_OF_CREDIT', title: 'Payment Required', status: 402,
- * //     detail: { balance: 0, currency: 'usd' } }
- *
- * class Overdrawn extends HTTPError<'OVERDRAWN'> {
- * 	type = 'OVERDRAWN' as const
- * 	override readonly status = 402
- *
- * 	async detail() {
- * 		return await describeBalance()
- * 	}
+ * class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT') {
+ * 	   readonly status = 402
+ * 	   readonly detail = 'Top up to continue'
  * }
  *
- * class Legacy extends HTTPError<'LEGACY'> {
- * 	type = 'LEGACY' as const
- * 	override readonly status = 402
+ * class Overdrawn extends Error implements HTTPError {
+ *     readonly type = 'OVERDRAWN'
+ * 	   readonly status = 402
  *
- * 	// full control, served as-is
- * 	value() {
- * 		return { code: 'OUT_OF_CREDIT', ok: false }
- * 	}
+ *     value() {
+ *         return problem(402, {
+ * 	           type: 'OVERDRAWN',
+ * 	            detail: await describeBalance()
+ * 	       })
+ *     }
  * }
  * ```
  *
@@ -1244,19 +1226,46 @@ export abstract class HTTPError<
 	declare readonly headers?: Record<string, string>
 
 	/**
-	 * Return a value to serve as the whole response
+	 * Return a value to serve as the whole response, may be `async`
 	 *
 	 * Supports `status()`/`problem()` for status-based Eden response
 	 */
 	value?(): MaybePromise<unknown>
 
 	/**
-	 * Return the `detail` member of the RFC 9457 problem document,
-	 * similar to `problem()`
+	 * `detail` member of the RFC 9457 problem document, served in place of
+	 * the error message
 	 *
-	 * Use `value()` to override the entire response
+	 * Use `value()` for anything computed asynchronously
 	 */
-	detail?(): MaybePromise<unknown>
+	declare readonly detail?: string
+
+	/**
+	 * Return RFC 9457 extension members added to the problem document,
+	 * synchronously
+	 *
+	 * `type`, `code` and `status` stay the error's own. A string `detail` is
+	 * served when the error has no `detail` of its own, in place of the
+	 * message. `title` and `instance` may be overridden. Not served when
+	 * `value()` answers
+	 *
+	 * Only a plain object's own data members are served, which types can't
+	 * check: return an object literal, not a class instance
+	 *
+	 * @example
+	 * ```ts
+	 * class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {
+	 *     constructor(readonly balance: number) {
+	 *         super()
+	 *     }
+	 *
+	 *     extension() {
+	 *         return { balance: this.balance, accounts: ['/account/12345'] }
+	 *     }
+	 * }
+	 * ```
+	 */
+	extension?(): Record<string, unknown>
 
 	/**
 	 * Create a concrete `HTTPError` subclass carrying `code`, mirrored into
@@ -1281,16 +1290,14 @@ export abstract class HTTPError<
 	 * Create a concrete `HTTPError` subclass carrying `code`, annotated with
 	 * `status` as a number or a status name
 	 *
-	 * Annotate what is served with `detail()` (problem `detail` member) or
-	 * `value()` (whole-response override), either of which may be `async`
+	 * Annotate what is served with `detail` (problem `detail` member) or
+	 * `value()` (whole-response override, may be `async`)
 	 *
 	 * @example
 	 * ```ts
 	 * class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {}
 	 * class Denied extends HTTPError.id('DENIED', 'Payment Required') {
-	 *     async detail() {
-	 *         return await describeBalance()
-	 *     }
+	 *     override readonly detail = 'Top up to continue'
 	 * }
 	 * ```
 	 */

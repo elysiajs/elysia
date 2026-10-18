@@ -38,9 +38,9 @@ describe('1.x argument order', () => {
 		).toThrow(`[Elysia] .get('/api/swapped', handler, hook)`)
 	})
 
-	it('.method(verb, path, handler, hook) throws too', () => {
+	it('.route(verb, path, handler, hook) throws too', () => {
 		expect(() =>
-			(new Elysia() as any).method('SEARCH', '/swapped', () => 'hi', {
+			(new Elysia() as any).route('SEARCH', '/swapped', () => 'hi', {
 				query: t.Object({ name: t.String() })
 			})
 		).toThrow(

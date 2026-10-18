@@ -7,10 +7,7 @@ import { Elysia, HTTPError } from '../../src'
 class Owned extends HTTPError<'OWNED'> {
 	type = 'OWNED' as const
 	override readonly status = 500
-
-	detail() {
-		return 'owned-detail'
-	}
+	override readonly detail = 'owned-detail'
 }
 
 // Shaped like undici's ResponseStatusCodeError, never opted in
@@ -60,11 +57,7 @@ class Implementer extends Error implements HTTPError<'IMPLEMENTER'> {
 	readonly code = 'implementer-code'
 	readonly status = 503
 	readonly headers = { 'x-implementer': 'implementer-header' }
-
-	detail() {
-		invoked.push('detail')
-		return 'implementer-detail'
-	}
+	readonly detail = 'implementer-detail'
 
 	value() {
 		invoked.push('value')

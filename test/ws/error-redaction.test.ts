@@ -67,6 +67,22 @@ describe('WebSocket error redaction', () => {
 		)
 	})
 
+	// Only a problem leaves out a message never given, a raw frame stays the
+	// message as on HTTP: empty, never the string `undefined`
+	it('keeps the raw frame of an error given no message empty', async () => {
+		const bare = () => Object.assign(new Error(), { status: 403 })
+
+		await expect(
+			frameFor(() => {
+				throw bare()
+			})
+		).resolves.toBe('')
+		await expect(httpResponseOf(bare)).resolves.toEqual({
+			status: 403,
+			body: ''
+		})
+	})
+
 	it('preserves explicit error response bodies in production', async () => {
 		process.env.NODE_ENV = 'production'
 
@@ -128,11 +144,7 @@ describe('WebSocket problem frames in production', () => {
 			readonly type = 'IMPLEMENTER'
 			readonly code = 'implementer-code'
 			readonly status = 503
-
-			detail() {
-				invoked.push('detail')
-				return 'implementer-detail'
-			}
+			readonly detail = 'implementer-detail'
 
 			value() {
 				invoked.push('value')
@@ -162,14 +174,14 @@ describe('WebSocket problem frames in production', () => {
 		process.env.NODE_ENV = 'production'
 
 		const invoked: string[] = []
-		const detail = () => {
-			invoked.push('detail')
-			return 'claimant-detail'
+		const value = () => {
+			invoked.push('value')
+			return 'claimant-value'
 		}
 
 		class StatusLess extends Error {
 			readonly type = 'STATUS_LESS'
-			readonly detail = detail
+			readonly value = value
 		}
 
 		for (const thrown of [
@@ -178,7 +190,7 @@ describe('WebSocket problem frames in production', () => {
 				type: 'PLAIN',
 				status: 503,
 				message: 'claimant-secret',
-				detail
+				value
 			})
 		]) {
 			const frame = await frameFor(() => {
@@ -277,9 +289,9 @@ describe('problem members are read once', () => {
 				return this.typeReads++ === 0 ? undefined : 'SECOND_READ'
 			}
 
-			detail() {
-				invoked.push('detail')
-				return 'late-detail'
+			value() {
+				invoked.push('value')
+				return 'late-value'
 			}
 		}
 

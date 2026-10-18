@@ -1,4 +1,6 @@
-import { Elysia, t } from '../../src'
+import { Elysia, HTTPError, status, t } from '../../src'
+
+import { expectTypeOf } from 'expect-type'
 
 // A macro response schema constrains its consuming route's handler return.
 
@@ -98,3 +100,96 @@ new Elysia().get(
 	{ response: t.Object({ name: t.String() }) },
 	() => ({ name: 'a' })
 )
+
+// A macro's `beforeHandle` or `afterHandle` returning a raw `Error` goes back
+// through `.onError(Class)` dispatch like the handler's own (402, or 418 once
+// handled), so it types as an error, never under 200. Its `error` hook
+// returning one serves it as an unhandled error at its own status, never
+// dispatched again
+{
+	class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {}
+
+	const credit = ({ request }: { request: Request }) =>
+		request.headers.has('x-credit') ? new OutOfCredit() : undefined
+
+	const auth = new Elysia().macro({ auth: { beforeHandle: credit } })
+
+	const app = auth.get('/', { auth: true }, () => 'ok' as const)
+	const handler = new Elysia().get('/', ({ request }) =>
+		request.headers.has('x-credit') ? new OutOfCredit() : ('ok' as const)
+	)
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<
+		(typeof handler)['~Routes']['get']['response']
+	>()
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['response'][200]
+	>().toEqualTypeOf<'ok'>()
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['error']
+	>().toEqualTypeOf<OutOfCredit>()
+
+	const handled = auth
+		.onError(OutOfCredit, () => status(418, 'teapot' as const))
+		.get('/', { auth: true }, () => 'ok' as const)
+
+	expectTypeOf<
+		(typeof handled)['~Routes']['get']['response']
+	>().toEqualTypeOf<{ 200: 'ok'; 418: 'teapot' }>()
+
+	const after = new Elysia()
+		.macro({ after: { afterHandle: credit } })
+		.get('/', { after: true }, () => 'ok' as const)
+
+	expectTypeOf<(typeof after)['~Routes']['get']['response']>().toEqualTypeOf<
+		(typeof handler)['~Routes']['get']['response']
+	>()
+
+	// the `afterHandle` error reaches the `error` hook, whose own error is
+	// served at its 402, not dispatched to the 418 handler
+	class Lib extends Error {
+		readonly lib = true
+	}
+
+	const failed = new Elysia()
+		.macro({
+			after: {
+				afterHandle: () => (Math.random() ? new Lib() : undefined)
+			},
+			failed: { error: () => new OutOfCredit() }
+		})
+		.onError(OutOfCredit, () => status(418, 'teapot' as const))
+		.get('/', { after: true, failed: true }, () => 'ok' as const)
+	type Failed = (typeof failed)['~Routes']['get']['response']
+
+	expectTypeOf<keyof Failed>().toEqualTypeOf<200 | 402>()
+	expectTypeOf<Failed[402]['code']>().toEqualTypeOf<'OUT_OF_CREDIT'>()
+}
+
+// A macro's hooks each answer on their own, so a status two of them serve
+// takes either body, beside a `beforeHandle`'s raw `Error`
+{
+	class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {}
+
+	const app = new Elysia()
+		.macro({
+			auth: {
+				beforeHandle: ({ request }: { request: Request }) =>
+					request.headers.has('x-credit')
+						? new OutOfCredit()
+						: status(401, 'before' as const),
+				afterHandle: () => status(401, 'after' as const),
+				error: () => status(401, 'error' as const)
+			}
+		})
+		.get('/', { auth: true }, () => 'ok' as const)
+
+	type Route = (typeof app)['~Routes']['get']
+
+	// its `error` hook always answers, so the raw `Error` never serves 402
+	expectTypeOf<keyof Route['response']>().toEqualTypeOf<200 | 401>()
+	expectTypeOf<Route['response'][401]>().toEqualTypeOf<
+		'before' | 'after' | 'error'
+	>()
+	expectTypeOf<Route['error']>().toEqualTypeOf<never>()
+}

@@ -888,6 +888,24 @@ describe('HTTP and WebSocket upgrade answers', () => {
 			beforeHandle() {
 				throw new Error('x')
 			}
+		},
+		// a returned error answers as a thrown one, as on HTTP
+		returned: {
+			beforeHandle: () => new Error('x')
+		},
+		returnedHookReturn: {
+			beforeHandle: () => new Error('x'),
+			error: () => 'handled'
+		},
+		// set once the hook returned: neither lane waits for it before
+		// mapping, so a returned error's check adds no microtask either
+		late: {
+			beforeHandle({ set }: any) {
+				queueMicrotask(() => {
+					set.headers['x-pending'] = 'late'
+				})
+				return status(403, 'late')
+			}
 		}
 	}
 
@@ -945,6 +963,24 @@ describe('HTTP and WebSocket upgrade answers', () => {
 				body: '{"type":"int',
 				pending: null,
 				seen: ['Response:500']
+			},
+			returned: {
+				status: 500,
+				body: '{"type":"int',
+				pending: null,
+				seen: ['Response:500']
+			},
+			returnedHookReturn: {
+				status: 500,
+				body: 'MAPPED:handl',
+				pending: null,
+				seen: ['string:500']
+			},
+			late: {
+				status: 403,
+				body: 'late',
+				pending: null,
+				seen: ['object:undefined']
 			}
 		})
 		expect(ws).toEqual(http)

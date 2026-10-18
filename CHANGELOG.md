@@ -38,7 +38,7 @@ Breaking Change:
 - `t.NoValidate` semantics now skips `Check` only, `Default`/`Convert`/`Decode`/`Encode` still run.
 - Cookie `sign` without matching `secrets` now throws at app construction time
 - deprecated passing Elysia instance to `.mount`, use `.use` instead
-- remove v1 instance methods `.route()`, `.env()`, `.affix()`/`.prefix()`/`.suffix()` and the `.store`/`.decorator`/`.config` instance getters.
+- remove v1 instance methods `.env()`, `.affix()`/`.prefix()`/`.suffix()` and the `.store`/`.decorator`/`.config` instance getters.
 - `.guard()` and `.group()` form now defaults to the 'override' channel instead of 'standalone'
 - rename `schema: standalone` to `schema: 'merge'`
 - wrap API v2

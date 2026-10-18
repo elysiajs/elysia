@@ -357,7 +357,8 @@ export function mapBeforeHandle(
 	mode: AsyncMode,
 	report?: TraceReporter,
 	abortGuard?: string,
-	arm?: string
+	arm?: string,
+	errorClasses?: Function[]
 ) {
 	const hooks = toArray(_hooks)
 	const modes = deriveModes(hooks, derive)
@@ -365,6 +366,11 @@ export function mapBeforeHandle(
 
 	let code = ''
 	let needsEs = false
+
+	const early =
+		'if(tmp instanceof es||tmp instanceof Error' +
+		(errorClasses ? '||ec.some((C)=>tmp instanceof C)' : '') +
+		')_r=tmp\n'
 
 	for (let i = 0; i < hooks.length; i++) {
 		const fn = hooks[i]
@@ -387,7 +393,7 @@ export function mapBeforeHandle(
 				link(replaceDeriveContext, 'rdc')
 				// the pre-swap context is the reference for "already there"
 				code +=
-					'if(tmp instanceof es)_r=tmp\n' +
+					early +
 					"else if(tmp){if(typeof tmp==='object'||typeof tmp==='function'){const _pc=c;c=rdc(c,tmp);for(const _k of Reflect.ownKeys(tmp))dsp(c,c[_k],_pc)}tmp=undefined}\n"
 			} else {
 				const keys = extractDeriveKeys(fn)
@@ -403,9 +409,7 @@ export function mapBeforeHandle(
 							)
 							.join(';')
 					: "if(Object.hasOwn(tmp,'__proto__')){for(const _k of Object.keys(tmp))dsp(c,tmp[_k]);Object.defineProperties(c,Object.getOwnPropertyDescriptors(tmp))}else{_v=Object.assign({},tmp);for(const _k of Reflect.ownKeys(_v)){dsp(c,_v[_k]);c[_k]=_v[_k]}}"
-				code +=
-					'if(tmp instanceof es)_r=tmp\n' +
-					`else if(tmp){${merge};tmp=undefined}\n`
+				code += early + `else if(tmp){${merge};tmp=undefined}\n`
 			}
 		} else code += 'if(tmp!==undefined)_r=tmp\n'
 
@@ -413,7 +417,10 @@ export function mapBeforeHandle(
 		if (tail || guard) code += '}\n'
 	}
 
-	if (needsEs) link(ElysiaStatus, 'es')
+	if (needsEs) {
+		link(ElysiaStatus, 'es')
+		if (errorClasses) link(errorClasses, 'ec')
+	}
 
 	return code
 }
@@ -526,15 +533,18 @@ export const mapError = /*#__PURE__*/ map<
 		schedule: string,
 		sign: string,
 		mode: AsyncMode,
-		arm?: string
+		arm: string | undefined,
+		declined: string
 	]
->((i, fn, [map, link, mapResponse, schedule, sign, mode, arm]) => {
+>((i, fn, [map, link, mapResponse, schedule, sign, mode, arm, declined]) => {
 	link(mapResponse, 'rm')
 	link(adoptErrorType, 'aet')
 	link(ElysiaStatus, 'es')
 	return (
 		awaitSite(`er${at(i)}(c)`, fn, mode, '_r', arm) +
 		`if(_r!==undefined){\n` +
+		// a returned error is served as one no hook answers, at its own status
+		`if(_r instanceof Error){c.set.status=_r.status||500\n${declined}return _efb(_r,c)}\n` +
 		`if(_r instanceof es||_r instanceof Response)c.set.status=_r.status\n` +
 		`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
 		schedule +

@@ -1,7 +1,7 @@
 // Each test changes one response component and verifies the reported mismatch.
 
 import { describe, it, expect } from 'bun:test'
-import { jitHandle, type Lane, type Define } from './lanes'
+import { jitHandle, assertPortClosed, type Lane, type Define } from './lanes'
 import {
 	snapshot,
 	compareResponses,
@@ -204,5 +204,69 @@ describe('differential comparator detects injected skew', () => {
 	it('treats array order as significant', () => {
 		const m = compareObservations(ctx, ['a', 'b'], ['b', 'a'])
 		expect(m?.component).toBe('observation')
+	})
+})
+
+// The listen lanes call assertPortClosed after stop(true): it must still catch
+// a listener this process left open, and must not blame this process for a
+// port somebody else holds.
+describe('listen lane port check', () => {
+	const serve = () => Bun.serve({ port: 0, fetch: () => new Response('ok') })
+
+	it('reports a listener that was never stopped as leaked', async () => {
+		const server = serve()
+		try {
+			await expect(
+				assertPortClosed('self', server.hostname!, server.port!, 100)
+			).rejects.toThrow('leaked')
+		} finally {
+			server.stop(true)
+		}
+	})
+
+	it('passes once the listener is stopped', async () => {
+		const server = serve()
+		const { hostname, port } = server
+		await server.stop(true)
+
+		await assertPortClosed('self', hostname!, port!, 100)
+	})
+
+	// macOS can give listen(0) a port another user's socket holds, then refuse
+	// an explicit re-bind of it until that socket closes. A second process
+	// holding the port models that foreign holder.
+	it('does not report a port held by another process as leaked', async () => {
+		const server = serve()
+		const { hostname, port } = server
+		await server.stop(true)
+
+		const holder = Bun.spawn(
+			[
+				process.execPath,
+				'-e',
+				`Bun.listen({ hostname: '0.0.0.0', port: ${port}, socket: { data() {} } }); console.log('ready'); setInterval(() => {}, 1000)`
+			],
+			{ stdout: 'pipe' }
+		)
+		try {
+			await holder.stdout.getReader().read()
+
+			let refused = false
+			try {
+				Bun.listen({
+					hostname: '0.0.0.0',
+					port: port!,
+					socket: { data() {} }
+				}).stop(true)
+			} catch (error) {
+				refused = (error as any)?.code === 'EADDRINUSE'
+			}
+			expect(refused).toBe(true)
+
+			await assertPortClosed('self', hostname!, port!, 100)
+		} finally {
+			holder.kill()
+			await holder.exited
+		}
 	})
 })

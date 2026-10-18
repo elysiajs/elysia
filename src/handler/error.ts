@@ -12,7 +12,7 @@ import {
 	PROBLEM_JSON
 } from '../error'
 import { StatusMap } from '../constants'
-import { isNotEmpty } from '../utils'
+import { isNotEmpty, isPlainObject, nullObject } from '../utils'
 import { materializeSetHeaders } from '../adapter/utils'
 
 import type { Context } from '../context'
@@ -139,30 +139,32 @@ export const resolveStatus = (status: unknown) =>
 export function statusFallbackBody(
 	error: any,
 	status: unknown,
-	mask = 'Internal Server Error'
+	mask = 'Internal Server Error',
+	asDetail?: boolean
 ) {
 	const masked = isProduction() && (status as number) >= 500
 	const declared = error.response
 
-	return declared !== undefined && !(masked && typeof declared === 'object')
-		? declared
-		: masked
-			? mask
-			: (error.message ?? '')
+	if (declared !== undefined && !(masked && typeof declared === 'object'))
+		return declared
+
+	if (masked) return mask
+
+	const message = error.message ?? ''
+
+	return asDetail && message === '' && !Object.hasOwn(error, 'message')
+		? undefined
+		: message
 }
 
-/**
- * RFC 9457 problem document carrying `detail` verbatim, mirroring `problem()`.
- * `type` comes in as the value the claim was checked on, and `code` is read
- * once, so a getter can't put anything but a string on the wire
- */
-const problemOf = (
+function problemOf(
 	self: any,
 	type: unknown,
 	detail: unknown,
 	status: number,
-	claimsProblem: boolean
-) => {
+	claimsProblem: boolean,
+	members?: Record<string, unknown>
+) {
 	const code = claimsProblem ? self.code : undefined
 
 	return new ElysiaStatus(
@@ -170,7 +172,10 @@ const problemOf = (
 		problemBody({
 			type: typeof type === 'string' ? type : 'about:blank',
 			...(typeof code === 'string' ? { code } : {}),
-			detail: detail as string,
+			// before `detail`: the error's own wins over its extension's
+			...members,
+			// left out, not `undefined`: a `mapResponse` hook sees this body
+			...(detail === undefined ? {} : { detail: detail as string }),
 			status
 		}),
 		{ 'content-type': PROBLEM_JSON }
@@ -178,19 +183,44 @@ const problemOf = (
 }
 
 /**
- * Read one annotation knob, a method (may be `async`) or a plain value.
- * A method may have side effects, so only an error claiming a problem type
- * gets it invoked; a plain value is read from any error
+ * RFC 9457 extension members of an error claiming a problem type. Sync
+ * only: anything but a plain object, a Promise included, adds nothing.
+ * `type`, `code` and `status` stay the error's own, `detail` only when a
+ * string
  */
-export const readAnnotation = (
+export function extensionOf(self: any) {
+	const extension = self.extension
+	const members = typeof extension === 'function' && extension.call(self)
+
+	if (!isPlainObject(members)) return
+
+	// null prototype: an own `__proto__` key stays a member
+	const served = nullObject()
+
+	for (const [key, value] of Object.entries(members))
+		// a function is behavior, not data: `toJSON`, `next` or `then` would
+		// take over how the document is served
+		if (
+			typeof value !== 'function' &&
+			key !== 'type' &&
+			key !== 'code' &&
+			key !== 'status' &&
+			(key !== 'detail' || typeof value === 'string')
+		)
+			served[key] = value
+
+	return served
+}
+
+export function readAnnotation(
 	self: any,
 	key: 'value' | 'detail',
 	claimsProblem: boolean
-) => {
+) {
 	const annotation = self[key]
 
 	return typeof annotation === 'function'
-		? claimsProblem
+		? claimsProblem && key === 'value'
 			? annotation.call(self)
 			: undefined
 		: annotation
@@ -259,6 +289,9 @@ function fallbackErrorResponse(
 		)
 	}
 
+	// read past `value`: a response it served never runs `extension`
+	let members: Record<string, unknown> | undefined
+
 	const serveMessage = () => {
 		if (!claimsProblem) return legacy()
 
@@ -269,9 +302,12 @@ function fallbackErrorResponse(
 			problemOf(
 				self,
 				type,
-				statusFallbackBody(error, served, titleOf(served)),
+				// an extension's `detail` wins over the message
+				members?.detail ??
+					statusFallbackBody(error, served, titleOf(served), true),
 				served,
-				claimsProblem
+				claimsProblem,
+				members
 			),
 			context.set,
 			context
@@ -283,6 +319,7 @@ function fallbackErrorResponse(
 
 		try {
 			annotation = readAnnotation(self, key, claimsProblem)
+			if (key === 'detail' && claimsProblem) members = extensionOf(self)
 		} catch (cause) {
 			return failed(cause)
 		}
@@ -290,29 +327,15 @@ function fallbackErrorResponse(
 		if (annotation === undefined)
 			return key === 'value' ? serveAnnotation('detail') : serveMessage()
 
-		if (annotation instanceof Promise)
+		// Only `value` is awaited, a promised `detail` is plain data
+		if (key === 'value' && annotation instanceof Promise)
 			return annotation.then((resolved: unknown) => {
-				// Resolving `undefined` annotates nothing, fall to the next knob
-				if (resolved === undefined)
-					return key === 'value'
-						? serveAnnotation('detail')
-						: serveMessage()
+				// Resolving `undefined` annotates nothing, fall to `detail`
+				if (resolved === undefined) return serveAnnotation('detail')
 
 				mergeHeaders()
 
-				return mapResponse(
-					key === 'value'
-						? resolved
-						: problemOf(
-								self,
-								type,
-								resolved,
-								served,
-								claimsProblem
-							),
-					context.set,
-					context
-				)
+				return mapResponse(resolved, context.set, context)
 			}, failed)
 
 		mergeHeaders()
@@ -320,7 +343,14 @@ function fallbackErrorResponse(
 		return mapResponse(
 			key === 'value'
 				? annotation
-				: problemOf(self, type, annotation, served, claimsProblem),
+				: problemOf(
+						self,
+						type,
+						annotation,
+						served,
+						claimsProblem,
+						members
+					),
 			context.set,
 			context
 		)
@@ -416,6 +446,13 @@ export function createErrorHandler(
 		result: unknown,
 		sign: Sign
 	) => {
+		// a returned error is served as one no hook answers, at its own status
+		if (result instanceof Error) {
+			context.set.status = (result as any).status || 500
+
+			return serveUnhandled(context, result, sign)
+		}
+
 		if (result instanceof ElysiaStatus || result instanceof Response)
 			context.set.status = result.status
 		else if (context.set.status === undefined || context.set.status === 200)

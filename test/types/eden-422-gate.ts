@@ -1,4 +1,4 @@
-import { Elysia, t } from '../../src'
+import { Elysia, t, type ValidationErrorResponse } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
 // Path parameters alone do not add a validator, so Eden must omit 422.
@@ -19,6 +19,10 @@ const b = new Elysia().get(
 type B = (typeof b)['~Routes']['n'][':id']['get']['response']
 declare const checkB: B
 checkB[422].type satisfies 'validation'
+
+// That 422 is the exported document member for member, though the route
+// spells it out so a consumer's d.ts prints it inline
+expectTypeOf<B[422]>().toEqualTypeOf<ValidationErrorResponse>()
 
 // A query schema adds a validation response.
 const c = new Elysia().get(

@@ -1005,7 +1005,8 @@ export function compileHandlerJit(
 						asyncMode,
 						buildReport('beforeHandle'),
 						chainGuard,
-						arm
+						arm,
+						errorClasses
 					)
 					code += beforeHandlePrefix
 						? `if(${chainGuard ? `!${chainGuard}&&` : ''}_r===undefined){\n${mapped}}\n`
@@ -1127,7 +1128,8 @@ export function compileHandlerJit(
 					)
 				}
 				code += endTrace('afterHandle')
-				if (hasAfterHandle) code += abortCheck()
+				// a returned error is forwarded as the handler's is
+				if (hasAfterHandle) code += abortCheck() + plain(rethrow('_r'))
 			}
 
 			if (hasMapResponse || hasTrace) {
@@ -1280,6 +1282,13 @@ export function compileHandlerJit(
 				asyncMode.e = true
 			}
 
+			// what an error no hook answers runs before `_efb`
+			const declined =
+				endTrace('error') +
+				(hasDeriveDispose
+					? schedule + abortCatch
+					: abortCatch + schedule)
+
 			body +=
 				errorHead +
 				`let _r${hasMapResponse ? ',tmp' : ''}\n` +
@@ -1299,22 +1308,16 @@ export function compileHandlerJit(
 									abortChainGuard(),
 									arm
 								)
-							: '') +
-							endTrace('error') +
-							(hasDeriveDispose
-								? schedule + abortCatch
-								: abortCatch + schedule),
+							: '') + declined,
 						signPrefix,
 						asyncMode,
-						arm
+						arm,
+						declined
 					],
 					abortChainGuard(),
 					asyncTail(asyncMode)
 				) +
-				endTrace('error') +
-				(hasDeriveDispose
-					? schedule + abortCatch
-					: abortCatch + schedule) +
+				declined +
 				`return _efb(e,c)\n`
 		} else body += endTrace('error') + freThenSchedule('e')
 

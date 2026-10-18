@@ -2,6 +2,7 @@
 // Every lane owns a fresh app and must release its resources in dispose().
 
 import '../../src/compile/aot-capture' // installs captureImpl (side effect)
+import { existsSync, readFileSync, readdirSync, readlinkSync } from 'node:fs'
 import { Elysia, type AnyElysia } from '../../src'
 import { Compiled, type CompiledSnapshot } from '../../src/compile/aot'
 import {
@@ -123,7 +124,52 @@ const listenLane = (
 // so re-bind the same wildcard pair the server actually used in that case.
 const wildcardAddresses = ['0.0.0.0', '::']
 
-async function assertPortClosed(
+// A failed re-bind alone does not prove a leak. macOS hands `listen(0)` a port
+// that another user's socket holds on a specific address (Tailscale, OrbStack's
+// kernel_task), then refuses an explicit bind of it for as long as that socket
+// lives. Ask the socket table whether the listener is in this process: /proc
+// on Linux, lsof elsewhere. `undefined` when neither answers: the caller keeps
+// treating the port as leaked.
+const ownsListener = (port: number): boolean | undefined => {
+	try {
+		if (process.platform === 'linux') {
+			// row: sl local_address rem_address st ... inode, LISTEN is st 0A
+			const local = `:${port.toString(16).toUpperCase().padStart(4, '0')}`
+			const sockets = new Set<string>()
+			for (const table of ['/proc/net/tcp', '/proc/net/tcp6']) {
+				if (!existsSync(table)) continue
+				for (const row of readFileSync(table, 'utf8').split('\n')) {
+					const cell = row.trim().split(/\s+/)
+					if (cell[3] === '0A' && cell[1].endsWith(local))
+						sockets.add(`socket:[${cell[9]}]`)
+				}
+			}
+
+			return readdirSync('/proc/self/fd').some((fd) => {
+				try {
+					return sockets.has(readlinkSync(`/proc/self/fd/${fd}`))
+				} catch {
+					return false
+				}
+			})
+		}
+
+		const { exitCode, stdout, stderr } = Bun.spawnSync([
+			'lsof',
+			'-nPw',
+			'-a',
+			'-p',
+			String(process.pid),
+			`-iTCP:${port}`,
+			'-sTCP:LISTEN',
+			'-t'
+		])
+		if (exitCode === 0) return true
+		if (exitCode === 1 && !stdout.length && !stderr.length) return false
+	} catch {}
+}
+
+export async function assertPortClosed(
 	id: string,
 	hostname: string,
 	port: number,
@@ -150,9 +196,12 @@ async function assertPortClosed(
 			}
 		}
 		if (!bound) return
+		const owned = ownsListener(port)
+		if (owned === false) return
 		if (Date.now() >= deadline)
 			throw new Error(
-				`[${id}] port ${port} is still bound after stop(true) — leaked`
+				`[${id}] port ${port} is still bound after stop(true) — leaked` +
+					(owned ? '' : ' (holder unverified)')
 			)
 		await new Promise((r) => setTimeout(r, 10))
 	}

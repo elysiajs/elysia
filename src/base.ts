@@ -143,7 +143,7 @@ import type {
 	ObjectMacroDefs,
 	WrapFn,
 	ExcludeElysiaResponse,
-	ExtractErrorFromHandle,
+	DeriveResponse,
 	HTTPMethod,
 	AddRoute,
 	AddWSRoute,
@@ -151,6 +151,12 @@ import type {
 	HookContextSchema,
 	HookContextSingleton,
 	LocalHookReturn,
+	CatchAllHookReturn,
+	CatchAllEntries,
+	ErrorHookStatus,
+	MacroCatchAll,
+	WithoutMacroCatch,
+	WithErrorEntries,
 	PluginHookReturn,
 	GlobalHookReturn,
 	ScopedHookReturn,
@@ -168,6 +174,79 @@ import {
 } from './context'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
+
+/**
+ * Merge two `Metadata` whose hooks all apply. `&` would intersect what both
+ * sides respond with at a status, and their `~error`, which must union.
+ * Same as in `types.ts`, kept off its public module
+ */
+type MergeMetadata<
+	A extends MetadataBase,
+	B extends MetadataBase
+> = {} extends A['response']
+	? A & B
+	: {} extends B['response']
+		? A & B
+		: Omit<A & B, 'response'> & {
+				response: UnionResponseStatus<A['response'], B['response']>
+			}
+
+// A factory declaring no parameter: one declaring one, even optional, is
+// handed the parent
+type IgnoresApp<Factory> = Factory extends (...a: infer A) => any
+	? A extends []
+		? true
+		: false
+	: false
+
+// What `.use()` types an async factory's parameter as when the factory takes
+// none, so one declaring a parameter, even an optional one, falls through to
+// the overload that hands it the parent. A `type`, not an `interface`: a
+// consumer's d.ts prints it inline, where an unexported interface can't be
+// named (TS4023)
+type NotTheParent = {
+	'~notTheParent': true
+}
+
+// Same as in `types.ts`, kept off its public module
+type RouteHookCapture = {
+	beforeHandle?: unknown
+	afterHandle?: unknown
+	error?: unknown
+}
+
+// A WebSocket route's own `beforeHandle` and `error` hooks, captured like
+// `RouteHookCapture`
+type WSHookCapture = {
+	beforeHandle?: unknown
+	error?: unknown
+}
+
+// Keys a route's hook object can have besides its macros'. `derive` and
+// `trace` run on a route too (`trace` needs `.use(trace())`), though
+// `LocalHook` doesn't type them
+type HookObjectKey =
+	| keyof InputSchema
+	| 'detail'
+	| 'parse'
+	| 'transform'
+	| 'derive'
+	| 'beforeHandle'
+	| 'afterHandle'
+	| 'mapResponse'
+	| 'afterResponse'
+	| 'error'
+	| 'trace'
+	| 'tags'
+
+// `Input` takes in the whole hook object once it names a schema, macro or
+// lifecycle key, which turns off the excess property check: a key left over
+// is a typo. The verbs work the keys out once, in a defaulted type parameter
+// (`NoInfer`: never from the hook object), so a valid hook object adds
+// nothing to the parameter
+type UnknownHookKey<Key extends PropertyKey> = [Key] extends [never]
+	? unknown
+	: { [K in NoInfer<Key>]: never }
 
 const useNodesBuffer: ChainNode[] = []
 // instance -> registration -> named plugins it was propagated through
@@ -1522,6 +1601,7 @@ export class Elysia<
 		const Derivative extends
 			| Record<string, unknown>
 			| ElysiaStatus<any, any, any>
+			| Error
 			| void
 	>(
 		transform: (
@@ -1539,7 +1619,7 @@ export class Elysia<
 		Routes,
 		Ephemeral,
 		Volatile,
-		ExtractErrorFromHandle<Derivative>,
+		DeriveResponse<Derivative>,
 		ExcludeElysiaResponse<Derivative>
 	>
 
@@ -1547,6 +1627,7 @@ export class Elysia<
 		const Derivative extends
 			| Record<string, unknown>
 			| ElysiaStatus<any, any, any>
+			| Error
 			| void
 	>(
 		scope: 'local',
@@ -1565,7 +1646,7 @@ export class Elysia<
 		Routes,
 		Ephemeral,
 		Volatile,
-		ExtractErrorFromHandle<Derivative>,
+		DeriveResponse<Derivative>,
 		ExcludeElysiaResponse<Derivative>
 	>
 
@@ -1574,6 +1655,7 @@ export class Elysia<
 		const Derivative extends
 			| Record<string, unknown>
 			| ElysiaStatus<any, any, any>
+			| Error
 			| void
 	>(
 		scope: 'plugin',
@@ -1594,7 +1676,7 @@ export class Elysia<
 		Routes,
 		Ephemeral,
 		Volatile,
-		ExtractErrorFromHandle<Derivative>,
+		DeriveResponse<Derivative>,
 		ExcludeElysiaResponse<Derivative>
 	>
 
@@ -1602,6 +1684,7 @@ export class Elysia<
 		const Derivative extends
 			| Record<string, unknown>
 			| ElysiaStatus<any, any, any>
+			| Error
 			| void
 	>(
 		scope: 'global',
@@ -1622,7 +1705,7 @@ export class Elysia<
 		Routes,
 		Ephemeral,
 		Volatile,
-		ExtractErrorFromHandle<Derivative>,
+		DeriveResponse<Derivative>,
 		ExcludeElysiaResponse<Derivative>
 	>
 
@@ -1632,6 +1715,7 @@ export class Elysia<
 		const Derivative extends
 			| Record<string, unknown>
 			| ElysiaStatus<any, any, any>
+			| Error
 			| void
 	>(
 		options: { as: As },
@@ -1653,7 +1737,7 @@ export class Elysia<
 		Routes,
 		Ephemeral,
 		Volatile,
-		ExtractErrorFromHandle<Derivative>,
+		DeriveResponse<Derivative>,
 		ExcludeElysiaResponse<Derivative>
 	>
 
@@ -1662,6 +1746,7 @@ export class Elysia<
 		const Derivative extends
 			| Record<string, unknown>
 			| ElysiaStatus<any, any, any>
+			| Error
 			| void
 	>(
 		scope: HookScope,
@@ -1683,7 +1768,7 @@ export class Elysia<
 		Routes,
 		Ephemeral,
 		Volatile,
-		ExtractErrorFromHandle<Derivative>,
+		DeriveResponse<Derivative>,
 		ExcludeElysiaResponse<Derivative>
 	>
 
@@ -1716,6 +1801,7 @@ export class Elysia<
 		const Derivative extends
 			| Record<string, unknown>
 			| ElysiaStatus<any, any, any>
+			| Error
 			| void
 	>(
 		transform: (
@@ -1738,7 +1824,7 @@ export class Elysia<
 			schemas: Volatile['schemas']
 			response: UnionResponseStatus<
 				Volatile['response'],
-				ExtractErrorFromHandle<Derivative>
+				DeriveResponse<Derivative>
 			>
 			error: Volatile['error']
 		}
@@ -1748,6 +1834,7 @@ export class Elysia<
 		const Derivative extends
 			| Record<string, unknown>
 			| ElysiaStatus<any, any, any>
+			| Error
 			| void
 	>(
 		scope: 'local',
@@ -1771,7 +1858,7 @@ export class Elysia<
 			schemas: Volatile['schemas']
 			response: UnionResponseStatus<
 				Volatile['response'],
-				ExtractErrorFromHandle<Derivative>
+				DeriveResponse<Derivative>
 			>
 			error: Volatile['error']
 		}
@@ -1781,6 +1868,7 @@ export class Elysia<
 		const Derivative extends
 			| Record<string, unknown>
 			| ElysiaStatus<any, any, any>
+			| Error
 			| void
 	>(
 		scope: 'plugin',
@@ -1805,7 +1893,7 @@ export class Elysia<
 			schemas: Ephemeral['schemas']
 			response: UnionResponseStatus<
 				Ephemeral['response'],
-				ExtractErrorFromHandle<Derivative>
+				DeriveResponse<Derivative>
 			>
 			error: Ephemeral['error']
 		},
@@ -1816,6 +1904,7 @@ export class Elysia<
 		const Derivative extends
 			| Record<string, unknown>
 			| ElysiaStatus<any, any, any>
+			| Error
 			| void
 	>(
 		scope: 'global',
@@ -1844,7 +1933,7 @@ export class Elysia<
 			parser: Metadata['parser']
 			response: UnionResponseStatus<
 				Metadata['response'],
-				ExtractErrorFromHandle<Derivative>
+				DeriveResponse<Derivative>
 			>
 		},
 		Routes,
@@ -1858,6 +1947,7 @@ export class Elysia<
 		const Derivative extends
 			| Record<string, unknown>
 			| ElysiaStatus<any, any, any>
+			| Error
 			| void
 	>(
 		options: { as: As },
@@ -1879,7 +1969,7 @@ export class Elysia<
 		Routes,
 		Ephemeral,
 		Volatile,
-		ExtractErrorFromHandle<Derivative>,
+		DeriveResponse<Derivative>,
 		ExcludeElysiaResponse<Derivative>
 	>
 
@@ -1888,6 +1978,7 @@ export class Elysia<
 		const Derivative extends
 			| Record<string, unknown>
 			| ElysiaStatus<any, any, any>
+			| Error
 			| void
 	>(
 		scope: HookScope,
@@ -1909,7 +2000,7 @@ export class Elysia<
 		Routes,
 		Ephemeral,
 		Volatile,
-		ExtractErrorFromHandle<Derivative>,
+		DeriveResponse<Derivative>,
 		ExcludeElysiaResponse<Derivative>
 	>
 
@@ -2146,7 +2237,8 @@ export class Elysia<
 		>
 	>(
 		fn: Handler
-	): LocalHookReturn<
+	): CatchAllHookReturn<
+		'local',
 		BasePath,
 		Scope,
 		Singleton,
@@ -2155,7 +2247,7 @@ export class Elysia<
 		Routes,
 		Ephemeral,
 		Volatile,
-		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
+		Handler
 	>
 	onError<
 		const E extends AnyErrorConstructor &
@@ -2273,7 +2365,8 @@ export class Elysia<
 	>(
 		scope: 'local',
 		fn: Handler
-	): LocalHookReturn<
+	): CatchAllHookReturn<
+		'local',
 		BasePath,
 		Scope,
 		Singleton,
@@ -2282,7 +2375,7 @@ export class Elysia<
 		Routes,
 		Ephemeral,
 		Volatile,
-		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
+		Handler
 	>
 	onError<
 		const Handler extends MaybeArray<
@@ -2301,7 +2394,8 @@ export class Elysia<
 	>(
 		scope: 'plugin',
 		fn: Handler
-	): PluginHookReturn<
+	): CatchAllHookReturn<
+		'plugin',
 		BasePath,
 		Scope,
 		Singleton,
@@ -2310,7 +2404,7 @@ export class Elysia<
 		Routes,
 		Ephemeral,
 		Volatile,
-		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
+		Handler
 	>
 	onError<
 		const Handler extends MaybeArray<
@@ -2329,7 +2423,8 @@ export class Elysia<
 	>(
 		scope: 'global',
 		fn: Handler
-	): GlobalHookReturn<
+	): CatchAllHookReturn<
+		'global',
 		BasePath,
 		Scope,
 		Singleton,
@@ -2338,7 +2433,7 @@ export class Elysia<
 		Routes,
 		Ephemeral,
 		Volatile,
-		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
+		Handler
 	>
 	/** @deprecated 1.x syntax, use `.onError('plugin', fn)`, `'scoped'` is now `'plugin'` */
 	onError<
@@ -2359,7 +2454,7 @@ export class Elysia<
 	>(
 		options: { as: As },
 		fn: Handler
-	): ScopedHookReturn<
+	): CatchAllHookReturn<
 		LegacyScope<As>,
 		BasePath,
 		Scope,
@@ -2369,7 +2464,7 @@ export class Elysia<
 		Routes,
 		Ephemeral,
 		Volatile,
-		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
+		Handler
 	>
 	onError<
 		const HookScope extends EventScope,
@@ -2389,7 +2484,7 @@ export class Elysia<
 	>(
 		scope: HookScope,
 		fn: Handler
-	): ScopedHookReturn<
+	): CatchAllHookReturn<
 		HookScope,
 		BasePath,
 		Scope,
@@ -2399,7 +2494,7 @@ export class Elysia<
 		Routes,
 		Ephemeral,
 		Volatile,
-		ElysiaHandlerToResponseSchemaAmbiguous<Handler>
+		Handler
 	>
 
 	onError<
@@ -2811,14 +2906,25 @@ export class Elysia<
 				UnwrapRoute<Input, Definitions['typebox']> &
 				MacroContext
 			response: UnionResponseStatus<
-				Volatile['response'],
-				ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-					ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-					// @ts-ignore
-					MacroContext['return']
+				UnionResponseStatus<
+					Volatile['response'],
+					ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
+				>,
+				UnionResponseStatus<
+					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle>,
+					UnionResponseStatus<
+						ErrorHookStatus<ErrorHandle>,
+						WithoutMacroCatch<
+							MacroContext['return' & keyof MacroContext]
+						> & {}
+					>
+				>
 			>
-			error: Volatile['error']
+			error: [
+				...Volatile['error'],
+				...CatchAllEntries<ErrorHandle>,
+				...MacroCatchAll<MacroContext['return' & keyof MacroContext]>
+			]
 		}
 	>
 
@@ -2902,14 +3008,25 @@ export class Elysia<
 					>
 			schemas: Volatile['schemas'] & MacroContext
 			response: UnionResponseStatus<
-				Volatile['response'],
-				ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-					ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-					// @ts-ignore
-					MacroContext['return']
+				UnionResponseStatus<
+					Volatile['response'],
+					ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
+				>,
+				UnionResponseStatus<
+					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle>,
+					UnionResponseStatus<
+						ErrorHookStatus<ErrorHandle>,
+						WithoutMacroCatch<
+							MacroContext['return' & keyof MacroContext]
+						> & {}
+					>
+				>
 			>
-			error: Volatile['error']
+			error: [
+				...Volatile['error'],
+				...CatchAllEntries<ErrorHandle>,
+				...MacroCatchAll<MacroContext['return' & keyof MacroContext]>
+			]
 		}
 	>
 
@@ -2986,7 +3103,15 @@ export class Elysia<
 						// @ts-ignore
 						MacroContext['derive']
 				},
-				Definitions,
+				WithErrorEntries<
+					Definitions,
+					[
+						...CatchAllEntries<ErrorHandle>,
+						...MacroCatchAll<
+							MacroContext['return' & keyof MacroContext]
+						>
+					]
+				>,
 				{
 					schema: Metadata['schema']
 					schemas: Metadata['schemas'] &
@@ -2995,12 +3120,21 @@ export class Elysia<
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
-					response: Metadata['response'] &
-						// @ts-ignore
-						MacroContext['response'] &
-						ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-						ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-						ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle>
+					response: UnionResponseStatus<
+						UnionResponseStatus<
+							Metadata['response'],
+							ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
+						>,
+						UnionResponseStatus<
+							ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle>,
+							UnionResponseStatus<
+								ErrorHookStatus<ErrorHandle>,
+								WithoutMacroCatch<
+									MacroContext['return' & keyof MacroContext]
+								> & {}
+							>
+						>
+					>
 				},
 				{},
 				Ephemeral,
@@ -3090,7 +3224,15 @@ export class Elysia<
 						// @ts-ignore
 						MacroContext['derive']
 				},
-				Definitions,
+				WithErrorEntries<
+					Definitions,
+					[
+						...CatchAllEntries<ErrorHandle>,
+						...MacroCatchAll<
+							MacroContext['return' & keyof MacroContext]
+						>
+					]
+				>,
 				{
 					schema: MergeSchema<
 						UnwrapRoute<Input, Definitions['typebox']>,
@@ -3103,12 +3245,21 @@ export class Elysia<
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
-					response: Metadata['response'] &
-						// @ts-ignore
-						MacroContext['response'] &
-						ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-						ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-						ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle>
+					response: UnionResponseStatus<
+						UnionResponseStatus<
+							Metadata['response'],
+							ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
+						>,
+						UnionResponseStatus<
+							ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle>,
+							UnionResponseStatus<
+								ErrorHookStatus<ErrorHandle>,
+								WithoutMacroCatch<
+									MacroContext['return' & keyof MacroContext]
+								> & {}
+							>
+						>
+					>
 				},
 				{},
 				{
@@ -3215,14 +3366,25 @@ export class Elysia<
 				UnwrapRoute<Input, Definitions['typebox']> &
 				MacroContext
 			response: UnionResponseStatus<
-				Volatile['response'],
-				ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-					ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-					// @ts-ignore
-					MacroContext['return']
+				UnionResponseStatus<
+					Volatile['response'],
+					ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
+				>,
+				UnionResponseStatus<
+					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle>,
+					UnionResponseStatus<
+						ErrorHookStatus<ErrorHandle>,
+						WithoutMacroCatch<
+							MacroContext['return' & keyof MacroContext]
+						> & {}
+					>
+				>
 			>
-			error: Volatile['error']
+			error: [
+				...Volatile['error'],
+				...CatchAllEntries<ErrorHandle>,
+				...MacroCatchAll<MacroContext['return' & keyof MacroContext]>
+			]
 		}
 	>
 
@@ -3307,14 +3469,25 @@ export class Elysia<
 					>
 			schemas: Volatile['schemas'] & MacroContext
 			response: UnionResponseStatus<
-				Volatile['response'],
-				ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-					ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-					// @ts-ignore
-					MacroContext['return']
+				UnionResponseStatus<
+					Volatile['response'],
+					ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
+				>,
+				UnionResponseStatus<
+					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle>,
+					UnionResponseStatus<
+						ErrorHookStatus<ErrorHandle>,
+						WithoutMacroCatch<
+							MacroContext['return' & keyof MacroContext]
+						> & {}
+					>
+				>
 			>
-			error: Volatile['error']
+			error: [
+				...Volatile['error'],
+				...CatchAllEntries<ErrorHandle>,
+				...MacroCatchAll<MacroContext['return' & keyof MacroContext]>
+			]
 		}
 	>
 
@@ -3394,14 +3567,25 @@ export class Elysia<
 				UnwrapRoute<Input, Definitions['typebox']> &
 				MacroContext
 			response: UnionResponseStatus<
-				Ephemeral['response'],
-				ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-					ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-					// @ts-ignore
-					MacroContext['return']
+				UnionResponseStatus<
+					Ephemeral['response'],
+					ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
+				>,
+				UnionResponseStatus<
+					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle>,
+					UnionResponseStatus<
+						ErrorHookStatus<ErrorHandle>,
+						WithoutMacroCatch<
+							MacroContext['return' & keyof MacroContext]
+						> & {}
+					>
+				>
 			>
-			error: Ephemeral['error']
+			error: [
+				...Ephemeral['error'],
+				...CatchAllEntries<ErrorHandle>,
+				...MacroCatchAll<MacroContext['return' & keyof MacroContext]>
+			]
 		},
 		Volatile
 	>
@@ -3486,14 +3670,25 @@ export class Elysia<
 					>
 			schemas: Ephemeral['schemas'] & MacroContext
 			response: UnionResponseStatus<
-				Ephemeral['response'],
-				ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-					ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-					// @ts-ignore
-					MacroContext['return']
+				UnionResponseStatus<
+					Ephemeral['response'],
+					ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
+				>,
+				UnionResponseStatus<
+					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle>,
+					UnionResponseStatus<
+						ErrorHookStatus<ErrorHandle>,
+						WithoutMacroCatch<
+							MacroContext['return' & keyof MacroContext]
+						> & {}
+					>
+				>
 			>
-			error: Ephemeral['error']
+			error: [
+				...Ephemeral['error'],
+				...CatchAllEntries<ErrorHandle>,
+				...MacroCatchAll<MacroContext['return' & keyof MacroContext]>
+			]
 		},
 		Volatile
 	>
@@ -3568,7 +3763,13 @@ export class Elysia<
 				// @ts-ignore
 				MacroContext['derive']
 		},
-		Definitions,
+		WithErrorEntries<
+			Definitions,
+			[
+				...CatchAllEntries<ErrorHandle>,
+				...MacroCatchAll<MacroContext['return' & keyof MacroContext]>
+			]
+		>,
 		{
 			schema: Metadata['schema']
 			schemas: Metadata['schemas'] &
@@ -3578,12 +3779,19 @@ export class Elysia<
 			macroFn: Metadata['macroFn']
 			parser: Metadata['parser']
 			response: UnionResponseStatus<
-				Metadata['response'],
-				ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-					ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-					// @ts-ignore
-					MacroContext['return']
+				UnionResponseStatus<
+					Metadata['response'],
+					ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
+				>,
+				UnionResponseStatus<
+					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle>,
+					UnionResponseStatus<
+						ErrorHookStatus<ErrorHandle>,
+						WithoutMacroCatch<
+							MacroContext['return' & keyof MacroContext]
+						> & {}
+					>
+				>
 			>
 		},
 		Routes,
@@ -3662,7 +3870,13 @@ export class Elysia<
 				// @ts-ignore
 				MacroContext['derive']
 		},
-		Definitions,
+		WithErrorEntries<
+			Definitions,
+			[
+				...CatchAllEntries<ErrorHandle>,
+				...MacroCatchAll<MacroContext['return' & keyof MacroContext]>
+			]
+		>,
 		{
 			schema: {} extends Pick<Input, Extract<keyof Input, InputSchemaKey>>
 				? Metadata['schema']
@@ -3675,12 +3889,19 @@ export class Elysia<
 			macroFn: Metadata['macroFn']
 			parser: Metadata['parser']
 			response: UnionResponseStatus<
-				Metadata['response'],
-				ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-					ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-					// @ts-ignore
-					MacroContext['return']
+				UnionResponseStatus<
+					Metadata['response'],
+					ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
+				>,
+				UnionResponseStatus<
+					ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle>,
+					UnionResponseStatus<
+						ErrorHookStatus<ErrorHandle>,
+						WithoutMacroCatch<
+							MacroContext['return' & keyof MacroContext]
+						> & {}
+					>
+				>
 			>
 		},
 		Routes,
@@ -3852,7 +4073,15 @@ export class Elysia<
 						// @ts-ignore
 						MacroContext['derive']
 				},
-				Definitions,
+				WithErrorEntries<
+					Definitions,
+					[
+						...CatchAllEntries<ErrorHandle>,
+						...MacroCatchAll<
+							MacroContext['return' & keyof MacroContext]
+						>
+					]
+				>,
 				{
 					schema: Metadata['schema']
 					schemas: Metadata['schemas'] &
@@ -3861,12 +4090,21 @@ export class Elysia<
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
-					response: Metadata['response'] &
-						// @ts-ignore
-						MacroContext['response'] &
-						ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-						ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-						ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle>
+					response: UnionResponseStatus<
+						UnionResponseStatus<
+							Metadata['response'],
+							ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
+						>,
+						UnionResponseStatus<
+							ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle>,
+							UnionResponseStatus<
+								ErrorHookStatus<ErrorHandle>,
+								WithoutMacroCatch<
+									MacroContext['return' & keyof MacroContext]
+								> & {}
+							>
+						>
+					>
 				},
 				{},
 				Ephemeral,
@@ -3962,7 +4200,15 @@ export class Elysia<
 						// @ts-ignore
 						MacroContext['derive']
 				},
-				Definitions,
+				WithErrorEntries<
+					Definitions,
+					[
+						...CatchAllEntries<ErrorHandle>,
+						...MacroCatchAll<
+							MacroContext['return' & keyof MacroContext]
+						>
+					]
+				>,
 				{
 					schema: MergeSchema<
 						UnwrapRoute<Input, Definitions['typebox']>,
@@ -3975,12 +4221,21 @@ export class Elysia<
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
-					response: Metadata['response'] &
-						// @ts-ignore
-						MacroContext['response'] &
-						ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-						ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-						ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle>
+					response: UnionResponseStatus<
+						UnionResponseStatus<
+							Metadata['response'],
+							ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
+						>,
+						UnionResponseStatus<
+							ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle>,
+							UnionResponseStatus<
+								ErrorHookStatus<ErrorHandle>,
+								WithoutMacroCatch<
+									MacroContext['return' & keyof MacroContext]
+								> & {}
+							>
+						>
+					>
 				},
 				{},
 				{
@@ -4429,7 +4684,7 @@ export class Elysia<
 				...NewElysia['~Definitions']['error']
 			]
 		},
-		Metadata & NewElysia['~Metadata'],
+		MergeMetadata<Metadata, NewElysia['~Metadata']>,
 		BasePath extends ``
 			? Routes &
 					ResolveUsedRouteErrors<
@@ -4459,16 +4714,26 @@ export class Elysia<
 			derive: Volatile['derive'] & NewElysia['~Ephemeral']['derive']
 			schema: Volatile['schema'] & NewElysia['~Ephemeral']['schema']
 			schemas: Volatile['schemas'] & NewElysia['~Ephemeral']['schemas']
-			response: Volatile['response'] & NewElysia['~Ephemeral']['response']
+			response: UnionResponseStatus<
+				Volatile['response'],
+				NewElysia['~Ephemeral']['response']
+			>
 			error: [...Volatile['error'], ...NewElysia['~Ephemeral']['error']]
 		}
 	>
 
 	/**
-	 * Merge multiple plugin instances
+	 * Merge multiple plugin instances, or a factory returning them
+	 *
+	 * A factory taking no `app` has its array inferred by the instance
+	 * overload above, as an array rather than a tuple, so its plugins are
+	 * lost: return it `as const`
 	 */
-	use<const Instances extends AnyElysia[]>(
-		instances: Instances
+	use<
+		const Instances extends AnyElysia[],
+		const Param extends AnyElysia = this
+	>(
+		instances: Instances | ((app: Param) => readonly [...Instances])
 	): MergeElysiaInstances<
 		Instances,
 		BasePath,
@@ -4483,57 +4748,154 @@ export class Elysia<
 
 	/**
 	 * Inline functional plugin
+	 *
+	 * A factory that ignores `app` is assumed to return a new instance, used
+	 * as a plugin the same way as `.use(instance)`. One returning the parent
+	 * it captured is mistyped, types can't see instance identity. A factory
+	 * declaring a parameter, even an optional one, is typed as returning `app`
 	 */
 	use<
 		const NewElysia extends AnyElysia,
-		const Param extends AnyElysia = this
+		const Param extends AnyElysia = this,
+		// The factory itself, to tell whether it takes `app`
+		const Factory = unknown
 	>(
-		plugin: (app: Param) => NewElysia
-	): Elysia<
-		BasePath,
-		Scope,
-		{
-			decorator: Singleton['decorator'] &
-				NewElysia['~Singleton']['decorator']
-			store: Prettify<
-				Singleton['store'] & NewElysia['~Singleton']['store']
+		plugin: Factory & ((app: Param) => NewElysia)
+	): IgnoresApp<Factory> extends true
+		? Elysia<
+				BasePath,
+				Scope,
+				{
+					decorator: Singleton['decorator'] &
+						NewElysia['~Singleton']['decorator']
+					store: Prettify<
+						Singleton['store'] & NewElysia['~Singleton']['store']
+					>
+					derive: Singleton['derive'] &
+						NewElysia['~Singleton']['derive']
+				},
+				{
+					typebox: Definitions['typebox'] &
+						NewElysia['~Definitions']['typebox']
+					error: [
+						...Definitions['error'],
+						...NewElysia['~Definitions']['error']
+					]
+				},
+				MergeMetadata<Metadata, NewElysia['~Metadata']>,
+				BasePath extends ``
+					? Routes &
+							ResolveUsedRouteErrors<
+								NewElysia['~Routes'],
+								[
+									...Definitions['error'],
+									...Ephemeral['error'],
+									...Volatile['error']
+								],
+								ParentResponse<Metadata, Ephemeral, Volatile>
+							>
+					: Routes &
+							CreateEden<
+								BasePath,
+								ResolveUsedRouteErrors<
+									NewElysia['~Routes'],
+									[
+										...Definitions['error'],
+										...Ephemeral['error'],
+										...Volatile['error']
+									],
+									ParentResponse<
+										Metadata,
+										Ephemeral,
+										Volatile
+									>
+								>
+							>,
+				Ephemeral,
+				{
+					derive: Volatile['derive'] &
+						NewElysia['~Ephemeral']['derive']
+					schema: Volatile['schema'] &
+						NewElysia['~Ephemeral']['schema']
+					schemas: Volatile['schemas'] &
+						NewElysia['~Ephemeral']['schemas']
+					response: UnionResponseStatus<
+						Volatile['response'],
+						NewElysia['~Ephemeral']['response']
+					>
+					error: [
+						...Volatile['error'],
+						...NewElysia['~Ephemeral']['error']
+					]
+				}
 			>
-			derive: Singleton['derive'] & NewElysia['~Singleton']['derive']
-		},
-		{
-			typebox: Definitions['typebox'] &
-				NewElysia['~Definitions']['typebox']
-			error: [
-				...Definitions['error'],
-				...NewElysia['~Definitions']['error']
-			]
-		},
-		Metadata & NewElysia['~Metadata'],
-		BasePath extends ``
-			? Routes & NewElysia['~Routes']
-			: Routes & CreateEden<BasePath, NewElysia['~Routes']>,
-		{
-			derive: Ephemeral['derive'] & NewElysia['~Ephemeral']['derive']
-			schema: Ephemeral['schema'] & NewElysia['~Ephemeral']['schema']
-			schemas: Ephemeral['schemas'] & NewElysia['~Ephemeral']['schemas']
-			response: Ephemeral['response'] &
-				NewElysia['~Ephemeral']['response']
-			error: NewElysia['~Ephemeral']['error']
-		},
-		{
-			derive: Volatile['derive'] & NewElysia['~Volatile']['derive']
-			schema: Volatile['schema'] & NewElysia['~Volatile']['schema']
-			schemas: Volatile['schemas'] & NewElysia['~Volatile']['schemas']
-			response: Volatile['response'] & NewElysia['~Volatile']['response']
-			error: NewElysia['~Volatile']['error']
-		}
-	>
+		: Elysia<
+				BasePath,
+				Scope,
+				{
+					decorator: Singleton['decorator'] &
+						NewElysia['~Singleton']['decorator']
+					store: Prettify<
+						Singleton['store'] & NewElysia['~Singleton']['store']
+					>
+					derive: Singleton['derive'] &
+						NewElysia['~Singleton']['derive']
+				},
+				{
+					typebox: Definitions['typebox'] &
+						NewElysia['~Definitions']['typebox']
+					error: [
+						...Definitions['error'],
+						...NewElysia['~Definitions']['error']
+					]
+				},
+				MergeMetadata<Metadata, NewElysia['~Metadata']>,
+				BasePath extends ``
+					? Routes & NewElysia['~Routes']
+					: Routes & CreateEden<BasePath, NewElysia['~Routes']>,
+				{
+					derive: Ephemeral['derive'] &
+						NewElysia['~Ephemeral']['derive']
+					schema: Ephemeral['schema'] &
+						NewElysia['~Ephemeral']['schema']
+					schemas: Ephemeral['schemas'] &
+						NewElysia['~Ephemeral']['schemas']
+					response: UnionResponseStatus<
+						Ephemeral['response'],
+						NewElysia['~Ephemeral']['response']
+					>
+					error: NewElysia['~Ephemeral']['error']
+				},
+				{
+					derive: Volatile['derive'] &
+						NewElysia['~Volatile']['derive']
+					schema: Volatile['schema'] &
+						NewElysia['~Volatile']['schema']
+					schemas: Volatile['schemas'] &
+						NewElysia['~Volatile']['schemas']
+					response: UnionResponseStatus<
+						Volatile['response'],
+						NewElysia['~Volatile']['response']
+					>
+					error: NewElysia['~Volatile']['error']
+				}
+			>
 
 	/**
 	 * async plugin instance
+	 *
+	 * A factory that ignores `app` is assumed to resolve to a new instance,
+	 * used as a plugin the same way. One resolving to the parent it captured
+	 * is mistyped, types can't see instance identity. A factory declaring a
+	 * parameter, even an optional one, is typed as returning `app`, see the
+	 * async functional plugin below
 	 */
 	use<const NewElysia extends AnyElysia>(
-		instance: Promise<NewElysia | { default: NewElysia }>
+		instance:
+			| Promise<NewElysia | { default: NewElysia }>
+			| ((
+					app?: NotTheParent
+			  ) => MaybePromise<NewElysia | { default: NewElysia }>)
 	): Elysia<
 		BasePath,
 		Scope,
@@ -4554,7 +4916,7 @@ export class Elysia<
 				...NewElysia['~Definitions']['error']
 			]
 		},
-		Metadata & NewElysia['~Metadata'],
+		MergeMetadata<Metadata, NewElysia['~Metadata']>,
 		BasePath extends ``
 			? Routes &
 					ResolveUsedRouteErrors<
@@ -4585,7 +4947,10 @@ export class Elysia<
 				Partial<NewElysia['~Ephemeral']['derive']>
 			schema: Volatile['schema'] & NewElysia['~Ephemeral']['schema']
 			schemas: Volatile['schemas'] & NewElysia['~Ephemeral']['schemas']
-			response: Volatile['response'] & NewElysia['~Ephemeral']['response']
+			response: UnionResponseStatus<
+				Volatile['response'],
+				NewElysia['~Ephemeral']['response']
+			>
 			error: [...Volatile['error'], ...NewElysia['~Ephemeral']['error']]
 		}
 	>
@@ -4621,7 +4986,7 @@ export class Elysia<
 				...NewElysia['~Definitions']['error']
 			]
 		},
-		Metadata & NewElysia['~Metadata'],
+		MergeMetadata<Metadata, NewElysia['~Metadata']>,
 		BasePath extends ``
 			? Routes & NewElysia['~Routes']
 			: Routes & CreateEden<BasePath, NewElysia['~Routes']>,
@@ -4630,8 +4995,10 @@ export class Elysia<
 				Partial<NewElysia['~Ephemeral']['derive']>
 			schema: Ephemeral['schema'] & NewElysia['~Ephemeral']['schema']
 			schemas: Ephemeral['schemas'] & NewElysia['~Ephemeral']['schemas']
-			response: Ephemeral['response'] &
+			response: UnionResponseStatus<
+				Ephemeral['response'],
 				NewElysia['~Ephemeral']['response']
+			>
 			error: NewElysia['~Ephemeral']['error']
 		},
 		{
@@ -4639,7 +5006,10 @@ export class Elysia<
 				Partial<NewElysia['~Volatile']['derive']>
 			schema: Volatile['schema'] & NewElysia['~Volatile']['schema']
 			schemas: Volatile['schemas'] & NewElysia['~Volatile']['schemas']
-			response: Volatile['response'] & NewElysia['~Volatile']['response']
+			response: UnionResponseStatus<
+				Volatile['response'],
+				NewElysia['~Volatile']['response']
+			>
 			error: NewElysia['~Volatile']['error']
 		}
 	>
@@ -4747,7 +5117,11 @@ export class Elysia<
 			)
 		}
 
-		return this
+		// What it returns is used as a plugin, the same as what an async one
+		// resolves to. Returning `app` itself merges nothing
+		if (!result || result === this) return this
+
+		return this.use(result as any)
 	}
 
 	#use(app: AnyElysia) {
@@ -5311,13 +5685,16 @@ export class Elysia<
 				this.#routerBuilt = false
 				clearContextCache(this)
 
-				try {
-					this.#buildRouter(false)
-				} catch (error) {
-					this.compiled = previousCompiled
-					this.jitColdRemaining = previousJitColdRemaining
-					this._error ??= { error }
-				}
+				// only an instance that served rebuilds: a plugin is merged by its
+				// parent, built alone it lacks the parent's models and AOT manifest
+				if (this['~map'])
+					try {
+						this.#buildRouter(false)
+					} catch (error) {
+						this.compiled = previousCompiled
+						this.jitColdRemaining = previousJitColdRemaining
+						this._error ??= { error }
+					}
 			})
 
 		this.ready = next
@@ -5372,11 +5749,11 @@ export class Elysia<
 		// route doubles registration time
 		const verb =
 			this['~generation'] === undefined
-				? 'method'
+				? 'route'
 				: method === '*'
 					? 'all'
 					: method.toLowerCase()
-		this.#assertMutable(verb in this ? verb : 'method')
+		this.#assertMutable(verb in this ? verb : 'route')
 		;(this.declaredRoutes ?? this.#materializeDeclaredRoutes()).push(
 			(appHook
 				? [method, path, handler, this, hook, appHook]
@@ -5605,7 +5982,8 @@ export class Elysia<
 	get<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
+			InputSchema<keyof Definitions['typebox'] & string> &
+			RouteHookCapture,
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
@@ -5643,7 +6021,11 @@ export class Elysia<
 					NoInfer<Decorator>,
 					// @ts-ignore
 					MacroContext
-				>
+				>,
+		UnknownKey extends PropertyKey = Exclude<
+			keyof Input,
+			HookObjectKey | keyof Metadata['macro']
+		>
 	>(
 		path: Path,
 		hook: LocalHook<
@@ -5654,7 +6036,8 @@ export class Elysia<
 			Definitions['error'],
 			keyof Metadata['parser']
 		> &
-			MacroOptionContext<Metadata['macroFn'], Schema, Decorator>,
+			MacroOptionContext<Metadata['macroFn'], Schema, Decorator> &
+			UnknownHookKey<UnknownKey>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -5669,7 +6052,8 @@ export class Elysia<
 		Path,
 		Schema,
 		MacroContext,
-		Handle
+		Handle,
+		Input
 	>
 	get<
 		const Path extends string,
@@ -5739,7 +6123,8 @@ export class Elysia<
 	post<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
+			InputSchema<keyof Definitions['typebox'] & string> &
+			RouteHookCapture,
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
@@ -5777,7 +6162,11 @@ export class Elysia<
 					NoInfer<Decorator>,
 					// @ts-ignore
 					MacroContext
-				>
+				>,
+		UnknownKey extends PropertyKey = Exclude<
+			keyof Input,
+			HookObjectKey | keyof Metadata['macro']
+		>
 	>(
 		path: Path,
 		hook: LocalHook<
@@ -5788,7 +6177,8 @@ export class Elysia<
 			Definitions['error'],
 			keyof Metadata['parser']
 		> &
-			MacroOptionContext<Metadata['macroFn'], Schema, Decorator>,
+			MacroOptionContext<Metadata['macroFn'], Schema, Decorator> &
+			UnknownHookKey<UnknownKey>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -5803,7 +6193,8 @@ export class Elysia<
 		Path,
 		Schema,
 		MacroContext,
-		Handle
+		Handle,
+		Input
 	>
 	post<
 		const Path extends string,
@@ -5873,7 +6264,8 @@ export class Elysia<
 	put<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
+			InputSchema<keyof Definitions['typebox'] & string> &
+			RouteHookCapture,
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
@@ -5911,7 +6303,11 @@ export class Elysia<
 					NoInfer<Decorator>,
 					// @ts-ignore
 					MacroContext
-				>
+				>,
+		UnknownKey extends PropertyKey = Exclude<
+			keyof Input,
+			HookObjectKey | keyof Metadata['macro']
+		>
 	>(
 		path: Path,
 		hook: LocalHook<
@@ -5922,7 +6318,8 @@ export class Elysia<
 			Definitions['error'],
 			keyof Metadata['parser']
 		> &
-			MacroOptionContext<Metadata['macroFn'], Schema, Decorator>,
+			MacroOptionContext<Metadata['macroFn'], Schema, Decorator> &
+			UnknownHookKey<UnknownKey>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -5937,7 +6334,8 @@ export class Elysia<
 		Path,
 		Schema,
 		MacroContext,
-		Handle
+		Handle,
+		Input
 	>
 	put<
 		const Path extends string,
@@ -6007,7 +6405,8 @@ export class Elysia<
 	patch<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
+			InputSchema<keyof Definitions['typebox'] & string> &
+			RouteHookCapture,
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
@@ -6045,7 +6444,11 @@ export class Elysia<
 					NoInfer<Decorator>,
 					// @ts-ignore
 					MacroContext
-				>
+				>,
+		UnknownKey extends PropertyKey = Exclude<
+			keyof Input,
+			HookObjectKey | keyof Metadata['macro']
+		>
 	>(
 		path: Path,
 		hook: LocalHook<
@@ -6056,7 +6459,8 @@ export class Elysia<
 			Definitions['error'],
 			keyof Metadata['parser']
 		> &
-			MacroOptionContext<Metadata['macroFn'], Schema, Decorator>,
+			MacroOptionContext<Metadata['macroFn'], Schema, Decorator> &
+			UnknownHookKey<UnknownKey>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -6071,7 +6475,8 @@ export class Elysia<
 		Path,
 		Schema,
 		MacroContext,
-		Handle
+		Handle,
+		Input
 	>
 	patch<
 		const Path extends string,
@@ -6141,7 +6546,8 @@ export class Elysia<
 	delete<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
+			InputSchema<keyof Definitions['typebox'] & string> &
+			RouteHookCapture,
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
@@ -6179,7 +6585,11 @@ export class Elysia<
 					NoInfer<Decorator>,
 					// @ts-ignore
 					MacroContext
-				>
+				>,
+		UnknownKey extends PropertyKey = Exclude<
+			keyof Input,
+			HookObjectKey | keyof Metadata['macro']
+		>
 	>(
 		path: Path,
 		hook: LocalHook<
@@ -6190,7 +6600,8 @@ export class Elysia<
 			Definitions['error'],
 			keyof Metadata['parser']
 		> &
-			MacroOptionContext<Metadata['macroFn'], Schema, Decorator>,
+			MacroOptionContext<Metadata['macroFn'], Schema, Decorator> &
+			UnknownHookKey<UnknownKey>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -6205,7 +6616,8 @@ export class Elysia<
 		Path,
 		Schema,
 		MacroContext,
-		Handle
+		Handle,
+		Input
 	>
 	delete<
 		const Path extends string,
@@ -6275,7 +6687,8 @@ export class Elysia<
 	options<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
+			InputSchema<keyof Definitions['typebox'] & string> &
+			RouteHookCapture,
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
@@ -6313,7 +6726,11 @@ export class Elysia<
 					NoInfer<Decorator>,
 					// @ts-ignore
 					MacroContext
-				>
+				>,
+		UnknownKey extends PropertyKey = Exclude<
+			keyof Input,
+			HookObjectKey | keyof Metadata['macro']
+		>
 	>(
 		path: Path,
 		hook: LocalHook<
@@ -6324,7 +6741,8 @@ export class Elysia<
 			Definitions['error'],
 			keyof Metadata['parser']
 		> &
-			MacroOptionContext<Metadata['macroFn'], Schema, Decorator>,
+			MacroOptionContext<Metadata['macroFn'], Schema, Decorator> &
+			UnknownHookKey<UnknownKey>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -6339,7 +6757,8 @@ export class Elysia<
 		Path,
 		Schema,
 		MacroContext,
-		Handle
+		Handle,
+		Input
 	>
 	options<
 		const Path extends string,
@@ -6409,7 +6828,8 @@ export class Elysia<
 	query<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
+			InputSchema<keyof Definitions['typebox'] & string> &
+			RouteHookCapture,
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
@@ -6447,7 +6867,11 @@ export class Elysia<
 					NoInfer<Decorator>,
 					// @ts-ignore
 					MacroContext
-				>
+				>,
+		UnknownKey extends PropertyKey = Exclude<
+			keyof Input,
+			HookObjectKey | keyof Metadata['macro']
+		>
 	>(
 		path: Path,
 		hook: LocalHook<
@@ -6458,7 +6882,8 @@ export class Elysia<
 			Definitions['error'],
 			keyof Metadata['parser']
 		> &
-			MacroOptionContext<Metadata['macroFn'], Schema, Decorator>,
+			MacroOptionContext<Metadata['macroFn'], Schema, Decorator> &
+			UnknownHookKey<UnknownKey>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -6473,7 +6898,8 @@ export class Elysia<
 		Path,
 		Schema,
 		MacroContext,
-		Handle
+		Handle,
+		Input
 	>
 	query<
 		const Path extends string,
@@ -6543,7 +6969,8 @@ export class Elysia<
 	head<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
+			InputSchema<keyof Definitions['typebox'] & string> &
+			RouteHookCapture,
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
@@ -6581,7 +7008,11 @@ export class Elysia<
 					NoInfer<Decorator>,
 					// @ts-ignore
 					MacroContext
-				>
+				>,
+		UnknownKey extends PropertyKey = Exclude<
+			keyof Input,
+			HookObjectKey | keyof Metadata['macro']
+		>
 	>(
 		path: Path,
 		hook: LocalHook<
@@ -6592,7 +7023,8 @@ export class Elysia<
 			Definitions['error'],
 			keyof Metadata['parser']
 		> &
-			MacroOptionContext<Metadata['macroFn'], Schema, Decorator>,
+			MacroOptionContext<Metadata['macroFn'], Schema, Decorator> &
+			UnknownHookKey<UnknownKey>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -6607,7 +7039,8 @@ export class Elysia<
 		Path,
 		Schema,
 		MacroContext,
-		Handle
+		Handle,
+		Input
 	>
 	head<
 		const Path extends string,
@@ -6661,7 +7094,7 @@ export class Elysia<
 	}
 
 	/**
-	 * ### method
+	 * ### route
 	 * Register handler for path with custom method
 	 *
 	 * ---
@@ -6670,14 +7103,15 @@ export class Elysia<
 	 * import { Elysia, t } from 'elysia'
 	 *
 	 * new Elysia()
-	 *     .method('Elysia', '/', 'hi')
+	 *     .route('Elysia', '/', 'hi')
 	 * ```
 	 */
-	method<
+	route<
 		const Method extends HTTPMethod,
 		const Path extends string,
 		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
+			InputSchema<keyof Definitions['typebox'] & string> &
+			RouteHookCapture,
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
@@ -6715,7 +7149,11 @@ export class Elysia<
 					NoInfer<Decorator>,
 					// @ts-ignore
 					MacroContext
-				>
+				>,
+		UnknownKey extends PropertyKey = Exclude<
+			keyof Input,
+			HookObjectKey | keyof Metadata['macro']
+		>
 	>(
 		method: Method,
 		path: Path,
@@ -6727,7 +7165,8 @@ export class Elysia<
 			Definitions['error'],
 			keyof Metadata['parser']
 		> &
-			MacroOptionContext<Metadata['macroFn'], Schema, Decorator>,
+			MacroOptionContext<Metadata['macroFn'], Schema, Decorator> &
+			UnknownHookKey<UnknownKey>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -6742,9 +7181,10 @@ export class Elysia<
 		Path,
 		Schema,
 		MacroContext,
-		Handle
+		Handle,
+		Input
 	>
-	method<
+	route<
 		const Method extends HTTPMethod,
 		const Path extends string,
 		const Schema extends IntersectIfObjectSchema<
@@ -6793,7 +7233,7 @@ export class Elysia<
 		{},
 		Handle
 	>
-	method(
+	route(
 		method: HTTPMethod,
 		path: string,
 		hookOrFn: unknown,
@@ -6848,7 +7288,11 @@ export class Elysia<
 					NoInfer<Decorator>,
 					// @ts-ignore
 					MacroContext
-				>
+				>,
+		UnknownKey extends PropertyKey = Exclude<
+			keyof Input,
+			HookObjectKey | keyof Metadata['macro']
+		>
 	>(
 		path: Path,
 		hook: LocalHook<
@@ -6859,7 +7303,8 @@ export class Elysia<
 			Definitions['error'],
 			keyof Metadata['parser']
 		> &
-			MacroOptionContext<Metadata['macroFn'], Schema, Decorator>,
+			MacroOptionContext<Metadata['macroFn'], Schema, Decorator> &
+			UnknownHookKey<UnknownKey>,
 		fn: Handle
 	): this
 	all<
@@ -6906,7 +7351,8 @@ export class Elysia<
 	ws<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
+			InputSchema<keyof Definitions['typebox'] & string> &
+			WSHookCapture,
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
@@ -6964,7 +7410,9 @@ export class Elysia<
 		Path,
 		Schema,
 		MacroContext,
-		void
+		void,
+		Input['error'],
+		Input['beforeHandle']
 	>
 	ws<
 		const Path extends string,
@@ -7026,7 +7474,8 @@ export class Elysia<
 	ws<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
+			InputSchema<keyof Definitions['typebox'] & string> &
+			WSHookCapture,
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
@@ -7099,7 +7548,9 @@ export class Elysia<
 		Path,
 		Schema,
 		MacroContext,
-		WSHandlerResponse<Handler>
+		WSHandlerResponse<Handler>,
+		Input['error'],
+		Input['beforeHandle']
 	>
 	ws(path: string, optionsOrHandler: unknown, handler?: unknown): any {
 		this['~hasWS'] = true
@@ -7826,13 +8277,12 @@ export class Elysia<
 		if (length) {
 			const programId = this['~programId']
 
-			if (
-				!Compiled.claim(
-					programId,
-					(this['~aotFingerprint'] = createAotFingerprint())
-				)
+			// keyed as the AOT build keys each manifest (`manifestKey`)
+			Compiled.claim(
+				programId,
+				(this['~aotFingerprint'] = createAotFingerprint()),
+				this['~config']?.name || ''
 			)
-				Compiled.assertUncontested(programId)
 
 			markDuplicates =
 				Compiled.hasProgram(programId) ||

@@ -3,7 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { Compiled, createAotFingerprint } from '../../src/compile/aot'
-import { abortCapture } from '../../src/compile/aot-capture'
+import {
+	abortCapture,
+	restoreCompiled,
+	snapshotCompiled
+} from '../../src/compile/aot-capture'
 import { captureArtifacts } from '../../src/plugin/aot/source'
 import { Validator } from '../../src/validator'
 import { post, json } from '../utils'
@@ -91,11 +95,11 @@ describe('AOT manifest ownership and compiler sessions', () => {
 			{ body: t.Object({ b: t.Number() }) },
 			({ body }) => body
 		)
-		expect(() => void appB.fetch).toThrow('one app per process')
+		expect(() => void appB.fetch).toThrow('has no AOT manifest')
 
 		// an app with the *same* routes is still a second app: there is no
 		// content comparison to fall back on
-		expect(() => void buildA().fetch).toThrow('one app per process')
+		expect(() => void buildA().fetch).toThrow('has no AOT manifest')
 
 		// neither reached the frozen factory, so the program stayed appA's
 		expect(frozenFactoryCalls).toBe(1)
@@ -122,7 +126,7 @@ describe('AOT manifest ownership and compiler sessions', () => {
 		expect((await foreign.handle('/x', json({ b: 1 }))).status).toBe(200)
 		expect((await foreign.handle('/x', json({ a: 'x' }))).status).toBe(422)
 
-		expect(() => void buildA().fetch).toThrow('one app per process')
+		expect(() => void buildA().fetch).toThrow('has no AOT manifest')
 	})
 
 	// A routeless app never attempts a claim, so it can never contest one.
@@ -267,5 +271,90 @@ describe('AOT manifest ownership and compiler sessions', () => {
 		expect(() => void bad.fetch).toThrow('Unknown model reference')
 		expect(bad['~compilerSession']).toBeUndefined()
 		await expectFreshCapture('/after-failure')
+	})
+})
+
+// One process may serve several AOT apps: each claims the manifest registered
+// under its `name`, so whichever builds first can't take another's
+describe('AOT manifests keyed by app name', () => {
+	const build = (name: string | undefined, field: string) =>
+		new Elysia({ name, precompile: true }).post(
+			'/x',
+			{ body: t.Object({ [field]: t.String() }) },
+			({ body }) => body
+		)
+
+	// register the app's captured manifest under its key, counting replays
+	const register = async (name: string, field: string) => {
+		const artifacts = await captureArtifacts(build(name, field))
+		const handlers = materialiseHandlers(artifacts.handlers)
+		const original = handlers.POST!['/x']!.f!
+		const replay = { calls: 0 }
+		handlers.POST!['/x']!.f = (...args: unknown[]) => {
+			replay.calls++
+			return original(...args)
+		}
+
+		Compiled.register(
+			{
+				fingerprint: artifacts.fingerprint,
+				validators: materialise(artifacts.validators),
+				handlers
+			},
+			artifacts.key
+		)
+
+		return replay
+	}
+
+	it('binds each app to the manifest of its own name, whichever builds first', async () => {
+		const a = await register('a', 'a')
+		const b = await register('b', 'b')
+
+		const appB = build('b', 'b')
+		expect((await appB.handle('/x', json({ b: 'ok' }))).status).toBe(200)
+		expect([a.calls, b.calls]).toEqual([0, 1])
+
+		const appA = build('a', 'a')
+		expect((await appA.handle('/x', json({ a: 'ok' }))).status).toBe(200)
+		expect([a.calls, b.calls]).toEqual([1, 1])
+
+		// an app with no manifest of its own has nothing to claim
+		expect(() => void build(undefined, 'a').fetch).toThrow(
+			'[elysia-aot] App "" has no AOT manifest'
+		)
+		expect(() => void build('a', 'a').fetch).toThrow(
+			'[elysia-aot] App "a" has no AOT manifest'
+		)
+
+		// rebuilding the owner keeps its claim
+		expect(() => appA.compile()).not.toThrow()
+	})
+
+	it('only guards a process that registered a manifest', async () => {
+		expect(() => void build('a', 'a').fetch).not.toThrow()
+
+		await register('a', 'a')
+		Compiled.clear()
+		expect(() => void build('b', 'b').fetch).not.toThrow()
+	})
+
+	// capture analysis swaps the registry out and back: what a snapshot holds
+	// must survive the registrations made in between
+	it('restores keyed registrations from a snapshot', async () => {
+		const a = await register('a', 'a')
+		const snapshot = snapshotCompiled()
+
+		Compiled.clear()
+		await register('b', 'b')
+		restoreCompiled(snapshot)
+
+		expect(
+			(await build('a', 'a').handle('/x', json({ a: 'ok' }))).status
+		).toBe(200)
+		expect(a.calls).toBe(1)
+		expect(() => void build('b', 'b').fetch).toThrow(
+			'[elysia-aot] App "b" has no AOT manifest'
+		)
 	})
 })

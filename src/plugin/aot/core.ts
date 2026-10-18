@@ -4,11 +4,13 @@ import { dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Worker } from 'node:worker_threads'
 import {
-	compileToSource,
 	captureArtifacts,
+	emitModule,
+	manifestKey,
 	replayStubbability,
 	type AotTarget,
-	type AotModuleCondition
+	type AotModuleCondition,
+	type CapturedArtifacts
 } from './source'
 import type { JITProbeResult } from '../../compile/jit-probe'
 import { composeRouteHook, runIntrospect } from '../../compile/handler'
@@ -21,6 +23,7 @@ import {
 	REQUEST_SLOTS
 } from '../../compile/handler/frozen-validator'
 import type { CapturedValidator, ValidatorSlot } from '../../compile/aot'
+import { abortCapture } from '../../compile/aot-capture'
 
 /**
  * A route that differs from the build compiles live with a warning, or fails
@@ -345,13 +348,15 @@ export function planFromReport(
 	 */
 	wsCookie: boolean = false,
 	/** `exact-mirror` resolves from the elysia package at build time. */
-	exactMirror: boolean = false
+	exactMirror: boolean = false,
+	/** Manifest key, names the app in a multi-app build's errors */
+	key = ''
 ): { plan: StubPlan; mode: BridgeMode } {
 	const jit = report.jit
 
 	if (strip === true && !jit)
 		throw new Error(
-			`[elysia-aot] strip: true requires every route to be covered by the` +
+			`[elysia-aot] strip: true requires every route${key && ` of app "${key}"`} to be covered by the` +
 				` AOT handler manifest, but handler JIT is still reachable (` +
 				`${report.reasons.join(', ') || 'unknown'}).` +
 				` Use strip: 'auto' to skip stubbing when the app is not fully precompiled.`
@@ -378,15 +383,65 @@ export function planFromReport(
 			cookie: jit && !aliases.has('cc') && !wsCookie,
 			trace: !aliases.has('tr') && (jit || !mayTrace),
 			sucrose: jit,
-			compat: mode !== 'off',
-			bridge: mode === 'wired',
-			typeboxValue: mode !== 'sealed',
-			exactMirror: exactMirror && mode !== 'sealed',
+			...bridgePlan(mode, exactMirror),
 			adapter: adapterStub,
 			isProduction: productionStub
 		},
 		mode
 	}
+}
+
+/** TypeBox wiring follows the mode, see `BridgeMode` */
+const bridgePlan = (mode: BridgeMode, exactMirror: boolean) => ({
+	compat: mode !== 'off',
+	bridge: mode === 'wired',
+	typeboxValue: mode !== 'sealed',
+	exactMirror: exactMirror && mode !== 'sealed'
+})
+
+const MODE_RANK = { off: 0, wired: 1, sealed: 2 } as const
+
+// every `StubPlan` flag is classified: these drop a module, so a multi-app
+// bundle stubs one only when every app can; the rest follow the merged mode
+// (`bridgePlan`) or are the same for every app (`adapter`, `isProduction`)
+const REMOVAL_FLAGS = {
+	jit: 0,
+	staticClone: 0,
+	ws: 0,
+	reconstruct: 0,
+	cookie: 0,
+	trace: 0,
+	sucrose: 0
+} satisfies Record<
+	Exclude<
+		keyof StubPlan,
+		keyof ReturnType<typeof bridgePlan> | 'adapter' | 'isProduction'
+	>,
+	0
+>
+
+/**
+ * Fold the per-app plans of a multi-app build into the one shared bundle: a
+ * module is stubbed only when every app can drop it, and the TypeBox wiring
+ * follows the least sealed app
+ */
+export function mergePlans(
+	plans: { plan: StubPlan; mode: BridgeMode }[],
+	exactMirror: boolean
+): { plan: StubPlan; mode: BridgeMode } {
+	const plan = { ...plans[0]!.plan }
+	let mode = plans[0]!.mode
+
+	for (const each of plans) {
+		if (MODE_RANK[each.mode] < MODE_RANK[mode]) mode = each.mode
+
+		for (const key in REMOVAL_FLAGS) {
+			const flag = key as keyof typeof REMOVAL_FLAGS
+			plan[flag] &&= each.plan[flag]
+		}
+	}
+
+	return { plan: { ...plan, ...bridgePlan(mode, exactMirror) }, mode }
 }
 
 export function adapterConstantsSource(target: 'bun' | 'web-standard'): string {
@@ -860,34 +915,6 @@ export function validatorSlotSetsMatch(
 	return true
 }
 
-/**
- * The manifest is one flat `method -> path` table with no per-app namespace,
- * bound to whichever app builds a router first, so a mounted sub-app (a second
- * Elysia building on its own schedule) is not representable
- *
- * refuse at build time rather than ship a coin flip
- */
-const assertNoMount = (
-	app: Parameters<typeof captureArtifacts>[0],
-	entry: string
-) => {
-	const routes = app['~routes']
-
-	const mounted: string[] = []
-	for (const route of routes) {
-		const handler = route[2] as { ['~mount']?: unknown } | undefined
-
-		if (handler?.['~mount'] && !mounted.includes(route[1]))
-			mounted.push(route[1])
-	}
-
-	if (!mounted.length) return
-
-	throw new Error(
-		`[elysia-aot] "${entry}" mounts a sub-app (${mounted.join(', ')}). AOT cannot compile a mounted sub-app. Compose with .use() instead of .mount(), or disable AOT plugin`
-	)
-}
-
 export async function generateCompiledArtifacts(
 	file: string,
 	options?: ElysiaAotOptions,
@@ -922,6 +949,15 @@ export async function generateCompiledArtifacts(
 		const isApp = (value: unknown) =>
 			typeof (value as { compile?: unknown } | undefined)?.compile ===
 			'function'
+		// an async module's routes decide which exported apps are captured
+		await Promise.allSettled(
+			Object.values(mod)
+				.filter(isApp)
+				.map((app) => (app as { modules?: unknown }).modules)
+		)
+		// a router built while the entry evaluated (eg. `.mount(path, sub.fetch)`)
+		// left its captures in the build session, each app recaptures from scratch
+		abortCapture()
 
 		let app = isApp(mod.app) ? mod.app : mod.default
 
@@ -939,8 +975,46 @@ export async function generateCompiledArtifacts(
 		if (!isApp(app))
 			throw new Error(`[elysia-aot] "${entry}" must export an Elysia app`)
 
-		const typedApp = app as Parameters<typeof captureArtifacts>[0]
-		assertNoMount(typedApp, entry)
+		type App = Parameters<typeof captureArtifacts>[0]
+		const primary = app as App
+		const apps = [primary]
+		// export name per manifest key, so a collision names both exports
+		const exportOf = new Map([
+			[
+				manifestKey(primary),
+				Object.keys(mod).find((name) => mod[name] === app)!
+			]
+		])
+
+		// every other exported app with a name and a route gets its own manifest
+		for (const name of Object.keys(mod)) {
+			const other = mod[name] as App
+			const key =
+				isApp(other) && !apps.includes(other) && manifestKey(other)
+			if (!key || !other['~routes'].length) continue
+
+			if (exportOf.has(key))
+				throw new Error(
+					`[elysia-aot] "${entry}" exports two Elysia apps named "${key}" (${exportOf.get(key)}, ${name}). Each AOT manifest is keyed by app name, rename one`
+				)
+
+			exportOf.set(key, name)
+			apps.push(other)
+		}
+
+		// with no '' manifest, an unnamed app built at runtime (eg. a hidden
+		// `.mount(path, sub.fetch)` sub-app) fails instead of claiming the primary's
+		if (apps.length > 1 && !manifestKey(primary)) {
+			const unnamed = exportOf.get('')
+			const named = [...exportOf.values()]
+				.slice(1)
+				.map((name) => `\`${name}\``)
+				.join(', ')
+
+			throw new Error(
+				`[elysia-aot] "${entry}" exports \`${unnamed}\` with no name next to named Elysia apps (${named}): name it (new Elysia({ name: '${unnamed}' })), or stop exporting ${named}`
+			)
+		}
 
 		const sourceOptions = {
 			moduleCondition,
@@ -962,9 +1036,212 @@ export async function generateCompiledArtifacts(
 		const productionStub = options?.production !== false
 		const exactMirror = resolveExactMirror(entry)
 
+		const analyze = (typedApp: App, artifacts: CapturedArtifacts) => {
+			const report = replayStubbability(
+				typedApp,
+				artifacts.handlers,
+				options?.target
+			)
+			const aliases = new Set<string>()
+
+			for (const handler of artifacts.handlers)
+				if (handler.alias)
+					// a response param resolves through the route validator like `va`
+					for (const name of handler.alias.split(','))
+						aliases.add(isResponseParam(name) ? 'va' : name)
+
+			const history = typedApp['~routes']
+
+			const hasWS =
+				!!typedApp['~hasWS'] ||
+				history.some((route) => route[0] === 'WS')
+
+			const mayTrace =
+				!!typedApp['~hasTrace'] ||
+				history.some(
+					(route: any) =>
+						(route?.[4] as { trace?: unknown[] } | undefined)?.trace
+							?.length || route?.[2]?.['~mount']
+				)
+
+			const expectedSlots: ValidatorSlotIdentity[] = []
+			// Capture merges repeated logical slots, so their optional fields can be stale.
+			const declaredTypeBoxSlots = new Set<string>()
+
+			let routesForbidSeal = false
+			// WS cookies emit no `cc` alias, see `planFromReport`
+			let wsCookie = false
+			for (const route of history) {
+				const method = route[0] as string
+				const path = route[1] as string
+				const expectTypeBoxSlot = (slot: ValidatorSlot) => {
+					const identity = { method, path, slot }
+					const key = validatorSlotKey(identity)
+
+					if (declaredTypeBoxSlots.has(key)) routesForbidSeal = true
+					else {
+						declaredTypeBoxSlots.add(key)
+						expectedSlots.push(identity)
+					}
+				}
+
+				const [
+					,
+					,
+					,
+					instance,
+					hook,
+					appHook,
+					inheritedChain,
+					macroScope
+				] = route
+				const hooks = composeRouteHook(
+					instance,
+					hook,
+					appHook,
+					inheritedChain,
+					typedApp,
+					macroScope
+				) as Record<string, unknown> | undefined
+				runIntrospect(hooks)
+
+				if (
+					method === 'WS' &&
+					(hook?.cookie !== undefined || hooks?.cookie !== undefined)
+				)
+					wsCookie = true
+
+				if (!hooks) continue
+
+				let routeHasTypeBoxDirectSlot = false
+				const classify = (schema: unknown, slot: ValidatorSlot) => {
+					if (schema === undefined) {
+						routesForbidSeal = true
+						return
+					}
+					if (isStandardSchema(schema)) return
+
+					routeHasTypeBoxDirectSlot = true
+					expectTypeBoxSlot(slot)
+				}
+
+				for (const slot of REQUEST_SLOTS) {
+					const value = hooks[slot]
+					if (value !== undefined)
+						classify(
+							resolveModelRef(value, typedApp),
+							slot as ValidatorSlot
+						)
+				}
+
+				if (hooks.response !== undefined) {
+					const response = resolveModelRef(hooks.response, typedApp)
+
+					if (isResponseMap(response))
+						for (const status in response)
+							classify(
+								resolveModelRef(response[status], typedApp),
+								`response:${status}` as ValidatorSlot
+							)
+					else classify(response, 'response:200')
+				}
+
+				const mergeSchemas = (hooks as { schemas?: unknown[] }).schemas
+				if (Array.isArray(mergeSchemas) && mergeSchemas.length > 0) {
+					if (
+						routeHasTypeBoxDirectSlot ||
+						!mergeSchemasAllStandard(
+							mergeSchemas as Array<Record<string, unknown>>
+						)
+					)
+						routesForbidSeal = true
+				}
+			}
+
+			// `normalize: 'typebox'` need 'typebox/value'
+			if (typedApp['~config']?.normalize === 'typebox')
+				routesForbidSeal = true
+
+			const validatorSlotsMatch = validatorSlotSetsMatch(
+				expectedSlots,
+				artifacts.validators
+			)
+
+			const hasReplayableCapture =
+				artifacts.handlers.some((h) => h.code) ||
+				artifacts.validators.length > 0
+
+			const allBridgeFree =
+				hasReplayableCapture &&
+				!routesForbidSeal &&
+				validatorSlotsMatch &&
+				artifacts.validators.every((v) => v.bridgeFree === true)
+
+			const plan = planFromReport(
+				strip,
+				report,
+				hasWS,
+				mayTrace,
+				aliases,
+				allBridgeFree,
+				!hasReplayableCapture,
+				adapterStub,
+				productionStub,
+				wsCookie,
+				exactMirror,
+				artifacts.key
+			)
+
+			if (options?.target === 'workerd') {
+				if (!report.jit)
+					throw new Error(
+						`[elysia-aot] target 'workerd' but handler JIT is still ` +
+							`reachable${artifacts.key && ` in app "${artifacts.key}"`} (${report.reasons.join(', ') || 'unknown'}). ` +
+							`Every route must be captured into the AOT manifest.`
+					)
+
+				if (!validatorSlotsMatch)
+					console.warn(
+						`[elysia-aot] target 'workerd': captured validator slots ` +
+							`do not exactly match declared slots; ` +
+							`unfrozen slots compile at runtime and will fail on workerd.`
+					)
+			}
+
+			return plan
+		}
+
+		const captured: CapturedArtifacts[] = []
+		const plans: ReturnType<typeof analyze>[] = []
+
+		for (const each of apps) {
+			let artifacts: CapturedArtifacts
+			try {
+				artifacts = await captureArtifacts(each, sourceOptions)
+			} catch (error) {
+				if (each === primary) throw error
+
+				// eg. a plugin leaning on its parent's models: with no manifest it
+				// only fails if it ever builds a router of its own
+				const key = manifestKey(each)
+				console.warn(
+					`[elysia-aot] export \`${exportOf.get(key)}\` (app "${key}") gets no AOT manifest, its capture failed: ${(error as Error).message}`
+				)
+				continue
+			}
+
+			captured.push(artifacts)
+			if (strip !== false) plans.push(analyze(each, artifacts))
+		}
+
+		const source =
+			captured.length > 1
+				? emitModule(captured, captured[0]!.fingerprint, sourceOptions)
+				: captured[0]!.source
+
 		if (strip === false)
 			return {
-				source: await compileToSource(typedApp, sourceOptions),
+				source,
 				stub: {
 					...NO_STUB,
 					// TypeBox stays fully wired here, so keep the ops statically
@@ -977,167 +1254,7 @@ export async function generateCompiledArtifacts(
 				mode: 'off'
 			}
 
-		const artifacts = await captureArtifacts(typedApp, sourceOptions)
-		const report = replayStubbability(
-			typedApp,
-			artifacts.handlers,
-			options?.target
-		)
-		const aliases = new Set<string>()
-
-		for (const handler of artifacts.handlers)
-			if (handler.alias)
-				// a response param resolves through the route validator like `va`
-				for (const name of handler.alias.split(','))
-					aliases.add(isResponseParam(name) ? 'va' : name)
-
-		const history = typedApp['~routes']
-
-		const hasWS =
-			!!typedApp['~hasWS'] || history.some((route) => route[0] === 'WS')
-
-		const mayTrace =
-			!!typedApp['~hasTrace'] ||
-			history.some(
-				(route: any) =>
-					(route?.[4] as { trace?: unknown[] } | undefined)?.trace
-						?.length || route?.[2]?.['~mount']
-			)
-
-		const expectedSlots: ValidatorSlotIdentity[] = []
-		// Capture merges repeated logical slots, so their optional fields can be stale.
-		const declaredTypeBoxSlots = new Set<string>()
-
-		let routesForbidSeal = false
-		// WS cookies emit no `cc` alias, see `planFromReport`
-		let wsCookie = false
-		for (const route of history) {
-			const method = route[0] as string
-			const path = route[1] as string
-			const expectTypeBoxSlot = (slot: ValidatorSlot) => {
-				const identity = { method, path, slot }
-				const key = validatorSlotKey(identity)
-
-				if (declaredTypeBoxSlots.has(key)) routesForbidSeal = true
-				else {
-					declaredTypeBoxSlots.add(key)
-					expectedSlots.push(identity)
-				}
-			}
-
-			const [, , , instance, hook, appHook, inheritedChain, macroScope] =
-				route
-			const hooks = composeRouteHook(
-				instance,
-				hook,
-				appHook,
-				inheritedChain,
-				typedApp,
-				macroScope
-			) as Record<string, unknown> | undefined
-			runIntrospect(hooks)
-
-			if (
-				method === 'WS' &&
-				(hook?.cookie !== undefined || hooks?.cookie !== undefined)
-			)
-				wsCookie = true
-
-			if (!hooks) continue
-
-			let routeHasTypeBoxDirectSlot = false
-			const classify = (schema: unknown, slot: ValidatorSlot) => {
-				if (schema === undefined) {
-					routesForbidSeal = true
-					return
-				}
-				if (isStandardSchema(schema)) return
-
-				routeHasTypeBoxDirectSlot = true
-				expectTypeBoxSlot(slot)
-			}
-
-			for (const slot of REQUEST_SLOTS) {
-				const value = hooks[slot]
-				if (value !== undefined)
-					classify(
-						resolveModelRef(value, typedApp),
-						slot as ValidatorSlot
-					)
-			}
-
-			if (hooks.response !== undefined) {
-				const response = resolveModelRef(hooks.response, typedApp)
-
-				if (isResponseMap(response))
-					for (const status in response)
-						classify(
-							resolveModelRef(response[status], typedApp),
-							`response:${status}` as ValidatorSlot
-						)
-				else classify(response, 'response:200')
-			}
-
-			const mergeSchemas = (hooks as { schemas?: unknown[] }).schemas
-			if (Array.isArray(mergeSchemas) && mergeSchemas.length > 0) {
-				if (
-					routeHasTypeBoxDirectSlot ||
-					!mergeSchemasAllStandard(
-						mergeSchemas as Array<Record<string, unknown>>
-					)
-				)
-					routesForbidSeal = true
-			}
-		}
-
-		// `normalize: 'typebox'` need 'typebox/value'
-		if (typedApp['~config']?.normalize === 'typebox')
-			routesForbidSeal = true
-
-		const validatorSlotsMatch = validatorSlotSetsMatch(
-			expectedSlots,
-			artifacts.validators
-		)
-
-		const hasReplayableCapture =
-			artifacts.handlers.some((h) => h.code) ||
-			artifacts.validators.length > 0
-
-		const allBridgeFree =
-			hasReplayableCapture &&
-			!routesForbidSeal &&
-			validatorSlotsMatch &&
-			artifacts.validators.every((v) => v.bridgeFree === true)
-
-		const { plan: stub, mode } = planFromReport(
-			strip,
-			report,
-			hasWS,
-			mayTrace,
-			aliases,
-			allBridgeFree,
-			!hasReplayableCapture,
-			adapterStub,
-			productionStub,
-			wsCookie,
-			exactMirror
-		)
-
-		if (options?.target === 'workerd') {
-			if (!report.jit)
-				throw new Error(
-					`[elysia-aot] target 'workerd' but handler JIT is still ` +
-						`reachable (${report.reasons.join(', ') || 'unknown'}). ` +
-						`Every route must be captured into the AOT manifest.`
-				)
-
-			if (!validatorSlotsMatch)
-				console.warn(
-					`[elysia-aot] target 'workerd': captured validator slots ` +
-						`do not exactly match declared slots; ` +
-						`unfrozen slots compile at runtime and will fail on workerd.`
-				)
-		}
+		const { plan: stub, mode } = mergePlans(plans, exactMirror)
 
 		const virtualType =
 			mode === 'off'
@@ -1145,7 +1262,7 @@ export async function generateCompiledArtifacts(
 				: await generateVirtualType(moduleCondition)
 
 		return {
-			source: artifacts.source,
+			source,
 			stub,
 			mode,
 			virtualType

@@ -162,7 +162,8 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 		expect(r.jit).toBe(true)
 	})
 
-	// Mounted subapps must be built separately or used with strip:false.
+	// The forwarding handler needs no JIT; a mounted Elysia sub-app builds its
+	// own router, served from its own manifest only when named and exported.
 	it('treats a captured mount forwarding handler as stubbable', async () => {
 		const inner = new Elysia().get('/hello', () => 'from-inner')
 		const app = new Elysia().mount('/sub', inner.handle)

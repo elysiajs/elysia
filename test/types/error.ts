@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Elysia, NotFound, status, problem } from '../../src'
+import { Elysia, HTTPError, NotFound, status, problem, t } from '../../src'
+import type { ValidationErrorResponse } from '../../src/error'
+import { websocket } from '../../src/plugin/websocket'
 
 import { expectTypeOf } from 'expect-type'
 import { ZodError } from 'zod'
@@ -24,6 +26,18 @@ class OtherError extends Error {
 	constructor(message: string) {
 		super(message)
 	}
+}
+
+// What an error that never described itself is served as: the generic
+// internal-server-error problem document, not the error instance
+type Unhandled500 = {
+	type: string
+	code: 'internal-server-error'
+	title: 'Internal Server Error'
+	status: 500
+	detail?: string
+	name?: string
+	cause?: unknown
 }
 
 // Handler context narrows `error` to the registered class.
@@ -102,7 +116,7 @@ class OtherError extends Error {
 	const app = new Elysia().get('/', () => new OtherError('x'))
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
-		500: OtherError
+		500: Unhandled500
 	}>()
 	expectTypeOf<
 		(typeof app)['~Routes']['get']['error']
@@ -121,7 +135,7 @@ class OtherError extends Error {
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
 		404: { readonly message: string }
-		500: OtherError
+		500: Unhandled500
 	}>()
 	expectTypeOf<
 		(typeof app)['~Routes']['get']['error']
@@ -154,7 +168,7 @@ class OtherError extends Error {
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
 		200: { id: number; name: string; message: string }
-		500: OtherError
+		500: Unhandled500
 	}>()
 	expectTypeOf<
 		(typeof app)['~Routes']['get']['error']
@@ -224,7 +238,8 @@ class OtherError extends Error {
 	}>()
 }
 
-// A class that is no `Error` still routes as one by declaring `stack`.
+// A class that is no `Error` still routes as one by declaring `stack`. It
+// adds nothing to `Error`, so its handler may be the one that answers
 {
 	class Problem {
 		name = 'Problem'
@@ -238,6 +253,7 @@ class OtherError extends Error {
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
 		418: 'problem'
+		500: Unhandled500
 	}>()
 }
 
@@ -307,7 +323,7 @@ class OtherError extends Error {
 
 	expectTypeOf<
 		(typeof app)['~Routes']['outer']['get']['response']
-	>().toEqualTypeOf<{ 500: MyError }>()
+	>().toEqualTypeOf<{ 500: Unhandled500 }>()
 	expectTypeOf<
 		(typeof app)['~Routes']['outer']['get']['error']
 	>().toEqualTypeOf<MyError>()
@@ -333,7 +349,7 @@ class OtherError extends Error {
 
 	expectTypeOf<
 		(typeof grandparent)['~Routes']['get']['response']
-	>().toEqualTypeOf<{ 500: MyError }>()
+	>().toEqualTypeOf<{ 500: Unhandled500 }>()
 	expectTypeOf<
 		(typeof grandparent)['~Routes']['get']['error']
 	>().toEqualTypeOf<MyError>()
@@ -398,7 +414,7 @@ class OtherError extends Error {
 	expectTypeOf<
 		(typeof sameInstance)['~Routes']['get']['response']
 	>().toEqualTypeOf<{
-		500: MyError
+		500: Unhandled500
 	}>()
 	expectTypeOf<
 		(typeof sameInstance)['~Routes']['get']['error']
@@ -413,7 +429,7 @@ class OtherError extends Error {
 	expectTypeOf<
 		(typeof afterUse)['~Routes']['get']['response']
 	>().toEqualTypeOf<{
-		500: MyError
+		500: Unhandled500
 	}>()
 
 	// A catch-all registered before the route doesn't change that
@@ -427,7 +443,7 @@ class OtherError extends Error {
 	expectTypeOf<
 		(typeof afterOwnHook)['~Routes']['get']['response']
 	>().toEqualTypeOf<{
-		500: MyError
+		500: Unhandled500
 	}>()
 
 	// Nor does a late catch-all add its response
@@ -438,7 +454,7 @@ class OtherError extends Error {
 	expectTypeOf<
 		(typeof lateCatchAll)['~Routes']['get']['response']
 	>().toEqualTypeOf<{
-		500: MyError
+		500: Unhandled500
 	}>()
 
 	// Nor does a plugin used later that brings its own handler
@@ -453,7 +469,7 @@ class OtherError extends Error {
 	expectTypeOf<
 		(typeof lateUse)['~Routes']['get']['response']
 	>().toEqualTypeOf<{
-		500: MyError
+		500: Unhandled500
 	}>()
 
 	const lateUseMany = new Elysia()
@@ -463,7 +479,7 @@ class OtherError extends Error {
 	expectTypeOf<
 		(typeof lateUseMany)['~Routes']['get']['response']
 	>().toEqualTypeOf<{
-		500: MyError
+		500: Unhandled500
 	}>()
 }
 
@@ -506,7 +522,7 @@ class OtherError extends Error {
 		.get('/', () => new MyError('x'))
 
 	expectTypeOf<(typeof alone)['~Routes']['get']['response']>().toEqualTypeOf<{
-		500: MyError
+		500: Unhandled500
 	}>()
 	expectTypeOf<
 		(typeof alone)['~Routes']['get']['error']
@@ -571,14 +587,30 @@ class OtherError extends Error {
 		418: 'parent'
 	}>()
 
-	// A catch-all `.onError(fn)` runs first too, but may return nothing for an
-	// error and fall through to the plugin's handler, so both can respond
+	// A catch-all `.onError(fn)` runs first too. One that always answers takes
+	// the error over
 	const catchAll = new Elysia()
 		.onError(() => status(418, 'catch-all' as const))
 		.use(routes)
 
 	expectTypeOf<
 		(typeof catchAll)['~Routes']['get']['response']
+	>().toEqualTypeOf<{
+		418: 'catch-all'
+	}>()
+
+	// One that may return nothing falls through to the plugin's handler, so
+	// both can respond
+	const passes = new Elysia()
+		.onError(({ error }) =>
+			error instanceof OtherError
+				? status(418, 'catch-all' as const)
+				: undefined
+		)
+		.use(routes)
+
+	expectTypeOf<
+		(typeof passes)['~Routes']['get']['response']
 	>().toEqualTypeOf<{
 		403: 'plugin'
 		418: 'catch-all'
@@ -810,4 +842,755 @@ class OtherError extends Error {
 
 	// an extension member that merely *contains* a status is untouched
 	problem(409, { meta: { status: 'nested' } })
+}
+
+// Matching is structural, the runtime matches by constructor. A class that
+// adds nothing to `Error` matches every error structurally, but only its own
+// instances reach its handler, which the types can't tell apart: it may
+// answer, and the error may still go unhandled. Served at runtime by
+// test/lifecycle/error-class-match.test.ts
+{
+	class EmptyA extends Error {}
+	class EmptyB extends Error {}
+	class RateLimited extends HTTPError.id('RATE_LIMITED', 429) {}
+
+	const twin = new Elysia()
+		.onError(EmptyA, () => status(418, 'teapot' as const))
+		.get('/', (): EmptyB | 'ok' =>
+			Math.random() > 0.5 ? new EmptyB() : 'ok'
+		)
+
+	expectTypeOf<(typeof twin)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'ok'
+		418: 'teapot'
+		500: Unhandled500
+	}>()
+	expectTypeOf<
+		(typeof twin)['~Routes']['get']['error']
+	>().toEqualTypeOf<EmptyB>()
+
+	// an unrelated error keeps its own status
+	const unrelated = new Elysia()
+		.onError(EmptyA, () => status(401, 'no' as const))
+		.get('/', () => new RateLimited())
+
+	type Unrelated = (typeof unrelated)['~Routes']['get']['response']
+
+	expectTypeOf<keyof Unrelated>().toEqualTypeOf<401 | 429>()
+	expectTypeOf<Unrelated[429]['code']>().toEqualTypeOf<'RATE_LIMITED'>()
+
+	// so does its own instance, as far as the types can tell
+	const own = new Elysia()
+		.onError(EmptyA, () => status(401, 'no' as const))
+		.get('/', () => new EmptyA())
+
+	expectTypeOf<(typeof own)['~Routes']['get']['response']>().toEqualTypeOf<{
+		401: 'no'
+		500: Unhandled500
+	}>()
+
+	// A built-in subclass such as `TypeError` adds nothing either. `Error`
+	// itself does catch every error
+	const typeError = new Elysia()
+		.onError(TypeError, () => status(400, 'type' as const))
+		.get('/', () => new RateLimited())
+	const error = new Elysia()
+		.onError(Error, () => status(418, 'any' as const))
+		.get('/', () => new RateLimited())
+
+	expectTypeOf<
+		keyof (typeof typeError)['~Routes']['get']['response']
+	>().toEqualTypeOf<400 | 429>()
+	expectTypeOf<(typeof error)['~Routes']['get']['response']>().toEqualTypeOf<{
+		418: 'any'
+	}>()
+	expectTypeOf<
+		(typeof error)['~Routes']['get']['error']
+	>().toEqualTypeOf<never>()
+
+	// A member of its own, such as a literal `name`, tells a class apart
+	class Named extends Error {
+		name = 'Named' as const
+	}
+
+	class OtherNamed extends Error {
+		name = 'OtherNamed' as const
+	}
+
+	const named = new Elysia()
+		.onError(Named, () => status(418, 'named' as const))
+		.get('/named', () => new Named('x'))
+		.get('/other', () => new OtherNamed('x'))
+
+	type Routes = (typeof named)['~Routes']
+
+	expectTypeOf<Routes['named']['get']['response']>().toEqualTypeOf<{
+		418: 'named'
+	}>()
+	expectTypeOf<Routes['other']['get']['response']>().toEqualTypeOf<{
+		500: Unhandled500
+	}>()
+}
+
+// An error with its own `status`, or a `toResponse()` handing back a
+// `Response`, serves something only it knows, so it keeps its instance
+// rather than the generic problem document. The runtime reads the value: an
+// optional member may be absent, which serves the document, and so does a
+// `toResponse` that isn't a function or hands back anything else
+{
+	class NotAResponse extends Error {
+		toResponse() {
+			return 'not a Response'
+		}
+	}
+
+	class MaybeAResponse extends Error {
+		toResponse() {
+			return Math.random() > 0.5 ? new Response('custom') : 'no'
+		}
+	}
+
+	class Answers extends Error {
+		toResponse() {
+			return new Response('custom', { status: 418 })
+		}
+	}
+
+	class MayAnswer extends Error {
+		toResponse?: () => Response = () =>
+			new Response('custom', { status: 418 })
+	}
+
+	class NotCallable extends Error {
+		readonly toResponse = 'nope'
+	}
+
+	class Wide extends Error {
+		status: number = 503
+	}
+
+	class MayStatus extends Error {
+		status?: number = 503
+	}
+
+	const app = new Elysia()
+		.get('/answers', () => new Answers())
+		.get('/may-answer', () => new MayAnswer())
+		.get('/not-callable', () => new NotCallable())
+		.get('/wide', () => new Wide())
+		.get('/may-status', () => new MayStatus())
+		.get('/not-a-response', () => new NotAResponse())
+		.get('/maybe-a-response', () => new MaybeAResponse())
+
+	type Routes = (typeof app)['~Routes']
+
+	expectTypeOf<
+		Routes['answers']['get']['response'][500]
+	>().toEqualTypeOf<Answers>()
+	expectTypeOf<Routes['may-answer']['get']['response'][500]>().toEqualTypeOf<
+		MayAnswer | Unhandled500
+	>()
+	expectTypeOf<
+		Routes['not-callable']['get']['response'][500]
+	>().toEqualTypeOf<Unhandled500>()
+	expectTypeOf<Routes['wide']['get']['response'][500]>().toEqualTypeOf<Wide>()
+	expectTypeOf<Routes['may-status']['get']['response'][500]>().toEqualTypeOf<
+		MayStatus | Unhandled500
+	>()
+	expectTypeOf<
+		Routes['not-a-response']['get']['response'][500]
+	>().toEqualTypeOf<Unhandled500>()
+	expectTypeOf<
+		Routes['maybe-a-response']['get']['response'][500]
+	>().toEqualTypeOf<MaybeAResponse | Unhandled500>()
+}
+
+// Every unhandled plain error serves the same body, so a parent taking one
+// over must not take a 500 the route serves for another reason: its own
+// `status(500, …)`, whatever the shape, or another unhandled error
+{
+	class Taken extends Error {
+		readonly taken = true
+	}
+
+	class Later extends Error {
+		readonly later = true
+	}
+
+	const own = {
+		type: 'internal-server-error',
+		code: 'internal-server-error',
+		title: 'Internal Server Error',
+		status: 500
+	} as const
+
+	const errorLike = { name: 'db', message: 'down', taken: true } as const
+
+	const app = new Elysia()
+		.onError(Taken, () => status(418, 'teapot' as const))
+		.use(
+			new Elysia()
+				.get('/problem', () =>
+					Math.random() > 0.5 ? status(500, own) : new Taken('x')
+				)
+				.get('/error-like', () =>
+					Math.random() > 0.5
+						? status(500, errorLike)
+						: new Taken('x')
+				)
+				.get('/other', (): Taken | Later | 'ok' => {
+					if (Math.random() > 0.5) return new Taken('x')
+					if (Math.random() > 0.5) return new Later('x')
+					return 'ok'
+				})
+		)
+
+	type Routes = (typeof app)['~Routes']
+
+	expectTypeOf<Routes['problem']['get']['response']>().toEqualTypeOf<{
+		418: 'teapot'
+		500: typeof own
+	}>()
+	expectTypeOf<Routes['error-like']['get']['response']>().toEqualTypeOf<{
+		418: 'teapot'
+		500: typeof errorLike
+	}>()
+	expectTypeOf<Routes['other']['get']['response']>().toEqualTypeOf<{
+		200: 'ok'
+		418: 'teapot'
+		500: Unhandled500
+	}>()
+	expectTypeOf<Routes['other']['get']['error']>().toEqualTypeOf<Later>()
+
+	// Nor when a parent takes over what the plugin handled itself, and the
+	// remaining error is handled one level further up
+	const nested = new Elysia()
+		.onError(Later, () => status(410, 'gone' as const))
+		.use(
+			new Elysia()
+				.onError(Taken, () => status(418, 'teapot' as const))
+				.use(
+					new Elysia()
+						.onError(Taken, () => status(409, 'own' as const))
+						.get(
+							'/',
+							(): Taken | Later | 'ok' | typeof ownStatus => {
+								if (Math.random() > 0.5) return ownStatus
+								if (Math.random() > 0.5) return new Taken('x')
+								if (Math.random() > 0.5) return new Later('x')
+								return 'ok'
+							}
+						)
+				)
+		)
+
+	const ownStatus = status(500, own)
+
+	expectTypeOf<
+		(typeof nested)['~Routes']['get']['response']
+	>().toEqualTypeOf<{
+		200: 'ok'
+		410: 'gone'
+		418: 'teapot'
+		500: typeof own
+	}>()
+	expectTypeOf<
+		(typeof nested)['~Routes']['get']['error']
+	>().toEqualTypeOf<never>()
+}
+
+// A parent's hook response joins the rebuilt response as well
+{
+	class Taken extends Error {
+		readonly taken = true
+	}
+
+	const app = new Elysia()
+		.onError(Taken, () => status(418, 'teapot' as const))
+		.use(
+			new Elysia()
+				.onBeforeHandle(() => {
+					if (Math.random() > 0.5) return status(401, 'no' as const)
+				})
+				.as('plugin')
+				.use(
+					new Elysia().get('/', (): Taken | 'ok' =>
+						Math.random() > 0.5 ? new Taken('x') : 'ok'
+					)
+				)
+		)
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'ok'
+		401: 'no'
+		418: 'teapot'
+	}>()
+}
+
+// A parent's `beforeHandle` error joins the route at `.use()`: the part a
+// handler answers stays when a later handler takes the rest over, and so does
+// the route's own 500
+{
+	class Taken extends Error {
+		readonly taken = true
+	}
+
+	class Later extends Error {
+		readonly later = true
+	}
+
+	const own = {
+		type: 'internal-server-error',
+		code: 'internal-server-error',
+		title: 'Internal Server Error',
+		status: 500
+	} as const
+
+	const parent = new Elysia()
+		.onError(Taken, () => status(418, 'teapot' as const))
+		.onBeforeHandle(({ request }) => {
+			if (request.headers.has('x-taken')) return new Taken('x')
+			if (request.headers.has('x-later')) return new Later('x')
+		})
+		.as('plugin')
+		.use(
+			new Elysia().get('/', () =>
+				Math.random() > 0.5 ? status(500, own) : ('ok' as const)
+			)
+		)
+
+	expectTypeOf<
+		(typeof parent)['~Routes']['get']['error']
+	>().toEqualTypeOf<Later>()
+
+	const app = new Elysia()
+		.onError(Later, () => status(410, 'gone' as const))
+		.use(parent)
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'ok'
+		410: 'gone'
+		418: 'teapot'
+		500: typeof own
+	}>()
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['error']
+	>().toEqualTypeOf<never>()
+}
+
+// A catch-all error hook, `.onError(fn)` or a route's own `error`, that never
+// returns nothing answers every error that reaches it, returned ones too: the
+// error leaves the route's type, and a plain value it answers with is served
+// at that error's status, as a `.onError(Class)` handler's is. Each case is
+// served at runtime by test/lifecycle/catch-all-error.test.ts
+{
+	class Lib extends Error {
+		readonly lib = true
+	}
+
+	class Other extends Error {
+		readonly other = true
+	}
+
+	class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {}
+
+	const route = new Elysia()
+		.get(
+			'/status',
+			{ error: () => status(503, 'down' as const) },
+			() => new Lib('x')
+		)
+		.get('/plain', { error: () => 'fallback' as const }, () => new Lib('x'))
+		.get(
+			'/credit',
+			{ error: () => 'fallback' as const },
+			() => new OutOfCredit()
+		)
+		.get(
+			'/passes',
+			{
+				error: ({ error }) =>
+					error instanceof Other ? undefined : ('fallback' as const)
+			},
+			() => new Lib('x')
+		)
+
+	type Route = (typeof route)['~Routes']
+
+	expectTypeOf<Route['status']['get']['response']>().toEqualTypeOf<{
+		503: 'down'
+	}>()
+	expectTypeOf<Route['status']['get']['error']>().toEqualTypeOf<never>()
+	expectTypeOf<Route['plain']['get']['response']>().toEqualTypeOf<{
+		500: 'fallback'
+	}>()
+	expectTypeOf<Route['credit']['get']['response']>().toEqualTypeOf<{
+		402: 'fallback'
+	}>()
+	// one that may pass the error on handles nothing
+	expectTypeOf<Route['passes']['get']['response']>().toEqualTypeOf<{
+		500: Unhandled500 | 'fallback'
+	}>()
+	expectTypeOf<Route['passes']['get']['error']>().toEqualTypeOf<Lib>()
+
+	// `.onError(fn)` the same, at any scope
+	const instance = new Elysia()
+		.onError(() => status(503, 'down' as const))
+		.get('/', () => new Lib('x'))
+	const plain = new Elysia()
+		.onError('global', () => 'fallback' as const)
+		.get('/', () => new OutOfCredit())
+
+	expectTypeOf<
+		(typeof instance)['~Routes']['get']['response']
+	>().toEqualTypeOf<{ 503: 'down' }>()
+	expectTypeOf<
+		(typeof instance)['~Routes']['get']['error']
+	>().toEqualTypeOf<never>()
+	expectTypeOf<(typeof plain)['~Routes']['get']['response']>().toEqualTypeOf<{
+		402: 'fallback'
+	}>()
+
+	// A thrown error stays out of the type, so a plain value adds nothing
+	const thrown = new Elysia().get(
+		'/',
+		{ error: () => 'fallback' as const },
+		(): string => {
+			throw new Lib('x')
+		}
+	)
+
+	expectTypeOf<
+		(typeof thrown)['~Routes']['get']['response']
+	>().toEqualTypeOf<{
+		200: string
+	}>()
+
+	// A validation error is caught too, and answered at 422. A class handler
+	// may catch it first, matched structurally, so the default document stays
+	const query = t.Object({ n: t.Numeric() })
+	const validated = new Elysia()
+		.get(
+			'/route',
+			{ query, error: () => 'fallback' as const },
+			() => 'ok' as const
+		)
+		.onError(({ error }) => (error instanceof Other ? undefined : 'maybe'))
+		.get('/passes', { query }, () => 'ok' as const)
+
+	expectTypeOf<
+		(typeof validated)['~Routes']['route']['get']['response']
+	>().toEqualTypeOf<{
+		200: 'ok'
+		422: ValidationErrorResponse | 'fallback'
+	}>()
+	expectTypeOf<
+		(typeof validated)['~Routes']['passes']['get']['response']
+	>().toEqualTypeOf<{ 200: 'ok'; 422: ValidationErrorResponse | 'maybe' }>()
+
+	// Class handlers run in registration order, a route's own `error` hook
+	// last. Which catch-all comes first isn't kept, so each may answer
+	const classFirst = new Elysia()
+		.onError(Lib, () => status(418, 'class' as const))
+		.onError(() => status(503, 'all' as const))
+		.get('/', () => new Lib('x'))
+	const catchAllFirst = new Elysia()
+		.onError(() => status(503, 'all' as const))
+		.onError(Lib, () => status(418, 'class' as const))
+		.get('/', () => new Lib('x'))
+
+	// its `status()` joins every route after it, whatever the error
+	expectTypeOf<
+		(typeof classFirst)['~Routes']['get']['response']
+	>().toEqualTypeOf<{ 418: 'class'; 503: 'all' }>()
+	expectTypeOf<
+		(typeof catchAllFirst)['~Routes']['get']['response']
+	>().toEqualTypeOf<{ 418: 'class'; 503: 'all' }>()
+
+	// A parent's handler registered before `.use()` runs before the plugin's
+	// catch-all, so it takes the error over
+	const takeover = new Elysia()
+		.onError(Lib, () => status(418, 'parent' as const))
+		.use(
+			new Elysia()
+				.get(
+					'/route',
+					{ error: () => status(503, 'route' as const) },
+					() => new Lib('x')
+				)
+				.onError(() => status(503, 'plugin' as const))
+				.get('/instance', () => new Lib('x'))
+		)
+
+	expectTypeOf<
+		(typeof takeover)['~Routes']['route']['get']['response']
+	>().toEqualTypeOf<{ 418: 'parent' }>()
+	expectTypeOf<
+		(typeof takeover)['~Routes']['instance']['get']['response']
+	>().toEqualTypeOf<{ 418: 'parent' }>()
+}
+
+// When which handler answers first can't be told from the types, every one
+// that may answer is in the route's type. Hooks are listed by scope, not in
+// the order they run, so catch-alls of different scopes all may answer; a
+// parent's handler that may pass the error on answers beside the plugin's;
+// and a validation error may reach a class handler as well as a catch-all,
+// so the default 422 stays beside them. Served at runtime by
+// test/lifecycle/catch-all-error.test.ts
+{
+	class Lib extends Error {
+		readonly lib = true
+	}
+
+	class Credit extends HTTPError.id('CREDIT', 402) {}
+
+	const query = t.Object({ n: t.Numeric() })
+
+	const mixedScope = new Elysia()
+		.onError(() => 'local' as const)
+		.onError('global', () => 'global' as const)
+		.get('/', () => new Lib('x'))
+
+	expectTypeOf<
+		(typeof mixedScope)['~Routes']['get']['response']
+	>().toEqualTypeOf<{ 500: 'local' | 'global' }>()
+
+	const parentMayPass = new Elysia()
+		.onError(({ query }) => (query.pass ? undefined : ('parent' as const)))
+		.use(
+			new Elysia()
+				.onError(() => 'child' as const)
+				.get('/', () => new Lib('x'))
+		)
+
+	expectTypeOf<
+		(typeof parentMayPass)['~Routes']['get']['response']
+	>().toEqualTypeOf<{ 500: 'parent' | 'child' }>()
+
+	const classFirst = new Elysia()
+		.onError(Error, () => status(409, 'class' as const))
+		.onError(() => status(503, 'all' as const))
+		.get('/', { query }, () => 'ok' as const)
+
+	expectTypeOf<
+		(typeof classFirst)['~Routes']['get']['response']
+	>().toEqualTypeOf<{
+		200: 'ok'
+		409: 'class'
+		422: ValidationErrorResponse
+		503: 'all'
+	}>()
+
+	// the response schema checks neither handler's answer
+	const schema = new Elysia().get(
+		'/',
+		{
+			query,
+			error: () => 'fallback' as const,
+			response: {
+				200: t.Literal('ok'),
+				422: t.Object({ why: t.String() })
+			}
+		},
+		() => 'ok' as const
+	)
+
+	expectTypeOf<
+		(typeof schema)['~Routes']['get']['response'][422]
+	>().toEqualTypeOf<'fallback' | { why: string }>()
+
+	const parentValidation = new Elysia()
+		.onError(() => 'parent' as const)
+		.use(
+			new Elysia().get(
+				'/',
+				{ query, error: () => 'child' as const },
+				() => 'ok' as const
+			)
+		)
+
+	expectTypeOf<
+		(typeof parentValidation)['~Routes']['get']['response']
+	>().toEqualTypeOf<{
+		200: 'ok'
+		422: ValidationErrorResponse | 'child' | 'parent'
+	}>()
+
+	// A WebSocket route's own `error` hook answers its upgrade too
+	const ws = new Elysia()
+		.use(websocket())
+		.onError(() => 'app' as const)
+		.ws('/', { query, error: () => 'own' as const, message: () => 'ok' })
+
+	expectTypeOf<
+		(typeof ws)['~Routes']['subscribe']['response']
+	>().toEqualTypeOf<{ 422: ValidationErrorResponse | 'own' | 'app' }>()
+
+	// `.guard()`, `.group()` and a macro's `error` hook catch it the same way
+	const guard = new Elysia()
+		.guard({ error: () => 'guard' as const })
+		.get('/', () => new Credit())
+	const group = new Elysia().group(
+		'/group',
+		{ error: () => 'group' as const },
+		(app) => app.get('/', () => new Credit())
+	)
+	const macro = new Elysia()
+		.macro({ rescue: { error: () => 'macro' as const } })
+		.get('/', { rescue: true }, () => new Credit())
+	const guardValidation = new Elysia()
+		.guard({ error: () => 'guard' as const })
+		.get('/', { query }, () => 'ok' as const)
+
+	expectTypeOf<(typeof guard)['~Routes']['get']['response']>().toEqualTypeOf<{
+		402: 'guard'
+	}>()
+	expectTypeOf<
+		(typeof group)['~Routes']['group']['get']['response']
+	>().toEqualTypeOf<{ 402: 'group' }>()
+	expectTypeOf<(typeof macro)['~Routes']['get']['response']>().toEqualTypeOf<{
+		402: 'macro'
+	}>()
+	expectTypeOf<
+		(typeof guardValidation)['~Routes']['get']['response']
+	>().toEqualTypeOf<{ 200: 'ok'; 422: ValidationErrorResponse | 'guard' }>()
+
+	// A widened array may be empty, so it only may answer. A hook that never
+	// returns throws, which is served as a plain 500. An `Error` it hands back
+	// is served as an unhandled one at its own status, never dispatched again:
+	// `Lib` has none, so the plain 500, not the caught error's 402
+	const handlers: Array<() => 'array'> = [() => 'array']
+	const array = new Elysia().onError(handlers).get('/', () => new Lib('x'))
+	const throws = new Elysia()
+		.onError((): never => {
+			throw new Error('hook')
+		})
+		.get('/', () => new Lib('x'))
+	const errorBack = new Elysia()
+		.onError(() => new Lib('again'))
+		.get('/', () => new Credit())
+
+	expectTypeOf<(typeof array)['~Routes']['get']['response']>().toEqualTypeOf<{
+		500: 'array' | Unhandled500
+	}>()
+	expectTypeOf<
+		(typeof throws)['~Routes']['get']['response']
+	>().toEqualTypeOf<{ 500: Unhandled500 }>()
+	expectTypeOf<
+		(typeof errorBack)['~Routes']['get']['response']
+	>().toEqualTypeOf<{ 500: Unhandled500 }>()
+
+	// A self-describing one keeps its own status and document, even beside a
+	// handler for its class
+	const credit = new Elysia()
+		.onError(() => new Credit())
+		.onError(Credit, () => status(418, 'credit' as const))
+		.get('/', () => new Lib('x'))
+	type CreditBack = (typeof credit)['~Routes']['get']['response']
+
+	expectTypeOf<keyof CreditBack>().toEqualTypeOf<402>()
+	expectTypeOf<CreditBack[402]['code']>().toEqualTypeOf<'CREDIT'>()
+
+	// It answers any error, so it joins every route in scope, as a `status()`
+	// the hook returns does. A route's own or a macro's `error` hook isn't
+	// typed this way
+	const anyError = new Elysia()
+		.onError(() => new Credit())
+		.get('/', () => 'ok' as const)
+	const guardAny = new Elysia()
+		.guard({ error: () => new Credit() })
+		.get('/', () => 'ok' as const)
+	type AnyError = (typeof anyError)['~Routes']['get']['response']
+
+	expectTypeOf<keyof AnyError>().toEqualTypeOf<200 | 402>()
+	expectTypeOf<AnyError[402]['code']>().toEqualTypeOf<'CREDIT'>()
+	expectTypeOf<
+		keyof (typeof guardAny)['~Routes']['get']['response']
+	>().toEqualTypeOf<200 | 402>()
+}
+
+// A parent's handlers registered before `.use()` run before the plugin's, so
+// one a validation error may reach answers a plugin route's 422 too: `Error`
+// itself, and a class that adds nothing to `Error` (which may not be the one
+// that answers, so the default document stays). A class with members of its
+// own doesn't match. Served at runtime by
+// test/lifecycle/error-class-match.test.ts
+{
+	class Empty extends Error {}
+	class RateLimited extends HTTPError.id('RATE_LIMITED', 429) {}
+
+	const query = t.Object({ n: t.Numeric() })
+	const plugin = () => new Elysia().get('/', { query }, () => 'ok' as const)
+
+	const error = new Elysia()
+		.onError(Error, () => status(418, 'parent' as const))
+		.use(plugin())
+	const empty = new Elysia()
+		.onError(Empty, () => status(401, 'empty' as const))
+		.use(plugin())
+	const member = new Elysia()
+		.onError(RateLimited, () => status(418, 'limited' as const))
+		.use(plugin())
+	const late = new Elysia()
+		.use(plugin())
+		.onError(Error, () => status(418, 'late' as const))
+	const deep = new Elysia()
+		.onError(Error, () => status(418, 'top' as const))
+		.use(new Elysia().use(plugin()))
+	const both = new Elysia()
+		.onError(Error, () => status(418, 'parent' as const))
+		.use(
+			new Elysia()
+				.onError(Error, () => status(409, 'plugin' as const))
+				.get('/', { query }, () => 'ok' as const)
+		)
+	const ws = new Elysia()
+		.onError(Error, () => status(418, 'parent' as const))
+		.use(
+			new Elysia()
+				.use(websocket())
+				.ws('/', { query, message: () => 'ok' })
+		)
+
+	type Valid = { 200: 'ok'; 422: ValidationErrorResponse }
+
+	expectTypeOf<(typeof error)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'ok'
+		418: 'parent'
+		422: ValidationErrorResponse
+	}>()
+	expectTypeOf<(typeof empty)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'ok'
+		401: 'empty'
+		422: ValidationErrorResponse
+	}>()
+	expectTypeOf<
+		(typeof member)['~Routes']['get']['response']
+	>().toEqualTypeOf<Valid>()
+	expectTypeOf<
+		(typeof late)['~Routes']['get']['response']
+	>().toEqualTypeOf<Valid>()
+	expectTypeOf<(typeof deep)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'ok'
+		418: 'top'
+		422: ValidationErrorResponse
+	}>()
+	expectTypeOf<(typeof both)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'ok'
+		409: 'plugin'
+		418: 'parent'
+		422: ValidationErrorResponse
+	}>()
+	expectTypeOf<
+		(typeof ws)['~Routes']['subscribe']['response']
+	>().toEqualTypeOf<{ 418: 'parent'; 422: ValidationErrorResponse }>()
+
+	// A route that doesn't validate gains nothing
+	const plain = new Elysia()
+		.onError(Error, () => status(418, 'parent' as const))
+		.use(new Elysia().get('/', () => 'ok' as const))
+
+	expectTypeOf<(typeof plain)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'ok'
+	}>()
 }

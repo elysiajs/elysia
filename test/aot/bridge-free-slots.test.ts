@@ -478,9 +478,9 @@ describe('sealed bundles with slot coercion', () => {
 
 		const min = Buffer.byteLength(esbuildBundle!)
 		const gz = gzipSync(esbuildBundle!, { level: 9 }).length
-		expect(min).toBeLessThan(162_500)
+		expect(min).toBeLessThan(162_600)
 		// Generic builds retain Bun `.listen()` lifecycle; node/workerd targets strip it.
-		expect(gz).toBeLessThan(56_700)
+		expect(gz).toBeLessThan(56_800)
 	})
 
 	it('still coerces valid values and rejects invalid values', async () => {

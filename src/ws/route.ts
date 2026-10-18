@@ -61,6 +61,7 @@ import {
 	adoptErrorType,
 	claimsProblemType,
 	createErrorHandler,
+	extensionOf,
 	readAnnotation,
 	resolveStatus,
 	statusFallbackBody
@@ -68,7 +69,8 @@ import {
 import {
 	drainDisposables,
 	finalizeRouteErrorOf,
-	registerDeriveDisposable
+	registerDeriveDisposable,
+	returnedErrorClasses
 } from '../handler/utils'
 
 import { isBun } from '../universal/constants'
@@ -229,6 +231,8 @@ function wsErrorFrameFallback(error: any): string | Promise<string> {
 					? JSON.stringify(value)
 					: String(value)
 
+			let members: Record<string, unknown> | undefined
+
 			const problemFrame = (detail: unknown, trusted = true) => {
 				const code = trusted ? error.code : undefined
 
@@ -236,16 +240,14 @@ function wsErrorFrameFallback(error: any): string | Promise<string> {
 					problemBody({
 						type: typeof type === 'string' ? type : 'about:blank',
 						...(typeof code === 'string' ? { code } : {}),
+						// before `detail`: the error's own wins over its extension's
+						...members,
 						detail: detail as string,
 						status: served
 					})
 				)
 			}
 
-			// As on HTTP, only an owned error is trusted past a production 5xx
-			// mask: a foreign Error keeps its problem shape, nothing past
-			// `type` and `status`, any other foreign claim falls to the legacy
-			// mask
 			if (
 				isProduction() &&
 				served >= 500 &&
@@ -259,22 +261,19 @@ function wsErrorFrameFallback(error: any): string | Promise<string> {
 
 			// A masked 5xx `detail` names the status it serves, as `title` does
 			const serveMessage = () =>
-				problemFrame(statusFallbackBody(error, served, titleOf(served)))
+				problemFrame(
+					// an extension's `detail` wins over the message
+					members?.detail ??
+						statusFallbackBody(error, served, titleOf(served), true)
+				)
 			const serveDetail = () => {
 				const detail = readAnnotation(error, 'detail', true)
+				members = extensionOf(error)
 
-				if (detail === undefined) return serveMessage()
-
-				if (detail instanceof Promise)
-					return detail
-						.then((resolved: unknown) =>
-							resolved === undefined
-								? serveMessage()
-								: problemFrame(resolved)
-						)
-						.catch(() => wsLegacyFrame(error))
-
-				return problemFrame(detail)
+				// plain data, a promised one included: never awaited
+				return detail === undefined
+					? serveMessage()
+					: problemFrame(detail)
 			}
 
 			const value = readAnnotation(error, 'value', true)
@@ -542,6 +541,8 @@ export function buildWSRoute(
 		mapResponse: mapResponses as any
 	})
 
+	const errorClasses = returnedErrorClasses({ error: errorHandlers })
+
 	// analyze without schema
 	const inference = sucrose(hook.message as any, {
 		beforeHandle: [
@@ -647,6 +648,9 @@ export function buildWSRoute(
 			}
 
 			if (r !== undefined) {
+				// a returned error is served as one no hook answers
+				if (r instanceof Error) return sendErrorFrame(ws, r)
+
 				r = adoptErrorType(r, error)
 
 				// the status the answer carries, as on HTTP
@@ -988,7 +992,13 @@ export function buildWSRoute(
 
 				const deriveMode = upgradeDeriveModes?.[i]
 
-				if (deriveMode !== undefined && !(r instanceof ElysiaStatus)) {
+				// a derived error answers like a `beforeHandle`'s
+				if (
+					deriveMode !== undefined &&
+					!(r instanceof ElysiaStatus) &&
+					!(r instanceof Error) &&
+					!errorClasses?.some((C) => r instanceof (C as any))
+				) {
 					if (
 						r &&
 						(typeof r === 'object' || typeof r === 'function')
@@ -1019,12 +1029,20 @@ export function buildWSRoute(
 							}
 						}
 					}
-				} else if (r !== undefined)
+				} else if (r !== undefined) {
+					// a returned error answers as a thrown one, as on HTTP
+					if (
+						r instanceof Error ||
+						errorClasses?.some((C) => r instanceof (C as any))
+					)
+						throw r
+
 					return finalizeUpgradeResponse(
 						r,
 						(context as any).set,
 						context
 					)
+				}
 			}
 
 			let upgradeHeaders: Record<string, string> | undefined

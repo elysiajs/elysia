@@ -4,10 +4,9 @@ import type { TraceHandler } from './trace'
 import type { ElysiaFile } from './universal/file'
 import { type StatusMap, type StatusMapBack } from './constants'
 import type {
-	ElysiaError,
 	ElysiaStatus,
 	ProblemResponseBody,
-	ValidationErrorResponse
+	ValidationError
 } from './error'
 import type { TypeBoxSchema, AnySchema, StandardSchemaV1Like } from './type'
 
@@ -390,13 +389,13 @@ export type LocalHook<
 	/**
 	 * Execute before main handler
 	 */
-	beforeHandle?: MaybeArray<
+	beforeHandle?: MaybeHookArray<
 		OptionalHandler<Schema, Singleton & { derive: Schema['derive'] }>
 	>
 	/**
 	 * Execute after main handler
 	 */
-	afterHandle?: MaybeArray<
+	afterHandle?: MaybeHookArray<
 		AfterHandler<Schema, Singleton & { derive: Schema['derive'] }>
 	>
 	/**
@@ -414,11 +413,15 @@ export type LocalHook<
 	/**
 	 * Catch error
 	 */
-	error?: MaybeArray<
+	error?: MaybeHookArray<
 		ErrorHandler<Errors, Schema, Singleton & { derive: Schema['derive'] }>
 	>
 	tags?: DocumentDecoration['tags']
 } & (Input extends any ? Input : Prettify<Input>)
+
+// A tuple too, so an array of hooks keeps each hook's own type instead of
+// collapsing into their common supertype
+type MaybeHookArray<T> = T | T[] | [T, ...T[]]
 
 export type AnyLocalHook = LocalHook<any, any, any, any, any>
 
@@ -439,7 +442,9 @@ export type GuardLocalHook<
 	schema?: GuardType
 
 	/**
-	 * Removed in 2.0 — pass the scope as guard's first argument instead:
+	 * @deprecated
+	 *
+	 * pass the scope as guard's first argument instead:
 	 * `.guard('plugin', { ... })` (1.x `as: 'scoped'` maps to `'plugin'`)
 	 */
 	as?: never
@@ -576,7 +581,10 @@ export type OptionalHandler<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = DefaultSingleton,
 	Path extends string | undefined = undefined,
-	ParamsScope extends 'local' | 'plugin' | 'global' = 'local'
+	ParamsScope extends 'local' | 'plugin' | 'global' = 'local',
+	// An HTTP hook's returned error goes to the error pipeline, like a
+	// handler's. A WebSocket hook's is served as a plain value, so `never`
+	ReturnedError = Error
 > = (
 	context: LifecycleContext<Route, Singleton, Path, ParamsScope>
 ) => MaybePromise<
@@ -585,6 +593,7 @@ export type OptionalHandler<
 		:
 				| Route['response'][keyof Route['response']]
 				| InlineHandlerResponse<Route['response']>
+				| ReturnedError
 				| void
 >
 
@@ -605,6 +614,8 @@ export type AfterHandler<
 		:
 				| Route['response'][keyof Route['response']]
 				| InlineHandlerResponse<Route['response']>
+				// goes to the error pipeline, like a handler's
+				| Error
 				| void
 >
 
@@ -686,9 +697,7 @@ export type ResolveHandler<
 	in out Singleton extends SingletonBase
 > = (
 	context: Context<Route, Singleton>
-) => MaybePromise<
-	Record<string, unknown> | ElysiaError | AnyElysiaStatus | void
->
+) => MaybePromise<Record<string, unknown> | Error | AnyElysiaStatus | void>
 
 export interface BunHTMLBundlelike {
 	index: string
@@ -756,10 +765,15 @@ export type InlineHandlerNonMacro<
 	| (Route['response'] extends infer ResponseSchema
 			? {} extends ResponseSchema
 				? MaybePromise<InlineResponse>
-				: MaybePromise<
-						| ResponseSchema[keyof ResponseSchema]
-						| InlineHandlerResponse<ResponseSchema>
-					>
+				: // A `t.Any()` / `t.Unknown()` status widens this member to
+					// `any` / `unknown`, which swallows the function member below
+					// and with it the handler's contextual typing
+					unknown extends ResponseSchema[keyof ResponseSchema]
+					? MaybePromise<{} | null | undefined>
+					: MaybePromise<
+							| ResponseSchema[keyof ResponseSchema]
+							| InlineHandlerResponse<ResponseSchema>
+						>
 			: never)
 	| ((context: Context<Route, Singleton>) =>
 			| MaybePromise<Response>
@@ -787,6 +801,8 @@ export type InlineHandlerNonMacro<
 								// This could be possible because of set.status
 								| Route['response'][keyof Route['response']]
 								| InlineHandlerResponse<Route['response']>
+								// forwarded to the error pipeline per request
+								| Error
 			  >)
 
 export type Handler = (context: Context) => unknown
@@ -1548,16 +1564,6 @@ export interface IntersectIfObjectSchema<
 		>
 		query: IntersectIfObject<RouteInput<A>['query'], RouteInput<B>['query']>
 	}
-	// `response` merges the override side (A: route-local + override-channel
-	// schemas) with the merge channel (B: `schema: 'merge'` guards) PER
-	// STATUS CODE. Merge schemas INTERSECT, so a status code declared by both
-	// sides merges its object fields (route `{ 404: { q } }` + merge guard
-	// `{ 404: { name } }` → `{ 404: { q, name } }`); codes declared by only one
-	// side survive (route `{ 200 }` + merge guard `{ 418 }` → `{ 200, 418 }`).
-	// `IntersectIfObject` keeps this safe for non-object (literal) responses: a
-	// same-code literal clash picks A (route) rather than intersecting to `never`.
-	// When neither side declares a response, A (`unknown | void`) leaves the
-	// handler unconstrained.
 	response: {} extends A['response']
 		? {} extends B['response']
 			? A['response']
@@ -1682,8 +1688,16 @@ type _FunctionArrayReturnTypeNonNullable<T, Carry = undefined> = T extends [
 
 type AnyElysiaStatus = ElysiaStatus<any, any, any>
 
+type Derived<T> = T extends AnyElysiaStatus
+	? never
+	: T extends Error
+		? 'stack' extends keyof T
+			? never
+			: T
+		: T
+
 export type ExcludeElysiaResponse<T> =
-	Exclude<Awaited<T>, AnyElysiaStatus> extends infer A
+	Derived<Awaited<T>> extends infer A
 		? IsNever<A & {}> extends true
 			? {}
 			: undefined extends A
@@ -1702,14 +1716,27 @@ type ExtractDeriveFromMacro<A> =
 					: A
 				: {}
 
+// A raw `Error` from a macro's `derive` is carried under `~error`, see
+// `ReturnedErrorCarrier`
 type ExtractOnlyResponseFromMacro<A> =
 	IsNever<A> extends true
 		? {}
-		: Extract<A, AnyElysiaStatus> extends infer A
-			? IsNever<A> extends true
-				? {}
+		: Extract<A, AnyElysiaStatus> extends infer S
+			? // plain records and statuses, the usual return, carry no error. One
+				// that may hold a `stack`, through an index signature too, may be
+				[A] extends [
+					{ [k: string]: unknown; stack?: never } | AnyElysiaStatus
+				]
+				? IsNever<S> extends true
+					? {}
+					: {
+							return: { '~derive': MergeResponseStatus<S> }
+						}
 				: {
-						return: MergeResponseStatus<A>
+						return: {
+							'~derive': MergeResponseStatus<S> &
+								ReturnedErrorCarrier<A>
+						}
 					}
 			: {}
 
@@ -1721,8 +1748,6 @@ type MergeResponseStatus<A> = {
 			: never
 	>]: Extract<
 		A,
-		// `status` alone is a shape a handler may write by hand — the brand on
-		// `AnyElysiaStatus` is what keeps such a literal out of this lane
 		AnyElysiaStatus & { status: status }
 	>['response'] extends infer Value
 		? IsAny<Value> extends true
@@ -1732,35 +1757,94 @@ type MergeResponseStatus<A> = {
 		: never
 }
 
-type ExtractAllResponseFromMacro<A> =
+type ExtractAllResponseFromMacro<A, Phase extends MacroPhase> =
 	IsNever<A> extends true
 		? {}
 		: {
 				// Merge all status to single object first
-				return: MergeResponseStatus<A> &
-					(Exclude<A, AnyElysiaStatus> extends infer A
-						? IsAny<A> extends true
-							? {}
-							: IsNever<A> extends true
+				return: {
+					[_ in Phase]: MergeResponseStatus<A> &
+						// A returned `Error` is never served as a 200
+						(Exclude<NonErrorOf<A>, AnyElysiaStatus> extends infer A
+							? IsAny<A> extends true
 								? {}
-								: // FunctionArrayReturnType
-									NonNullable<void> extends A
+								: IsNever<A> extends true
 									? {}
-									: undefined extends A
+									: // FunctionArrayReturnType
+										NonNullable<void> extends A
 										? {}
-										: {
-												200: A
-											}
-						: {})
+										: undefined extends A
+											? {}
+											: {
+													200: A
+												}
+							: {})
+				}
 			}
 
+// A raw `Error` from a macro's `beforeHandle` or `afterHandle` is carried
+// under `~error`, see `ReturnedErrorCarrier`
+type ExtractHandleHookFromMacro<
+	A,
+	Phase extends '~before' | '~after'
+> = ExtractAllResponseFromMacro<A, Phase> &
+	(IsAny<A> extends true
+		? {}
+		: ErrorOf<A> extends infer E
+			? IsNever<E> extends true
+				? {}
+				: { return: { [_ in Phase]: { '~error': E } } }
+			: {})
+
+// A macro's `error` hook answers a caught error: a `status()` at that status,
+// a plain value at the error's own, so the value rides along under
+// `~catchAll` until a route reads it as a `CatchAllErrorEntry`
+type ExtractErrorHookFromMacro<A> =
+	IsNever<A> extends true
+		? {}
+		: {
+				return: {
+					'~catch': MergeResponseStatus<A> &
+						(IsAny<A> extends true ? {} : { '~catchAll': A })
+				}
+			}
+
+/**
+ * A macro's `error` hook carried in its `return`, as error handler entries,
+ * and the `return` without it
+ */
+export type MacroCatchAll<Return> = [Return] extends [never]
+	? []
+	: '~catchAll' extends keyof Return
+		? CatchAllEntryOf<Awaited<Return['~catchAll' & keyof Return]>>
+		: []
+
+// `Definitions` with error handler entries appended, as is when there are none
+export type WithErrorEntries<
+	D extends DefinitionBase,
+	Entries extends ErrorDefinition[]
+> = Entries extends []
+	? D
+	: { typebox: D['typebox']; error: [...D['error'], ...Entries] }
+
+export type WithoutMacroCatch<Return> = [Return] extends [never]
+	? {}
+	: '~catchAll' extends keyof Return
+		? Omit<Return, '~catchAll'>
+		: Return
+
+// Each of a macro's hooks answers on its own, so what they respond with is
+// kept apart per hook, then unioned: intersecting would reduce a status two
+// hooks both serve to never
+type MacroPhase = '~before' | '~after' | '~catch' | '~derive'
+
 type FlattenMacroResponse<T> = T extends object
-	? '_' extends keyof T
-		? UnionResponseStatus<
-				Omit<T, '_'>,
-				FlattenMacroResponse<MergeStatusUnion<T['_']>>
-			>
-		: T
+	? MergeStatusUnion<
+			| T[MacroPhase & keyof T]
+			| ('_' extends keyof T
+					? FlattenMacroResponse<MergeStatusUnion<T['_']>>
+					: never)
+		>
 	: T
 
 /**
@@ -1931,19 +2015,21 @@ type InnerMacroToContext<
 									Def,
 									Definitions
 								> &
-									ExtractAllResponseFromMacro<
+									ExtractHandleHookFromMacro<
 										FunctionArrayReturnTypeNonNullable<
 											// @ts-expect-error type is checked in key mapping
 											Def['beforeHandle']
-										>
+										>,
+										'~before'
 									> &
-									ExtractAllResponseFromMacro<
+									ExtractHandleHookFromMacro<
 										FunctionArrayReturnTypeNonNullable<
 											// @ts-expect-error type is checked in key mapping
 											Def['afterHandle']
-										>
+										>,
+										'~after'
 									> &
-									ExtractAllResponseFromMacro<
+									ExtractErrorHookFromMacro<
 										// @ts-expect-error type is checked in key mapping
 										FunctionArrayReturnType<Def['error']>
 									> &
@@ -2130,9 +2216,9 @@ type _CreateEden<
 /**
  * Value an annotation knob resolves to, `never` when it annotates nothing.
  *
- * Both knobs are canonically methods, so what they *return* is the
- * annotation. A value or getter reads as the value itself. `unknown` stays
- * `unknown`, and `undefined` is excluded: it falls through to the next tier
+ * `value` is canonically a method, so what it *returns* is the annotation.
+ * A value or getter reads as the value itself. `unknown` stays `unknown`,
+ * and `undefined` is excluded: it falls through to the next tier
  */
 type ResolveAnnotation<V> = (
 	V extends (...args: any) => infer Returned ? Returned : V
@@ -2202,44 +2288,146 @@ type ErrorProblemCode<E> = E extends { code: infer C extends string }
 		: { code: C }
 	: {}
 
+/** A member that is behavior rather than data, never served */
+type Callable = (...args: any) => any
+
 /**
- * Problem document served for a `detail` annotation. `detail` is carried
- * verbatim, objects included — it is never spread into the envelope
+ * Key an `extension()` may serve a member under: an own string key.
+ * `type`, `code` and `status` stay the error's own, `detail` and `title` are
+ * typed on their own, an index signature adds nothing
  */
-type ProblemOf<E, Detail> = ProblemResponseBody<
-	ErrorFallbackStatus<E>,
+type ExtensionKey<K> = K extends
+	| 'type'
+	| 'code'
+	| 'status'
+	| 'detail'
+	| 'title'
+	| symbol
+	? never
+	: string extends K
+		? never
+		: number extends K
+			? never
+			: K
+
+/**
+ * Data members an `extension()` returning `X` serves. A function is never
+ * served, so a member that may be one may be missing
+ */
+type ExtensionMembers<X> = {
+	[K in keyof X as [Extract<X[K], Callable>] extends [never]
+		? ExtensionKey<K>
+		: never]: X[K]
+} & ([Extract<X[keyof X], Callable>] extends [never]
+	? {}
+	: {
+			[K in keyof X as [Extract<X[K], Callable>] extends [never]
+				? never
+				: [Exclude<X[K], Callable>] extends [never]
+					? never
+					: ExtensionKey<K>]?: Exclude<X[K], Callable>
+		})
+
+/**
+ * `title` an `extension()` returning `X` serves, `Absent` when it may not
+ * run: a function, `null` or `undefined` is filled in by the status title
+ */
+type ExtensionTitle<X, Absent> = 'title' extends keyof X
+	? {
+			[K in keyof X as K extends 'title' ? K : never]-?: [
+				Extract<X[K] | Absent, Callable | null | undefined>
+			] extends [never]
+				? X[K]
+				: Exclude<X[K], Callable | null | undefined> | string
+		}
+	: {}
+
+/**
+ * Problem document of members `P` at the error's status, flattened into one
+ * object as an editor and Eden show it. Not exported, so a consumer's d.ts
+ * prints it inline rather than as an `import()`
+ */
+type ErrorProblem<E, P> = Prettify<
+	ProblemResponseBody<ErrorFallbackStatus<E>, P>
+>
+
+/**
+ * Members `P` with the `detail` an `extension()` returning `X` serves: a
+ * string one, when the error has no `detail` of its own
+ */
+type WithExtensionDetail<E, X, P> = X extends {
+	detail: infer D extends string
+}
+	? undefined extends (E extends { detail: infer V } ? V : undefined)
+		? Omit<P, 'detail'> & { detail: D }
+		: P
+	: P
+
+/**
+ * Problem document of members `P` plus what the error's `extension()` adds,
+ * one document per member of a union it returns. Without an `extension()` of
+ * its own, `P` passes through untouched
+ */
+type ErrorProblemBody<E, P> = E extends { extension?(): infer X }
+	? // none at all, or `HTTPError`'s own `Record<string, unknown>`
+		unknown extends X
+		? ErrorProblem<E, P>
+		: [string, {}] extends [keyof X, X]
+			? ErrorProblem<E, P>
+			: X extends unknown
+				? ErrorProblem<
+						E,
+						// an `extension` that may be absent may add nothing
+						E extends { extension(): unknown }
+							? WithExtensionDetail<E, X, P> &
+									ExtensionMembers<X> &
+									ExtensionTitle<X, never>
+							: P &
+									Partial<ExtensionMembers<X>> &
+									ExtensionTitle<X, undefined>
+					>
+				: never
+	: ErrorProblem<E, P>
+
+type ProblemOf<E, Detail> = ErrorProblemBody<
+	E,
 	{ type: ErrorProblemType<E>; detail: Detail } & ErrorProblemCode<E>
 >
 
 /**
- * Tier 3 — nothing annotated. An error that claimed a problem serves its
- * message as `detail`, anything else keeps the legacy raw lane
+ * Problem document served for an error's message, which a type can't tell
+ * was given: an error given none serves no `detail`
+ *
+ * Not exported, like `ProblemOf`, so a consumer's d.ts prints it inline
+ * rather than as an `import()` a d.ts reader such as `fromTypes` can't follow
  */
+type MessageProblemOf<E> = ErrorProblemBody<
+	E,
+	{ type: ErrorProblemType<E>; detail?: string } & ErrorProblemCode<E>
+>
+
 type MessageTier<E> =
 	OwnedError<E> extends true
-		? ProblemOf<E, string>
+		? MessageProblemOf<E>
 		: E extends { response: infer R }
 			? unknown extends R
 				? string
 				: R
 			: string
 
-/** Tier 2 — `detail` fills the `detail` member of a problem document */
 type DetailTier<E> = E extends { detail: infer V }
-	? // an unclaimed foreign error never invokes a function annotation
-		[OwnedError<E>, V] extends [false, (...args: any) => any]
-		? MessageTier<E>
-		: IsNever<ResolveAnnotation<V>> extends true
+	? Exclude<V, undefined | ((...args: any) => any)> extends infer Served
+		? IsNever<Served> extends true
 			? MessageTier<E>
-			: AnnotationFallsThrough<V> extends true
-				? ProblemOf<E, ResolveAnnotation<V>> | MessageTier<E>
-				: ProblemOf<E, ResolveAnnotation<V>>
+			: // `unknown` may hold `undefined` too
+				undefined extends V
+				? ProblemOf<E, Served> | MessageTier<E>
+				: IsNever<Extract<V, (...args: any) => any>> extends true
+					? ProblemOf<E, Served>
+					: ProblemOf<E, Served> | MessageTier<E>
+		: never
 	: MessageTier<E>
 
-/**
- * Tier 1 — `value` replaces the whole response, so it is served raw: no
- * envelope, no problem+json
- */
 type ValueTier<E> = E extends { value: infer V }
 	? [OwnedError<E>, V] extends [false, (...args: any) => any]
 		? DetailTier<E>
@@ -2250,15 +2438,6 @@ type ValueTier<E> = E extends { value: infer V }
 				: ResolveAnnotation<V>
 	: DetailTier<E>
 
-/**
- * Key a served value by the status it actually reaches.
- *
- * `value()` may hand back a `status()` or `problem()`, which the mapResponse
- * lane serves at the status *it* carries, not the one the error annotated —
- * so those members escape to their own keys. Everything else stays under
- * `Fallback`. The unwrapping is `MergeResponseStatus`, the same one a route
- * handler's returned `status()` goes through
- */
 type ServedAtStatus<Served, Fallback extends number> = UnionResponseStatus<
 	IsNever<Extract<Served, AnyElysiaStatus>> extends true
 		? {}
@@ -2279,6 +2458,18 @@ type SelfDescribedResponse<E> = ServedAtStatus<
 	ErrorFallbackStatus<E>
 >
 
+// This must be type otherwise it would break something else idk
+// I don't have enough time to bother to check in 11AM (no sleep yet) but it's important
+type UnhandledErrorProblem = {
+	type: string
+	code: 'internal-server-error'
+	title: 'Internal Server Error'
+	status: 500
+	detail?: string
+	name?: string
+	cause?: unknown
+}
+
 /**
  * Response of an error that reached the error pipeline without a matching
  * `.onError(Class, handler)`.
@@ -2296,10 +2487,40 @@ type UnhandledErrorResponse<E> = [E] extends [never]
 					OwnedError<E> extends true
 					? SelfDescribedResponse<E>
 					: IsNever<LiteralErrorStatus<E>> extends true
-						? { 500: E }
+						? 'status' extends keyof E
+							? undefined extends E['status' & keyof E]
+								? { 500: E | UnhandledErrorProblem }
+								: { 500: E }
+							: 'toResponse' extends keyof E
+								? { 500: ToResponseLane<E> }
+								: { 500: UnhandledErrorProblem }
 						: SelfDescribedResponse<E>
 				: never
 		>
+
+type ToResponseLane<E> =
+	NonNullable<E['toResponse' & keyof E]> extends (...a: any) => infer R
+		? [Extract<Awaited<R>, Response>] extends [never]
+			? UnhandledErrorProblem
+			: [Exclude<Awaited<R>, Response>] extends [never]
+				? undefined extends E['toResponse' & keyof E]
+					? E | UnhandledErrorProblem
+					: E
+				: E | UnhandledErrorProblem
+		: UnhandledErrorProblem
+
+type UnhandledBaseKey<Base, Err> = [Err] extends [never]
+	? {}
+	: { '~base': Prettify<Base> }
+
+type RouteBaseResponse<Route> = Route extends { '~base': infer Base }
+	? Base
+	: [Route['error' & keyof Route]] extends [never]
+		? Route['response' & keyof Route]
+		: WithoutUnhandledErrorResponse<
+				Route['response' & keyof Route],
+				Route['error' & keyof Route]
+			>
 
 export type CreateEdenResponse<
 	Path extends string,
@@ -2320,7 +2541,7 @@ export type CreateEdenResponse<
 				UnionResponseStatus<Res, UnhandledErrorResponse<Err>>
 			>
 			error: Err
-		}
+		} & UnhandledBaseKey<Res, Err>
 	: {
 			body: Prettify<
 				RouteInput<Schema>['body'] & RouteInput<MacroContext>['body']
@@ -2341,15 +2562,16 @@ export type CreateEdenResponse<
 				UnionResponseStatus<Res, UnhandledErrorResponse<Err>>
 			>
 			error: Err
-		} & (MacroContext extends { meta: infer Meta }
-			? IsNever<Meta> extends true
-				? {}
-				: // A route whose selected macros declare no meta
-					// reaches here as unknown, not never
-					unknown extends Meta
+		} & UnhandledBaseKey<Res, Err> &
+			(MacroContext extends { meta: infer Meta }
+				? IsNever<Meta> extends true
 					? {}
-					: { meta: Meta }
-			: {})
+					: // A route whose selected macros declare no meta
+						// reaches here as unknown, not never
+						unknown extends Meta
+						? {}
+						: { meta: Meta }
+				: {})
 
 export type CreateWSEdenResponse<
 	Path extends string,
@@ -2380,7 +2602,7 @@ export type ValueToResponseSchema<
 	Value,
 	Errors extends ErrorDefinition[] = []
 > = ExtractErrorFromHandle<NonErrorOf<Value>> &
-	ExtractReturnedError<Value, Errors> &
+	(Errors extends [] ? {} : ExtractReturnedError<Value, Errors>) &
 	(Extract200<NonErrorOf<Value>> extends infer R200
 		? undefined extends R200
 			? {}
@@ -2399,7 +2621,8 @@ export type ValueOrFunctionToResponseSchema<
 export type ElysiaHandlerToResponseSchema<in out Handle extends Function> =
 	Prettify<
 		Handle extends (...a: any) => MaybePromise<infer R>
-			? ValueToResponseSchema<Exclude<R, undefined>>
+			? ValueToResponseSchema<Exclude<R, undefined>> &
+					ReturnedErrorCarrier<R>
 			: {}
 	>
 
@@ -2410,8 +2633,11 @@ export type ElysiaHandlerToResponseSchemas<
 	? ElysiaHandlerToResponseSchemas<
 			// @ts-ignore Trust me bro
 			Rest,
-			// @ts-ignore trust me bro
-			UnionResponseStatus<ElysiaHandlerToResponseSchema<Current>, Carry>
+			UnionResponseStatus<
+				// @ts-ignore trust me bro
+				ElysiaHandlerToResponseSchema<Current>,
+				Carry
+			>
 		>
 	: Prettify<Carry>
 
@@ -2425,6 +2651,54 @@ export type ElysiaHandlerToResponseSchemaAmbiguous<
 			: Schemas extends Function[]
 				? ElysiaHandlerToResponseSchemas<Schemas>
 				: {}
+
+/**
+ * Raw `Error`s a `beforeHandle` or `afterHandle` returns. Like the handler's,
+ * they go through `.onError(Class)` dispatch at runtime, so they ride along
+ * under `~error` until a route resolves them against the handlers in its scope
+ */
+type ReturnedErrorCarrier<R> = 0 extends 1 & R
+	? {}
+	: ErrorOf<R> extends infer E
+		? IsNever<E> extends true
+			? {}
+			: { '~error': E }
+		: {}
+
+/**
+ * What a `derive` responds with: its `status()` returns, and its raw `Error`s
+ * under `~error`, forwarded like a `beforeHandle`'s. Errors are told apart
+ * structurally, see `Derived`
+ */
+export type DeriveResponse<Derivative> = 0 extends 1 & Derivative
+	? ExtractErrorFromHandle<Derivative>
+	: {
+			[R in Derivative as R extends AnyElysiaStatus
+				? R['status']
+				: R extends Error
+					? 'stack' extends keyof R
+						? '~error'
+						: never
+					: never]: R extends AnyElysiaStatus
+				? Prettify<R['response']>
+				: R
+		}
+
+/**
+ * Merge two `Metadata` whose hooks all apply. `&` would intersect what both
+ * sides respond with at a status, and their `~error`, which must union.
+ * `base.ts` keeps a copy for `.use()`
+ */
+type MergeMetadata<
+	A extends MetadataBase,
+	B extends MetadataBase
+> = {} extends A['response']
+	? A & B
+	: {} extends B['response']
+		? A & B
+		: Omit<A & B, 'response'> & {
+				response: UnionResponseStatus<A['response'], B['response']>
+			}
 
 type ReconcileStatus<
 	in out A extends Record<number, unknown>,
@@ -2477,18 +2751,43 @@ export type ComposeElysiaResponse<
 	Handle,
 	Possibility extends PossibleResponse,
 	Errors extends ErrorDefinition[] = [],
-	Path extends string = string
-> = ReconcileStatus<
-	// @ts-ignore
-	Schema['response'],
-	UnionResponseStatus<
-		ValueOrFunctionToResponseSchema<Handle, Errors>,
-		Possibility &
-			(HasInputValidator<Schema, Path> extends false
-				? {}
-				: { 422: ValidationErrorResponse })
-	>
+	Path extends string = string,
+	// A raw `Error` a `beforeHandle` in scope returned, see `ComposeRoute`
+	HookError = never
+> = UnionResponseStatus<
+	ReconcileStatus<
+		// @ts-ignore
+		Schema['response'],
+		UnionResponseStatus<
+			ValueOrFunctionToResponseSchema<Handle>,
+			Possibility &
+				(HasInputValidator<Schema, Path> extends false
+					? {}
+					: { 422: ValidationProblem })
+		>
+	>,
+	// A returned error is answered by its `.onError()` handler, which the
+	// response schema never checks, so the schema can't claim that status.
+	// Nor a validation error's
+	HasInputValidator<Schema, Path> extends false
+		? ReturnedErrorResponse<Handle, Errors, HookError>
+		: UnionResponseStatus<
+				ReturnedErrorResponse<Handle, Errors, HookError>,
+				ValidationResponse<Errors>
+			>
 >
+
+type ReturnedErrorResponse<
+	Handle,
+	Errors extends ErrorDefinition[],
+	HookError
+> = Errors extends []
+	? {}
+	: ExtractReturnedError<
+			| (Handle extends (...a: any) => MaybePromise<infer R> ? R : Handle)
+			| HookError,
+			Errors
+		>
 
 export type ExtractErrorFromHandle<in out Handle> = {
 	[ErrorResponse in Extract<
@@ -2518,43 +2817,212 @@ export type ErrorDefinitionEntry<
 	response: ErrorHandlerResponseSchema<Awaited<R>, InstanceType<E>>
 	/**
 	 * The handler may return nothing, which passes the error on to the next
-	 * hook: it answers sometimes, but doesn't handle the error
 	 */
-	passes: undefined extends Awaited<R> ? true : false
+	passes: undefined extends Awaited<R>
+		? true
+		: Error extends InstanceType<E>
+			? // `Error` itself does catch every error
+				IsErrorConstructor<E> extends true
+				? false
+				: true
+			: false
+	// a plain value is served at the caught error's status, which may not be
+	// the class's own
+	'~return': Awaited<R>
 }
 
-export type ErrorHandlerResponseSchema<R, E> = ExtractErrorFromHandle<
-	Exclude<R, Error>
-> &
-	// The handler's own `status()` returns are extracted above. What is left is
-	// its plain return. Returning nothing adds nothing: the error goes on to
-	// the next hook, and in the end to the unhandled lane (see `passes`)
-	(Exclude<
-		R,
-		Extract<Exclude<R, Error>, AnyElysiaStatus> | undefined | void
-	> extends infer Served
-		? ServedAtStatus<Served, ErrorFallbackStatus<E>>
-		: {})
+// `Error` itself, not a subclass that adds nothing to it: those are
+// structurally the same, the constructors aren't identical
+type IsErrorConstructor<E> =
+	(<T>() => T extends E ? 1 : 2) extends <T>() => T extends ErrorConstructor
+		? 1
+		: 2
+		? true
+		: false
+
+export type ErrorHandlerResponseSchema<R, E> = UnionResponseStatus<
+	ExtractErrorFromHandle<Exclude<R, Error>> &
+		// The handler's own `status()` returns are extracted above. What is left
+		// is its plain return. Returning nothing adds nothing: the error goes on
+		// to the next hook, and in the end to the unhandled lane (see `passes`)
+		(Exclude<
+			R,
+			| Extract<Exclude<R, Error>, AnyElysiaStatus>
+			| ErrorOf<R>
+			| undefined
+			| void
+		> extends infer Served
+			? ServedAtStatus<Served, ErrorFallbackStatus<E>>
+			: {}),
+	// A returned `Error` is served as an unhandled one, at its own status
+	0 extends 1 & R ? {} : UnhandledErrorResponse<ErrorOf<R>>
+>
 
 type PassesError<Entry> = Entry extends { passes: true } ? true : false
 
-/**
- * What the handlers registered for `V` respond with: the first one that
- * always answers, and every one before it that may pass the error on
- */
 type MatchRegisteredError<
 	V,
-	Errors extends ErrorDefinition[]
+	Errors extends ErrorDefinition[],
+	Answered = false
 > = Errors extends [
 	infer Head extends ErrorDefinition,
 	...infer Rest extends ErrorDefinition[]
 ]
-	? V extends Head['error']
-		? PassesError<Head> extends true
-			? Head['response'] | MatchRegisteredError<V, Rest>
-			: Head['response']
-		: MatchRegisteredError<V, Rest>
+	? Head extends { '~catchAll': true }
+		? EntryResponse<Head, V> | MatchRegisteredError<V, Rest, Answered>
+		: Answered extends true
+			? MatchRegisteredError<V, Rest, true>
+			: V extends Head['error']
+				? PassesError<Head> extends true
+					? EntryResponse<Head, V> | MatchRegisteredError<V, Rest>
+					:
+							| EntryResponse<Head, V>
+							| MatchRegisteredError<V, Rest, true>
+				: MatchRegisteredError<V, Rest>
 	: never
+
+type EntryResponse<Entry extends ErrorDefinition, V> = Entry extends {
+	'~return': infer R
+}
+	? ErrorHandlerResponseSchema<R, V>
+	: Entry['response']
+
+/**
+ * A `type`, not an `interface`: a consumer's d.ts prints it inline, where an
+ * unexported interface can't be named (TS4023)
+ */
+type CatchAllErrorEntry<R, Passes = undefined extends R ? true : false> = {
+	error: Error
+	response: {}
+	passes: Passes
+	'~return': R
+	'~catchAll': true
+}
+
+export type CatchAllEntries<Handler> =
+	// a hook left out, its type parameter at its constraint
+	MaybeArray<(...a: any) => any> extends Handler
+		? []
+		: CatchAllEntriesOf<Handler>
+
+type CatchAllEntriesOf<Handler> = Handler extends (...a: any) => infer R
+	? CatchAllEntryOf<Awaited<R>>
+	: Handler extends readonly [infer Head, ...infer Rest]
+		? [...CatchAllEntriesOf<Head>, ...CatchAllEntriesOf<Rest>]
+		: Handler extends readonly ((...a: any) => infer R)[]
+			? CatchAllEntryOf<Awaited<R>, true>
+			: []
+
+type CatchAllEntryOf<
+	R,
+	Passes = undefined extends R ? true : false
+> = unknown extends R
+	? []
+	: [R] extends [never]
+		? []
+		: [CatchAllErrorEntry<R, Passes>]
+
+// The error a request validator throws, at the status it is served at
+/**
+ * A route's 422: the exported `ValidationErrorResponse`, spelled out (and
+ * pinned equal in `test/types`) because a consumer's d.ts prints a reference
+ * to it as an `import()`, which a d.ts reader such as `fromTypes` can't
+ * follow. Not exported, so it prints inline. A mapped copy would print
+ * `detail?: string | undefined`
+ */
+type ValidationProblem = {
+	type: 'validation'
+	code: 'validation'
+	title: 'Validation Error'
+	status: 422
+	detail?: string
+	on: string
+	found?: unknown
+	property?: string
+	expected?: string
+}
+
+type InputValidationError = ValidationError & { status: 422 }
+
+type ValidationResponse<Errors extends ErrorDefinition[]> = Errors extends []
+	? {}
+	: MergeStatusUnion<ValidationMatch<Errors>>
+
+// Not constrained to `ErrorDefinition`: checking an entry against it would
+// resolve its response just to skip it
+type ValidationMatch<Errors extends unknown[]> = Errors extends [
+	infer Head,
+	...infer Rest
+]
+	? Head extends { error: infer E; '~return': infer R }
+		? InputValidationError extends E
+			?
+					| ErrorHandlerResponseSchema<R, InputValidationError>
+					| ValidationMatch<Rest>
+			: ValidationMatch<Rest>
+		: ValidationMatch<Rest>
+	: never
+
+export type CatchAllHookReturn<
+	HookScope extends EventScope,
+	BasePath extends string,
+	Scope extends EventScope,
+	Singleton extends SingletonBase,
+	Definitions extends DefinitionBase,
+	Metadata extends MetadataBase,
+	Routes extends RouteBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	Handler
+> = Elysia<
+	BasePath,
+	Scope,
+	Singleton,
+	[HookScope] extends ['global']
+		? {
+				typebox: Definitions['typebox']
+				error: [...Definitions['error'], ...CatchAllEntries<Handler>]
+			}
+		: Definitions,
+	[HookScope] extends ['global']
+		? {
+				schema: Metadata['schema']
+				schemas: Metadata['schemas']
+				macro: Metadata['macro']
+				macroFn: Metadata['macroFn']
+				parser: Metadata['parser']
+				response: UnionResponseStatus<
+					Metadata['response'],
+					ErrorHookStatus<Handler>
+				>
+			}
+		: Metadata,
+	Routes,
+	[HookScope] extends ['plugin']
+		? {
+				derive: Ephemeral['derive']
+				schema: Ephemeral['schema']
+				schemas: Ephemeral['schemas']
+				response: UnionResponseStatus<
+					Ephemeral['response'],
+					ErrorHookStatus<Handler>
+				>
+				error: [...Ephemeral['error'], ...CatchAllEntries<Handler>]
+			}
+		: Ephemeral,
+	[HookScope] extends ['plugin' | 'global']
+		? Volatile
+		: {
+				derive: Volatile['derive']
+				schema: Volatile['schema']
+				schemas: Volatile['schemas']
+				response: UnionResponseStatus<
+					Volatile['response'],
+					ErrorHookStatus<Handler>
+				>
+				error: [...Volatile['error'], ...CatchAllEntries<Handler>]
+			}
+>
 
 // Handled only by a handler that always answers
 type HasErrorMatch<V, Errors extends ErrorDefinition[]> = Errors extends [
@@ -2588,12 +3056,6 @@ export type UnhandledReturnedErrorOf<
 	? UnhandledReturnedError<R, Errors>
 	: UnhandledReturnedError<T, Errors>
 
-/**
- * Returned errors a `.onError(Class, handler)` already consumed, each paired
- * with the response that handler contributed. Carried on the route under
- * `~handled` so a parent handler registered before `.use()`, which runs first
- * at runtime, can take the error over
- */
 type HandledReturnedError<
 	Value,
 	Errors extends ErrorDefinition[]
@@ -2621,10 +3083,15 @@ export type HandledReturnedErrorOf<
 export type WithHandledErrors<
 	Route,
 	Handle,
-	Errors extends ErrorDefinition[]
+	Errors extends ErrorDefinition[],
+	HookError = never
 > = Errors extends []
 	? Route
-	: Route & HandledErrorKey<HandledReturnedErrorOf<Handle, Errors>>
+	: Route &
+			HandledErrorKey<
+				| HandledReturnedErrorOf<Handle, Errors>
+				| HandledReturnedError<HookError, Errors>
+			>
 
 export type HandledErrorKey<Handled> = [Handled] extends [never]
 	? {}
@@ -2632,11 +3099,6 @@ export type HandledErrorKey<Handled> = [Handled] extends [never]
 
 type RouteHandled<Route> = Route extends { '~handled': infer H } ? H : never
 
-/**
- * Strip what the handlers in `Taken` contributed from a route's response.
- * Same caveat as `WithoutUnhandledErrorResponse`: a value the handler itself
- * also returns at that status is indistinguishable and goes too
- */
 type WithoutHandledResponse<Response, Contributed> = {
 	[K in keyof Response as K extends keyof Contributed
 		? IsNever<Exclude<Response[K], Contributed[K]>> extends true
@@ -2656,6 +3118,8 @@ type TakenOverError<H, Errors extends ErrorDefinition[]> = H extends {
 	: never
 
 type HandledResponseOf<H> = H extends { response: infer R } ? R : never
+
+type HandledErrorOf<H> = H extends { error: infer V } ? V : never
 
 type RehandledError<Won, Errors extends ErrorDefinition[]> = Won extends {
 	error: infer V
@@ -2680,26 +3144,52 @@ type ResolveRouteLeafErrors<
 	Errors extends ErrorDefinition[]
 > = [Route['error']] extends [never]
 	? Route
-	: Omit<Route, 'response' | 'error' | '~handled'> & {
-			response: Prettify<
-				UnionResponseStatus<
-					WithoutUnhandledErrorResponse<
-						Route['response'],
-						Route['error']
-					>,
-					UnionResponseStatus<
-						ExtractReturnedError<Route['error'], Errors>,
-						UnhandledErrorResponse<
-							UnhandledReturnedError<Route['error'], Errors>
-						>
+	: UnionResponseStatus<
+				RouteBaseResponse<Route>,
+				ExtractReturnedError<Route['error'], Errors>
+		  > extends infer Base
+		? UnhandledReturnedError<Route['error'], Errors> extends infer Err
+			? Omit<Route, 'response' | 'error' | '~handled' | '~base'> & {
+					response: Prettify<
+						UnionResponseStatus<Base, UnhandledErrorResponse<Err>>
 					>
+					error: Err
+				} & HandledErrorKey<
+						| RouteHandled<Route>
+						| HandledReturnedError<Route['error'], Errors>
+					> &
+					UnhandledBaseKey<Base, Err>
+			: never
+		: never
+
+type TakeOverResponse<
+	Response,
+	Route,
+	Won,
+	Errors extends ErrorDefinition[]
+> = Prettify<
+	UnionResponseStatus<
+		WithoutHandledResponse<
+			Response,
+			MergeStatusUnion<HandledResponseOf<Won>>
+		>,
+		UnionResponseStatus<
+			MergeStatusUnion<
+				HandledResponseOf<Exclude<RouteHandled<Route>, Won>>
+			>,
+			UnionResponseStatus<
+				MergeStatusUnion<
+					HandledResponseOf<RehandledError<Won, Errors>>
+				>,
+				// what a parent's handler that may pass answers for the rest
+				ExtractReturnedError<
+					HandledErrorOf<Exclude<RouteHandled<Route>, Won>>,
+					Errors
 				>
 			>
-			error: UnhandledReturnedError<Route['error'], Errors>
-		} & HandledErrorKey<
-				| RouteHandled<Route>
-				| HandledReturnedError<Route['error'], Errors>
-			>
+		>
+	>
+>
 
 /**
  * Take a parent's handlers registered before `.use()` in front of the
@@ -2712,33 +3202,37 @@ type PrependRouteLeafErrors<
 > =
 	TakenOverError<RouteHandled<Route>, Errors> extends infer Won
 		? [Won] extends [never]
-			? ResolveRouteLeafErrors<Route, Errors>
+			? ResolveRouteLeafErrors<
+					WithParentResponse<
+						Route,
+						ExtractReturnedError<
+							HandledErrorOf<RouteHandled<Route>>,
+							Errors
+						>
+					>,
+					Errors
+				>
 			: ResolveRouteLeafErrors<
-					Omit<Route, 'response' | '~handled'> & {
-						response: Prettify<
-							UnionResponseStatus<
-								WithoutHandledResponse<
-									Route['response'],
-									MergeStatusUnion<HandledResponseOf<Won>>
-								>,
-								UnionResponseStatus<
-									MergeStatusUnion<
-										HandledResponseOf<
-											Exclude<RouteHandled<Route>, Won>
-										>
-									>,
-									MergeStatusUnion<
-										HandledResponseOf<
-											RehandledError<Won, Errors>
-										>
-									>
-								>
-							>
+					Omit<Route, 'response' | '~handled' | '~base'> & {
+						response: TakeOverResponse<
+							Route['response'],
+							Route,
+							Won,
+							Errors
 						>
 						'~handled':
 							| Exclude<RouteHandled<Route>, Won>
 							| RehandledError<Won, Errors>
-					},
+					} & (Route extends { '~base': infer Base }
+							? {
+									'~base': TakeOverResponse<
+										Base,
+										Route,
+										Won,
+										Errors
+									>
+								}
+							: {}),
 					Errors
 				>
 		: never
@@ -2748,13 +3242,110 @@ type PrependRouteLeafErrors<
  * so what they can respond with joins each route's response, the same as on
  * a route the parent declares itself
  */
-type WithParentResponse<Route, Response> = {} extends Response
-	? Route
-	: {
-			[K in keyof Route]: K extends 'response'
-				? UnionParentResponse<Route[K], Response>
-				: Route[K]
-		}
+type WithParentResponse<
+	Route,
+	Response,
+	Errors extends ErrorDefinition[] = [],
+	// whether a handler in `Errors` may catch a validation error, so what it
+	// answers is only resolved for a route that reads its 422
+	Catches = false
+> = Catches extends true
+	? WithParentValidation<Route, Response, Errors>
+	: {} extends Response
+		? Route
+		: {
+				[K in keyof Route]: K extends 'response' | '~base'
+					? UnionParentResponse<Route[K], Response>
+					: Route[K]
+			}
+
+// A route that validates keeps its default 422, so a parent's handler that may
+// catch a validation error joins there. Read lazily, per key
+type WithParentValidation<Route, Response, Errors extends ErrorDefinition[]> = {
+	[K in keyof Route]: K extends 'response' | '~base'
+		? 422 extends keyof Route['response' & keyof Route]
+			? UnionParentResponse<
+					Route[K],
+					UnionResponseStatus<Response, ValidationResponse<Errors>>
+				>
+			: {} extends Response
+				? Route[K]
+				: UnionParentResponse<Route[K], Response>
+		: Route[K]
+}
+
+type CatchesValidation<Errors extends unknown[]> = Errors extends [
+	infer Head,
+	...infer Rest
+]
+	? Head extends { error: infer E }
+		? InputValidationError extends E
+			? true
+			: CatchesValidation<Rest>
+		: CatchesValidation<Rest>
+	: false
+
+interface ParentHookError {
+	error: unknown
+	response: PossibleResponse
+	answered: PossibleResponse
+	handled: unknown
+}
+
+type ResolveParentHookError<HookError, Errors extends ErrorDefinition[]> = {
+	error: UnhandledReturnedError<HookError, Errors>
+	response: UnionResponseStatus<
+		ExtractReturnedError<HookError, Errors>,
+		UnhandledErrorResponse<UnhandledReturnedError<HookError, Errors>>
+	>
+	// what its handlers answer, without the unhandled part
+	answered: ExtractReturnedError<HookError, Errors>
+	handled: HandledReturnedError<HookError, Errors>
+}
+
+type WithParentHookError<Routes, HookError extends ParentHookError> = {
+	[K in keyof Routes]: RouteKey extends keyof Routes[K]
+		? // A WebSocket route has no `error` to take it
+			'error' extends keyof Routes[K]
+			? {
+					[P in
+						| keyof Routes[K]
+						| ([HookError['handled']] extends [never]
+								? never
+								: '~handled')
+						| ([
+								| Routes[K]['error' & keyof Routes[K]]
+								| HookError['error']
+						  ] extends [never]
+								? never
+								: '~base')]: P extends 'response'
+						? UnionParentResponse<
+								Routes[K][P],
+								HookError['response']
+							>
+						: P extends 'error'
+							? Routes[K][P] | HookError['error']
+							: P extends '~handled'
+								? RouteHandled<Routes[K]> | HookError['handled']
+								: P extends '~base'
+									? UnionParentResponse<
+											RouteBaseResponse<Routes[K]>,
+											HookError['answered']
+										>
+									: Routes[K][P & keyof Routes[K]]
+				}
+			: // nor `~handled`: what the parent's handlers answer, and what
+				// they leave unhandled, joins its response
+				{
+					[P in keyof Routes[K]]: P extends 'response'
+						? UnionParentResponse<
+								Routes[K][P],
+								HookError['response']
+							>
+						: Routes[K][P]
+				}
+		: WithParentHookError<Routes[K], HookError>
+}
 
 type UnionParentResponse<Own, Response> = {
 	[S in keyof Own | keyof Response]:
@@ -2779,7 +3370,15 @@ type UsedRoutes<
 	Response
 > = string extends keyof Routes
 	? Routes
-	: PrependUsedRoutes<Routes, Errors, Response>
+	: '~error' extends keyof Response
+		? WithParentHookError<
+				PrependUsedRoutes<Routes, Errors, Omit<Response, '~error'>>,
+				ResolveParentHookError<
+					Response[keyof Response & '~error'],
+					Errors
+				>
+			>
+		: PrependUsedRoutes<Routes, Errors, Response>
 
 /**
  * Found by its keys alone: matching a route structurally would resolve its
@@ -2788,7 +3387,14 @@ type UsedRoutes<
  */
 type RouteKey = 'params' | 'query' | 'headers' | 'response'
 
-type PrependUsedRoutes<Routes, Errors extends ErrorDefinition[], Response> = {
+type PrependUsedRoutes<
+	Routes,
+	Errors extends ErrorDefinition[],
+	Response,
+	// The parent's handlers run before the plugin's, every one that may catch
+	// a validation error may answer it
+	Catches = CatchesValidation<Errors>
+> = {
 	[K in keyof Routes]: RouteKey extends keyof Routes[K]
 		? WithParentResponse<
 				Errors extends []
@@ -2798,9 +3404,11 @@ type PrependUsedRoutes<Routes, Errors extends ErrorDefinition[], Response> = {
 						? // @ts-ignore keyed as a route above
 							PrependRouteLeafErrors<Routes[K], Errors>
 						: Routes[K],
-				Response
+				Response,
+				Errors,
+				Catches
 			>
-		: PrependUsedRoutes<Routes[K], Errors, Response>
+		: PrependUsedRoutes<Routes[K], Errors, Response, Catches>
 }
 
 type MergeStatusUnion<U> = {
@@ -2859,14 +3467,16 @@ export type MergeElysiaInstances<
 					...Current['~Definitions']['error']
 				]
 			},
-			Metadata & Current['~Metadata'],
+			MergeMetadata<Metadata, Current['~Metadata']>,
 			Ephemeral,
 			{
 				derive: Volatile['derive'] & Current['~Ephemeral']['derive']
 				schema: Volatile['schema'] & Current['~Ephemeral']['schema']
 				schemas: Volatile['schemas'] & Current['~Ephemeral']['schemas']
-				response: Volatile['response'] &
+				response: UnionResponseStatus<
+					Volatile['response'],
 					Current['~Ephemeral']['response']
+				>
 				error: [...Volatile['error'], ...Current['~Ephemeral']['error']]
 			},
 			Routes &
@@ -2917,6 +3527,51 @@ export type WrapFn<
 	fetch: (request: Request, ...rest: any[]) => MaybePromise<Response>
 ) => Callback
 
+type RouteHookCapture = {
+	beforeHandle?: unknown
+	afterHandle?: unknown
+	error?: unknown
+}
+
+// A hook object that names at least one lifecycle hook
+type LifecycleHookObject =
+	| { beforeHandle: unknown }
+	| { afterHandle: unknown }
+	| { error: unknown }
+
+type RouteHookReturn<Hook> = Hook extends (...a: any) => MaybePromise<infer R>
+	? unknown extends R
+		? never
+		: R
+	: Hook extends readonly (infer Each)[]
+		? RouteHookReturn<Each>
+		: never
+
+type RouteHookValue<Hook extends RouteHookCapture> =
+	| Exclude<RouteHookReturn<Hook['beforeHandle']>, void>
+	| Exclude<RouteHookReturn<Hook['afterHandle']>, void>
+	| Extract<RouteHookReturn<Hook['error']>, AnyElysiaStatus>
+
+// What an error hook answers any error with: its `status()` returns, and the
+// `Error`s it returns, each served as an unhandled one at its own status
+export type ErrorHookStatus<Handler> =
+	MaybeArray<(...a: any) => any> extends Handler
+		? {}
+		: RouteHookReturn<Handler> extends infer R
+			? [ErrorOf<R>] extends [never]
+				? ExtractErrorFromHandle<R>
+				: UnionResponseStatus<
+						ExtractErrorFromHandle<R>,
+						UnhandledErrorResponse<ErrorOf<R>>
+					>
+			: {}
+
+type RouteHandle<Handle, Hook extends RouteHookCapture> = (
+	...a: any
+) =>
+	| (Handle extends (...a: any) => MaybePromise<infer R> ? R : Handle)
+	| RouteHookValue<Hook>
+
 export type AddRoute<
 	BasePath extends string,
 	Scope extends EventScope,
@@ -2930,7 +3585,11 @@ export type AddRoute<
 	Path extends string,
 	Schema extends RouteSchema,
 	MacroContext extends RouteSchema,
-	Handle
+	Handle,
+	RouteHook extends RouteHookCapture = RouteHookCapture,
+	RouteHandler = RouteHook extends LifecycleHookObject
+		? RouteHandle<Handle, RouteHook>
+		: Handle
 > = Elysia<
 	BasePath,
 	Scope,
@@ -2942,50 +3601,33 @@ export type AddRoute<
 			BasePath,
 			Path,
 			{
-				[method in Method]: WithHandledErrors<
-					CreateEdenResponse<
-						Path,
-						Schema,
-						MacroContext,
-						ComposeElysiaResponse<
-							Schema &
-								MacroContext &
-								Metadata['schemas'] &
-								Ephemeral['schemas'] &
-								Volatile['schemas'],
-							Handle,
+				[method in Method]: ComposeRoute<
+					Path,
+					Schema,
+					MacroContext,
+					Schema &
+						MacroContext &
+						Metadata['schemas'] &
+						Ephemeral['schemas'] &
+						Volatile['schemas'],
+					RouteHandler,
+					UnionResponseStatus<
+						Metadata['response'],
+						UnionResponseStatus<
+							Ephemeral['response'],
 							UnionResponseStatus<
-								Metadata['response'],
-								UnionResponseStatus<
-									Ephemeral['response'],
-									UnionResponseStatus<
-										Volatile['response'],
-										// @ts-ignore
-										MacroContext['return'] & {}
-									>
-								>
-							>,
-							[
-								...Definitions['error'],
-								...Ephemeral['error'],
-								...Volatile['error']
-							],
-							Path
-						>,
-						UnhandledReturnedErrorOf<
-							Handle,
-							[
-								...Definitions['error'],
-								...Ephemeral['error'],
-								...Volatile['error']
-							]
+								Volatile['response'],
+								// @ts-ignore
+								MacroContext['return'] & {}
+							>
 						>
 					>,
-					Handle,
 					[
 						...Definitions['error'],
 						...Ephemeral['error'],
-						...Volatile['error']
+						...Volatile['error'],
+						// a route's own `error` hook runs after them
+						...CatchAllEntries<RouteHook['error']>
 					]
 				>
 			}
@@ -2993,6 +3635,64 @@ export type AddRoute<
 	Ephemeral,
 	Volatile
 >
+
+type ComposeRoute<
+	Path extends string,
+	Schema extends RouteSchema,
+	MacroContext extends RouteSchema,
+	ResponseSchema extends RouteSchema,
+	Handle,
+	Possibility extends PossibleResponse,
+	Errors extends ErrorDefinition[]
+> = '~catchAll' extends keyof Possibility
+	? // A macro's `error` hook, carried in its `return`
+		ComposeRoute<
+			Path,
+			Schema,
+			MacroContext,
+			ResponseSchema,
+			Handle,
+			Omit<Possibility, '~catchAll'>,
+			[...Errors, ...MacroCatchAll<Possibility>]
+		>
+	: [Possibility] extends [{ '~error': infer HookError }]
+		? WithHandledErrors<
+				CreateEdenResponse<
+					Path,
+					Schema,
+					MacroContext,
+					ComposeElysiaResponse<
+						ResponseSchema,
+						Handle,
+						Omit<Possibility, '~error'>,
+						Errors,
+						Path,
+						HookError
+					>,
+					| UnhandledReturnedErrorOf<Handle, Errors>
+					| UnhandledReturnedError<HookError, Errors>
+				>,
+				Handle,
+				Errors,
+				HookError
+			>
+		: WithHandledErrors<
+				CreateEdenResponse<
+					Path,
+					Schema,
+					MacroContext,
+					ComposeElysiaResponse<
+						ResponseSchema,
+						Handle,
+						Possibility,
+						Errors,
+						Path
+					>,
+					UnhandledReturnedErrorOf<Handle, Errors>
+				>,
+				Handle,
+				Errors
+			>
 
 export type HookContextSchema<
 	Metadata extends MetadataBase,
@@ -3299,7 +3999,9 @@ export type AddWSRoute<
 	Path extends string,
 	Schema extends RouteSchema,
 	MacroContext extends RouteSchema,
-	Response
+	Response,
+	RouteError = unknown,
+	RouteBeforeHandle = unknown
 > = Elysia<
 	BasePath,
 	Scope,
@@ -3311,41 +4013,94 @@ export type AddWSRoute<
 			BasePath,
 			Path,
 			{
-				subscribe: CreateWSEdenResponse<
+				subscribe: ComposeWSRoute<
 					Path,
 					Schema,
 					MacroContext,
-					ComposeElysiaResponse<
-						Schema &
-							MacroContext &
-							Metadata['schemas'] &
-							Ephemeral['schemas'] &
-							Volatile['schemas'],
-						Response,
+					Schema &
+						MacroContext &
+						Metadata['schemas'] &
+						Ephemeral['schemas'] &
+						Volatile['schemas'],
+					Response,
+					UnionResponseStatus<
+						Metadata['response'],
 						UnionResponseStatus<
-							Metadata['response'],
+							Ephemeral['response'],
 							UnionResponseStatus<
-								Ephemeral['response'],
-								UnionResponseStatus<
-									Volatile['response'],
-									// @ts-ignore
-									MacroContext['return'] & {}
-								>
+								Volatile['response'],
+								// its own `beforeHandle` runs on the upgrade too
+								RouteBeforeHandle extends MaybeArray<Function>
+									? UnionResponseStatus<
+											WithoutMacroCatch<
+												MacroContext['return' &
+													keyof MacroContext]
+											> & {},
+											ElysiaHandlerToResponseSchemaAmbiguous<RouteBeforeHandle>
+										>
+									: WithoutMacroCatch<
+											MacroContext['return' &
+												keyof MacroContext]
+										> & {}
 							>
+						>
+					>,
+					[
+						...Definitions['error'],
+						...Ephemeral['error'],
+						...Volatile['error'],
+						...MacroCatchAll<
+							MacroContext['return' & keyof MacroContext]
 						>,
-						[
-							...Definitions['error'],
-							...Ephemeral['error'],
-							...Volatile['error']
-						],
-						Path
-					>
+						// its own `error` hook runs first
+						...CatchAllEntries<RouteError>
+					]
 				>
 			}
 		>,
 	Ephemeral,
 	Volatile
 >
+
+type ComposeWSRoute<
+	Path extends string,
+	Schema extends RouteSchema,
+	MacroContext extends RouteSchema,
+	ResponseSchema extends RouteSchema,
+	Response,
+	Possibility extends PossibleResponse,
+	Errors extends ErrorDefinition[]
+> = [Possibility] extends [{ '~error': infer HookError }]
+	? CreateWSEdenResponse<
+			Path,
+			Schema,
+			MacroContext,
+			UnionResponseStatus<
+				ComposeElysiaResponse<
+					ResponseSchema,
+					Response,
+					Omit<Possibility, '~error'>,
+					Errors,
+					Path,
+					HookError
+				>,
+				UnhandledErrorResponse<
+					UnhandledReturnedError<HookError, Errors>
+				>
+			>
+		>
+	: CreateWSEdenResponse<
+			Path,
+			Schema,
+			MacroContext,
+			ComposeElysiaResponse<
+				ResponseSchema,
+				Response,
+				Possibility,
+				Errors,
+				Path
+			>
+		>
 
 export type GuardHookSingleton<
 	Singleton extends SingletonBase,

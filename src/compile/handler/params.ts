@@ -113,6 +113,8 @@ const handlerParams = (): Record<string, Resolver | undefined> =>
 			const classes = returnedErrorClasses(c.hook as any)
 			return classes ? forwardErrorOf(classes) : forwardError
 		},
+		// those classes, a derive's returned value checked against
+		ec: (c) => returnedErrorClasses(c.hook as any),
 		// route-level error boundary
 		fre: (c) => finalizeRouteErrorOf(c.hook as any),
 		// shared error fallback, reached once every error hook has declined

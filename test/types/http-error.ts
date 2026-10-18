@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Elysia, HTTPError, problem, status } from '../../src'
+import { Elysia, HTTPError, problem, status, t } from '../../src'
 import type { TaggedHTTPError } from '../../src'
 import type { ElysiaStatus } from '../../src/error'
 import type { StatusMap } from '../../src/constants'
@@ -12,18 +12,27 @@ import { expectTypeOf } from 'expect-type'
 class OutOfCredit extends HTTPError<'OUT_OF_CREDIT'> {
 	type = 'OUT_OF_CREDIT' as const
 	override readonly status = 402
+	override readonly detail = 'Out of credit'
+}
 
-	detail() {
-		return 'Out of credit'
-	}
+// What an error that never described itself is served as: the generic
+// internal-server-error problem document, not the error instance
+type Unhandled500 = {
+	type: string
+	code: 'internal-server-error'
+	title: 'Internal Server Error'
+	status: 500
+	detail?: string
+	name?: string
+	cause?: unknown
 }
 
 class Deferred extends HTTPError<'DEFERRED'> {
 	type = 'DEFERRED' as const
 	override readonly status = 409
 
-	async detail() {
-		return { deferred: true }
+	async value() {
+		return problem(409, { type: 'DEFERRED', deferred: true })
 	}
 }
 
@@ -49,14 +58,16 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	}>()
 	expectTypeOf<Response[402]['type']>().toEqualTypeOf<'OUT_OF_CREDIT'>()
 	expectTypeOf<Response[402]['status']>().toEqualTypeOf<402>()
-	expectTypeOf<Response[402]['detail']>().toEqualTypeOf<string>()
+	// a readonly `detail` keeps its literal, as `status` does
+	expectTypeOf<Response[402]['detail']>().toEqualTypeOf<'Out of credit'>()
 	expectTypeOf<Response[402]['title']>().toEqualTypeOf<string>()
 	expectTypeOf<Response[402]['instance']>().toEqualTypeOf<
 		string | undefined
 	>()
 }
 
-// A promised `detail` is awaited, then carried verbatim.
+// A promised `value` is awaited, and the `problem()` it resolves keeps the
+// problem shape, structured data riding as extension members.
 {
 	const app = new Elysia().get('/', () => new Deferred())
 
@@ -65,7 +76,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	expectTypeOf<keyof Response>().toEqualTypeOf<409>()
 	expectTypeOf<Response[409]>().toMatchTypeOf<{
 		type: 'DEFERRED'
-		detail: { deferred: boolean }
+		deferred: true
 		status: 409
 	}>()
 }
@@ -128,17 +139,15 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	}>()
 }
 
-// A `detail` that may resolve `undefined` falls through to the message, so
-// both arms appear — the annotated value on one, the message string on the
-// other, each inside a problem document.
+// A `detail` that may be `undefined` falls through to the message, so both
+// arms appear — the annotated string on one, the message (absent when none
+// was given) on the other, each inside a problem document.
 {
 	class Maybe extends HTTPError<'MAYBE'> {
 		type = 'MAYBE' as const
 		override readonly status = 404
-
-		detail(): { payload: string } | undefined {
-			return Math.random() > 0.5 ? { payload: 'maybe' } : undefined
-		}
+		override readonly detail =
+			Math.random() > 0.5 ? ('maybe' as const) : undefined
 	}
 
 	const app = new Elysia().get('/', () => new Maybe())
@@ -146,9 +155,12 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	type Response = (typeof app)['~Routes']['get']['response']
 
 	expectTypeOf<keyof Response>().toEqualTypeOf<404>()
-	expectTypeOf<Response[404]['detail']>().toEqualTypeOf<
-		{ payload: string } | string
-	>()
+	// the annotated arm, its `detail` required
+	expectTypeOf<
+		Extract<Response[404], { detail: 'maybe' }>['detail']
+	>().toEqualTypeOf<'maybe'>()
+	// the message arm beside it
+	expectTypeOf<Response[404]['detail']>().toEqualTypeOf<string | undefined>()
 	expectTypeOf<Response[404]['type']>().toEqualTypeOf<'MAYBE'>()
 }
 
@@ -162,7 +174,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	const app = new Elysia().get('/', () => new SDKError())
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
-		500: SDKError
+		500: Unhandled500
 	}>()
 }
 
@@ -176,7 +188,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	const app = new Elysia().get('/', () => new Wild())
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
-		500: Wild
+		500: Unhandled500
 	}>()
 }
 
@@ -231,6 +243,85 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	}>()
 }
 
+// A function `detail` is never invoked even once a problem is claimed, owned
+// or not: it annotates nothing, so the message is the `detail` served. The
+// method form is gone from `HTTPError`, declaring it is a type error.
+{
+	class ClaimedFn extends Error {
+		type = 'CLAIMED_FN' as const
+		readonly status = 403 as const
+
+		detail() {
+			return { never: 'run' }
+		}
+	}
+
+	class OwnedFn extends HTTPError.id('OWNED_FN', 403) {
+		// @ts-expect-error `detail` is a string, not a method
+		detail() {
+			return { never: 'run' }
+		}
+	}
+
+	const app = new Elysia()
+		.get('/claimed', () => new ClaimedFn())
+		.get('/owned', () => new OwnedFn())
+
+	expectTypeOf<
+		(typeof app)['~Routes']['claimed']['get']['response'][403]['detail']
+	>().toEqualTypeOf<string | undefined>()
+	expectTypeOf<
+		(typeof app)['~Routes']['claimed']['get']['response'][403]['type']
+	>().toEqualTypeOf<'CLAIMED_FN'>()
+	expectTypeOf<
+		(typeof app)['~Routes']['owned']['get']['response'][403]['detail']
+	>().toEqualTypeOf<string | undefined>()
+}
+
+// The same holds for a function member of a mixed `detail`: never invoked, so
+// what it returns never reaches the type, and the message arm stands beside
+// the data member.
+{
+	class Mixed extends Error {
+		type = 'MIXED_DETAIL' as const
+		readonly status = 409 as const
+		readonly detail: 'literal' | (() => { phantom: true }) = 'literal'
+	}
+
+	const app = new Elysia().get('/', () => new Mixed())
+
+	type Entry = (typeof app)['~Routes']['get']['response'][409]
+
+	// the data arm
+	expectTypeOf<
+		Extract<Entry, { detail: 'literal' }>['detail']
+	>().toEqualTypeOf<'literal'>()
+	// the message arm, and no `{ phantom: true }` anywhere
+	expectTypeOf<Entry['detail']>().toEqualTypeOf<string | undefined>()
+}
+
+// A promised `detail` is plain data too: never awaited, so the document
+// carries the Promise as it was annotated, never what it resolves to — the
+// runtime serializes it untouched (`{}`), and no other tier models
+// serialization either. Holding neither `undefined` nor a function, it has
+// no message arm.
+{
+	class Pending extends Error {
+		type = 'PENDING' as const
+		readonly status = 409 as const
+		readonly detail = Promise.resolve({ resolved: true })
+	}
+
+	const app = new Elysia().get('/', () => new Pending())
+
+	type Response = (typeof app)['~Routes']['get']['response']
+
+	expectTypeOf<keyof Response>().toEqualTypeOf<409>()
+	expectTypeOf<Response[409]['detail']>().toEqualTypeOf<
+		Promise<{ resolved: boolean }>
+	>()
+}
+
 // A value-less foreign duck error never claimed a problem document, it keeps
 // its raw message entry.
 {
@@ -256,7 +347,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	expectTypeOf<keyof Response>().toEqualTypeOf<500>()
 	expectTypeOf<Response[500]>().toMatchTypeOf<{
 		type: 'OUT_OF_CREDIT'
-		detail: string
+		detail?: string
 		status: 500
 	}>()
 	expectTypeOf(new OutOfCredit().type).toEqualTypeOf<'OUT_OF_CREDIT'>()
@@ -268,14 +359,29 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	>().toEqualTypeOf<OutOfCredit>()
 }
 
+// With nothing annotated `detail` is the message, which a type can't see was
+// given: `new OutOfCredit()` serves no `detail` member at all, so it's optional.
+{
+	class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {}
+
+	const app = new Elysia().get('/', () => new OutOfCredit())
+
+	type Response = (typeof app)['~Routes']['get']['response']
+
+	expectTypeOf<Response[402]['detail']>().toEqualTypeOf<string | undefined>()
+	expectTypeOf<{
+		type: 'OUT_OF_CREDIT'
+		code: 'OUT_OF_CREDIT'
+		title: string
+		status: 402
+	}>().toMatchTypeOf<Response[402]>()
+}
+
 // An `HTTPError.id` subclass annotating a status serves it.
 {
 	class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT') {
 		override readonly status = 402
-
-		detail() {
-			return { remaining: 0 }
-		}
+		override readonly detail = 'No credit remaining'
 	}
 
 	const app = new Elysia().get('/', () => new OutOfCredit())
@@ -285,7 +391,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	expectTypeOf<keyof Response>().toEqualTypeOf<402>()
 	expectTypeOf<Response[402]>().toMatchTypeOf<{
 		type: 'OUT_OF_CREDIT'
-		detail: { remaining: number }
+		detail: 'No credit remaining'
 		status: 402
 	}>()
 }
@@ -294,9 +400,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 // no class-body override needed.
 {
 	class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {
-		detail() {
-			return { remaining: 0 }
-		}
+		override readonly detail = 'No credit remaining'
 	}
 
 	const app = new Elysia().get('/', () => new OutOfCredit())
@@ -306,7 +410,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	expectTypeOf<keyof Response>().toEqualTypeOf<402>()
 	expectTypeOf<Response[402]>().toMatchTypeOf<{
 		type: 'OUT_OF_CREDIT'
-		detail: { remaining: number }
+		detail: 'No credit remaining'
 		status: 402
 	}>()
 	expectTypeOf(new OutOfCredit().status).toEqualTypeOf<402>()
@@ -318,9 +422,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 // it, which no static type can see.
 {
 	class AppError extends HTTPError.id('APP_ERROR', 402) {
-		detail() {
-			return 'denied'
-		}
+		override readonly detail = 'denied'
 	}
 
 	class Nested extends AppError {}
@@ -342,10 +444,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	class Manual extends HTTPError<'MANUAL'> {
 		type = 'MANUAL' as const
 		override readonly status = 402
-
-		detail() {
-			return 'manual'
-		}
+		override readonly detail = 'manual'
 	}
 
 	const app = new Elysia().get('/', () => new Manual())
@@ -366,9 +465,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 // numeric literal, both on the class annotation and the response key.
 {
 	class Denied extends HTTPError.id('DENIED', 'Payment Required') {
-		detail() {
-			return 'denied'
-		}
+		override readonly detail = 'denied'
 	}
 
 	const app = new Elysia().get('/', () => new Denied())
@@ -385,10 +482,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	class Denied extends HTTPError<'DENIED'> {
 		type = 'DENIED' as const
 		override readonly status = 'Payment Required'
-
-		detail() {
-			return 'denied'
-		}
+		override readonly detail = 'denied'
 	}
 
 	const app = new Elysia().get('/', () => new Denied())
@@ -418,15 +512,53 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	}>()
 }
 
+// `value` reads what the error was constructed with, and what it returns
+// resolves the same sync or async.
+{
+	class Echo extends HTTPError.id('ECHO', 409) {
+		constructor(readonly path: string) {
+			super()
+		}
+
+		value() {
+			return { path: this.path }
+		}
+	}
+
+	class AsyncEcho extends HTTPError.id('ASYNC_ECHO', 402) {
+		constructor(readonly path: string) {
+			super()
+		}
+
+		async value() {
+			return problem(503, { detail: this.path })
+		}
+	}
+
+	const app = new Elysia()
+		.get('/sync', () => new Echo('/sync'))
+		.get('/async', () => new AsyncEcho('/async'))
+
+	type Routes = (typeof app)['~Routes']
+
+	expectTypeOf<Routes['sync']['get']['response']>().toEqualTypeOf<{
+		409: { path: string }
+	}>()
+	expectTypeOf<
+		keyof Routes['async']['get']['response']
+	>().toEqualTypeOf<503>()
+	expectTypeOf<
+		Routes['async']['get']['response'][503]['detail']
+	>().toEqualTypeOf<string>()
+}
+
 // `value` wins over `detail` when both are annotated.
 {
 	class Both extends HTTPError.id('BOTH', 402) {
+		override readonly detail = 'loser'
+
 		value() {
 			return { winner: 'value' as const }
-		}
-
-		detail() {
-			return 'loser'
 		}
 	}
 
@@ -440,12 +572,10 @@ class Deferred extends HTTPError<'DEFERRED'> {
 // A `value` that may resolve `undefined` falls through, so both tiers appear.
 {
 	class Falls extends HTTPError.id('FALLS', 402) {
+		override readonly detail = 'fell through'
+
 		value(): { raw: true } | undefined {
 			return Math.random() > 0.5 ? { raw: true } : undefined
-		}
-
-		detail() {
-			return 'fell through'
 		}
 	}
 
@@ -456,17 +586,14 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	expectTypeOf<Extract<Entry, { raw: true }>>().toEqualTypeOf<{ raw: true }>()
 	expectTypeOf<
 		Extract<Entry, { type: 'FALLS' }>['detail']
-	>().toEqualTypeOf<string>()
+	>().toEqualTypeOf<'fell through'>()
 }
 
 // An error without a literal status falls back to 500, still problem-shaped.
 {
 	class Vague extends HTTPError<'VAGUE'> {
 		type = 'VAGUE' as const
-
-		detail() {
-			return { vague: true }
-		}
+		override readonly detail = 'vague'
 	}
 
 	const app = new Elysia().get('/', () => new Vague())
@@ -476,7 +603,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	expectTypeOf<keyof Response>().toEqualTypeOf<500>()
 	expectTypeOf<Response[500]>().toMatchTypeOf<{
 		type: 'VAGUE'
-		detail: { vague: boolean }
+		detail: 'vague'
 		status: 500
 	}>()
 }
@@ -496,32 +623,31 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	expectTypeOf<keyof Response>().toEqualTypeOf<403>()
 	expectTypeOf<Response[403]>().toMatchTypeOf<{
 		type: 'IMPL_NO_VALUE'
-		detail: string
+		detail?: string
 		status: 403
 	}>()
 }
 
-// `implements` checks assignability, not member kind, so a method satisfies
-// the declared knob. A plain value no longer does.
+// `implements` checks assignability, not member kind: `detail` is declared a
+// string, so a plain value satisfies it and a method no longer does.
 {
+	class ImplValue extends Error implements HTTPError<'IMPL_VALUE'> {
+		type = 'IMPL_VALUE' as const
+		readonly status = 403
+		detail = 'forbidden by policy'
+	}
+
 	class ImplMethod extends Error implements HTTPError<'IMPL_METHOD'> {
 		type = 'IMPL_METHOD' as const
 		readonly status = 403
 
+		// @ts-expect-error `detail` is a string, not a method
 		detail() {
 			return 'forbidden by policy'
 		}
 	}
 
-	class ImplValue extends Error implements HTTPError<'IMPL_VALUE'> {
-		type = 'IMPL_VALUE' as const
-		readonly status = 403
-
-		// @ts-expect-error a knob is a method, not a value
-		detail = 'forbidden by policy'
-	}
-
-	const app = new Elysia().get('/', () => new ImplMethod())
+	const app = new Elysia().get('/', () => new ImplValue())
 
 	expectTypeOf<
 		(typeof app)['~Routes']['get']['response'][403]['detail']
@@ -544,12 +670,19 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	>().toEqualTypeOf<string>()
 }
 
-// The base declares both knobs as methods, so a method is the only form an
-// owned class can annotate them with — an eagerly assigned value is rejected.
+// The base declares `value` as a method, so a method is the only form an
+// owned class can annotate it with — an eagerly assigned value is rejected.
+// `detail` is the reverse: a string, never a method.
 {
 	class EagerDetail extends HTTPError.id('EAGER_DETAIL', 410) {
-		// @ts-expect-error a knob is a method, not a value
-		detail = 'known upfront'
+		override readonly detail = 'known upfront'
+	}
+
+	class MethodDetail extends HTTPError.id('METHOD_DETAIL', 410) {
+		// @ts-expect-error `detail` is a string, not a method
+		async detail() {
+			return 'computed later'
+		}
 	}
 
 	class EagerValue extends HTTPError.id('EAGER_VALUE', 410) {
@@ -566,10 +699,11 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	}
 }
 
-// Either knob declared to return `unknown` resolves to `unknown`, not to the
-// message fallback: the runtime serves whatever the knob returns (an object
-// is served verbatim) and can't see a declared type, so the type can't
-// promise the message either.
+// A knob typed `unknown` resolves to `unknown`, not to the message fallback:
+// the runtime serves whatever it holds (an object is served verbatim) and
+// can't see a declared type, so the type can't promise the message either.
+// `detail` is a string on `HTTPError`, so only an error implementing the
+// contract on its own can carry an opaque one.
 {
 	class OpaqueValue extends HTTPError.id('OPAQUE_VALUE', 409) {
 		value(): unknown {
@@ -577,10 +711,10 @@ class Deferred extends HTTPError<'DEFERRED'> {
 		}
 	}
 
-	class OpaqueDetail extends HTTPError.id('OPAQUE_DETAIL', 409) {
-		detail(): unknown {
-			return { whatever: true }
-		}
+	class OpaqueDetail extends Error {
+		type = 'OPAQUE_DETAIL' as const
+		readonly status = 409 as const
+		readonly detail: unknown = { whatever: true }
 	}
 
 	const app = new Elysia()
@@ -595,6 +729,17 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	expectTypeOf<
 		(typeof app)['~Routes']['detail']['get']['response'][409]['detail']
 	>().toEqualTypeOf<unknown>()
+	// `unknown` may hold `undefined`, so the message arm stands beside it
+	expectTypeOf<
+		[
+			Extract<
+				(typeof app)['~Routes']['detail']['get']['response'][409],
+				{ detail?: string }
+			>
+		] extends [never]
+			? 'no message arm'
+			: 'message arm'
+	>().toEqualTypeOf<'message arm'>()
 }
 
 // `value()` may hand back a `status()` or `problem()`, which is served at the
@@ -642,15 +787,13 @@ class Deferred extends HTTPError<'DEFERRED'> {
 // under the annotated status, and the `detail` fall-through beside it.
 {
 	class Mixed extends HTTPError.id('MIXED', 402) {
+		override readonly detail = 'fell through'
+
 		value():
 			| ElysiaStatus<503, { esc: true }>
 			| { plain: true }
 			| undefined {
 			return undefined
-		}
-
-		detail() {
-			return 'fell through'
 		}
 	}
 
@@ -665,7 +808,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	}>()
 	expectTypeOf<
 		Extract<Response[402], { type: 'MIXED' }>['detail']
-	>().toEqualTypeOf<string>()
+	>().toEqualTypeOf<'fell through'>()
 }
 
 // A handler that falls through inherits the escape too.
@@ -739,7 +882,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	expectTypeOf<Response[200]>().toEqualTypeOf<'ok'>()
 	expectTypeOf<Response[400]>().toMatchTypeOf<{ status: 400 }>()
 	expectTypeOf<Response[401]>().toMatchTypeOf<{ status: 401 }>()
-	expectTypeOf<Response[500]>().toEqualTypeOf<Error>()
+	expectTypeOf<Response[500]>().toEqualTypeOf<Unhandled500>()
 	// the handler intercepts Error2 before `value()` runs, so no 418
 	expectTypeOf<
 		(typeof app)['~Routes']['get']['error']
@@ -761,7 +904,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 	type Response = (typeof app)['~Routes']['get']['response']
 
 	expectTypeOf<keyof Response>().toEqualTypeOf<200 | 400 | 500>()
-	expectTypeOf<Response[500]>().toEqualTypeOf<Error>()
+	expectTypeOf<Response[500]>().toEqualTypeOf<Unhandled500>()
 }
 
 // Control: a bare `Error` on its own still gets its 500 bucket.
@@ -772,7 +915,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
 		200: 'ok'
-		500: Error
+		500: Unhandled500
 	}>()
 }
 
@@ -780,9 +923,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 // self-described entry keeps its own status, the bare one keeps 500.
 {
 	class Denied extends HTTPError.id('denied', 402) {
-		detail() {
-			return 'no funds'
-		}
+		override readonly detail = 'no funds'
 	}
 
 	const app = new Elysia().get('/', (): Denied | Error | 'ok' => {
@@ -795,7 +936,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 
 	expectTypeOf<keyof Response>().toEqualTypeOf<200 | 402 | 500>()
 	expectTypeOf<Response[402]['type']>().toEqualTypeOf<'denied'>()
-	expectTypeOf<Response[500]>().toEqualTypeOf<Error>()
+	expectTypeOf<Response[500]>().toEqualTypeOf<Unhandled500>()
 }
 
 // And beside one whose `value()` escapes to a different status.
@@ -881,10 +1022,7 @@ class Deferred extends HTTPError<'DEFERRED'> {
 {
 	class Denied extends HTTPError.id('DENIED', 402) {
 		override readonly headers = { 'x-reason': 'no-funds' }
-
-		detail() {
-			return 'no funds'
-		}
+		override readonly detail = 'no funds'
 	}
 
 	const app = new Elysia().get('/', () => new Denied())
@@ -898,4 +1036,174 @@ class Deferred extends HTTPError<'DEFERRED'> {
 		status: 402
 	}>()
 	expectTypeOf<Response[402]>().not.toHaveProperty('headers')
+}
+
+// A response schema constrains what a handler serves, not the errors it
+// returns: those go to the error pipeline, so the schema needn't list them.
+// The returned error joins the route at its own status.
+{
+	class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {}
+
+	const app = new Elysia().get('/', { response: t.String() }, ({ query }) =>
+		query.x ? 'ok' : new OutOfCredit()
+	)
+
+	type Route = (typeof app)['~Routes']['get']
+
+	expectTypeOf<keyof Route['response']>().toEqualTypeOf<200 | 402>()
+	expectTypeOf<Route['response'][200]>().toEqualTypeOf<string>()
+	expectTypeOf<
+		Route['response'][402]['type']
+	>().toEqualTypeOf<'OUT_OF_CREDIT'>()
+	expectTypeOf<Route['error']>().toEqualTypeOf<OutOfCredit>()
+
+	// A status the schema declares too can be served either way: the
+	// handler's own `status(402, …)`, or the returned error's problem
+	// document, which response validation never sees
+	const both = new Elysia().get(
+		'/',
+		{ response: { 200: t.String(), 402: t.Object({ foo: t.String() }) } },
+		({ query }) => (query.x ? 'ok' : new OutOfCredit())
+	)
+
+	type Both = (typeof both)['~Routes']['get']['response'][402]
+
+	expectTypeOf<Extract<Both, { foo: string }>>().toEqualTypeOf<{
+		foo: string
+	}>()
+	expectTypeOf<
+		Extract<Both, { type: string }>['type']
+	>().toEqualTypeOf<'OUT_OF_CREDIT'>()
+
+	// A registered handler takes the error over, as without a schema
+	const handled = new Elysia()
+		.onError(OutOfCredit, () => status(418, 'teapot'))
+		.get('/', { response: t.String() }, ({ query }) =>
+			query.x ? 'ok' : new OutOfCredit()
+		)
+
+	expectTypeOf<
+		(typeof handled)['~Routes']['get']['response']
+	>().toEqualTypeOf<{ 200: string; 418: 'teapot' }>()
+
+	// The handler's answer is never checked against the schema, so at a
+	// status the schema declares too, either can be served
+	const collides = new Elysia()
+		.onError(OutOfCredit, () => status(418, 'teapot'))
+		.get(
+			'/',
+			{ response: { 200: t.String(), 418: t.Object({ x: t.String() }) } },
+			({ query }) => (query.x ? 'ok' : new OutOfCredit())
+		)
+
+	expectTypeOf<
+		(typeof collides)['~Routes']['get']['response'][418]
+	>().toEqualTypeOf<{ x: string } | 'teapot'>()
+
+	// `beforeHandle` errors are forwarded to the error pipeline the same way
+	new Elysia().get(
+		'/',
+		{
+			response: t.String(),
+			beforeHandle({ query }) {
+				if (!query.x) return new OutOfCredit()
+			}
+		},
+		() => 'ok'
+	)
+
+	new Elysia()
+		.guard({ response: t.String() })
+		.onBeforeHandle(({ query }) => {
+			if (!query.x) return new OutOfCredit()
+		})
+		.get('/', () => 'ok')
+
+	// So are `afterHandle` errors
+	new Elysia().get(
+		'/',
+		{
+			response: t.String(),
+			afterHandle({ query }) {
+				if (!query.x) return new OutOfCredit()
+			}
+		},
+		() => 'ok'
+	)
+
+	new Elysia()
+		.guard({ response: t.String() })
+		.onAfterHandle(({ query }) => {
+			if (!query.x) return new OutOfCredit()
+		})
+		.get('/', () => 'ok')
+
+	// Its plain value is still checked
+	new Elysia().get(
+		'/',
+		{
+			response: t.String(),
+			// @ts-expect-error an afterHandle value must satisfy the schema
+			afterHandle: () => 1
+		},
+		() => 'ok'
+	)
+
+	// Neither is a WebSocket hook's: it is sent as a frame
+	new Elysia().ws('/', {
+		response: t.String(),
+		message() {},
+		beforeHandle: () => 'ok',
+		afterHandle: () => 'ok'
+	})
+
+	// @ts-expect-error a WebSocket beforeHandle error is a frame
+	new Elysia().ws('/', {
+		response: t.String(),
+		message() {},
+		beforeHandle: () => new OutOfCredit()
+	})
+
+	// @ts-expect-error a WebSocket afterHandle error is a frame
+	new Elysia().ws('/', {
+		response: t.String(),
+		message() {},
+		afterHandle: () => new OutOfCredit()
+	})
+}
+
+// Returned from any `beforeHandle`, the instance's, a guard's or a macro's,
+// an error serves the same problem document as from the handler, since it
+// goes through the same error pipeline.
+{
+	const handler = new Elysia().get('/', () =>
+		Math.random() > 0.5 ? new OutOfCredit() : ('ok' as const)
+	)
+	const deny = () => (Math.random() > 0.5 ? new OutOfCredit() : undefined)
+
+	const hook = new Elysia().onBeforeHandle(deny).get('/', () => 'ok' as const)
+	const guard = new Elysia()
+		.guard({ beforeHandle: deny })
+		.get('/', () => 'ok' as const)
+	const macro = new Elysia()
+		.macro({ deny: { beforeHandle: deny } })
+		.get('/', { deny: true }, () => 'ok' as const)
+
+	type Response = (typeof handler)['~Routes']['get']['response']
+
+	expectTypeOf<
+		(typeof hook)['~Routes']['get']['response'][402]['type']
+	>().toEqualTypeOf<'OUT_OF_CREDIT'>()
+	expectTypeOf<
+		(typeof hook)['~Routes']['get']['response']
+	>().toEqualTypeOf<Response>()
+	expectTypeOf<
+		(typeof guard)['~Routes']['get']['response']
+	>().toEqualTypeOf<Response>()
+	expectTypeOf<
+		(typeof macro)['~Routes']['get']['response']
+	>().toEqualTypeOf<Response>()
+	expectTypeOf<
+		(typeof macro)['~Routes']['get']['error']
+	>().toEqualTypeOf<OutOfCredit>()
 }

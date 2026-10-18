@@ -333,9 +333,7 @@ describe('WebSocket upgrade validation error responses', () => {
 
 describe('WebSocket self-describing errors', () => {
 	class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {
-		detail() {
-			return 'Out of credit'
-		}
+		override readonly detail = 'Out of credit'
 	}
 
 	// A frame is the only thing a socket can serve, so an error that
@@ -375,6 +373,105 @@ describe('WebSocket self-describing errors', () => {
 		}
 	})
 
+	// As on HTTP, an error an error hook returns is served as an unhandled
+	// one, never dispatched again
+	it('serves an error returned by an error hook as a thrown one', async () => {
+		let dispatched = false
+		const app = new Elysia()
+			.use(websocket())
+			.onError(OutOfCredit, () => {
+				dispatched = true
+				return status(418, 'teapot')
+			})
+			.ws('/ws', {
+				error: () => new OutOfCredit(),
+				beforeHandle({ query }) {
+					if (query.upgrade) throw new Error('caught')
+				},
+				message() {
+					throw new Error('caught')
+				}
+			})
+			.listen(0)
+
+		let ws: WebSocket | undefined
+
+		try {
+			ws = newWebsocket(app.server!)
+			await wsOpen(ws)
+
+			const msg = wsMessage(ws)
+			ws.send('trigger')
+
+			const { data } = await msg
+
+			expect(JSON.parse(String(data))).toEqual({
+				type: 'OUT_OF_CREDIT',
+				code: 'OUT_OF_CREDIT',
+				title: 'Payment Required',
+				detail: 'Out of credit',
+				status: 402
+			})
+
+			const upgrade = await app.handle(
+				new Request('http://localhost/ws?upgrade=1', {
+					headers: { upgrade: 'websocket' }
+				})
+			)
+			expect(upgrade.status).toBe(402)
+			expect(dispatched).toBe(false)
+		} finally {
+			if (ws && ws.readyState !== WebSocket.CLOSED) await wsClosed(ws)
+			app.stop()
+		}
+	})
+
+	// As on HTTP, an error given no message has no `detail`, while an
+	// explicit `''` was given and is served as-is
+	it('serves `detail` only for a given message', async () => {
+		class Bare extends HTTPError.id('BARE', 402) {}
+
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws', {
+				message(_, message) {
+					throw message === 'none' ? new Bare() : new Bare('')
+				}
+			})
+			.listen(0)
+
+		const envelope = {
+			type: 'BARE',
+			code: 'BARE',
+			title: 'Payment Required',
+			status: 402
+		}
+
+		try {
+			for (const [send, frame] of [
+				['none', envelope],
+				['empty', { ...envelope, detail: '' }]
+			] as const) {
+				const ws = newWebsocket(app.server!)
+
+				try {
+					await wsOpen(ws)
+
+					const msg = wsMessage(ws)
+					ws.send(send)
+
+					const { data } = await msg
+
+					expect(JSON.parse(String(data))).toEqual(frame)
+				} finally {
+					if (ws.readyState !== WebSocket.CLOSED) await wsClosed(ws)
+				}
+			}
+		} finally {
+			app.stop()
+		}
+	})
+
 	// `value` is the escape hatch on both transports: no envelope, the
 	// annotation is the whole frame
 	it('serves an annotated value as the whole frame', async () => {
@@ -410,6 +507,132 @@ describe('WebSocket self-describing errors', () => {
 			})
 		} finally {
 			if (ws && ws.readyState !== WebSocket.CLOSED) await wsClosed(ws)
+			app.stop()
+		}
+	})
+
+	// As on HTTP, a `detail` method is never invoked, sync or async: the
+	// frame serves the message, as for an error that annotated nothing
+	it('never invokes a `detail` method', async () => {
+		let invoked = 0
+
+		class Removed extends HTTPError.id('REMOVED', 402) {
+			// @ts-expect-error `detail` is a string, not a method
+			detail() {
+				invoked++
+				throw new Error('detail must not run')
+			}
+		}
+
+		class RemovedAsync extends HTTPError.id('REMOVED', 402) {
+			// @ts-expect-error `detail` is a string, not a method
+			async detail() {
+				invoked++
+				return 'must not be served'
+			}
+		}
+
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws', {
+				message(_, message) {
+					throw message === 'sync'
+						? new Removed('the message')
+						: new RemovedAsync('the message')
+				}
+			})
+			.listen(0)
+
+		try {
+			for (const send of ['sync', 'async']) {
+				const ws = newWebsocket(app.server!)
+
+				try {
+					await wsOpen(ws)
+
+					const msg = wsMessage(ws)
+					ws.send(send)
+
+					const { data } = await msg
+
+					expect(JSON.parse(String(data))).toEqual({
+						type: 'REMOVED',
+						code: 'REMOVED',
+						title: 'Payment Required',
+						detail: 'the message',
+						status: 402
+					})
+				} finally {
+					if (ws.readyState !== WebSocket.CLOSED) await wsClosed(ws)
+				}
+			}
+		} finally {
+			app.stop()
+		}
+
+		expect(invoked).toBe(0)
+	})
+
+	// As on HTTP, a promised `detail` is plain data, never awaited, a
+	// rejected one included: the frame is the document HTTP serves
+	it('never awaits a promised detail', async () => {
+		class Pending extends Error {
+			type = 'PENDING' as const
+			readonly status = 409
+
+			constructor(readonly detail: Promise<unknown>) {
+				super('the message')
+			}
+		}
+
+		const rejected = Promise.reject(new Error('rejected-marker'))
+		rejected.catch(() => {})
+
+		const thrown = (which: string) =>
+			new Pending(
+				which === 'rejected'
+					? rejected
+					: Promise.resolve({ marker: 'resolved-marker' })
+			)
+
+		const app = new Elysia()
+			.get('/http/:which', ({ params }) => {
+				throw thrown(params.which)
+			})
+			.use(websocket())
+			.ws('/ws', {
+				message(_, message) {
+					throw thrown(String(message))
+				}
+			})
+			.listen(0)
+
+		try {
+			for (const which of ['resolved', 'rejected']) {
+				const http = await (await app.handle(`/http/${which}`)).text()
+				const ws = newWebsocket(app.server!)
+
+				try {
+					await wsOpen(ws)
+
+					const msg = wsMessage(ws)
+					ws.send(which)
+
+					const frame = String((await msg).data)
+
+					expect(frame).not.toContain('marker')
+					expect(JSON.parse(frame)).toEqual({
+						type: 'PENDING',
+						title: 'Conflict',
+						detail: {},
+						status: 409
+					})
+					expect(frame).toBe(http)
+				} finally {
+					if (ws.readyState !== WebSocket.CLOSED) await wsClosed(ws)
+				}
+			}
+		} finally {
 			app.stop()
 		}
 	})
@@ -483,6 +706,282 @@ describe('WebSocket self-describing errors', () => {
 			app.stop()
 		}
 	})
+
+	// Extension members are part of that one document: the frame carries
+	// them, keeps the members Elysia owns, and masks a foreign 5xx in
+	// production exactly as HTTP does
+	for (const production of [false, true])
+		it(`serves extension members as HTTP does (${production ? 'production' : 'development'})`, async () => {
+			if (production) process.env.NODE_ENV = 'production'
+
+			const ran: string[] = []
+
+			class Credit extends HTTPError.id('OUT_OF_CREDIT', 402) {
+				readonly detail =
+					'Your current balance is 30, but that costs 50'
+
+				extension() {
+					ran.push('owned')
+					return {
+						balance: 30,
+						accounts: ['/account/12345'],
+						type: 'https://evil.example/hijack',
+						detail: 'spoofed'
+					}
+				}
+			}
+
+			class Foreign extends Error {
+				type = 'UNAVAILABLE'
+				status = 503
+
+				extension() {
+					ran.push('foreign')
+					return { internalHost: 'db-7.internal' }
+				}
+			}
+
+			const thrown = (which: string) =>
+				which === 'owned' ? new Credit() : new Foreign('secret')
+
+			const app = new Elysia()
+				.get('/http/:which', ({ params }) => {
+					throw thrown(params.which)
+				})
+				.use(websocket())
+				.ws('/ws', {
+					message(_, message) {
+						throw thrown(String(message))
+					}
+				})
+				.listen(0)
+
+			try {
+				for (const which of ['owned', 'foreign']) {
+					const http = await (
+						await app.handle(`/http/${which}`)
+					).text()
+					const ws = newWebsocket(app.server!)
+
+					try {
+						await wsOpen(ws)
+
+						const msg = wsMessage(ws)
+						ws.send(which)
+
+						expect(String((await msg).data)).toBe(http)
+					} finally {
+						if (ws.readyState !== WebSocket.CLOSED)
+							await wsClosed(ws)
+					}
+
+					expect(JSON.parse(http)).toEqual(
+						which === 'owned'
+							? {
+									type: 'OUT_OF_CREDIT',
+									code: 'OUT_OF_CREDIT',
+									title: 'Payment Required',
+									detail: 'Your current balance is 30, but that costs 50',
+									status: 402,
+									balance: 30,
+									accounts: ['/account/12345']
+								}
+							: {
+									type: 'UNAVAILABLE',
+									title: 'Service Unavailable',
+									detail: production
+										? 'Service Unavailable'
+										: 'secret',
+									status: 503,
+									...(production
+										? {}
+										: { internalHost: 'db-7.internal' })
+								}
+					)
+				}
+			} finally {
+				app.stop()
+			}
+
+			expect(ran).toEqual(
+				production
+					? ['owned', 'owned']
+					: ['owned', 'owned', 'foreign', 'foreign']
+			)
+		})
+
+	// An extension is data. A function member is behavior that would take
+	// over how the document is served: `toJSON` re-labels it, a callable
+	// `next` turns it into a stream, `then` into a thenable, a symbol
+	// iterator into an iterable. None of them is served, on either transport
+	it('serves no function member of an extension', async () => {
+		const spoof = {
+			type: 'https://evil.example/hijack',
+			code: 'HIJACK',
+			status: 200,
+			detail: 'spoofed'
+		}
+
+		const members: Record<string, () => object> = {
+			toJSON: () => ({ toJSON: () => spoof }),
+			next: () => ({
+				next: () => ({ done: false, value: 'stream-replaced' })
+			}),
+			then: () => ({
+				then: (resolve: (value: unknown) => void) =>
+					resolve('thenable-replaced')
+			}),
+			asyncIterator: () => ({
+				async *[Symbol.asyncIterator]() {
+					yield 'iterated'
+				}
+			})
+		}
+
+		const thrown = (which: string) =>
+			new (class Hijack extends HTTPError.id('CONFLICT', 409) {
+				extension() {
+					return { ...members[which](), balance: 30 }
+				}
+			})()
+
+		const app = new Elysia()
+			.get('/http/:which', ({ params }) => {
+				throw thrown(params.which)
+			})
+			.use(websocket())
+			.ws('/ws', {
+				message(_, message) {
+					throw thrown(String(message))
+				}
+			})
+			.listen(0)
+
+		try {
+			for (const which of Object.keys(members)) {
+				const response = await app.handle(`/http/${which}`)
+				const http = await response.text()
+
+				expect({ which, status: response.status }).toEqual({
+					which,
+					status: 409
+				})
+				expect({ which, body: JSON.parse(http) }).toEqual({
+					which,
+					body: {
+						type: 'CONFLICT',
+						code: 'CONFLICT',
+						title: 'Conflict',
+						status: 409,
+						balance: 30
+					}
+				})
+
+				const ws = newWebsocket(app.server!)
+
+				try {
+					await wsOpen(ws)
+
+					const msg = wsMessage(ws)
+					ws.send(which)
+
+					expect(String((await msg).data)).toBe(http)
+				} finally {
+					if (ws.readyState !== WebSocket.CLOSED) await wsClosed(ws)
+				}
+			}
+		} finally {
+			app.stop()
+		}
+	})
+
+	// The error's own `detail` wins, else a string one from its extension,
+	// else the message: on both transports, production masking included
+	for (const production of [false, true])
+		it(`serves an extension \`detail\` as HTTP does (${production ? 'production' : 'development'})`, async () => {
+			if (production) process.env.NODE_ENV = 'production'
+
+			class Explained extends HTTPError.id('UNAVAILABLE', 503) {
+				extension(): Record<string, unknown> {
+					return {
+						detail:
+							this.message === 'number'
+								? 42
+								: 'Retry in 30 seconds'
+					}
+				}
+			}
+
+			class Own extends Explained {
+				override readonly detail = 'own'
+			}
+
+			class Foreign extends Error {
+				type = 'UNAVAILABLE'
+				status = 503
+
+				extension() {
+					return { detail: 'db-7.internal is down' }
+				}
+			}
+
+			const thrown = (which: string) =>
+				which === 'own'
+					? new Own()
+					: which === 'foreign'
+						? new Foreign('secret')
+						: new Explained(which)
+
+			const expected: Record<string, string> = {
+				own: 'own',
+				extension: 'Retry in 30 seconds',
+				number: production ? 'Service Unavailable' : 'number',
+				foreign: production
+					? 'Service Unavailable'
+					: 'db-7.internal is down'
+			}
+
+			const app = new Elysia()
+				.get('/http/:which', ({ params }) => {
+					throw thrown(params.which)
+				})
+				.use(websocket())
+				.ws('/ws', {
+					message(_, message) {
+						throw thrown(String(message))
+					}
+				})
+				.listen(0)
+
+			try {
+				for (const [which, detail] of Object.entries(expected)) {
+					const http = await (
+						await app.handle(`/http/${which}`)
+					).text()
+
+					expect({ which, detail: JSON.parse(http).detail }).toEqual({
+						which,
+						detail
+					})
+
+					const ws = newWebsocket(app.server!)
+
+					try {
+						await wsOpen(ws)
+
+						const msg = wsMessage(ws)
+						ws.send(which)
+
+						expect(String((await msg).data)).toBe(http)
+					} finally {
+						if (ws.readyState !== WebSocket.CLOSED)
+							await wsClosed(ws)
+					}
+				}
+			} finally {
+				app.stop()
+			}
+		})
 })
 
 // A hook reaches only the routes registered after it, as in Elysia 1, on a
