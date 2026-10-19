@@ -1,7 +1,8 @@
 import { expectTypeOf } from 'expect-type'
 import { Elysia } from '../../src'
 
-// ? async plugin should mark as partial
+// Async plugin-derived values are optional; decorations and state remain exact.
+// The plugin is used as an instance, so its local derive stays its own
 {
 	const serviceA = async () => {
 		await Bun.sleep(1)
@@ -9,39 +10,45 @@ import { Elysia } from '../../src'
 		return new Elysia()
 			.decorate('decoratorA', 'decoratorA')
 			.state('storeA', 'storeA' as const)
-			.derive(() => ({
+			.derive('plugin', () => ({
 				deriveA: 'deriveA'
 			}))
-			.resolve(() => ({
+			.derive('plugin', () => ({
 				resolveA: 'resolveA'
+			}))
+			.derive(() => ({
+				localA: 'localA'
 			}))
 	}
 
 	new Elysia()
 		.use(serviceA)
 		.decorate((v) => {
-			expectTypeOf(v.decoratorA).toEqualTypeOf<string | undefined>()
+			expectTypeOf(v.decoratorA).toEqualTypeOf<string>()
 
 			return v
 		})
 		.state((v) => {
-			expectTypeOf(v.storeA).toEqualTypeOf<'storeA' | undefined>()
+			expectTypeOf(v.storeA).toEqualTypeOf<'storeA'>()
 
 			return v
 		})
 		.derive((v) => {
 			expectTypeOf(v.deriveA).toEqualTypeOf<'deriveA' | undefined>()
+			expectTypeOf<
+				'localA' extends keyof typeof v ? true : false
+			>().toEqualTypeOf<false>()
 
 			return v
 		})
-		.resolve((v) => {
+		.derive((v) => {
 			expectTypeOf(v.resolveA).toEqualTypeOf<'resolveA' | undefined>()
 
 			return v
 		})
 }
 
-// ? inline async should mark plugin as partial
+// Inline plugin-scoped async derivations are optional; decorations and state remain exact.
 {
 	const serviceA = new Elysia().use(async (app) => {
 		await Bun.sleep(1)
@@ -52,21 +59,21 @@ import { Elysia } from '../../src'
 			.derive(() => ({
 				deriveA: 'deriveA'
 			}))
-			.resolve(() => ({
+			.derive(() => ({
 				resolveA: 'resolveA'
 			}))
-			.as('scoped')
+			.as('plugin')
 	})
 
 	new Elysia()
 		.use(serviceA)
 		.decorate((v) => {
-			expectTypeOf(v.decoratorA).toEqualTypeOf<string | undefined>()
+			expectTypeOf(v.decoratorA).toEqualTypeOf<string>()
 
 			return v
 		})
 		.state((v) => {
-			expectTypeOf(v.storeA).toEqualTypeOf<'storeA' | undefined>()
+			expectTypeOf(v.storeA).toEqualTypeOf<'storeA'>()
 
 			return v
 		})
@@ -75,14 +82,14 @@ import { Elysia } from '../../src'
 
 			return v
 		})
-		.resolve((v) => {
+		.derive((v) => {
 			expectTypeOf(v.resolveA).toEqualTypeOf<'resolveA' | undefined>()
 
 			return v
 		})
 }
 
-// ? async plugin should mark plugin as partial
+// Plugin-scoped async derivations are optional; decorations and state remain exact.
 {
 	const serviceA = async () => {
 		await Bun.sleep(1)
@@ -93,21 +100,21 @@ import { Elysia } from '../../src'
 			.derive(() => ({
 				deriveA: 'deriveA'
 			}))
-			.resolve(() => ({
+			.derive(() => ({
 				resolveA: 'resolveA'
 			}))
-			.as('scoped')
+			.as('plugin')
 	}
 
 	new Elysia()
 		.use(serviceA)
 		.decorate((v) => {
-			expectTypeOf(v.decoratorA).toEqualTypeOf<string | undefined>()
+			expectTypeOf(v.decoratorA).toEqualTypeOf<string>()
 
 			return v
 		})
 		.state((v) => {
-			expectTypeOf(v.storeA).toEqualTypeOf<'storeA' | undefined>()
+			expectTypeOf(v.storeA).toEqualTypeOf<'storeA'>()
 
 			return v
 		})
@@ -116,14 +123,14 @@ import { Elysia } from '../../src'
 
 			return v
 		})
-		.resolve((v) => {
+		.derive((v) => {
 			expectTypeOf(v.resolveA).toEqualTypeOf<'resolveA' | undefined>()
 
 			return v
 		})
 }
 
-// ? inline async should mark plugin as partial
+// Inline plugin-scoped async derivations are optional; decorations and state remain exact.
 {
 	const serviceA = new Elysia().use(async (app) => {
 		await Bun.sleep(1)
@@ -134,21 +141,21 @@ import { Elysia } from '../../src'
 			.derive(() => ({
 				deriveA: 'deriveA'
 			}))
-			.resolve(() => ({
+			.derive(() => ({
 				resolveA: 'resolveA'
 			}))
-			.as('scoped')
+			.as('plugin')
 	})
 
 	new Elysia()
 		.use(serviceA)
 		.decorate((v) => {
-			expectTypeOf(v.decoratorA).toEqualTypeOf<string | undefined>()
+			expectTypeOf(v.decoratorA).toEqualTypeOf<string>()
 
 			return v
 		})
 		.state((v) => {
-			expectTypeOf(v.storeA).toEqualTypeOf<'storeA' | undefined>()
+			expectTypeOf(v.storeA).toEqualTypeOf<'storeA'>()
 
 			return v
 		})
@@ -157,14 +164,14 @@ import { Elysia } from '../../src'
 
 			return v
 		})
-		.resolve((v) => {
+		.derive((v) => {
 			expectTypeOf(v.resolveA).toEqualTypeOf<'resolveA' | undefined>()
 
 			return v
 		})
 }
 
-// ? async plugin should mark global as partial
+// Global async derivations are optional; decorations and state remain exact.
 {
 	const serviceA = async () => {
 		await Bun.sleep(1)
@@ -175,7 +182,7 @@ import { Elysia } from '../../src'
 			.derive(() => ({
 				deriveA: 'deriveA'
 			}))
-			.resolve(() => ({
+			.derive(() => ({
 				resolveA: 'resolveA'
 			}))
 			.as('global')
@@ -184,12 +191,12 @@ import { Elysia } from '../../src'
 	new Elysia()
 		.use(serviceA)
 		.decorate((v) => {
-			expectTypeOf(v.decoratorA).toEqualTypeOf<string | undefined>()
+			expectTypeOf(v.decoratorA).toEqualTypeOf<string>()
 
 			return v
 		})
 		.state((v) => {
-			expectTypeOf(v.storeA).toEqualTypeOf<'storeA' | undefined>()
+			expectTypeOf(v.storeA).toEqualTypeOf<'storeA'>()
 
 			return v
 		})
@@ -198,14 +205,14 @@ import { Elysia } from '../../src'
 
 			return v
 		})
-		.resolve((v) => {
+		.derive((v) => {
 			expectTypeOf(v.resolveA).toEqualTypeOf<'resolveA' | undefined>()
 
 			return v
 		})
 }
 
-// ? inline async should mark global as partial
+// Inline global async derivations are optional; decorations and state remain exact.
 {
 	const serviceA = new Elysia().use(async (app) => {
 		await Bun.sleep(1)
@@ -216,7 +223,7 @@ import { Elysia } from '../../src'
 			.derive(() => ({
 				deriveA: 'deriveA'
 			}))
-			.resolve(() => ({
+			.derive(() => ({
 				resolveA: 'resolveA'
 			}))
 			.as('global')
@@ -225,12 +232,12 @@ import { Elysia } from '../../src'
 	new Elysia()
 		.use(serviceA)
 		.decorate((v) => {
-			expectTypeOf(v.decoratorA).toEqualTypeOf<string | undefined>()
+			expectTypeOf(v.decoratorA).toEqualTypeOf<string>()
 
 			return v
 		})
 		.state((v) => {
-			expectTypeOf(v.storeA).toEqualTypeOf<'storeA' | undefined>()
+			expectTypeOf(v.storeA).toEqualTypeOf<'storeA'>()
 
 			return v
 		})
@@ -239,7 +246,7 @@ import { Elysia } from '../../src'
 
 			return v
 		})
-		.resolve((v) => {
+		.derive((v) => {
 			expectTypeOf(v.resolveA).toEqualTypeOf<'resolveA' | undefined>()
 
 			return v
@@ -250,13 +257,13 @@ import { Elysia } from '../../src'
 	// ? inherits lazy loading plugin type
 	new Elysia().use(import('./plugins')).get(
 		'/',
+		{
+			body: 'string'
+		},
 		({ body, decorate, store: { state } }) => {
 			expectTypeOf<typeof decorate>().toBeString()
 			expectTypeOf<typeof state>().toBeString()
 			expectTypeOf<typeof body>().toBeString()
-		},
-		{
-			body: 'string'
 		}
 	)
 }

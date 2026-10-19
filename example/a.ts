@@ -1,34 +1,41 @@
-import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+import { Elysia, HTTPError, problem } from '../src'
+
+class Unauthorized extends HTTPError.id('Unauthorized', 401) {
+	readonly detail = 'You are not authorized'
+}
+class InsufficientBalance extends HTTPError.id('INSUFFICIENT_BALANCE', 402) {
+	extension() {
+		return {
+			detail: 'out of credit',
+			balance: 0
+		} as const
+	}
+}
+class OutOfStock extends HTTPError.id('OUT_OF_STOCK', 409) {
+	readonly detail = 'The item is out of stock'
+}
 
 const app = new Elysia()
-	.get('/', async () => {
-		const file = Bun.file('test/kyuukurarin.mp4')
-
-		// Wrap the stream in another ReadableStream
-		// perhaps we are concatenating streams or whatever
-		const body = new ReadableStream({
-			async start(controller) {
-				const reader = file.stream().getReader()
-				try {
-					while (true) {
-						const { done, value } = await reader.read()
-						if (done) break
-						controller.enqueue(value)
-					}
-					controller.close()
-				} catch (err) {
-					controller.error(err)
-				} finally {
-					reader.releaseLock()
-				}
+	.macro({
+		auth: {
+			beforeHandle() {
+				if (Math.random() > 0.5) return new Unauthorized()
 			}
-		})
-
-		// Returning the stream uses 100% for several minutes
-		return body
-
-		// Returning the same stream wrapped in a Response servers the stream in a fraction of a second
-		// return new Response(body);
+		}
 	})
+	.get(
+		'/id/:id',
+		{
+			auth: true,
+			beforeHandle() {
+				if (Math.random() > 0) return new InsufficientBalance()
+			},
+			afterHandle() {
+				if (Math.random() > 0.5) return new OutOfStock()
+			}
+		},
+		({ params: { id } }) => `bought ${id}` as const
+	)
 	.listen(3000)
+
+type app = (typeof app)['~Routes']['id'][':id']['get']['response']

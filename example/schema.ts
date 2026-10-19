@@ -15,30 +15,38 @@ const app = new Elysia()
 	// Strictly validate response
 	.get('/', () => 'hi')
 	// Strictly validate body and response
-	.post('/', ({ body, query }) => body.id, {
-		body: t.Object({
-			id: t.Number(),
-			username: t.String(),
-			profile: t.Object({
-				name: t.String()
+	.post(
+		'/',
+		{
+			body: t.Object({
+				id: t.Number(),
+				username: t.String(),
+				profile: t.Object({
+					name: t.String()
+				})
 			})
-		})
-	})
+		},
+		({ body, query }) => body.id
+	)
 	// Strictly validate query, params, and body
-	.get('/query/:id', ({ query: { name }, params }) => name, {
-		query: t.Object({
-			name: t.String()
-		}),
-		params: t.Object({
-			id: t.String()
-		}),
-		response: {
-			200: t.String(),
-			300: t.Object({
-				error: t.String()
-			})
-		}
-	})
+	.get(
+		'/query/:id',
+		{
+			query: t.Object({
+				name: t.String()
+			}),
+			params: t.Object({
+				id: t.String()
+			}),
+			response: {
+				200: t.String(),
+				300: t.Object({
+					error: t.String()
+				})
+			}
+		},
+		({ query: { name }, params }) => name
+	)
 	.guard(
 		{
 			headers: 'authorization'
@@ -49,13 +57,17 @@ const app = new Elysia()
 					userId: headers.authorization
 				}))
 				.get('/', ({ userId }) => 'A')
-				.post('/id/:id', ({ query, body, params, userId }) => body, {
-					params: t.Object({
-						id: t.Number()
-					}),
-					transform({ params }) {
-						params.id = +params.id
-					}
-				})
+				.post(
+					'/id/:id',
+					{
+						params: t.Object({
+							id: t.Number()
+						}),
+						transform({ params }) {
+							params.id = +params.id
+						}
+					},
+					({ query, body, params, userId }) => body
+				)
 	)
 	.listen(3000)
