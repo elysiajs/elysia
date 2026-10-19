@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'bun:test'
 
 import { t } from '../../src'
-import { hasProperty, getSchemaProperties } from '../../src/schema'
+import {
+	hasProperty,
+	getSchemaProperties,
+	hasElysiaMeta,
+	hasAdditionalProperties,
+	getSchemaValidator
+} from '../../src/schema'
 
 describe('getSchemaProperties', () => {
 	it('returns properties for Object schema', () => {
@@ -173,8 +179,6 @@ describe('hasProperty', () => {
 })
 
 describe('hasElysiaMeta', () => {
-	const { hasElysiaMeta } = require('../../src/schema')
-
 	it('finds elysiaMeta in Object properties even if placed after another property', () => {
 		const schema = t.Object({
 			a: t.String(),
@@ -201,5 +205,78 @@ describe('hasElysiaMeta', () => {
 		})
 
 		expect(hasElysiaMeta('ObjectString', schema)).toBe(false)
+	})
+})
+
+describe('hasAdditionalProperties', () => {
+	// I have nothing but my burger and I want nothing more
+	it('returns true when root object has additionalProperties: true', () => {
+		const schema = t.Object(
+			{ a: t.String() },
+			{ additionalProperties: true }
+		)
+
+		expect(hasAdditionalProperties(schema)).toBe(true)
+	})
+
+	it('finds additionalProperties in Object properties even if placed after another property', () => {
+		const schema = t.Object({
+			a: t.String(),
+			b: t.Object({ c: t.String() }, { additionalProperties: true })
+		})
+
+		expect(hasAdditionalProperties(schema)).toBe(true)
+	})
+
+	it('finds additionalProperties in Union schema', () => {
+		const schema = t.Union([
+			t.Object({ a: t.String() }),
+			t.Object({ b: t.String() }, { additionalProperties: true })
+		])
+
+		expect(hasAdditionalProperties(schema)).toBe(true)
+	})
+
+	it('returns false when additionalProperties is false or absent', () => {
+		const schema = t.Object({
+			a: t.String(),
+			b: t.Object({ c: t.String() })
+		})
+
+		expect(hasAdditionalProperties(schema)).toBe(false)
+	})
+})
+
+describe('safeParse', () => {
+	it('returns error object without ReferenceError when validation fails', () => {
+		const validator = getSchemaValidator(
+			t.Object({
+				id: t.Number()
+			}),
+			{ dynamic: true }
+		)
+
+		const result = validator.safeParse({ id: 'invalid-string' })
+		expect(result.success).toBe(false)
+		if (!result.success) {
+			expect(result.data).toBeNull()
+			expect(result.errors.length).toBeGreaterThan(0)
+		}
+	})
+
+	it('returns successful data when validation succeeds', () => {
+		const validator = getSchemaValidator(
+			t.Object({
+				id: t.Number()
+			}),
+			{ dynamic: true }
+		)
+
+		const result = validator.safeParse({ id: 123 })
+		expect(result.success).toBe(true)
+		if (result.success) {
+			expect(result.data).toEqual({ id: 123 })
+			expect(result.error).toBeNull()
+		}
 	})
 })
