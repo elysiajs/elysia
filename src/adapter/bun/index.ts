@@ -81,11 +81,7 @@ const unavailableFetch = () =>
 function releaseLifecycle(
 	app: AnyElysia,
 	ext: NonNullable<AnyElysia['~ext']>,
-	createdExt: boolean,
-	stop: LifecycleStop,
-	registerCleanup: (
-		handler: GracefulHandler<any> | GracefulHandler<any>[]
-	) => boolean
+	createdExt: boolean
 ) {
 	delete ext.stop
 	delete ext.cleanupEpoch
@@ -800,13 +796,7 @@ export const BunAdapter = createAdapter({
 						if (cleanupFailures) errors.push(...cleanupFailures)
 
 						const release = () =>
-							releaseLifecycle(
-								app,
-								ext,
-								createdExt,
-								stop,
-								registerCleanup
-							)
+							releaseLifecycle(app, ext, createdExt)
 
 						if (releasable && abandonedSetups)
 							void abandonedSetups.then((results) => {

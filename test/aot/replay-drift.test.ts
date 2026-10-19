@@ -75,6 +75,15 @@ const drifted: Row[] = [
 		requests: [['/s']]
 	},
 	{
+		why: 'a root onRequest writing set reaches a route built without hooks',
+		build: () => new Elysia().get('/s', secret),
+		runtime: () =>
+			new Elysia().get('/s', secret).onRequest(({ set }) => {
+				set.headers['x-frame-options'] = 'DENY'
+			}),
+		requests: [['/s']]
+	},
+	{
 		why: "a plugin's global beforeHandle reaches a route built without hooks",
 		build: () => new Elysia().get('/s', secret),
 		runtime: () =>

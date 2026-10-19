@@ -745,9 +745,18 @@ export function compileHandler(
 			})
 		) as CompiledHandler
 
+	// fetch-level: registered at any point, but the route hook holds only
+	// those added before it, and none once merged with a local hook
+	const requestHooks = flattenChainMemoReadonly(
+		root,
+		root['~hookChain'],
+		chainResolver(root)
+	)?.request
+
 	// Bare-route fast path.
 	if (
 		hook === undefined &&
+		!requestHooks &&
 		// a hook-less route still sees the app-level error classes
 		!errorClasses &&
 		isHandleFunction &&
@@ -766,6 +775,7 @@ export function compileHandler(
 		root,
 		adapter,
 		hook,
+		requestHooks,
 		buildValidator,
 		isHandleFunction,
 		isStaticResponse,

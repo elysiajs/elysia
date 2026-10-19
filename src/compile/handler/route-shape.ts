@@ -8,7 +8,13 @@ import { originalFunction } from '../../type/shared'
 import { isAsyncFunction } from '../utils'
 import { deriveModes } from './utils'
 import { isResponseMap } from './frozen-validator'
-import { compositionKeys, fnv1a, isNotEmpty, refTargets } from '../../utils'
+import {
+	compositionKeys,
+	flattenChain,
+	fnv1a,
+	isNotEmpty,
+	refTargets
+} from '../../utils'
 
 /**
  * `k` of a captured route: the manifest stores it, replay compares it.
@@ -211,6 +217,13 @@ export function routeShape(
 
 		const fns = (hook as any)?.[event]
 		if (fns) for (const fn of Array.isArray(fns) ? fns : [fns]) shape(fn)
+	}
+
+	// fetch-level, not in the route hook, see `compileHandler`
+	const request = flattenChain(root['~hookChain'])?.request
+	if (request) {
+		feed('|r')
+		for (const fn of request) shape(fn)
 	}
 
 	const bf = hook?.beforeHandle as Function | Function[] | undefined

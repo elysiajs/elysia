@@ -196,6 +196,33 @@ describe('AOT module stubs', () => {
 		expect((await app.handle(req('/', json({ name: 1 })))).status).toBe(422)
 	})
 
+	// the stub throws on every schema it is handed, so the build-time strip
+	// decision must match every runtime snapshot call, not only the schemas
+	// a route can reach: a trailing guard or an unused app's model counts
+	it('keeps schema snapshot for a schema no route reaches', async () => {
+		for (const name of ['trailing-guard', 'unused-model']) {
+			const text = await build(name)
+			expect(stubbed(text).schemaSnapshot).toBe(false)
+
+			const app = await load(text)
+			await expect(
+				app.handle(req('/')).then((r) => r.text())
+			).resolves.toBe('ok')
+		}
+	})
+
+	// the stub replaces the module for every importer in the bundle, so it
+	// must carry each export Elysia's own modules import, the AOT plugin too
+	it('stubs schema snapshot when the bundle keeps the AOT plugin', async () => {
+		const text = await build('aot-import')
+		expect(stubbed(text).schemaSnapshot).toBe(true)
+
+		const app = await load(text)
+		await expect(app.handle(req('/')).then((r) => r.text())).resolves.toBe(
+			'ok'
+		)
+	})
+
 	it('keeps the body-parse table for a named parser without a schema', async () => {
 		const text = await build('parser')
 		expect(stubbed(text).parse).toBe(false)

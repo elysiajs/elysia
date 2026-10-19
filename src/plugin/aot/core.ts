@@ -24,6 +24,7 @@ import {
 } from '../../compile/handler/frozen-validator'
 import type { CapturedValidator, ValidatorSlot } from '../../compile/aot'
 import { abortCapture } from '../../compile/aot-capture'
+import { snapshotCalls } from '../../schema-snapshot'
 import { sucrose } from '../../sucrose'
 import { flattenChain, isNotEmpty } from '../../utils'
 
@@ -269,9 +270,11 @@ export interface StubPlan {
 
 	/**
 	 * Stub `schema-snapshot` when no route declares a schema slot (directly,
-	 * via guard `schemas`, or a mount) and no app registers a model. The route
-	 * and guard registration call `snapshotHookSchemas` for every hook, so the
-	 * stub passes a schema-free hook through and throws on one with a slot
+	 * via guard `schemas`, or a mount), no app registers a model, and the
+	 * build-time replay handed no schema to either snapshot entry point. The
+	 * route and guard registration call `snapshotHookSchemas` for every hook,
+	 * so the stub passes a schema-free hook through and throws on one with a
+	 * slot
 	 */
 	schemaSnapshot: boolean
 
@@ -489,7 +492,7 @@ export function planFromReport(
 export interface StubEvidence {
 	/** no route path contains `:` or `*` */
 	staticPaths: boolean
-	/** no route schema slot and no registered model */
+	/** no schema reached a snapshot call, no route schema slot, no model */
 	schemaFree: boolean
 	/** every captured HTTP handler aliases the compact response mapper `rc` */
 	allCompact: boolean
@@ -834,7 +837,9 @@ export const STUB_SOURCES: Record<
 				`const e=()=>{throw new Error("[elysia-aot] schema snapshot was stripped (strip mode) but a schema or model was registered. Rebuild with strip:false.")}\n` +
 				`const s=(t)=>t!=null&&(t.body!=null||t.query!=null||t.params!=null||t.headers!=null||t.cookie!=null||t.response!=null)\n` +
 				`export function snapshotSchema(v){return v===null||typeof v!=="object"||"~standard" in v?v:e()}\n` +
-				`export function snapshotHookSchemas(h){return h&&(s(h)||Array.isArray(h.schemas)&&h.schemas.some(s))?e():h}\n`
+				`export function snapshotHookSchemas(h){return h&&(s(h)||Array.isArray(h.schemas)&&h.schemas.some(s))?e():h}\n` +
+				// imported by the AOT plugin, which a bundle may keep
+				`export let snapshotCalls=0\n`
 		}
 	],
 	cookieJar: [
@@ -1176,6 +1181,7 @@ export async function generateCompiledArtifacts(
 			)
 
 		_importedEntries.add(entryReal)
+		const snapshotsBefore = snapshotCalls
 		const mod = (await import(entry)) as Record<string, unknown>
 		const isApp = (value: unknown) =>
 			typeof (value as { compile?: unknown } | undefined)?.compile ===
@@ -1307,7 +1313,10 @@ export async function generateCompiledArtifacts(
 				isNotEmpty(
 					(instance as App | undefined)?.['~ext']?.models ?? {}
 				)
-			let schemaFree = !hasModels(typedApp)
+			// a guard after the last route or an unused app's model reaches no
+			// route, but the stub still throws on it
+			let schemaFree =
+				snapshotCalls === snapshotsBefore && !hasModels(typedApp)
 			let staticPaths = true
 			let hasMount = false
 			for (const route of history) {

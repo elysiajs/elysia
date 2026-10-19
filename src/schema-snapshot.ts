@@ -17,6 +17,12 @@ const isEnumerable = Object.prototype.propertyIsEnumerable
 const schemaProtoMarkers = new Set(['~kind', '~standard', '~unsafe'])
 const schemaSlots = ['body', 'query', 'params', 'headers', 'cookie'] as const
 
+/**
+ * Schemas handed to the two snapshot entry points, read by the AOT build:
+ * its stub throws on each one, including a schema no route reaches
+ */
+export let snapshotCalls = 0
+
 function isClonableProto(proto: object | null): boolean {
 	if (proto === null || proto === Object.prototype) return true
 
@@ -283,6 +289,7 @@ export function snapshotSchema<T>(schema: T): T {
 	const object = schema as unknown as object
 
 	if ('~standard' in object) return schema
+	snapshotCalls++
 	if (produced.has(object) && !Object.isFrozen(object)) return schema
 
 	const existing = modelSnapshots.get(object)
@@ -436,6 +443,7 @@ export function snapshotHookSchemas<T extends Record<string, any> | undefined>(
 	)
 		return hook
 
+	snapshotCalls++
 	const intern = !env.ELYSIA_AOT_BUILD
 
 	const copy: Record<string, any> = Object.assign(

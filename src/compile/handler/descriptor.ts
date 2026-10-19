@@ -31,7 +31,7 @@ import { JITProbe } from '../jit-probe'
 import { Reconstruct } from './reconstruct'
 
 import { isNotEmpty, type CompactBeforeHandlePrefix } from '../../utils'
-import type { AnyLocalHook, MaybeArray } from '../../types'
+import type { AnyLocalHook, AppHook, MaybeArray } from '../../types'
 
 export interface RouteDescriptor {
 	handlerKind: 'function' | 'response' | 'promise' | 'static-value'
@@ -102,6 +102,7 @@ export interface DescribeRouteInput {
 	root: AnyElysia
 	adapter: ElysiaAdapter
 	hook: AnyLocalHook | undefined
+	requestHooks: AppHook['request'] | undefined
 	buildValidator: () => RouteValidator<any> | undefined
 	isHandleFunction: boolean
 	isStaticResponse: boolean
@@ -203,6 +204,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		root,
 		adapter,
 		hook,
+		requestHooks,
 		buildValidator,
 		isHandleFunction,
 		isStaticResponse,
@@ -221,6 +223,13 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 			inference,
 			inferCompactPrefix(beforeHandlePrefix)
 		)
+	// only `set` reaches the route: the rest is read before routing
+	if (
+		requestHooks &&
+		!inference.set &&
+		sucrose(undefined, { request: requestHooks }).set
+	)
+		inference = { ...inference, set: true }
 
 	const parseLength = Array.isArray(hook?.parse) ? hook.parse.length : 0
 	const parseFirst = Array.isArray(hook?.parse) ? hook.parse[0] : hook?.parse

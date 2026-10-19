@@ -327,6 +327,34 @@ describe('Parser', () => {
 			expect(await json.json()).toEqual({ a: 1 })
 		})
 
+	// a named parser is resolved against the plugin that registered it, not the
+	// root's merged table: two plugins may reuse a name without the last one
+	// hijacking the other's routes
+	it('resolve named onParse against the registering plugin', async () => {
+		const a = new Elysia({ name: 'a' })
+			.parser('x', () => 'A')
+			.onParse('x')
+			.post('/a', ({ body }) => body)
+		const b = new Elysia({ name: 'b' })
+			.parser('x', () => 'B')
+			.onParse('x')
+			.post('/b', ({ body }) => body)
+
+		const app = new Elysia().use(a).use(b)
+
+		const send = (path: string) =>
+			app.handle(
+				new Request('http://localhost' + path, {
+					method: 'POST',
+					headers: { 'content-type': 'text/plain' },
+					body: 'hi'
+				})
+			)
+
+		expect(await (await send('/a')).text()).toBe('A')
+		expect(await (await send('/b')).text()).toBe('B')
+	})
+
 	it('handle custom parser then fallback to named default', async () => {
 		const app = new Elysia()
 			.parser('custom', ({ contentType, request }) => {

@@ -1340,6 +1340,14 @@ export class Elysia<
 		>
 	): this
 	onParse(scopeOrFnOrName: any, fn?: any): this {
+		// bind a name this instance already knows now, before absorption merges
+		// it into the root table where the last plugin wins; unknown names stay
+		// strings and resolve at compile time (parser may be registered later)
+		if (fn === undefined && typeof scopeOrFnOrName === 'string') {
+			const named = this['~ext']?.parser?.[scopeOrFnOrName]
+			if (named) return this.#onBranch('parse', named as any)
+		}
+
 		return this.#onBranch('parse', scopeOrFnOrName as any, fn as any)
 	}
 
