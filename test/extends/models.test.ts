@@ -346,11 +346,11 @@ describe('Model', () => {
 		expect(Object.keys(app.models)).toEqual(['string', 'number'])
 	})
 
-	// a direct redeclaration keeps the first schema (plugin absorption is a
-	// separate rule and still overwrites); the string and object forms must
-	// not diverge on this, nor on stamping `$id`, which OpenAPI references
+	// as 1.x: `.model('m', schema)` replaces an existing model while the
+	// object form keeps the first; plugin absorption is a separate rule and
+	// still overwrites. Both forms stamp `$id`, which OpenAPI references
 	for (const form of ['string', 'object'] as const)
-		it(`keeps the existing model and sets $id on ${form}-form redeclaration`, async () => {
+		it(`${form}-form redeclaration ${form === 'string' ? 'replaces' : 'keeps'} the model and sets $id`, async () => {
 			// distinct shapes: snapshots are interned, so a plain t.String() may
 			// carry the $id of an earlier test's model
 			const first = t.String({ description: `${form} first` })
@@ -363,15 +363,17 @@ describe('Model', () => {
 			const app = registered.post(
 				'/',
 				{ body: 'm' },
-				({ body }: { body: string }) => typeof body
+				({ body }: { body: unknown }) => typeof body
 			)
 
 			expect(app.models.m.$id).toBe('m')
 
-			const string = await app.handle(post('/', 's'))
-			expect(string.status).toBe(200)
-			expect(await string.text()).toBe('string')
+			const [kept, rejected] = form === 'string' ? [1, 's'] : ['s', 1]
 
-			expect((await app.handle(post('/', 1))).status).toBe(422)
+			const ok = await app.handle(post('/', kept))
+			expect(ok.status).toBe(200)
+			expect(await ok.text()).toBe(typeof kept)
+
+			expect((await app.handle(post('/', rejected))).status).toBe(422)
 		})
 })

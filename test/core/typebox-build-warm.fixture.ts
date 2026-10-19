@@ -190,6 +190,12 @@ switch (arm) {
 
 		const perRequest: number[] = []
 
+		// Open the keep-alive connection on a 404 first: the timed request
+		// then pays only server work, not connection setup (up to 140 ms on
+		// macOS). The `loaded:*` arms prove TypeBox loads at build, so this
+		// cannot mask a lazy load.
+		await (await fetch(`http://127.0.0.1:${port}/warm`)).text()
+
 		// Exclude the interval's first tick.
 		await Bun.sleep(30)
 		maxLag = 0
@@ -197,7 +203,7 @@ switch (arm) {
 
 		for (let i = 0; i < 5; i++) {
 			const started = Bun.nanoseconds()
-			const response = await fetch(`http://localhost:${port}/`, {
+			const response = await fetch(`http://127.0.0.1:${port}/`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ name: 'elysia' })

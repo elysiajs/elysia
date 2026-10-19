@@ -5912,7 +5912,7 @@ export class Elysia<
 			}
 
 			case 'string':
-				if (!(name in models)) models[name] = toModel(name, model!)
+				models[name] = toModel(name, model!)
 
 				return this
 		}
