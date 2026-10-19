@@ -61,11 +61,11 @@ export interface ElysiaTypeCheck<T extends AnySchema>
 	safeParse(v: unknown):
 		| { success: true; data: UnwrapSchema<T>; error: null }
 		| {
-				success: false
-				data: null
-				error: string | undefined
-				errors: MapValueError[]
-		  }
+			success: false
+			data: null
+			error: string | undefined
+			errors: MapValueError[]
+		}
 	hasAdditionalProperties: boolean
 	'~hasAdditionalProperties'?: boolean
 	hasDefault: boolean
@@ -114,23 +114,14 @@ export const hasAdditionalProperties = (
 	if (schema.type === 'object') {
 		const properties = schema.properties as Record<string, TAnySchema>
 
-		if ('additionalProperties' in schema) return schema.additionalProperties
-		if ('patternProperties' in schema) return false
+		if (properties)
+			for (const key of Object.keys(properties)) {
+				const property = properties[key]
 
-		for (const key of Object.keys(properties)) {
-			const property = properties[key]
-
-			if (property.type === 'object') {
 				if (hasAdditionalProperties(property)) return true
-			} else if (property.anyOf) {
-				for (let i = 0; i < property.anyOf.length; i++)
-					if (hasAdditionalProperties(property.anyOf[i])) return true
 			}
 
-			return property.additionalProperties
-		}
-
-		return false
+		return schema.additionalProperties === true
 	}
 
 	if (schema.type === 'array' && schema.items && !Array.isArray(schema.items))
@@ -237,17 +228,10 @@ export const hasElysiaMeta = (meta: string, _schema: TAnySchema): boolean => {
 		for (const key of Object.keys(properties)) {
 			const property = properties[key]
 
-			if (property.type === 'object') {
-				if (hasElysiaMeta(meta, property)) return true
-			} else if (property.anyOf) {
-				for (let i = 0; i < property.anyOf.length; i++)
-					if (hasElysiaMeta(meta, property.anyOf[i])) return true
-			}
-
-			return schema.elysiaMeta === meta
+			if (hasElysiaMeta(meta, property)) return true
 		}
 
-		return false
+		return schema.elysiaMeta === meta
 	}
 
 	if (schema.type === 'array' && schema.items && !Array.isArray(schema.items))
@@ -403,7 +387,7 @@ const createCleaner = (schema: TAnySchema) => (value: unknown) => {
 	if (typeof value === 'object')
 		try {
 			return Value.Clean(schema, value)
-		} catch {}
+		} catch { }
 
 	return value
 }
@@ -438,8 +422,8 @@ export const getSchemaValidator = <T extends AnySchema | string | undefined>(
 ): IsAny<T> extends true
 	? ElysiaTypeCheck<TAnySchema>
 	: undefined extends T
-		? undefined
-		: ElysiaTypeCheck<NonNullable<Exclude<T, string>>> => {
+	? undefined
+	: ElysiaTypeCheck<NonNullable<Exclude<T, string>>> => {
 	validators = validators?.filter((x) => x)
 
 	if (!s) {
@@ -699,7 +683,7 @@ export const getSchemaValidator = <T extends AnySchema | string | undefined>(
 			provider: 'standard',
 			schema,
 			references: '',
-			checkFunc: () => {},
+			checkFunc: () => { },
 			code: '',
 			Check,
 			Validate,
@@ -733,7 +717,7 @@ export const getSchemaValidator = <T extends AnySchema | string | undefined>(
 					error: null
 				}
 			} catch (error) {
-				const errors = [...compiled.Errors(v)].map(mapValueError)
+				const errors = [...validator.Errors(v)].map(mapValueError)
 
 				return {
 					success: false,
@@ -812,7 +796,7 @@ export const getSchemaValidator = <T extends AnySchema | string | undefined>(
 				schema,
 				// @ts-ignore
 				references: '',
-				checkFunc: () => {},
+				checkFunc: () => { },
 				code: '',
 				Check: (value: unknown) => Value.Check(schema, value),
 				Errors: (value: unknown) => Value.Errors(schema, value),
@@ -893,7 +877,7 @@ export const getSchemaValidator = <T extends AnySchema | string | undefined>(
 						error: null
 					}
 				} catch (error) {
-					const errors = [...compiled.Errors(v)].map(mapValueError)
+					const errors = [...validator.Errors(v)].map(mapValueError)
 
 					return {
 						success: false,
@@ -912,7 +896,7 @@ export const getSchemaValidator = <T extends AnySchema | string | undefined>(
 				provider: 'standard',
 				schema,
 				references: '',
-				checkFunc: () => {},
+				checkFunc: () => { },
 				code: '',
 				// @ts-ignore
 				Check: (v) => schema['~standard'].validate(v),
@@ -966,7 +950,7 @@ export const getSchemaValidator = <T extends AnySchema | string | undefined>(
 						error: null
 					}
 				} catch (error) {
-					const errors = [...compiled.Errors(v)].map(mapValueError)
+					const errors = [...validator.Errors(v)].map(mapValueError)
 
 					return {
 						success: false,
@@ -1175,13 +1159,13 @@ export const mergeObjectSchemas = (
 	if (schemas.length === 1)
 		return schemas[0].type === 'object'
 			? {
-					schema: schemas[0] as TObject,
-					notObjects: []
-				}
+				schema: schemas[0] as TObject,
+				notObjects: []
+			}
 			: {
-					schema: undefined,
-					notObjects: schemas
-				}
+				schema: undefined,
+				notObjects: schemas
+			}
 
 	let newSchema: TObject
 	const notObjects = <TSchema[]>[]
@@ -1318,16 +1302,16 @@ export const getResponseSchemaValidator = (
 				record[+status] =
 					Kind in schema || '~standard' in schema
 						? getSchemaValidator(schema as TSchema, {
-								modules,
-								models,
-								additionalProperties,
-								dynamic,
-								normalize,
-								coerce: false,
-								additionalCoerce: [],
-								validators: validators.map((x) => x![+status]),
-								sanitize
-							})!
+							modules,
+							models,
+							additionalProperties,
+							dynamic,
+							normalize,
+							coerce: false,
+							additionalCoerce: [],
+							validators: validators.map((x) => x![+status]),
+							sanitize
+						})!
 						: (schema as ElysiaTypeCheck<any>)
 			}
 
@@ -1338,16 +1322,16 @@ export const getResponseSchemaValidator = (
 		record[+status] =
 			Kind in maybeNameOrSchema || '~standard' in maybeNameOrSchema
 				? getSchemaValidator(maybeNameOrSchema as TSchema, {
-						modules,
-						models,
-						additionalProperties,
-						dynamic,
-						normalize,
-						coerce: false,
-						additionalCoerce: [],
-						validators: validators.map((x) => x![+status]),
-						sanitize
-					})
+					modules,
+					models,
+					additionalProperties,
+					dynamic,
+					normalize,
+					coerce: false,
+					additionalCoerce: [],
+					validators: validators.map((x) => x![+status]),
+					sanitize
+				})
 				: (maybeNameOrSchema as ElysiaTypeCheck<any>)
 	})
 
@@ -1366,11 +1350,11 @@ export const getCookieValidator = ({
 	sanitize
 }: {
 	validator:
-		| TSchema
-		| StandardSchemaV1Like
-		| ElysiaTypeCheck<any>
-		| string
-		| undefined
+	| TSchema
+	| StandardSchemaV1Like
+	| ElysiaTypeCheck<any>
+	| string
+	| undefined
 	modules: TModule<any, any>
 	defaultConfig: CookieOptions | undefined
 	config: CookieOptions
@@ -1385,17 +1369,17 @@ export const getCookieValidator = ({
 		validator?.provider
 			? (validator as ElysiaTypeCheck<any>)
 			: // @ts-ignore
-				getSchemaValidator(validator, {
-					modules,
-					dynamic,
-					models,
-					normalize,
-					additionalProperties: true,
-					coerce: true,
-					additionalCoerce: stringToStructureCoercions(),
-					validators,
-					sanitize
-				})
+			getSchemaValidator(validator, {
+				modules,
+				dynamic,
+				models,
+				normalize,
+				additionalProperties: true,
+				coerce: true,
+				additionalCoerce: stringToStructureCoercions(),
+				validators,
+				sanitize
+			})
 
 	if (cookieValidator)
 		cookieValidator.config = mergeCookie(cookieValidator.config, config)
@@ -1456,7 +1440,7 @@ export const getCookieValidator = ({
 
 export const unwrapImportSchema = (schema: TSchema): TSchema =>
 	schema &&
-	schema[Kind] === 'Import' &&
-	schema.$defs[schema.$ref][Kind] === 'Object'
+		schema[Kind] === 'Import' &&
+		schema.$defs[schema.$ref][Kind] === 'Object'
 		? schema.$defs[schema.$ref]
 		: schema
