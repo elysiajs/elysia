@@ -243,4 +243,44 @@ describe('Status', () => {
 			response: 'c'
 		})
 	})
+
+	// A status's `set-cookie` must not erase cookies the handler already set:
+	// one user cookie leaves `set.headers` a plain object, two make it a
+	// `Headers`, and both shapes have to append
+	describe('append a status set-cookie to cookies already set', () => {
+		const returnStatus = () =>
+			new ElysiaStatus(201, 'x', { 'set-cookie': 's=1', 'x-a': 'b' })
+
+		it('after one user cookie', async () => {
+			const app = new Elysia().get('/', ({ set }) => {
+				set.headers['set-cookie'] = 'u=1'
+
+				return returnStatus()
+			})
+
+			const response = await app.handle('/')
+
+			expect(response.status).toBe(201)
+			expect(response.headers.get('x-a')).toBe('b')
+			expect(response.headers.getSetCookie()).toEqual(['u=1', 's=1'])
+		})
+
+		it('after two user cookies', async () => {
+			const app = new Elysia().get('/', ({ set }) => {
+				set.headers['set-cookie'] = ['u=1', 'v=2']
+
+				return returnStatus()
+			})
+
+			const response = await app.handle('/')
+
+			expect(response.status).toBe(201)
+			expect(response.headers.get('x-a')).toBe('b')
+			expect(response.headers.getSetCookie()).toEqual([
+				'u=1',
+				'v=2',
+				's=1'
+			])
+		})
+	})
 })

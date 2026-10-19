@@ -2,6 +2,8 @@ import { describe, it, expect } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { resolveHandlerParams } from '../../src/compile/handler/params'
+import * as resolvers from '../../src/compile/handler/param-resolvers'
+import { handlerParams } from '../../src/compile/handler/param-table'
 
 const source = (file: string) =>
 	readFileSync(resolve(import.meta.dir, file), 'utf8')
@@ -13,8 +15,6 @@ const compilerSource = [
 ]
 	.map(source)
 	.join('\n')
-
-const paramsSource = source('../../src/compile/handler/params.ts')
 
 const linkedNames = () => {
 	const names = new Set<string>()
@@ -33,14 +33,8 @@ const linkedNames = () => {
 	return names
 }
 
-const descriptorNames = () =>
-	new Set(
-		[
-			...paramsSource.matchAll(
-				/^\t\t([a-z0-9]+): (?:\(|staticCloneResolver,?$)/gm
-			)
-		].map((match) => match[1]!)
-	)
+// one export per alias: an AOT build re-exports only the aliases it uses
+const descriptorNames = () => new Set(Object.keys(resolvers))
 
 describe('frozen handler parameter descriptors', () => {
 	it('matches every dependency linked by the handler compiler', () => {
@@ -48,6 +42,18 @@ describe('frozen handler parameter descriptors', () => {
 		expect(linked.size).toBeGreaterThan(20)
 
 		expect([...descriptorNames()].sort()).toEqual([...linked].sort())
+	})
+
+	// a build without the AOT stub (strip: false, an unbundled manifest)
+	// replays from the full table, a resolver left out of it fails the replay
+	it('keeps every resolver in the default table', () => {
+		expect(Object.keys(handlerParams).sort()).toEqual(
+			Object.keys(resolvers).sort()
+		)
+		for (const name in handlerParams)
+			expect(handlerParams[name]).toBe(
+				resolvers[name as keyof typeof resolvers] as any
+			)
 	})
 
 	it('resolves params positionally, in alias order', () => {

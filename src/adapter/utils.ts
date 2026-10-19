@@ -12,6 +12,22 @@ import { defaultHeaders } from './default-headers'
 
 const setCookie = 'set-cookie' as const
 
+export const hget = (h: Headers | Record<string, unknown>, k: string) =>
+	h instanceof Headers ? h.get(k) : h[k]
+
+// write a header on either shape; `soft` keeps a present key on Headers
+// and a truthy value on a plain object
+export function hput(
+	h: Headers | Record<string, unknown>,
+	k: string,
+	v: unknown,
+	soft?: 1
+) {
+	if (h instanceof Headers) {
+		if (!soft || !h.has(k)) h.set(k, v as string)
+	} else if (!soft || !h[k]) h[k] = v
+}
+
 export function materializeSetHeaders(set: Context['set']) {
 	const headers = set.headers
 	if ((headers as any)[defaultHeaders] !== headers) return headers
@@ -230,13 +246,12 @@ export function createStreamHandler({
 
 			if (set) {
 				handleSet(set)
-				const headers = materializeSetHeaders(set)
-
-				if (headers instanceof Headers) {
-					if (!headers.has('content-type'))
-						headers.set('content-type', 'application/octet-stream')
-				} else if (!headers['content-type'])
-					headers['content-type'] = 'application/octet-stream'
+				hput(
+					materializeSetHeaders(set),
+					'content-type',
+					'application/octet-stream',
+					1
+				)
 
 				return new Response(generator, set as ResponseInit)
 			}
@@ -297,13 +312,12 @@ export function createStreamHandler({
 				(init?.value?.sse ??
 					// @ts-ignore ReadableStream is wrapped with sse()
 					generator?.sse ??
-					(set?.headers instanceof Headers
-						? set.headers
-								.get('content-type')
-								?.startsWith('text/event-stream')
-						: set?.headers['content-type']?.startsWith(
-								'text/event-stream'
-							))))
+					(set &&
+						(
+							hget(set.headers, 'content-type') as
+								| string
+								| undefined
+						)?.startsWith('text/event-stream'))))
 
 		const format = isSSE ? sseFormat : identityFormat
 
@@ -315,43 +329,16 @@ export function createStreamHandler({
 					: 'application/json'
 				: 'text/plain'
 
-		if (set) materializeSetHeaders(set)
-		const headers = set?.headers
-		if (headers instanceof Headers) {
-			if (!typedSSE && !headers.has('transfer-encoding'))
-				headers.set('transfer-encoding', 'chunked')
+		set ??= { status: 200, headers: nullObject() } as Context['set']
+		const headers = materializeSetHeaders(set)
 
-			if (!headers.has('content-type'))
-				headers.set('content-type', contentType)
-
-			if (!headers.has('cache-control'))
-				headers.set('cache-control', 'no-cache')
-		} else if (headers) {
-			if (!typedSSE && !headers['transfer-encoding'])
-				headers['transfer-encoding'] = 'chunked'
-			if (!headers['content-type']) headers['content-type'] = contentType
-			if (!headers['cache-control']) headers['cache-control'] = 'no-cache'
-		} else if (typedSSE)
-			set = {
-				status: 200,
-				headers: {
-					'content-type': contentType,
-					'cache-control': 'no-cache'
-				}
-			}
-		else
-			set = {
-				status: 200,
-				headers: {
-					'content-type': contentType,
-					'transfer-encoding': 'chunked',
-					'cache-control': 'no-cache',
-					connection: 'keep-alive'
-				}
-			}
+		if (!typedSSE) hput(headers, 'transfer-encoding', 'chunked', 1)
+		hput(headers, 'content-type', contentType, 1)
+		hput(headers, 'cache-control', 'no-cache', 1)
 
 		const sourceStream =
 			generator instanceof ReadableStream ? generator : undefined
+
 		let streamReader:
 			| {
 					read(): Promise<IteratorResult<unknown>>
@@ -359,6 +346,7 @@ export function createStreamHandler({
 					releaseLock(): void
 			  }
 			| undefined
+
 		const iterator: AsyncIterator<unknown> = sourceStream
 			? {
 					next: () =>
@@ -380,13 +368,14 @@ export function createStreamHandler({
 					}
 				}
 			: (sourceIterator ?? (generator as any)[Symbol.asyncIterator]())
+
 		const outerIterator =
 			yieldedStream && !init!.done ? sourceIterator : undefined
 
 		let end = false
 		let finalizing: Promise<void> | undefined
-		const signal = request?.signal
 		let onAbort: (() => void) | undefined
+		const signal = request?.signal
 
 		const cleanupAbort = () => {
 			if (signal && onAbort) {
@@ -439,11 +428,6 @@ export function createStreamHandler({
 				return value.arrayBuffer().then((buffer) => {
 					controller.enqueue(new Uint8Array(buffer))
 				})
-
-			if (value instanceof Uint8Array) {
-				controller.enqueue(value)
-				return
-			}
 
 			if (value instanceof ArrayBuffer) {
 				controller.enqueue(new Uint8Array(value))
@@ -633,33 +617,17 @@ function applySetHeaders(
 	setHeaders: Context['set']['headers'],
 	present: Headers
 ) {
-	if (setHeaders instanceof Headers) {
-		const incoming = setHeaders.getSetCookie()
-		if (incoming.length) {
-			const cookies = target.getSetCookie()
-			for (const cookie of incoming)
-				if (!cookies.includes(cookie)) {
-					target.append(setCookie, cookie)
-					cookies.push(cookie)
-				}
-		}
-
-		for (const key of setHeaders.keys())
-			if (key !== setCookie && !present.has(key))
-				target.set(key, setHeaders.get(key) ?? '')
-	} else {
-		let cookies: string[] | undefined
-		for (const key of Object.keys(setHeaders))
-			if (key === setCookie) {
-				const cookie = setHeaders[key] as string
-				cookies ??= target.getSetCookie()
-				if (!cookies.includes(cookie)) {
-					target.append(key, cookie)
-					cookies.push(cookie)
-				}
-			} else if (!present.has(key))
-				target.set(key, setHeaders[key] as any)
-	}
+	let cookies: string[] | undefined
+	for (const [key, value] of setHeaders instanceof Headers
+		? setHeaders
+		: (Object.entries(setHeaders) as [string, string][]))
+		if (key === setCookie) {
+			cookies ??= target.getSetCookie()
+			if (!cookies.includes(value)) {
+				target.append(key, value)
+				cookies.push(value)
+			}
+		} else if (!present.has(key)) target.set(key, value)
 }
 
 function mergeHeaders(
@@ -700,9 +668,7 @@ function cancelPropagatingBody(
 	})
 }
 
-export function createResponseHandler(handler: CreateHandlerParameter) {
-	const handleStream = createStreamHandler(handler)
-
+export function createResponseHandler() {
 	return (
 		response: Response,
 		set?: Context['set'],
@@ -774,19 +740,6 @@ export function createResponseHandler(handler: CreateHandlerParameter) {
 						statusText: response.statusText
 					}
 		)
-
-		if (
-			borrowed &&
-			!(newResponse as Response).headers.has('content-length') &&
-			(newResponse as Response).headers.get('transfer-encoding') ===
-				'chunked'
-		)
-			return handleStream(
-				streamResponse(newResponse as Response),
-				responseToSetHeaders(newResponse as Response, set),
-				request,
-				true
-			) as any
 
 		return newResponse
 	}

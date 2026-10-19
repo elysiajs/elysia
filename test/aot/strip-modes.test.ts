@@ -16,6 +16,10 @@ import { json } from '../utils'
  */
 
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
+const ROUTE_SHAPE_FROM = resolve(
+	import.meta.dir,
+	'../../src/compile/handler/route-shape.ts'
+)
 
 /** Error markers emitted by stripped runtime modules. */
 const STUB_MARKERS = [
@@ -30,7 +34,13 @@ const built: string[] = []
 async function build(entry: string, strip: boolean | 'auto') {
 	const result = await Bun.build({
 		entrypoints: [entry],
-		plugins: [bunAot(entry, { registerFrom: REGISTER_FROM, strip })],
+		plugins: [
+			bunAot(entry, {
+				registerFrom: REGISTER_FROM,
+				routeShapeFrom: ROUTE_SHAPE_FROM,
+				strip
+			})
+		],
 		target: 'bun'
 	})
 	if (!result.success)
@@ -142,6 +152,15 @@ describe('automatic AOT stripping', () => {
 			cookie: true,
 			trace: true,
 			sucrose: true,
+			// a WS route keeps the query parser, cookie jar (`ws/route` parses
+			// upgrade queries and cookies) and the router (dynamic WS paths)
+			query: false,
+			parse: false,
+			router: false,
+			schemaSnapshot: true,
+			cookieJar: false,
+			// only the replayed handlers' link aliases stay in the table
+			params: ['fe', 'fre', 'rc', 'rm', 'rt'],
 			compat: true,
 			bridge: false,
 			typeboxValue: false,

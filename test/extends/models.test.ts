@@ -345,4 +345,33 @@ describe('Model', () => {
 
 		expect(Object.keys(app.models)).toEqual(['string', 'number'])
 	})
+
+	// a direct redeclaration keeps the first schema (plugin absorption is a
+	// separate rule and still overwrites); the string and object forms must
+	// not diverge on this, nor on stamping `$id`, which OpenAPI references
+	for (const form of ['string', 'object'] as const)
+		it(`keeps the existing model and sets $id on ${form}-form redeclaration`, async () => {
+			// distinct shapes: snapshots are interned, so a plain t.String() may
+			// carry the $id of an earlier test's model
+			const first = t.String({ description: `${form} first` })
+			const second = t.Number({ description: `${form} second` })
+			// `any`: the two forms infer different app types
+			const registered: any =
+				form === 'string'
+					? new Elysia().model('m', first).model('m', second)
+					: new Elysia().model({ m: first }).model({ m: second })
+			const app = registered.post(
+				'/',
+				{ body: 'm' },
+				({ body }: { body: string }) => typeof body
+			)
+
+			expect(app.models.m.$id).toBe('m')
+
+			const string = await app.handle(post('/', 's'))
+			expect(string.status).toBe(200)
+			expect(await string.text()).toBe('string')
+
+			expect((await app.handle(post('/', 1))).status).toBe(422)
+		})
 })

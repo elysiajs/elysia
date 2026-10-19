@@ -183,6 +183,42 @@ describe('route introspection', () => {
 		expect(route).toBeDefined()
 		expect((route!.hooks as any)?.query).toBeDefined()
 	})
+
+	// openapi/sync read hooks.response as the complete status map; a merged
+	// guard's response would otherwise be enforced yet missing from the spec
+	it('merges guard response schemas into the route status map', () => {
+		const app = new Elysia()
+			.guard({ schema: 'merge', response: { 404: t.String() } })
+			.get('/x', { response: { 200: t.String() } }, () => 'ok')
+
+		const response = (app.routes[0].hooks as any).response
+		expect(Object.keys(response).sort()).toEqual(['200', '404'])
+	})
+
+	// .routes must show the hook list the compiled handler runs, so a macro
+	// introspect that reorders hooks applies here too
+	it('runs macro introspect', () => {
+		const mark = () => {}
+		const app = new Elysia()
+			.macro({
+				last: {
+					afterHandle: mark,
+					introspect(hooks: any) {
+						hooks.afterHandle = [
+							...hooks.afterHandle.filter(
+								(fn: any) => fn !== mark
+							),
+							mark
+						]
+					}
+				}
+			})
+			.get('/', { last: true, afterHandle: () => {} }, () => 'ok')
+
+		const afterHandle = (app.routes[0].hooks as any).afterHandle
+		expect(afterHandle).toHaveLength(2)
+		expect(afterHandle.at(-1)).toBe(mark)
+	})
 })
 
 describe('registration input ownership', () => {
@@ -239,6 +275,37 @@ describe('registration input ownership', () => {
 		const parent = new Elysia().use(plugin)
 
 		expect((parent['~ext'] as any)?.decorator?.db).toBe(instance)
+	})
+
+	// a plugin adding a sub-key must not wipe the host's config under that key
+	it('deep-merges a plugin store into the host key', async () => {
+		const plugin = new Elysia({ name: 'p' }).state('cfg', { b: 2 })
+		const app = new Elysia()
+			.state('cfg', { a: 1 })
+			.use(plugin)
+			.get('/', ({ store }) => store.cfg)
+
+		expect(await app.handle('/').then((r) => r.json())).toEqual({
+			a: 1,
+			b: 2
+		})
+	})
+
+	// append keeps the first function on a direct redeclaration, like the
+	// object and primitive cases; 'override' is the explicit opt-in (plugin
+	// absorption is a separate rule and overrides)
+	it('keeps the first decorated function unless overridden', async () => {
+		const append = new Elysia()
+			.decorate('f', () => 1)
+			.decorate('f', () => 2)
+			.get('/', ({ f }) => String(f()))
+		const override = new Elysia()
+			.decorate('f', () => 1)
+			.decorate('override', 'f', () => 2)
+			.get('/', ({ f }) => String(f()))
+
+		expect(await append.handle('/').then((r) => r.text())).toBe('1')
+		expect(await override.handle('/').then((r) => r.text())).toBe('2')
 	})
 })
 

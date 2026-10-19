@@ -175,4 +175,35 @@ describe('Headers-instance response metadata', () => {
 		expect(sc.some((c) => c.includes('a=1'))).toBe(true)
 		expect(sc.some((c) => c.includes('b=2'))).toBe(true)
 	})
+
+	it('keeps the problem content type on 404 with two set-cookies', async () => {
+		const app = new Elysia()
+			.onRequest(({ set }) => {
+				set.headers['set-cookie'] = ['a=1', 'b=2']
+			})
+			.get('/exists', () => 'ok')
+
+		const res = await app.handle(new Request('http://localhost/missing'))
+		expect(res.status).toBe(404)
+		expect(res.headers.get('content-type')).toBe('application/problem+json')
+		expect(res.headers.getSetCookie()).toEqual(['a=1', 'b=2'])
+	})
+
+	it('keeps the problem content type on a masked 500 with two set-cookies', async () => {
+		const app = new Elysia()
+			.onRequest(({ set }) => {
+				set.headers['set-cookie'] = ['a=1', 'b=2']
+			})
+			// a returned thunk resolving to an Error takes errorToResponse,
+			// unlike a thrown Error
+			.get('/err', () => {
+				const error = new Error('x')
+				return () => error
+			})
+
+		const res = await app.handle(new Request('http://localhost/err'))
+		expect(res.status).toBe(500)
+		expect(res.headers.get('content-type')).toBe('application/problem+json')
+		expect(res.headers.getSetCookie()).toEqual(['a=1', 'b=2'])
+	})
 })

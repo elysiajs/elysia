@@ -16,6 +16,10 @@ import { aot as bunAot } from '../../src/plugin/aot/bun'
  */
 
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
+const ROUTE_SHAPE_FROM = resolve(
+	import.meta.dir,
+	'../../src/compile/handler/route-shape.ts'
+)
 const ENTRY = 'test/aot/fixtures/ws-inherited-auth-app.ts'
 
 const built: string[] = []
@@ -31,7 +35,11 @@ async function load() {
 	const result = await Bun.build({
 		entrypoints: [ENTRY],
 		plugins: [
-			bunAot(ENTRY, { registerFrom: REGISTER_FROM, strip: 'auto' })
+			bunAot(ENTRY, {
+				registerFrom: REGISTER_FROM,
+				routeShapeFrom: ROUTE_SHAPE_FROM,
+				strip: 'auto'
+			})
 		],
 		target: 'bun'
 	})

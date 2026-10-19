@@ -757,6 +757,82 @@ describe('Scoped macro resolution', () => {
 		await app.handle(new Request('http://localhost/g/x'))
 		expect(ran).toEqual(['new'])
 	})
+
+	// Two paths let the root resolve a group-local macro consumed by a guard
+	// in a used plugin: the `~scopeChildren` forward in #use and the macro
+	// table prototype chain in #ensureMacroTable. Drop both and an auth macro fails open
+	it('applies a group-local macro consumed by a guard inside a used plugin', async () => {
+		const inline = new Elysia().use(
+			new Elysia({ name: 'g1-inline' }).group('/g', (g) =>
+				g
+					.macro({ m: { beforeHandle: () => 'macro' } })
+					.guard({ m: true })
+					.get('/', () => 'plain')
+			)
+		)
+
+		const scoped = new Elysia().use(
+			new Elysia({ name: 'g1-scoped' }).group('/g', (g) =>
+				g
+					.macro({ m: { beforeHandle: () => 'macro' } })
+					.guard({ m: true }, (gg) => gg.get('/', () => 'plain'))
+			)
+		)
+
+		expect(await inline.handle('/g').then((r) => r.text())).toBe('macro')
+		expect(await scoped.handle('/g').then((r) => r.text())).toBe('macro')
+	})
+
+	// A group sandboxes routes and hooks, not macros: a plugin used inside a
+	// group is installed for the app, so ancestor routes using its macro must
+	// run it, not silently serve without it. Also pins the macro epoch invalidation
+	it('applies a macro plugin used inside a group to ancestor routes', async () => {
+		const parent = new Elysia()
+			.group('/g', (g) =>
+				g
+					.use(
+						new Elysia({ name: 'g3-parent' }).macro({
+							tag: { beforeHandle: () => 'tagged' }
+						})
+					)
+					.get('/', () => 'g')
+			)
+			.get('/', { tag: true } as any, () => 'plain')
+
+		const grandparent = new Elysia().group('/a', (a) =>
+			a
+				.group('/b', (b) =>
+					b
+						.use(
+							new Elysia({ name: 'g4-grandparent' }).macro({
+								tag: { beforeHandle: () => 'tagged' }
+							})
+						)
+						.get('/', () => 'b')
+				)
+				.get('/', { tag: true } as any, () => 'plain')
+		)
+
+		const root = new Elysia()
+			.group('/a', (a) =>
+				a.group('/b', (b) =>
+					b
+						.use(
+							new Elysia({ name: 'g4-root' }).macro({
+								tag: { beforeHandle: () => 'tagged' }
+							})
+						)
+						.get('/', () => 'b')
+				)
+			)
+			.get('/', { tag: true } as any, () => 'plain')
+
+		expect(await parent.handle('/').then((r) => r.text())).toBe('tagged')
+		expect(await grandparent.handle('/a').then((r) => r.text())).toBe(
+			'tagged'
+		)
+		expect(await root.handle('/').then((r) => r.text())).toBe('tagged')
+	})
 })
 
 describe('Macro derives across hook chains', () => {

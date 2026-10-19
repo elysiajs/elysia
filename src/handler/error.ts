@@ -2,7 +2,7 @@ import { hasAsync, getNotFound } from './utils'
 import { parseQueryFromURL } from '../parse-query'
 import {
 	NotFound,
-	ValidationError,
+	type ValidationError,
 	ElysiaStatus,
 	HTTPError,
 	isProduction,
@@ -58,8 +58,8 @@ const isPristineNotFound = (context: Context, error: any) =>
  */
 export const claimsProblemType = (error: any, type: unknown) =>
 	typeof type === 'string'
-		? !(error instanceof ValidationError) &&
-			error.constructor?.name !== 'ValidationError'
+		? error?.['~verr'] !== true &&
+			error?.constructor?.name !== 'ValidationError'
 		: error instanceof HTTPError
 
 export function adoptErrorType(result: any, error: any) {
@@ -359,7 +359,7 @@ function fallbackErrorResponse(
 	// the error's own body failed to build (a throwing custom `error`
 	// callback): response validation stays a masked 500, reading nothing
 	// more from the error
-	if (error instanceof ValidationError)
+	if (error?.['~verr'] === true)
 		return mapResponse(
 			error.type === 'response'
 				? internalServerErrorResponse(undefined)
@@ -419,8 +419,8 @@ export function createErrorHandler(
 	const enter = (context: Context, error: Error) => {
 		// @ts-expect-error
 		context.error = error
-		if (allowUnsafe && error instanceof ValidationError)
-			error.allowUnsafeValidationDetails = true
+		if (allowUnsafe && (error as any)?.['~verr'] === true)
+			(error as ValidationError).allowUnsafeValidationDetails = true
 		applyErrorStatus(context, error)
 
 		parseQuery(context)

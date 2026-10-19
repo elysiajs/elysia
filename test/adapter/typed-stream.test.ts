@@ -75,9 +75,13 @@ describe('certified byte streams', () => {
 	})
 
 	it('fails through the error pipeline for locked or consumed sources', async () => {
+		const caught: unknown[] = []
 		const locked = streamOf()
 		const reader = locked.getReader()
 		const lockedResponse = await new Elysia()
+			.onError(({ error }) => {
+				caught.push(error)
+			})
 			.get('/', () => bytes(locked))
 			.handle(request())
 		reader.releaseLock()
@@ -85,11 +89,34 @@ describe('certified byte streams', () => {
 		const consumed = streamOf()
 		await new Response(consumed).arrayBuffer()
 		const consumedResponse = await new Elysia()
+			.onError(({ error }) => {
+				caught.push(error)
+			})
 			.get('/', () => bytes(consumed))
 			.handle(request())
 
 		expect(lockedResponse.status).toBe(500)
 		expect(consumedResponse.status).toBe(500)
+		// both failures must reach .onError as a TypeError
+		expect(caught).toHaveLength(2)
+		for (const error of caught) expect(error).toBeInstanceOf(TypeError)
+	})
+
+	it('rejects a locked source before touching set.headers', async () => {
+		const locked = streamOf()
+		const reader = locked.getReader()
+		const response = await new Elysia()
+			// a value-returning error hook serves the same `set`
+			.onError(() => 'stream unavailable')
+			.get('/', () => bytes(locked))
+			.handle(request())
+		reader.releaseLock()
+
+		expect(response.status).toBe(500)
+		// the byte-stream default must not leak into the error response
+		expect(response.headers.get('content-type')).not.toBe(
+			'application/octet-stream'
+		)
 	})
 
 	it('keeps unmarked streams on the compatibility mapper', async () => {

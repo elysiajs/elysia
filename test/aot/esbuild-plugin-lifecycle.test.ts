@@ -97,7 +97,9 @@ it('fails before a later scl factory only when its resolver was omitted', async 
 			`import { Elysia, t } from ${JSON.stringify(resolve(packageRoot, 'dist/index.mjs'))}\n` +
 				`import { Compiled, createAotFingerprint } from ${JSON.stringify(resolve(packageRoot, 'dist/compile/aot.mjs'))}\n` +
 				`import { resolveHandlerParams } from ${JSON.stringify(resolve(packageRoot, 'dist/compile/handler/params.mjs'))}\n` +
-				`export const app = new Elysia().get('/plain', () => 'plain')\n` +
+				// the model keeps schema snapshot live, so the hidden schema route
+				// below reaches the `scl` check instead of the snapshot stub
+				`export const app = new Elysia().model({ manual: t.Any() }).get('/plain', () => 'plain')\n` +
 				`export async function exerciseUnexpected() {
 	let factoryCalls = 0
 	const result = { factoryCalls: 0, error: null, response: null, unrelated: resolveHandlerParams(['rm', 'rc'], { res: { map: 'map', compact: 'compact' } }) }

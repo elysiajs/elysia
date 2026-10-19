@@ -26,6 +26,10 @@ import {
 import { post, json } from '../utils'
 
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
+const ROUTE_SHAPE_FROM = resolve(
+	import.meta.dir,
+	'../../src/compile/handler/route-shape.ts'
+)
 const STRIP_E2E_APP = resolve(import.meta.dir, 'fixtures/strip-e2e-app.ts')
 
 // Inlined former `analyzeStubbability`: capture then replay against the same app.
@@ -253,6 +257,23 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			cookie: true,
 			trace: true,
 			sucrose: true,
+			query: false,
+			parse: false,
+			router: true,
+			schemaSnapshot: false,
+			cookieJar: true,
+			params: [
+				'es',
+				'fre',
+				'nc',
+				'pd',
+				'pe',
+				'pj',
+				'rc',
+				'rm',
+				'rt',
+				'va'
+			],
 			compat: true,
 			bridge: false,
 			typeboxValue: false,
@@ -272,6 +293,12 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			cookie: true,
 			trace: true,
 			sucrose: true,
+			query: true,
+			parse: true,
+			router: true,
+			schemaSnapshot: true,
+			cookieJar: true,
+			params: ['fe', 'fre', 'rc', 'rm', 'rt'],
 			compat: true,
 			bridge: false,
 			typeboxValue: false,
@@ -291,6 +318,13 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			cookie: true,
 			trace: true,
 			sucrose: true,
+			query: false,
+			parse: false,
+			router: false,
+			schemaSnapshot: true,
+			cookieJar: false,
+			// no HTTP handler is replayed, the table is empty
+			params: [],
 			// A schema-less WS app needs neither sealed nor wired TypeBox setup.
 			compat: false,
 			bridge: false,
@@ -470,7 +504,8 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			entrypoints: ['test/aot/fixtures/strip-schema-bundle.ts'],
 			plugins: [
 				bunAot('test/aot/fixtures/strip-schema-bundle.ts', {
-					registerFrom: REGISTER_FROM
+					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM
 				})
 			],
 			write: false,
@@ -492,7 +527,8 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			entrypoints: ['test/aot/fixtures/strip-ws-bundle.ts'],
 			plugins: [
 				bunAot('test/aot/fixtures/strip-ws-bundle.ts', {
-					registerFrom: REGISTER_FROM
+					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM
 				})
 			],
 			write: false,
@@ -513,6 +549,7 @@ describe('AOT strip detection (analyzeStubbability)', () => {
 			plugins: [
 				bunAot(STRIP_E2E_APP, {
 					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM,
 					strip: 'auto'
 				})
 			],

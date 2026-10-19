@@ -13,6 +13,10 @@ import { aot as viteAot } from '../../src/plugin/aot/vite'
 
 const APP = resolve(import.meta.dir, 'fixtures/strip-schema-bundle.ts')
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
+const ROUTE_SHAPE_FROM = resolve(
+	import.meta.dir,
+	'../../src/compile/handler/route-shape.ts'
+)
 
 describe('target-gated adapter stubs', () => {
 	it('matches Elysia src and dist Bun adapter paths', () => {
@@ -108,6 +112,7 @@ describe('target-gated adapter stubs', () => {
 			plugins: [
 				bunAot(APP, {
 					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM,
 					target: 'node'
 				})
 			],
@@ -128,6 +133,7 @@ describe('target-gated adapter stubs', () => {
 			plugins: [
 				bunAot(APP, {
 					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM,
 					target: 'workerd'
 				})
 			],
@@ -147,6 +153,7 @@ describe('target-gated adapter stubs', () => {
 			plugins: [
 				bunAot(APP, {
 					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM,
 					target: 'bun'
 				})
 			],
@@ -165,7 +172,8 @@ describe('target-gated adapter stubs', () => {
 			entrypoints: [APP],
 			plugins: [
 				bunAot(APP, {
-					registerFrom: REGISTER_FROM
+					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM
 					// no target
 				})
 			],
@@ -186,6 +194,7 @@ describe('target-gated adapter stubs', () => {
 			plugins: [
 				bunAot(APP, {
 					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM,
 					target: 'bun'
 				})
 			],
@@ -242,6 +251,7 @@ describe('build-time production flag', () => {
 			plugins: [
 				bunAot(APP, {
 					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM,
 					strip: false
 					// production defaults to true
 				})
@@ -262,6 +272,7 @@ describe('build-time production flag', () => {
 			plugins: [
 				bunAot(APP, {
 					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM,
 					strip: false,
 					production: false
 				})
@@ -278,8 +289,10 @@ describe('build-time production flag', () => {
 })
 
 describe('Vite plugin: adapter/bun stub parity', () => {
-	const bunIndexId = '/x/node_modules/elysia/dist/adapter/bun/index.mjs'
-	const bunSrcId = '/x/elysia/src/adapter/bun/index.ts'
+	// under the resolved package root: a mirrored suffix elsewhere is a user file
+	const packageRoot = resolve(import.meta.dir, '../..')
+	const bunIndexId = resolve(packageRoot, 'dist/adapter/bun/index.mjs')
+	const bunSrcId = resolve(packageRoot, 'src/adapter/bun/index.ts')
 	const unrelatedId = '/app/src/mymodule.ts'
 
 	it('uses the shared Bun adapter stub source', () => {
@@ -298,6 +311,7 @@ describe('Vite plugin: adapter/bun stub parity', () => {
 	it('replaces the Bun adapter for web-standard targets', async () => {
 		const plugin = viteAot(APP, {
 			registerFrom: REGISTER_FROM,
+			routeShapeFrom: ROUTE_SHAPE_FROM,
 			target: 'node'
 		})
 
@@ -315,6 +329,7 @@ describe('Vite plugin: adapter/bun stub parity', () => {
 	it('keeps the Bun adapter for Bun targets', async () => {
 		const plugin = viteAot(APP, {
 			registerFrom: REGISTER_FROM,
+			routeShapeFrom: ROUTE_SHAPE_FROM,
 			target: 'bun' // bun target → adapter:'bun', no bun-adapter stub
 		})
 
@@ -329,7 +344,8 @@ describe('Vite plugin: adapter/bun stub parity', () => {
 
 	it('keeps the Bun adapter when no target is declared', async () => {
 		const plugin = viteAot(APP, {
-			registerFrom: REGISTER_FROM
+			registerFrom: REGISTER_FROM,
+			routeShapeFrom: ROUTE_SHAPE_FROM
 		})
 
 		await plugin.buildStart()

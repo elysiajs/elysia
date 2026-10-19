@@ -295,6 +295,38 @@ describe('Parser', () => {
 		expect(response).toEqual({ name: 'Aru' })
 	})
 
+	// a named parse hook is resolved from the parser table at compile time, so
+	// registering .parser() before or after .onParse(name) must not matter
+	for (const order of ['before', 'after'] as const)
+		it(`resolve named onParse with parser registered ${order}`, async () => {
+			const custom = ({ contentType, request }: any) =>
+				contentType === 'application/elysia'
+					? request.text().then((text: string) => 'custom:' + text)
+					: undefined
+
+			const app = (
+				order === 'before'
+					? new Elysia().parser('custom', custom).onParse('custom')
+					: new Elysia().onParse('custom').parser('custom', custom)
+			)
+				.post('/', ({ body }) => body)
+				.onParse('json')
+
+			const response = await app.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					headers: { 'content-type': 'application/elysia' },
+					body: 'hi'
+				})
+			)
+			expect(response.status).toBe(200)
+			expect(await response.text()).toBe('custom:hi')
+
+			const json = await app.handle(post('/', { a: 1 }))
+			expect(json.status).toBe(200)
+			expect(await json.json()).toEqual({ a: 1 })
+		})
+
 	it('handle custom parser then fallback to named default', async () => {
 		const app = new Elysia()
 			.parser('custom', ({ contentType, request }) => {

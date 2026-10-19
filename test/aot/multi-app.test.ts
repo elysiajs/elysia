@@ -26,6 +26,10 @@ import { evalRegistration } from './_manifest'
  */
 
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
+const ROUTE_SHAPE_FROM = resolve(
+	import.meta.dir,
+	'../../src/compile/handler/route-shape.ts'
+)
 const fixture = (name: string) => resolve(import.meta.dir, 'fixtures', name)
 
 const dir = mkdtempSync(join(tmpdir(), 'elysia-aot-multi-app-'))
@@ -66,7 +70,13 @@ async function build(name: string, strip: boolean | 'auto') {
 	const result = await Bun.build({
 		entrypoints: [entry],
 		outdir: join(dir, `${built++}`),
-		plugins: [bunAot(entry, { registerFrom: REGISTER_FROM, strip })],
+		plugins: [
+			bunAot(entry, {
+				registerFrom: REGISTER_FROM,
+				routeShapeFrom: ROUTE_SHAPE_FROM,
+				strip
+			})
+		],
 		target: 'bun'
 	})
 	if (!result.success)
@@ -137,7 +147,11 @@ describe('AOT multi-app manifests', () => {
 		async (strip) => {
 			const { source } = await generateCompiledArtifacts(
 				fixture('multi-app-unnamed.ts'),
-				{ registerFrom: REGISTER_FROM, strip }
+				{
+					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM,
+					strip
+				}
 			)
 			// one unkeyed registration: the unnamed `api` got no manifest
 			expect(source.match(/^Compiled\.register\(/gm)).toHaveLength(1)
@@ -159,7 +173,8 @@ describe('AOT multi-app manifests', () => {
 	it('refuses a multi-app build whose primary app is unnamed', async () => {
 		await expect(
 			generateCompiledArtifacts(fixture('multi-app-unnamed-primary.ts'), {
-				registerFrom: REGISTER_FROM
+				registerFrom: REGISTER_FROM,
+				routeShapeFrom: ROUTE_SHAPE_FROM
 			})
 		).rejects.toThrow(
 			"exports `app` with no name next to named Elysia apps (`api`): name it (new Elysia({ name: 'app' })), or stop exporting `api`"
@@ -182,7 +197,8 @@ describe('AOT multi-app manifests', () => {
 		async (name, exports) => {
 			await expect(
 				generateCompiledArtifacts(fixture(name), {
-					registerFrom: REGISTER_FROM
+					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM
 				})
 			).rejects.toThrow(`exports two Elysia apps named "svc" ${exports}`)
 		}
@@ -249,7 +265,7 @@ describe('AOT multi-app manifests', () => {
 	it('keeps routers built while importing the entry out of the primary manifest', async () => {
 		const { source, mode } = await generateCompiledArtifacts(
 			fixture('multi-app-mount-leak.ts'),
-			{ registerFrom: REGISTER_FROM }
+			{ registerFrom: REGISTER_FROM, routeShapeFrom: ROUTE_SHAPE_FROM }
 		)
 		const { handlers, validators } = evalRegistration(source) as any
 
@@ -267,7 +283,10 @@ describe('AOT multi-app manifests', () => {
 		try {
 			;({ source } = await generateCompiledArtifacts(
 				fixture('multi-app-parent-model.ts'),
-				{ registerFrom: REGISTER_FROM }
+				{
+					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM
+				}
 			))
 			expect(warn.mock.calls.map(([message]) => message)).toContainEqual(
 				expect.stringContaining(
@@ -372,7 +391,8 @@ describe('AOT multi-app manifests', () => {
 	])('refuses %s once its async routes settle', async (name, message) => {
 		await expect(
 			generateCompiledArtifacts(fixture(name), {
-				registerFrom: REGISTER_FROM
+				registerFrom: REGISTER_FROM,
+				routeShapeFrom: ROUTE_SHAPE_FROM
 			})
 		).rejects.toThrow(message)
 	})
@@ -383,11 +403,11 @@ describe('AOT multi-app manifests', () => {
 	it('keeps a router built while async modules settle out of the primary manifest', async () => {
 		const leak = await generateCompiledArtifacts(
 			fixture('multi-app-async-leak.ts'),
-			{ registerFrom: REGISTER_FROM }
+			{ registerFrom: REGISTER_FROM, routeShapeFrom: ROUTE_SHAPE_FROM }
 		)
 		const control = await generateCompiledArtifacts(
 			fixture('multi-app-async-leak-control.ts'),
-			{ registerFrom: REGISTER_FROM }
+			{ registerFrom: REGISTER_FROM, routeShapeFrom: ROUTE_SHAPE_FROM }
 		)
 		const { handlers, validators } = evalRegistration(
 			leak.source,
@@ -442,7 +462,8 @@ describe('AOT multi-app manifest module', () => {
 			expect(source.match(/^import .*$/gm)).toEqual([
 				'import { Compiled } from "elysia"',
 				'import { buildCoercedFromPlan } from "elysia/coerce-plan"',
-				'import { Reconstruct } from "elysia/reconstruct"'
+				'import { Reconstruct } from "elysia/reconstruct"',
+				'import { routeShape } from "elysia/route-shape"'
 			])
 
 			const registrationA = evalRegistration(source, 'a')
@@ -516,6 +537,21 @@ describe('AOT multi-app stub plan', () => {
 		expect(merged.ws).toBe(false)
 	})
 
+	// each app replays its own handlers from the one shared link table, so
+	// intersecting like the module flags would starve both apps
+	it('keeps the union of every app link aliases', () => {
+		const a = plan(['rt', 'rc', 'cc'], true)
+		const b = plan(['rt', 'va', 'er'], false)
+
+		expect(mergePlans([a, b], true).plan.params).toEqual([
+			'cc',
+			'er',
+			'rc',
+			'rt',
+			'va'
+		])
+	})
+
 	it('keeps the handler JIT for every app when one still reaches it', () => {
 		const live = plan([], false, {
 			report: { jit: false, reasons: ['handler:indexed-duplicate'] }
@@ -532,6 +568,7 @@ describe('AOT multi-app stub plan', () => {
 		await expect(
 			generateCompiledArtifacts(fixture('multi-app-strip-true.ts'), {
 				registerFrom: REGISTER_FROM,
+				routeShapeFrom: ROUTE_SHAPE_FROM,
 				strip: true
 			})
 		).rejects.toThrow(
@@ -541,7 +578,7 @@ describe('AOT multi-app stub plan', () => {
 		// `app` alone would stub the JIT, `api` needs it
 		const { stub, mode } = await generateCompiledArtifacts(
 			fixture('multi-app-strip-true.ts'),
-			{ registerFrom: REGISTER_FROM }
+			{ registerFrom: REGISTER_FROM, routeShapeFrom: ROUTE_SHAPE_FROM }
 		)
 		expect(stub.jit).toBe(false)
 		expect(mode).toBe('off')

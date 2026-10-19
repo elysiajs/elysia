@@ -2,7 +2,7 @@ import { createAdapter } from '..'
 import { WebStandardAdapter } from '../web-standard'
 
 import { buildNativeStaticResponse } from '../../compile/handler'
-import { routeRow, RouteFlag } from '../../route-table'
+import { buildRouteTable, routeRow, RouteFlag } from '../../route-table'
 import {
 	flattenChain,
 	getLoosePath,
@@ -87,8 +87,8 @@ function releaseLifecycle(
 		handler: GracefulHandler<any> | GracefulHandler<any>[]
 	) => boolean
 ) {
-	if (ext.stop === stop) delete ext.stop
-	if (ext.cleanupEpoch === registerCleanup) delete ext.cleanupEpoch
+	delete ext.stop
+	delete ext.cleanupEpoch
 	if (createdExt && app['~ext'] === ext && !Object.keys(ext).length)
 		app['~ext'] = undefined
 }
@@ -179,9 +179,6 @@ function expandOptional(path: string): string[] {
 	].map((variant) => variant || '/')
 }
 
-// Only what Bun's router takes as-is: a `:name` whole segment (unique name,
-// not starting with a digit) and a trailing `*`. Anything else it rejects or
-// reads differently, e.g. `/time/12:30`
 function isNativePath(path: string) {
 	const names = new Set<string>()
 	const segments = path.split('/')
@@ -202,63 +199,138 @@ function isNativePath(path: string) {
 }
 
 /**
- * HTML bundles served by Bun's native router.
- *
- * A `:param` / `*` bundle matches before `fetch`, so with a `handoff` every
- * other route of that method is registered natively too, pointing at `fetch`;
- * Bun's specificity (exact > param > wildcard) then picks the Elysia route over
- * the bundle (Elysia's own router skips these bundles, see `#buildRouterUnsafe`).
- * If any route can't be expressed in Bun's router, dynamic bundles are skipped
- * entirely, since the bundle would shadow that route.
+ * Routes Bun serves natively: HTML bundles, promoted static Responses (only
+ * with `promote`), and with a `handoff` the `:param` / `*` bundles plus a
+ * hand-off entry for every other route of their method
  */
-export function collectHTMLBundleRoutes(
+export function collectNativeRoutes(
 	app: AnyElysia,
 	handoff?: (request: Request, server: unknown) => unknown,
-	routes?: NativeRoutes
+	promote?: boolean
 ) {
-	let dynamic: Set<string> | undefined
-	let bundles: [method: string, path: string, bundle: unknown][] | undefined
-
-	// once sealed, `~routes` would rematerialize the rows released at publish:
-	// scan the table, and build transient rows only when a bundle exists
-	const table = app['~generation']?.routeTable
-	if (
-		table &&
-		!table.handler.some(
-			(h, i) => isNativeStaticMethod(table.method[i]) && isHTMLBundle(h)
-		)
-	)
-		return routes
-
-	const declared = table
-		? table.method.map((_, i) => routeRow(table, i))
-		: app['~routes']
-
-	for (const route of declared) {
-		const [method, path, handler] = route
-		if (!isNativeStaticMethod(method) || !isHTMLBundle(handler)) continue
-
-		if (path.indexOf(':') !== -1 || path.indexOf('*') !== -1) {
-			if (!handoff) continue
-			;(dynamic ??= new Set()).add(method)
-			;(bundles ??= []).push([method, path, handler])
-		} else
-			((routes ??= nullObject())[path] ??= nullObject())[method] = handler
-
-		// Bun serves the bundle before any JS runs
-		if (!isProduction() && (route[4] || route[5] || route[6]))
-			console.warn(
-				`[Elysia] ${method} ${path} is an HTML bundle served natively, hooks do not run for it`
+	// `~routeTable` outlives #invalidateRouter: trust it only right after a
+	// build (`promote` callers read `app.fetch` first), else a sealed one
+	let table =
+		app['~generation']?.routeTable ??
+		(promote ? app['~routeTable'] : undefined)
+	if (!table) {
+		// before the first build: bundles only, from the declared rows
+		const declared = app['~routes']
+		if (
+			!declared.some(
+				(r) => isNativeStaticMethod(r[0]) && isHTMLBundle(r[2])
 			)
+		)
+			return
+		table = buildRouteTable(declared)
 	}
+
+	const length = table.length
+	if (!length) return
+
+	let promoteResponses = false
+	if (promote) {
+		const frozenRoot = frozenRootOf(app)
+		const fetchLevelHook = flattenChain(frozenRoot['~hookChain'])
+
+		promoteResponses =
+			app['~config']?.nativeStaticResponse !== false &&
+			!fetchLevelHook?.request?.length &&
+			!fetchLevelHook?.trace?.length &&
+			!frozenRoot['~ext']?.hoc?.length
+	}
+
+	const { method: methods, path: paths, handler: handlers, flags } = table
+	const isPromotable = (h: unknown) =>
+		promoteResponses &&
+		typeof h !== 'function' &&
+		!(h instanceof Error) &&
+		!(h instanceof Promise)
+
+	const strictPath = app['~config']?.strictPath === true
+	const routeIndex = new Map<string, Map<string, number>>()
+
+	let dynamic: Set<string> | undefined
+	let bundles: number[] | undefined
+	let hasCandidate = false
+
+	for (let i = 0; i < length; i++) {
+		const method = methods[i]
+		if (!isNativeStaticMethod(method)) continue
+
+		const h = handlers[i]
+		const bundle = isHTMLBundle(h)
+		if (bundle && !isProduction()) {
+			const row = routeRow(table, i)
+			// Bun serves the bundle before any JS runs
+			if (row[4] || row[5] || row[6])
+				console.warn(
+					`[Elysia] ${method} ${paths[i]} is an HTML bundle served natively, hooks do not run for it`
+				)
+		}
+
+		if (flags[i] & RouteFlag.Dynamic) {
+			if (bundle && handoff) {
+				;(dynamic ??= new Set()).add(method)
+				;(bundles ??= []).push(i)
+			}
+			continue
+		}
+
+		if (bundle || isPromotable(h)) hasCandidate = true
+
+		const path = paths[i]
+		let pathsByMethod = routeIndex.get(method)
+		if (!pathsByMethod) routeIndex.set(method, (pathsByMethod = new Map()))
+
+		pathsByMethod.set(path, i)
+
+		if (!strictPath && (flags[i] & RouteFlag.Encode) !== 0) {
+			const encoded = encodeURI(path)
+			if (encoded !== path && !pathsByMethod.has(encoded))
+				pathsByMethod.set(encoded, -1)
+		}
+	}
+
+	if (!hasCandidate && !dynamic) return
+
+	let routes: NativeRoutes | undefined
+	const add = (method: string, path: string, value: unknown) =>
+		(((routes ??= nullObject())[path] ??= nullObject())[method] = value)
+
+	if (hasCandidate)
+		for (let i = 0; i < length; i++) {
+			const method = methods[i]
+			const pathsByMethod = routeIndex.get(method)
+			const path = paths[i]
+			if (pathsByMethod?.get(path) !== i) continue
+
+			const h = handlers[i]
+			const value = isHTMLBundle(h)
+				? h
+				: isPromotable(h)
+					? buildNativeStaticResponse(routeRow(table, i), app)
+					: undefined
+			if (!value) continue
+
+			const needsEncode = (flags[i] & RouteFlag.Encode) !== 0
+			add(method, needsEncode ? encodeURI(path) : path, value)
+
+			if (!strictPath) {
+				const loose = getLoosePath(path)
+				if (loose !== path && !pathsByMethod.has(loose))
+					add(method, needsEncode ? encodeURI(loose) : loose, value)
+			}
+		}
 
 	if (!dynamic) return routes
 
-	const strictPath = app['~config']?.strictPath === true
 	const handoffs: [key: string, method: string][] = []
 
-	for (const [method, path, handler] of declared) {
-		if (isHTMLBundle(handler)) continue
+	for (let i = 0; i < length; i++) {
+		const method = methods[i]
+		const path = paths[i]
+		if (isHTMLBundle(handlers[i])) continue
 
 		const targets =
 			method === '*'
@@ -287,8 +359,6 @@ export function collectHTMLBundleRoutes(
 					return routes
 				}
 
-				// Bun matches the request as sent, so the encoded form is needed
-				// too; a raw non-ASCII key is rejected outright
 				const encoded = encodeURI(raw)
 				for (const target of targets) {
 					if (!/[^ -~]/.test(raw)) handoffs.push([raw, target])
@@ -298,8 +368,7 @@ export function collectHTMLBundleRoutes(
 		}
 	}
 
-	for (const [method, path, bundle] of bundles!)
-		((routes ??= nullObject())[path] ??= nullObject())[method] = bundle
+	for (const i of bundles!) add(methods[i], paths[i], handlers[i])
 
 	// a promoted static Response or bundle keeps its slot
 	for (const [key, method] of handoffs)
@@ -308,111 +377,16 @@ export function collectHTMLBundleRoutes(
 	return routes
 }
 
+export const collectHTMLBundleRoutes = (
+	app: AnyElysia,
+	handoff?: (request: Request, server: unknown) => unknown
+) => collectNativeRoutes(app, handoff)
+
 export function collectStaticRoutes(app: AnyElysia) {
 	void app.fetch
-
-	const frozenRoot = frozenRootOf(app)
-	const fetchLevelHook = flattenChain(frozenRoot['~hookChain'])
-	// Static Response promotion must yield to fetch-level hooks; HTML bundles
-	// cannot run on the JS lane at all, so they are promoted regardless.
-	const promoteResponses =
-		app['~config']?.nativeStaticResponse !== false &&
-		!fetchLevelHook?.request?.length &&
-		!fetchLevelHook?.trace?.length &&
-		!frozenRoot['~ext']?.hoc?.length
-
-	const table = app['~generation']?.routeTable ?? app['~routeTable']
-	const length = table?.length ?? 0
-	if (!table || !length) return
-
-	const { method: methods, path: paths, handler: handlers, flags } = table
-	const isStatic = (i: number) =>
-		isNativeStaticMethod(methods[i]) && (flags[i] & RouteFlag.Dynamic) === 0
-	const isPromotable = (h: unknown) =>
-		promoteResponses &&
-		typeof h !== 'function' &&
-		!(h instanceof Error) &&
-		!(h instanceof Promise)
-
-	let hasCandidate = false
-
-	for (let i = 0; i < length; i++) {
-		if (!isStatic(i)) continue
-
-		const h = handlers[i]
-		if (isHTMLBundle(h) || isPromotable(h)) {
-			hasCandidate = true
-			break
-		}
-	}
-	if (!hasCandidate) return
-
-	const strictPath = frozenRoot['~config']?.strictPath === true
-	const routeIndex = new Map<string, Map<string, number>>()
-
-	for (let i = 0; i < length; i++) {
-		if (!isStatic(i)) continue
-
-		const method = methods[i]
-		const path = paths[i]
-		let pathsByMethod = routeIndex.get(method)
-
-		if (!pathsByMethod) routeIndex.set(method, (pathsByMethod = new Map()))
-
-		pathsByMethod.set(path, i)
-
-		if (!strictPath && (flags[i] & RouteFlag.Encode) !== 0) {
-			const encoded = encodeURI(path)
-			if (encoded !== path && !pathsByMethod.has(encoded))
-				pathsByMethod.set(encoded, -1)
-		}
-	}
-
-	const ready: Record<
-		string,
-		Record<string, Response | BunHTMLBundlelike>
-	> = nullObject()
-	let hasReady = false
-	const add = (
-		method: string,
-		path: string,
-		value: Response | BunHTMLBundlelike,
-		needsEncode: boolean
-	) => {
-		if (needsEncode) path = encodeURI(path)
-		;(ready[path] ??= nullObject())[method] = value
-		hasReady = true
-	}
-
-	for (let i = 0; i < length; i++) {
-		if (!isStatic(i)) continue
-
-		const method = methods[i]
-		const pathsByMethod = routeIndex.get(method)!
-		const path = paths[i]
-		if (pathsByMethod.get(path) !== i) continue
-
-		const h = handlers[i]
-		let value: Response | BunHTMLBundlelike | undefined
-		if (isHTMLBundle(h)) value = h
-		else if (!isPromotable(h)) continue
-		else value = buildNativeStaticResponse(routeRow(table, i), app)
-
-		if (!value) continue
-
-		const needsEncode = (flags[i] & RouteFlag.Encode) !== 0
-		add(method, path, value, needsEncode)
-
-		if (!strictPath) {
-			const loose = getLoosePath(path)
-			if (loose !== path && !pathsByMethod.has(loose))
-				add(method, loose, value, needsEncode)
-		}
-	}
-
-	if (!hasReady) return
-
-	return ready
+	return collectNativeRoutes(app, undefined, true) as
+		| Record<string, Record<string, Response | BunHTMLBundlelike>>
+		| undefined
 }
 
 export const BunAdapter = createAdapter({
@@ -426,13 +400,15 @@ export const BunAdapter = createAdapter({
 
 		const requestReady = Promise.withResolvers<void>()
 
-		function gatedFetch(request: Request, server: unknown) {
-			return live && !cancelled
-				? live(request, server)
+		// `srv`, not `server`: Bun's server.fetch() passes undefined here
+		function gatedFetch(request: Request, srv: unknown) {
+			return live && app.server === server
+				? live(request, srv)
 				: requestReady.promise.then(() => {
-						if (cancelled || !live) return unavailableFetch()
+						if (app.server !== server || !live)
+							return unavailableFetch()
 
-						return live(request, server)
+						return live(request, srv)
 					})
 		}
 
@@ -448,12 +424,10 @@ export const BunAdapter = createAdapter({
 		const _config = (app['~config'] as any)?.serve
 		const serve = _config ? { ..._config, ..._options } : _options
 
-		// resolved per request: the start-up gate first, the live handler later
 		const handoff = (request: Request, server: unknown) =>
 			(serve.fetch as Function)(request, server)
-		// routes of pending async plugins are unknown yet, a dynamic bundle
-		// would shadow them during the start-up gate: add it at publish
-		const htmlRoutes = collectHTMLBundleRoutes(
+
+		const htmlRoutes = collectNativeRoutes(
 			app as AnyElysia,
 			(app as AnyElysia).pending ? undefined : handoff
 		)
@@ -469,34 +443,23 @@ export const BunAdapter = createAdapter({
 		))
 
 		let live: ((request: Request, server: unknown) => unknown) | undefined
-		let cancelled = false
 		let shutdownAttempt: Promise<void> | undefined
-
 		let wsLifecycle: WSLifecycle | undefined
 		let modulesReady: Promise<void> | undefined
-
-		let pendingSetups: Promise<unknown>[] | undefined
 		let setupsSettled: Promise<PromiseSettledResult<unknown>[]> | undefined
 
 		const build = () => {
 			const fetch = app.fetch
-			let routes: ReturnType<typeof collectStaticRoutes>
+			let routes: NativeRoutes | undefined
 
 			try {
-				routes = collectStaticRoutes(app as AnyElysia)
+				routes = collectNativeRoutes(app as AnyElysia, handoff, true)
 			} catch (error) {
 				console.warn(
 					'[Elysia] Native static promotion was skipped:',
 					error
 				)
 			}
-
-			// a reload replaces the table, keep dynamic bundles and their hand-offs
-			routes = collectHTMLBundleRoutes(
-				app as AnyElysia,
-				handoff,
-				routes as NativeRoutes | undefined
-			) as typeof routes
 
 			let websocket:
 				| (NonNullable<
@@ -552,25 +515,15 @@ export const BunAdapter = createAdapter({
 		let idleRequired = false
 		let cleanupFailures: unknown[] | undefined
 		let observedOutcome: Promise<void> | undefined
-		let persistentCleanup: GracefulHandler<any>[] | undefined
-		let persistentCleanupLength = -1
+
 		const epochCleanup: GracefulHandler<any>[] = []
 		const createdExt = app['~ext'] === undefined
 		const ext = (app['~ext'] ??= nullObject())
 		const epoch: LifecycleEpoch = { setup: false, invoking: false }
 
-		const snapshotCleanup = () => {
-			if (persistentCleanupLength !== -1) return
-
-			persistentCleanup = ext.cleanup
-			persistentCleanupLength = persistentCleanup?.length ?? 0
-		}
-
 		const registerCleanup = (
 			handler: GracefulHandler<any> | GracefulHandler<any>[]
 		) => {
-			if (ext.cleanupEpoch !== registerCleanup) return false
-
 			if (!epoch.setup)
 				throw new Error(
 					'[Elysia] .onStop() called after its onStart epoch settled'
@@ -583,10 +536,7 @@ export const BunAdapter = createAdapter({
 		}
 
 		const gate = () => {
-			if (!published) return
-
 			live = undefined
-			if (wsLifecycle) wsLifecycle.closing = true
 
 			try {
 				server.reload({
@@ -707,16 +657,15 @@ export const BunAdapter = createAdapter({
 		}
 
 		const setup = () => {
-			snapshotCleanup()
-
 			const onSetup = ext.setup
 			if (!onSetup) return
 
 			epoch.setup = true
 			ext.cleanupEpoch = registerCleanup
+			let pendingSetups: Promise<unknown>[] | undefined
 
 			for (let i = 0; i < onSetup.length; i++) {
-				if (cancelled) break
+				if (app.server !== server) break
 
 				try {
 					const result = runLifecycle(epoch, onSetup[i], app)
@@ -755,7 +704,6 @@ export const BunAdapter = createAdapter({
 				if (!forceDone) forceRequested = true
 			}
 
-			cancelled = true
 			requestReady.resolve()
 			if (app.server === server) app.server = undefined
 
@@ -773,7 +721,7 @@ export const BunAdapter = createAdapter({
 
 				outcome = shutdownAttempt = promise
 
-				const quiescence = quiesce(forceRequested || !published)
+				const quiescence = quiesce(forceRequested)
 				let releasable = false
 				let abandonedSetups: typeof setupsSettled
 				;(async () => {
@@ -822,30 +770,26 @@ export const BunAdapter = createAdapter({
 						}
 
 						if (!cleanupCompleted) {
-							snapshotCleanup()
+							const persistentCleanup = ext.cleanup ?? []
+							const persistentCleanupLength =
+								persistentCleanup.length
 
-							if (ext.stop === stop) {
-								const length =
-									persistentCleanupLength +
-									epochCleanup.length
+							const length =
+								persistentCleanupLength + epochCleanup.length
 
-								for (let n = 0; n < length; n++) {
-									if (ext.stop !== stop) break
-									const i = startupFailure
-										? length - 1 - n
-										: n
+							for (let n = 0; n < length; n++) {
+								const i = startupFailure ? length - 1 - n : n
 
-									const handler =
-										i < persistentCleanupLength
-											? persistentCleanup![i]
-											: epochCleanup[
-													i - persistentCleanupLength
-												]
-									try {
-										await runLifecycle(epoch, handler, app)
-									} catch (error) {
-										;(cleanupFailures ??= []).push(error)
-									}
+								const handler =
+									i < persistentCleanupLength
+										? persistentCleanup[i]
+										: epochCleanup[
+												i - persistentCleanupLength
+											]
+								try {
+									await runLifecycle(epoch, handler, app)
+								} catch (error) {
+									;(cleanupFailures ??= []).push(error)
 								}
 							}
 
@@ -898,7 +842,7 @@ export const BunAdapter = createAdapter({
 		ext.stop = stop
 
 		const publish = () => {
-			if (cancelled || app.server !== server) {
+			if (app.server !== server) {
 				requestReady.resolve()
 				return
 			}
@@ -944,7 +888,7 @@ export const BunAdapter = createAdapter({
 
 		const start = () => {
 			modulesReady = undefined
-			if (cancelled || app.server !== server) {
+			if (app.server !== server) {
 				requestReady.resolve()
 				return
 			}
@@ -956,10 +900,8 @@ export const BunAdapter = createAdapter({
 		}
 
 		try {
-			// defer building app so it doesn't block main thread and allow other synchronous code to run first
+			// defer building app so it doesn't block main thread
 			const modules = (modulesReady = app.modules)
-			// the TypeBox value graph loads faster asynchronously, and here it
-			// overlaps async plugins instead of stalling the first request
 			const preload = preloadTypebox()
 
 			;(preload ? Promise.all([modules, preload]) : modules)

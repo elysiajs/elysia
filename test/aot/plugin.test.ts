@@ -8,6 +8,10 @@ import { post, json } from '../utils'
 const APP = resolve(import.meta.dir, 'fixtures/app.ts')
 // In-repo `Compiled` source (the stale built `dist` can't resolve `elysia/compile`).
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
+const ROUTE_SHAPE_FROM = resolve(
+	import.meta.dir,
+	'../../src/compile/handler/route-shape.ts'
+)
 
 describe('AOT plugin', () => {
 	it('classifies JavaScript entries from the nearest package type', async () => {
@@ -55,7 +59,8 @@ describe('AOT plugin', () => {
 		try {
 			src = (
 				await generateCompiledArtifacts(APP, {
-					registerFrom: REGISTER_FROM
+					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM
 				})
 			).source
 			expect(process.env.ELYSIA_AOT_BUILD).toBe('keep')
@@ -94,7 +99,8 @@ describe('AOT plugin', () => {
 			{
 				moduleCondition: 'cjs',
 				registerFrom: 'custom-register',
-				reconstructFrom: 'custom-reconstruct'
+				reconstructFrom: 'custom-reconstruct',
+				routeShapeFrom: 'custom-route-shape'
 			}
 		)
 
@@ -104,6 +110,10 @@ describe('AOT plugin', () => {
 		expect(source).toContain(
 			'const { Reconstruct } = require("custom-reconstruct")'
 		)
+		expect(source).toContain(
+			'const { routeShape } = require("custom-route-shape")'
+		)
+		expect(source).toContain('Compiled.routeShape = routeShape')
 		expect(source).toContain(
 			'const { buildCoercedFromPlan } = require("elysia/coerce-plan")'
 		)
@@ -218,7 +228,10 @@ describe('AOT plugin', () => {
 		try {
 			await generateCompiledArtifacts(
 				resolve(import.meta.dir, 'fixtures/verbose-env-app.ts'),
-				{ registerFrom: REGISTER_FROM }
+				{
+					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM
+				}
 			)
 
 			// Per-route detail, not the aggregate summary telling the user
@@ -243,7 +256,7 @@ describe('AOT plugin', () => {
 
 		const { source } = await generateCompiledArtifacts(
 			resolve(import.meta.dir, 'fixtures/named-export-app.ts'),
-			{ registerFrom: REGISTER_FROM }
+			{ registerFrom: REGISTER_FROM, routeShapeFrom: ROUTE_SHAPE_FROM }
 		)
 
 		expect(source).toContain('Compiled.register((() => {')
@@ -257,7 +270,7 @@ describe('AOT plugin', () => {
 
 		const error = await generateCompiledArtifacts(
 			resolve(import.meta.dir, 'fixtures/ambiguous-export-app.ts'),
-			{ registerFrom: REGISTER_FROM }
+			{ registerFrom: REGISTER_FROM, routeShapeFrom: ROUTE_SHAPE_FROM }
 		).catch((e: Error) => e)
 
 		expect(error).toBeInstanceOf(Error)
@@ -271,7 +284,12 @@ describe('AOT plugin', () => {
 
 		const result = await Bun.build({
 			entrypoints: [APP],
-			plugins: [aot(APP, { registerFrom: REGISTER_FROM })],
+			plugins: [
+				aot(APP, {
+					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM
+				})
+			],
 			target: 'bun'
 		})
 
@@ -296,7 +314,12 @@ describe('AOT plugin', () => {
 			const result = await Bun.build({
 				entrypoints: [entry],
 				outdir: directory,
-				plugins: [aot(entry, { registerFrom: REGISTER_FROM })],
+				plugins: [
+					aot(entry, {
+						registerFrom: REGISTER_FROM,
+						routeShapeFrom: ROUTE_SHAPE_FROM
+					})
+				],
 				target: 'bun'
 			})
 
@@ -364,7 +387,12 @@ describe('AOT plugin', () => {
 			platform: 'node',
 			// No `external: ['bun']` needed — all `'bun'` imports in src are type-only
 			// (erased at build), so esbuild bundles elysia for non-Bun targets cleanly.
-			plugins: [aot(APP, { registerFrom: REGISTER_FROM })]
+			plugins: [
+				aot(APP, {
+					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM
+				})
+			]
 		})
 
 		const out = result.outputFiles![0]!.text
@@ -387,7 +415,10 @@ describe('AOT plugin', () => {
 		// Own fixture — generateCompiledArtifacts is non-idempotent on a shared app
 		// (memoized compile), and this test calls it directly like the core test.
 		const VITE_APP = resolve(import.meta.dir, 'fixtures/vite-app.ts')
-		const plugin = aot(VITE_APP, { registerFrom: REGISTER_FROM })
+		const plugin = aot(VITE_APP, {
+			registerFrom: REGISTER_FROM,
+			routeShapeFrom: ROUTE_SHAPE_FROM
+		})
 
 		expect(plugin.enforce).toBe('pre') // inject runs before Vite's transforms
 		expect(plugin.apply).toBe('build') // `vite dev` keeps the JIT path
@@ -421,7 +452,13 @@ describe('AOT plugin', () => {
 		const result = await Bun.build({
 			entrypoints: [APP],
 			// force lazy (the 3-route fixture would otherwise auto-pick eager)
-			plugins: [aot(APP, { registerFrom: REGISTER_FROM, lazy: true })],
+			plugins: [
+				aot(APP, {
+					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM,
+					lazy: true
+				})
+			],
 			target: 'bun'
 		})
 		expect(result.success).toBe(true)

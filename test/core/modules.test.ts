@@ -200,6 +200,35 @@ describe('Modules', () => {
 
 	// an app that served before its module settled rebuilds at settle, so
 	// the failure of that rebuild is what modules reports
+	// A route served while a plugin is pending compiles without that plugin's
+	// macro. If the rebuild after the plugin lands fails and a later build
+	// succeeds, it must recompile: a stale pre-plugin handler table must never
+	// outlive the plugin that replaced it (an auth macro would be skipped)
+	it('recompiles after a failed async rebuild instead of reusing pre-plugin handlers', async () => {
+		let resolvePlugin!: (plugin: Elysia) => void
+		const plugin = new Promise<Elysia>((resolve) => {
+			resolvePlugin = resolve
+		})
+		let calls = 0
+		const flaky = new Elysia({ name: 'flaky' }).macro({
+			tag: () => {
+				if (calls++ === 0) throw new Error('once')
+
+				return { beforeHandle: () => 'tagged' }
+			}
+		})
+		const app = new Elysia()
+			.get('/', { tag: true } as any, () => 'plain')
+			.use(plugin)
+
+		expect(await app.handle('/').then((r) => r.text())).toBe('plain')
+
+		resolvePlugin(flaky)
+		await expect(app.modules).rejects.toThrow('once')
+
+		expect(await app.handle('/').then((r) => r.text())).toBe('tagged')
+	})
+
 	it('preserves async router-build failures across modules reads after serving', async () => {
 		let resolvePlugin!: (plugin: Elysia) => void
 		const plugin = new Promise<Elysia>((resolve) => {

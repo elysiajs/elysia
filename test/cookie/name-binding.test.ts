@@ -455,6 +455,10 @@ describe('cookie signature name binding across transports', () => {
 							import.meta.dir,
 							'../../src/compile/aot.ts'
 						),
+						routeShapeFrom: resolve(
+							import.meta.dir,
+							'../../src/compile/handler/route-shape.ts'
+						),
 						strip: 'auto'
 					})
 				],

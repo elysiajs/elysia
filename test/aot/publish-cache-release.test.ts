@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach } from 'bun:test'
 import { createContext, Elysia, t } from '../../src'
 import { websocket } from '../../src/plugin/websocket'
 import { Compiled, createAotFingerprint } from '../../src/compile/aot'
-import { routeShape } from '../../src/compile/handler'
+import { routeShape } from '../../src/compile/handler/route-shape'
 import { abortCapture } from '../../src/compile/aot-capture'
 import { buildRouteTable, RouteFlag } from '../../src/route-table'
 

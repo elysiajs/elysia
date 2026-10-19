@@ -24,6 +24,10 @@ const ROUTES = 40
 // In-repo `Compiled` source: resolves to the same module instance this test
 // imports, so the generated module registers where the test can claim.
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
+const ROUTE_SHAPE_FROM = resolve(
+	import.meta.dir,
+	'../../src/compile/handler/route-shape.ts'
+)
 const RECONSTRUCT_FROM = resolve(
 	import.meta.dir,
 	'../../src/compile/aot-reconstruct.ts'
@@ -45,6 +49,7 @@ const build = () => {
 const manifest = (options?: { lazy?: number }) =>
 	compileToSource(build() as any, {
 		registerFrom: REGISTER_FROM,
+		routeShapeFrom: ROUTE_SHAPE_FROM,
 		reconstructFrom: RECONSTRUCT_FROM,
 		...options
 	})

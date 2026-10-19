@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test'
+import { resolve } from 'node:path'
 
 import { Elysia, t } from '../../src'
 import type { AnyElysia } from '../../src/base'
-import { routeShape } from '../../src/compile/handler'
+import { routeShape } from '../../src/compile/handler/route-shape'
 import { replaceFunction } from '../../src/type/shared'
 
 const fn = () => 'ok'
@@ -210,4 +211,38 @@ it('keeps k when another module copy replaces a check', async () => {
 	}
 
 	expect(routeShape({ body }, fn, plain)).toBe(k)
+})
+
+// the walker is AOT-only: a plain bundle (no manifest to compare against)
+// must not carry it
+describe('routeShape bundling', () => {
+	it('stays out of a plain bundle', async () => {
+		const result = await Bun.build({
+			entrypoints: ['./entry.ts'],
+			files: {
+				'./entry.ts': `import { Elysia } from '${resolve(import.meta.dir, '../../src/index.ts')}'\nexport const app = new Elysia().get('/', 'ok')`
+			},
+			target: 'bun'
+		})
+		if (!result.success)
+			throw new Error(result.logs.map((l) => l.message).join('\n'))
+		const text = await result.outputs[0]!.text()
+		expect(text).not.toContain('field*')
+		expect(text).not.toContain('function routeShape(')
+	})
+
+	it('stays out of a plain WebSocket bundle', async () => {
+		const result = await Bun.build({
+			entrypoints: ['./entry.ts'],
+			files: {
+				'./entry.ts': `import { Elysia } from '${resolve(import.meta.dir, '../../src/index.ts')}'\nimport { websocket } from '${resolve(import.meta.dir, '../../src/plugin/websocket.ts')}'\nexport const app = new Elysia().use(websocket()).ws('/', { message() {} })`
+			},
+			target: 'bun'
+		})
+		if (!result.success)
+			throw new Error(result.logs.map((l) => l.message).join('\n'))
+		const text = await result.outputs[0]!.text()
+		expect(text).toContain('upgrade')
+		expect(text).not.toContain('field*')
+	})
 })

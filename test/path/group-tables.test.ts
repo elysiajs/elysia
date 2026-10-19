@@ -422,7 +422,7 @@ describe('group tables', () => {
 		const app = new Elysia()
 			.decorate('d', 1)
 			.state('s', 1)
-			.model('M', t.Object({ x: t.String() }))
+			.model('N', t.String())
 
 		app.group('/g', (g: any) => {
 			child = g
@@ -440,7 +440,8 @@ describe('group tables', () => {
 		for (const table of ['decorator', 'store', 'models'] as const)
 			expect(child['~ext'][table], table).toBe(app['~ext']![table])
 
-		// the lazy macro reads the parent's current M through the child
+		// the lazy macro reads M, registered on the parent after the group,
+		// through the child (a redeclaration would not replace it: first wins)
 		expect((await app.handle(post('/g/x', { x: 1 }))).status).toBe(200)
 		expect((await app.handle(post('/g/x', { x: 'invalid' }))).status).toBe(
 			422

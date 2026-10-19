@@ -297,4 +297,29 @@ describe('Bun HTML import route', () => {
 			}
 		}
 	)
+
+	it('serves a bundle during the gate after an earlier handle() left a stale route table', async () => {
+		// `~routeTable` outlives #invalidateRouter: the listen-time walk must
+		// not read the 1-row table built by handle() and miss the bundle
+		const plugin = () =>
+			new Promise<Elysia>((resolve) =>
+				setTimeout(() => resolve(new Elysia().get('/a', () => 'a')), 30)
+			)
+		const app = new Elysia().get('/', () => 'root').use(plugin())
+		await app.handle(new Request('http://localhost/'))
+
+		app.get('/page', index).use(plugin())
+		app.listen(0)
+
+		try {
+			const response = await fetch(
+				`http://localhost:${app.server!.port}/page`
+			)
+
+			expect(response.status).toBe(200)
+			expect(await response.text()).toContain('id="fixture"')
+		} finally {
+			await app.stop(true)
+		}
+	})
 })

@@ -1930,6 +1930,28 @@ describe('Macro', () => {
 			expect(ran).toBe(true)
 		})
 	})
+
+	// A macro may expand to a key that re-enters itself; the 16-iteration cap
+	// bounds the expansion instead of overflowing the stack at registration
+	it('caps self-re-entering macro expansion at 16 iterations', async () => {
+		let n = 0
+
+		const app = new Elysia()
+			.macro({
+				loop: (v: number) => ({
+					loop: v + 1,
+					beforeHandle: () => {
+						n++
+					}
+				})
+			})
+			.get('/', { loop: 0 }, () => 'ok')
+
+		const response = await app.handle('/')
+
+		expect(response.status).toBe(200)
+		expect(n).toBe(16)
+	})
 })
 
 describe('Macro removed forms', () => {

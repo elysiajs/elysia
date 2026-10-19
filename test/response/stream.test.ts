@@ -299,6 +299,59 @@ describe('Stream', () => {
 			})
 	})
 
+	it('proxy chunked upstream fetch over network streams incrementally', async () => {
+		const enc = new TextEncoder()
+
+		const upstream = Bun.serve({
+			port: 0,
+			fetch: () =>
+				new Response(
+					new ReadableStream({
+						async start(c) {
+							c.enqueue(enc.encode('a'))
+							await Bun.sleep(50)
+							c.enqueue(enc.encode('b'))
+							await Bun.sleep(50)
+							c.enqueue(enc.encode('c'))
+							c.close()
+						}
+					})
+				)
+		})
+
+		const app = new Elysia()
+			.get('/', () => fetch(`http://localhost:${upstream.port}`))
+			.listen(0)
+
+		try {
+			const start = performance.now()
+			const response = await fetch(`http://localhost:${app.server!.port}`)
+
+			expect(response.headers.has('content-length')).toBe(false)
+
+			const reader = response.body!.getReader()
+			const times: number[] = []
+			let body = ''
+
+			while (true) {
+				const { done, value } = await reader.read()
+				if (done) break
+
+				times.push(performance.now() - start)
+				body += decodeChunk(value)
+			}
+
+			expect(body).toBe('abc')
+			expect(times.length).toBeGreaterThanOrEqual(2)
+			// first chunk must arrive well before the upstream finishes,
+			// i.e. the proxy must not buffer the whole body
+			expect(times[0]).toBeLessThan(times[times.length - 1] - 60)
+		} finally {
+			app.stop()
+			upstream.stop(true)
+		}
+	})
+
 	it('handle sse with id', () => {
 		const app = new Elysia().get('/sse', async function* () {
 			for (let i = 0; i < 3; i++) {

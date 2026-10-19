@@ -21,7 +21,7 @@ import {
 	isNotEmpty,
 	authorityEnd
 } from '../utils'
-import { handleSet, materializeSetHeaders } from '../adapter/utils'
+import { handleSet, hput, materializeSetHeaders } from '../adapter/utils'
 import {
 	InternalServerError,
 	NotFound,
@@ -47,8 +47,7 @@ function notFound(context: Context): Response {
 	if (set.cookie || isNotEmpty(set.headers)) {
 		handleSet(set)
 
-		if (!(set.headers as any)['content-type'])
-			(materializeSetHeaders(set) as any)['content-type'] = PROBLEM_JSON
+		hput(materializeSetHeaders(set), 'content-type', PROBLEM_JSON, 1)
 
 		return new Response(getNotFoundBody(), {
 			status: 404,

@@ -22,6 +22,10 @@ import { aot as bunAot } from '../../src/plugin/aot/bun'
 
 const APP = 'test/aot/fixtures/exact-mirror-app.ts'
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
+const ROUTE_SHAPE_FROM = resolve(
+	import.meta.dir,
+	'../../src/compile/handler/route-shape.ts'
+)
 // In-repo sources: the default `elysia/reconstruct` pulls the dist copy into the
 // plugin's virtual namespace, where its own relative imports no longer resolve
 const RECONSTRUCT_FROM = resolve(
@@ -44,6 +48,7 @@ async function build(strip: boolean | 'auto') {
 		plugins: [
 			bunAot(APP, {
 				registerFrom: REGISTER_FROM,
+				routeShapeFrom: ROUTE_SHAPE_FROM,
 				reconstructFrom: RECONSTRUCT_FROM,
 				strip
 			})

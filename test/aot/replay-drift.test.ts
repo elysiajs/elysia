@@ -1568,6 +1568,10 @@ describe('AOT replay of a WebSocket route that differs from the build', () => {
 describe('stripped AOT bundle of an app that differs at runtime', () => {
 	const ENTRY = 'test/aot/fixtures/replay-drift-app.ts'
 	const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
+	const ROUTE_SHAPE_FROM = resolve(
+		import.meta.dir,
+		'../../src/compile/handler/route-shape.ts'
+	)
 	const loaded: string[] = []
 
 	afterEach(async () => {
@@ -1595,7 +1599,11 @@ describe('stripped AOT bundle of an app that differs at runtime', () => {
 		const result = await Bun.build({
 			entrypoints: [ENTRY],
 			plugins: [
-				bunAot(ENTRY, { registerFrom: REGISTER_FROM, strip: true })
+				bunAot(ENTRY, {
+					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM,
+					strip: true
+				})
 			],
 			target: 'bun'
 		})

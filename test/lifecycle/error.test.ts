@@ -14,6 +14,7 @@ import { post, json } from '../utils'
 import * as z from 'zod'
 
 import { TypeBoxValidator } from '../../src/type/validator'
+import { claimsProblemType } from '../../src/handler/error'
 
 const ERROR_LIMIT = 64
 
@@ -714,6 +715,43 @@ describe('Lazy validation error enumeration', () => {
 			JSON.parse(JSON.stringify(eager)).errors
 		)
 		expect(Object.keys(lazy)).toContain('errors')
+	})
+
+	// the error path checks this brand instead of `instanceof`, so a bundle
+	// that never validates can drop the class. It must not serialize
+	it('brands a validation error on the prototype only', () => {
+		const error = new ValidationError('body', { x: 'a' }, [])
+
+		expect(error['~verr']).toBe(true)
+		expect(Object.getOwnPropertyDescriptor(error, '~verr')).toBeUndefined()
+		expect(JSON.parse(JSON.stringify(error))).not.toHaveProperty('~verr')
+
+		// `message` stays a non-enumerable accessor a handler can overwrite
+		expect(Object.keys(error)).not.toContain('message')
+		error.message = 'custom'
+		expect(error.message).toBe('custom')
+		expect(Object.keys(error)).not.toContain('message')
+	})
+
+	// a second installed copy's ValidationError fails `instanceof` but
+	// carries the brand, its `type` ('body', ...) is a slot, not a problem type
+	it('reads a validation error by its brand, not its class', () => {
+		const foreign = Object.assign(
+			Object.create({
+				get '~verr'() {
+					return true
+				}
+			}),
+			{ type: 'body' }
+		)
+
+		expect(claimsProblemType(foreign, 'body')).toBe(false)
+		expect(
+			claimsProblemType(new ValidationError('body', 1, []), 'body')
+		).toBe(false)
+		expect(
+			claimsProblemType(Object.assign(new Error(), { type: 'x' }), 'x')
+		).toBe(true)
 	})
 
 	it('defers schema error callbacks until the error is read', async () => {

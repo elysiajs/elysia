@@ -51,7 +51,10 @@ describe('no automatic GC', () => {
 		const [source, plugin] = await Promise.all([
 			compileToSource(
 				new Elysia().get('/x', () => 'ok'),
-				{ registerFrom: '../../src/compile/aot' }
+				{
+					registerFrom: '../../src/compile/aot',
+					routeShapeFrom: '../../src/compile/handler/route-shape'
+				}
 			),
 			readFile(
 				resolve(import.meta.dir, '../../src/plugin/aot/core.ts'),

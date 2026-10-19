@@ -11,6 +11,10 @@ import { aot as viteAot } from '../../src/plugin/aot/vite'
 
 const APP = resolve(import.meta.dir, 'fixtures/strip-schema-bundle.ts')
 const REGISTER_FROM = resolve(import.meta.dir, '../../src/compile/aot.ts')
+const ROUTE_SHAPE_FROM = resolve(
+	import.meta.dir,
+	'../../src/compile/handler/route-shape.ts'
+)
 
 describe('production call rewriting', () => {
 	it('rewrites a bare isProduction() call to true', () => {
@@ -120,6 +124,10 @@ describe('resolved Elysia package filtering', () => {
 		const pred = makeIsElysiaModule('/fake/node_modules/elysia')
 		expect(pred('/Users/me/elysia/src/app.ts')).toBe(false)
 		expect(pred('/tmp/fake/elysia/src/app.ts')).toBe(false)
+		// a mirrored suffix inside the root but outside its dist/ and src/
+		expect(
+			pred('/fake/node_modules/elysia/test/fixtures/elysia/src/error.ts')
+		).toBe(false)
 	})
 
 	it('returns false for the root itself (not a module file)', () => {
@@ -142,7 +150,8 @@ describe('resolved Elysia package filtering', () => {
 describe('generated production stubs', () => {
 	it('enables production mode by default', async () => {
 		const { stub } = await generateCompiledArtifacts(APP, {
-			registerFrom: REGISTER_FROM
+			registerFrom: REGISTER_FROM,
+			routeShapeFrom: ROUTE_SHAPE_FROM
 		})
 		expect(stub.isProduction).toBe(true)
 	})
@@ -150,6 +159,7 @@ describe('generated production stubs', () => {
 	it('preserves an explicit development mode', async () => {
 		const { stub } = await generateCompiledArtifacts(APP, {
 			registerFrom: REGISTER_FROM,
+			routeShapeFrom: ROUTE_SHAPE_FROM,
 			production: false
 		})
 		expect(stub.isProduction).toBe(false)
@@ -163,6 +173,7 @@ describe('Bun production builds', () => {
 			plugins: [
 				bunAot(APP, {
 					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM,
 					strip: false
 				})
 			],
@@ -183,6 +194,7 @@ describe('Bun production builds', () => {
 			plugins: [
 				bunAot(APP, {
 					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM,
 					strip: false,
 					production: false
 				})
@@ -207,6 +219,7 @@ describe('Vite production transforms', () => {
 	it('rewrites production calls by default', async () => {
 		const plugin = viteAot(APP, {
 			registerFrom: REGISTER_FROM,
+			routeShapeFrom: ROUTE_SHAPE_FROM,
 			strip: false
 		})
 		await plugin.buildStart()
@@ -222,6 +235,7 @@ describe('Vite production transforms', () => {
 	it('leaves production calls unchanged when production is disabled', async () => {
 		const plugin = viteAot(APP, {
 			registerFrom: REGISTER_FROM,
+			routeShapeFrom: ROUTE_SHAPE_FROM,
 			strip: false,
 			production: false
 		})
@@ -237,6 +251,7 @@ describe('Vite production transforms', () => {
 	it('leaves non-Elysia modules unchanged', async () => {
 		const plugin = viteAot(APP, {
 			registerFrom: REGISTER_FROM,
+			routeShapeFrom: ROUTE_SHAPE_FROM,
 			strip: false
 		})
 		await plugin.buildStart()
@@ -253,6 +268,7 @@ describe('Vite production transforms', () => {
 	it('leaves user modules inside an elysia-named directory unchanged', async () => {
 		const plugin = viteAot(APP, {
 			registerFrom: REGISTER_FROM,
+			routeShapeFrom: ROUTE_SHAPE_FROM,
 			strip: false
 		})
 		await plugin.buildStart()

@@ -3,6 +3,8 @@ import {
 	createStreamHandler,
 	handleFile,
 	handleSet,
+	hget,
+	hput,
 	materializeSetHeaders
 } from '../utils'
 
@@ -42,8 +44,7 @@ function handleElysiaFile(
 	const headers = materializeSetHeaders(set)
 	// unknown extension: keep the user's or the runtime's content-type
 	if (contentType !== 'application/octet-stream')
-		if (headers instanceof Headers) headers.set('content-type', contentType)
-		else headers['content-type'] = contentType
+		hput(headers, 'content-type', contentType)
 
 	const stats = file.stats
 	if (stats)
@@ -57,7 +58,7 @@ function handleElysiaFile(
 				set.status !== 412 &&
 				set.status !== 416
 			) {
-				headers['content-length'] = size
+				hput(headers, 'content-length', size)
 			}
 
 			return handleFile(file, set, request, size)
@@ -102,8 +103,8 @@ function mapResponseWithSet(
 
 	switch (responseTag(response)) {
 		case 'String':
-			if (!isBun && !headers['content-type'])
-				materializeSetHeaders(set)['content-type'] = 'text/plain'
+			if (!isBun && !hget(headers, 'content-type'))
+				hput(materializeSetHeaders(set), 'content-type', 'text/plain')
 
 			return new Response(response as string, set as ResponseInit)
 
@@ -131,7 +132,7 @@ function mapResponseWithSet(
 
 		case 'Number':
 		case 'Boolean':
-			return new Response(String(response), set as ResponseInit)
+			return new Response(response + '', set as ResponseInit)
 
 		case 'ElysiaFile':
 			return handleElysiaFile(response as ElysiaFile, set, request)
@@ -194,13 +195,18 @@ function withStatus(
 		} as Context['set']
 
 	if (response.headers) {
-		if (set.headers instanceof Headers)
-			for (const [key, value] of Object.entries(response.headers))
-				if (key.toLowerCase() === 'set-cookie')
-					for (const cookie of Array.isArray(value) ? value : [value])
-						set.headers.append(key, cookie as string)
-				else set.headers.set(key, value as string)
-		else Object.assign(materializeSetHeaders(set), response.headers)
+		const headers = materializeSetHeaders(set)
+		for (const [key, value] of Object.entries(response.headers))
+			if (key.toLowerCase() !== 'set-cookie') hput(headers, key, value)
+			else if (headers instanceof Headers)
+				for (const cookie of ([] as string[]).concat(value))
+					headers.append(key, cookie)
+			else if (headers['set-cookie'])
+				headers['set-cookie'] = ([] as string[]).concat(
+					headers['set-cookie'],
+					value
+				)
+			else headers['set-cookie'] = value
 	}
 
 	return mapResponseWithSet(response.response, set, request, owned)
@@ -299,7 +305,7 @@ export function mapCompactResponse(
 
 		case 'Number':
 		case 'Boolean':
-			return new Response(String(response))
+			return new Response(response + '')
 
 		case 'ElysiaFile':
 			return handleElysiaFile(response as ElysiaFile, undefined, request)
@@ -370,11 +376,8 @@ export function errorToResponse(
 	const body = internalServerErrorBody(error)
 	body.status = status
 
-	const headers = (set ? materializeSetHeaders(set) : nullObject()) as Record<
-		string,
-		string
-	>
-	headers['content-type'] = PROBLEM_JSON
+	const headers = set ? materializeSetHeaders(set) : nullObject()
+	hput(headers, 'content-type', PROBLEM_JSON)
 
 	return new Response(JSON.stringify(body), { status, headers })
 }
@@ -448,10 +451,7 @@ function remap(
 		: mapCompactResponse(response, request, owned)
 }
 
-const handleResponse = createResponseHandler({
-	mapResponse,
-	mapCompactResponse
-})
+const handleResponse = createResponseHandler()
 
 const handleStream = createStreamHandler({
 	mapResponse,

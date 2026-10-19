@@ -68,6 +68,11 @@
 			"import": "./dist/compile/aot-reconstruct.mjs",
 			"require": "./dist/compile/aot-reconstruct.js"
 		},
+		"./route-shape": {
+			"types": "./dist/compile/handler/route-shape.d.ts",
+			"import": "./dist/compile/handler/route-shape.mjs",
+			"require": "./dist/compile/handler/route-shape.js"
+		},
 		"./constants": {
 			"types": "./dist/constants.d.ts",
 			"import": "./dist/constants.mjs",

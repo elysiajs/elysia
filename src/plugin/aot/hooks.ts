@@ -20,6 +20,12 @@ import {
 	adapterConstantsSource,
 	bunAdapterStubSource,
 	rewriteIsProductionCalls,
+	ROUTER_IMPORTER_FILTER,
+	DEURI_IMPORTER_FILTER,
+	deuriStubSource,
+	routerStubSource,
+	PARAM_TABLE_FILTER,
+	paramTableSource,
 	type StubPlan,
 	type ElysiaAotOptions
 } from './core'
@@ -30,11 +36,13 @@ const toPosix = (path: string): string => path.replace(/\\/g, '/')
 
 const VIRTUAL = '\0elysia/compiled'
 const VIRTUAL_TYPE = '\0elysia/type'
+const VIRTUAL_ROUTER = '\0elysia/router'
+const VIRTUAL_DEURI = '\0elysia/deuri'
 
 export interface AotPluginHooks {
 	buildStart(): Promise<void>
 	buildEnd(): void
-	resolveId(id: string): string | undefined
+	resolveId(id: string, importer?: string): string | undefined
 	load(id: string): string | undefined
 	transform(code: string, id: string): string | undefined
 	isTransformCandidate(id: string): boolean
@@ -61,8 +69,7 @@ export const createAotPluginHooks = (
 	let source = ''
 	let virtualType: string | undefined
 	let stub: StubPlan = { ...NO_STUB }
-	let isElysiaModule = (_path: string) => false
-	let packageRoot = ''
+	const isElysiaModule = makeIsElysiaModule(resolveElysiaRoot(entryPath))
 
 	return {
 		async buildStart() {
@@ -75,9 +82,6 @@ export const createAotPluginHooks = (
 			source = generated.source
 			stub = generated.stub
 			virtualType = generated.virtualType
-			const pkgRoot = resolveElysiaRoot(entryPath)
-			isElysiaModule = makeIsElysiaModule(pkgRoot)
-			packageRoot = toPosix(pkgRoot)
 		},
 		buildEnd() {
 			if (!entryMatched)
@@ -87,38 +91,51 @@ export const createAotPluginHooks = (
 						`Check that the plugin entry matches a build input.`
 				)
 		},
-		resolveId(id) {
+		resolveId(id, importer) {
 			if (id === 'elysia/compiled') return VIRTUAL
 
-			// Serve the virtual `elysia/type` (no `setupTypebox`) so unused `t.*`
-			// tree-shake. Applies in sealed + wired modes; `off` leaves it real.
+			if (id === 'memoirist' || id === 'deuri') {
+				if (!stub.router || importer === undefined) return
+
+				const from = importer.split('?', 1)[0]
+				if (!isElysiaModule(from)) return
+				if (id === 'memoirist' && ROUTER_IMPORTER_FILTER.test(from))
+					return VIRTUAL_ROUTER
+
+				if (id === 'deuri' && DEURI_IMPORTER_FILTER.test(from))
+					return VIRTUAL_DEURI
+			}
+
 			if (id === 'elysia/type' && virtualType !== undefined)
 				return VIRTUAL_TYPE
 		},
 		load(id) {
 			if (id === VIRTUAL) return source
 			if (id === VIRTUAL_TYPE) return virtualType
+			if (id === VIRTUAL_ROUTER) return routerStubSource
+			if (id === VIRTUAL_DEURI) return deuriStubSource
 		},
 		transform(code, id) {
 			const cleanId = id.split('?', 1)[0]
+			const elysia = isElysiaModule(cleanId)
 
-			// Stub when every route is compiled
 			for (const key of Object.keys(
 				STUB_SOURCES
 			) as (keyof typeof STUB_SOURCES)[]) {
 				if (!stub[key]) continue
-				if (
-					key === 'staticClone' &&
-					(!isElysiaModule(cleanId) ||
-						!/^(dist|src)\/compile\/handler\/static-clone-resolver\.(m?js|ts)$/.test(
-							toPosix(cleanId).slice(packageRoot.length + 1)
-						))
-				)
+				if (!elysia && key !== 'typeboxValue' && key !== 'exactMirror')
 					continue
+
 				for (const { filter, source: stubSource } of STUB_SOURCES[key])
 					if (filter.test(cleanId))
 						return alignStubExtensions(stubSource, cleanId)
 			}
+
+			if (elysia && stub.params && PARAM_TABLE_FILTER.test(cleanId))
+				return alignStubExtensions(
+					paramTableSource(stub.params),
+					cleanId
+				)
 
 			if (TYPEBOX_REQUIRE_FILTER.test(cleanId))
 				return `export const requireTypebox = () => undefined\nexport const importTypebox = () => undefined\n`
@@ -137,6 +154,7 @@ export const createAotPluginHooks = (
 				return `export * from 'typebox/system'\n`
 
 			if (
+				elysia &&
 				stub.adapter !== false &&
 				ADAPTER_CONSTANTS_FILTER.test(cleanId)
 			)
@@ -146,12 +164,17 @@ export const createAotPluginHooks = (
 				)
 
 			if (
+				elysia &&
 				stub.adapter === 'web-standard' &&
 				ADAPTER_BUN_FILTER.test(cleanId)
 			)
 				return alignStubExtensions(bunAdapterStubSource, cleanId)
 
-			if (stub.isProduction && IS_PRODUCTION_FILTER.test(cleanId))
+			if (
+				elysia &&
+				stub.isProduction &&
+				IS_PRODUCTION_FILTER.test(cleanId)
+			)
 				return alignStubExtensions(
 					`export const isProduction = () => true\n`,
 					cleanId
@@ -165,8 +188,7 @@ export const createAotPluginHooks = (
 			)
 				out = rewriteTypeImport(out)
 
-			if (stub.isProduction && isElysiaModule(cleanId))
-				out = rewriteIsProductionCalls(out)
+			if (elysia && stub.isProduction) out = rewriteIsProductionCalls(out)
 
 			if (isEntry(cleanId)) {
 				entryMatched = true
@@ -276,6 +298,22 @@ export async function setupAotOnLoad(
 	build.onLoad(
 		{ filter: /.*/, namespace: 'elysia-aot-type' },
 		virtualLoad(VIRTUAL_TYPE)
+	)
+
+	build.onResolve(
+		{ filter: /^(memoirist|deuri)$/ },
+		(args: { path: string; importer?: string }) =>
+			hooks.resolveId(args.path, args.importer) !== undefined
+				? { path: args.path, namespace: 'elysia-aot-router' }
+				: undefined
+	)
+
+	build.onLoad(
+		{ filter: /.*/, namespace: 'elysia-aot-router' },
+		(args: { path: string }) =>
+			virtualLoad(
+				args.path === 'deuri' ? VIRTUAL_DEURI : VIRTUAL_ROUTER
+			)()
 	)
 
 	build.onLoad({ filter: SOURCE_REGEX }, async (args: { path: string }) => {

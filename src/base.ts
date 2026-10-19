@@ -56,7 +56,6 @@ import {
 	getLoosePath,
 	guardNonPlainLeaves,
 	hookToGuard,
-	isEmpty,
 	isHTMLBundle,
 	isNotEmpty,
 	isPlainObject,
@@ -1009,7 +1008,6 @@ export class Elysia<
 		switch (typeof value) {
 			case 'object':
 				if (!value) return this
-				if (!name && isEmpty(value)) return this
 
 				if (name) {
 					const existing = target[name]
@@ -1342,11 +1340,6 @@ export class Elysia<
 		>
 	): this
 	onParse(scopeOrFnOrName: any, fn?: any): this {
-		if (fn === undefined && typeof scopeOrFnOrName === 'string') {
-			const named = this['~ext']?.parser?.[scopeOrFnOrName]
-			return this.#onBranch('parse', (named ?? scopeOrFnOrName) as any)
-		}
-
 		return this.#onBranch('parse', scopeOrFnOrName as any, fn as any)
 	}
 
@@ -2797,11 +2790,7 @@ export class Elysia<
 
 	#as(node: ChainNode | undefined, scope: EventScope) {
 		while (node) {
-			if ('combine' in node) {
-				this.#as(node.combine, scope)
-				node = node.over
-				continue
-			}
+			node = node as Extract<ChainNode, { added: unknown }>
 
 			if (
 				node.scope !== 'global' &&
@@ -4307,12 +4296,6 @@ export class Elysia<
 					(ext as Record<string, unknown>)[field] = src[field]
 
 			if (src.macro) ext.macro = Object.create(src.macro)
-
-			if (src.capability) {
-				const cap = (ext.capability = nullObject())
-				if (src.capability.trace) cap.trace = src.capability.trace
-				if (src.capability.ws) cap.ws = src.capability.ws
-			}
 		}
 
 		if (isSchema) child.guard({ ...schemaOrRun } as Partial<AnyLocalHook>)
@@ -5274,8 +5257,6 @@ export class Elysia<
 		if (store && store !== ext.store) {
 			if (ext.store) mergeDeep(ext.store, store)
 			else ext.store = Object.assign(nullObject(), store)
-
-			markStoredSingletons(ext.store, store)
 		}
 
 		if (headers && headers !== ext.headers)
@@ -5367,24 +5348,17 @@ export class Elysia<
 				})
 
 				if (incomingOptions?.length) {
-					const base: WSOptionsEntry[] = existing.options ?? []
-					const seen = new Set(base.map((e) => e.origin))
-					let next: WSOptionsEntry[] | undefined
+					const options: WSOptionsEntry[] = (existing.options ??= [])
+					const seen = new Set(options.map((e) => e.origin))
 
-					for (const entry of incomingOptions) {
-						if (seen.has(entry.origin)) continue
-						seen.add(entry.origin)
-						;(next ??= base.slice()).push({
-							depth: entry.depth + 1,
-							value: entry.value,
-							origin: entry.origin
-						})
-					}
-
-					if (next)
-						target.ws = {
-							provider: existing.provider,
-							options: next
+					for (const entry of incomingOptions)
+						if (!seen.has(entry.origin)) {
+							seen.add(entry.origin)
+							options.push({
+								depth: entry.depth + 1,
+								value: entry.value,
+								origin: entry.origin
+							})
 						}
 				}
 			}
@@ -5405,13 +5379,8 @@ export class Elysia<
 		let current: ChainNode | undefined = hookChain
 
 		while (current) {
-			if ('combine' in current) {
-				current = current.over
-				continue
-			}
-
 			nodes.push(current)
-			current = current.parent
+			current = (current as Extract<ChainNode, { added: unknown }>).parent
 		}
 
 		const childrenHash = this.childrenHash
@@ -5624,13 +5593,7 @@ export class Elysia<
 		const resolved = base
 			.then(() => promise)
 			.then((value) => {
-				const plugin =
-					value &&
-					typeof value === 'object' &&
-					'default' in value &&
-					value.default
-						? value.default
-						: value
+				const plugin = value
 
 				const snapshots = this.macroSnapshots
 				let before: Map<string, unknown> | undefined
@@ -5676,9 +5639,6 @@ export class Elysia<
 				if (this.#pending > 0) return
 				if (this.ready !== next) return
 
-				const previousCompiled = this.compiled
-				const previousJitColdRemaining = this.jitColdRemaining
-
 				this.ready = undefined
 				this.compiled = undefined
 				this.fetchFn = undefined
@@ -5691,8 +5651,6 @@ export class Elysia<
 					try {
 						this.#buildRouter(false)
 					} catch (error) {
-						this.compiled = previousCompiled
-						this.jitColdRemaining = previousJitColdRemaining
 						this._error ??= { error }
 					}
 			})
@@ -5946,7 +5904,7 @@ export class Elysia<
 			}
 
 			case 'string':
-				models[name] = snapshotSchema(model!)
+				if (!(name in models)) models[name] = toModel(name, model!)
 
 				return this
 		}
@@ -7595,24 +7553,20 @@ export class Elysia<
 			}
 		}
 
-		if (typeof path === 'function' || path === '' || path === '/') {
-			const run =
-				typeof path === 'function'
-					? path
-					: typeof handler === 'function'
-						? handler
-						: null
+		if (typeof path === 'function') {
+			handler = path
+			path = ''
+		}
 
-			if (!run) throw new Error('Invalid handler')
+		if (typeof handler !== 'function') throw new Error('Invalid handler')
 
-			this.all('/*', options as any, Elysia.#mountHandler(run, 2))
+		if (path === '' || path === '/') {
+			this.all('/*', options as any, Elysia.#mountHandler(handler, 2))
 
 			return this
 		}
 
-		const handle = typeof handler === 'function' ? handler : null
-
-		if (!handle) throw new Error('Invalid handler')
+		const handle = handler
 
 		const endsStar = path.endsWith('*') ? 1 : 0
 		const wildcardSuffix = path.endsWith('/') ? '*' : '/*'
@@ -7669,6 +7623,7 @@ export class Elysia<
 		return this
 	}
 
+	/** @internal */
 	handler(
 		index: number,
 		immediate?: boolean,
@@ -7854,40 +7809,49 @@ export class Elysia<
 		map[path] = handler
 	}
 
-	static #slotHasString(h: Record<string, unknown> | undefined) {
+	static #slotHasString(
+		h: Record<string, unknown> | undefined,
+		onRef?: (ref: string, slot: string) => void
+	) {
 		if (!h || typeof h !== 'object') return false
 
-		if (
-			typeof h.body === 'string' ||
-			typeof h.headers === 'string' ||
-			typeof h.params === 'string' ||
-			typeof h.query === 'string' ||
-			typeof h.cookie === 'string'
-		)
-			return true
+		for (const key in h) {
+			if (!schemaProperties.has(key)) continue
 
-		const response = h.response
-		if (typeof response === 'string') return true
-
-		if (response && typeof response === 'object') {
-			const record = response as Record<string, unknown>
-			if (!isSingleSchema(record))
-				for (const status in record)
-					if (typeof record[status] === 'string') return true
+			const v = h[key]
+			if (typeof v === 'string') {
+				if (!onRef) return true
+				onRef(v, key)
+			} else if (
+				key === 'response' &&
+				v &&
+				typeof v === 'object' &&
+				!isSingleSchema(v)
+			)
+				for (const status in v) {
+					const r = (v as Record<string, unknown>)[status]
+					if (typeof r !== 'string') continue
+					if (!onRef) return true
+					onRef(r, 'response ' + status)
+				}
 		}
 
 		return false
 	}
 
-	static #hookHasString(h: Record<string, unknown> | undefined) {
-		if (Elysia.#slotHasString(h)) return true
+	static #hookHasString(
+		h: Record<string, unknown> | undefined,
+		onRef?: (ref: string, slot: string) => void
+	) {
+		if (Elysia.#slotHasString(h, onRef)) return true
 
 		const schemas = (h as { schemas?: unknown } | undefined)?.schemas
 		if (Array.isArray(schemas))
 			for (let s = 0; s < schemas.length; s++)
 				if (
 					Elysia.#slotHasString(
-						schemas[s] as Record<string, unknown> | undefined
+						schemas[s] as Record<string, unknown> | undefined,
+						onRef
 					)
 				)
 					return true
@@ -7985,53 +7949,23 @@ export class Elysia<
 
 	#assertRouteModelRefs(route: InternalRoute, method: string) {
 		const models = this['~ext']?.models
-		const path = route[1]
 
-		const checkSlots = (hook: Record<string, unknown> | undefined) => {
-			if (!hook) return
-
-			for (const key in hook) {
-				if (!schemaProperties.has(key)) continue
-
-				const v = hook[key]
-				if (typeof v === 'string') {
-					if (!models || !(v in models))
-						throw new Error(
-							`[Elysia] Unknown model reference "${v}" for ${key} on route ${method} ${path}.`
-						)
-				} else if (key === 'response' && v && typeof v === 'object') {
-					const record = v as Record<string, unknown>
-					if (isSingleSchema(record)) continue
-
-					for (const status in record) {
-						const r = record[status]
-						if (
-							typeof r === 'string' &&
-							(!models || !(r in models))
-						)
-							throw new Error(
-								`[Elysia] Unknown model reference "${r}" for response ${status} on route ${method} ${path}.`
-							)
-					}
-				}
+		Elysia.#hookHasString(
+			composeRouteHook(
+				route[3] as AnyElysia,
+				route[4] as any,
+				route[5] as any,
+				route[6] as any,
+				this as any,
+				route[7] as AnyElysia | undefined
+			) as Record<string, unknown> | undefined,
+			(ref, slot) => {
+				if (!models || !(ref in models))
+					throw new Error(
+						`[Elysia] Unknown model reference "${ref}" for ${slot} on route ${method} ${route[1]}.`
+					)
 			}
-		}
-
-		const hook = composeRouteHook(
-			route[3] as AnyElysia,
-			route[4] as any,
-			route[5] as any,
-			route[6] as any,
-			this as any,
-			route[7] as AnyElysia | undefined
-		) as (Record<string, unknown> & { schemas?: unknown[] }) | undefined
-
-		checkSlots(hook)
-
-		const schemas = hook?.schemas
-		if (Array.isArray(schemas))
-			for (let s = 0; s < schemas.length; s++)
-				checkSlots(schemas[s] as any)
+		)
 	}
 
 	#routerBuilt = false
@@ -8547,7 +8481,7 @@ export class Elysia<
 		) => MaybePromise<Response>
 	>(callback: WrapFn<T>): this {
 		this.#assertMutable('wrap')
-		if (this.fetchFn && !this.#pending)
+		if (!isProduction() && this.fetchFn && !this.#pending)
 			console.warn(
 				'[Elysia] .wrap() was called after the fetch handler was built'
 			)

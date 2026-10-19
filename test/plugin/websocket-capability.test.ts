@@ -102,6 +102,27 @@ describe('websocket capability', () => {
 			}
 		})
 
+		// Precedence is by depth, not registration order: absorbing a plugin pushes
+		// its entries one level deeper, so a later deep plugin cannot override root
+		it('root option beats a deep plugin registered after it', () => {
+			const warn = spyOn(console, 'warn').mockImplementation(() => {})
+			try {
+				const deep = new Elysia({ name: 'pp' }).use(
+					websocket({ idleTimeout: 7 })
+				)
+				const app = new Elysia()
+					.use(websocket({ idleTimeout: 99 }))
+					.use(deep)
+					.ws('/w', { message() {} })
+
+				app.compile()
+
+				expect((app['~wsConfig'] as any).idleTimeout).toBe(99)
+			} finally {
+				warn.mockRestore()
+			}
+		})
+
 		it('bare .use(websocket()) with no options and a plain route yields no config', () => {
 			const app = new Elysia().use(websocket()).ws('/x', { message() {} })
 			app.compile()
@@ -136,6 +157,28 @@ describe('websocket capability', () => {
 			app.compile()
 			// Both diamond arms carry the same origin → one effective value.
 			expect((app['~wsConfig'] as any).idleTimeout).toBe(42)
+		})
+
+		// A shared origin seen through a second arm keeps its first position,
+		// so the sibling registered after that first appearance still wins at
+		// equal depth: diamond order never overrides registration order
+		it('keeps the first position of a shared origin re-appended at equal depth', () => {
+			const warn = spyOn(console, 'warn').mockImplementation(() => {})
+			try {
+				const shared = websocket({ idleTimeout: 7 })
+				const left = new Elysia({ name: 'left' }).use(shared)
+				const right = new Elysia({ name: 'right' })
+					.use(websocket({ idleTimeout: 9 }))
+					.use(shared)
+				const app = new Elysia()
+					.use(left)
+					.use(right)
+					.ws('/x', { message() {} })
+				app.compile()
+				expect((app['~wsConfig'] as any).idleTimeout).toBe(9)
+			} finally {
+				warn.mockRestore()
+			}
 		})
 	})
 

@@ -24,6 +24,8 @@ import {
 } from '../../compile/handler/frozen-validator'
 import type { CapturedValidator, ValidatorSlot } from '../../compile/aot'
 import { abortCapture } from '../../compile/aot-capture'
+import { sucrose } from '../../sucrose'
+import { flattenChain, isNotEmpty } from '../../utils'
 
 /**
  * A route that differs from the build compiles live with a warning, or fails
@@ -46,6 +48,13 @@ export interface ElysiaAotOptions {
 	 * @default 'elysia/reconstruct'
 	 */
 	reconstructFrom?: string
+
+	/**
+	 * Module the generated manifest imports `routeShape` from
+	 *
+	 * @default 'elysia/route-shape'
+	 */
+	routeShapeFrom?: string
 
 	/**
 	 * Split the emitted validator manifest into lazily-materialized groups
@@ -231,6 +240,60 @@ export interface StubPlan {
 	sucrose: boolean
 
 	/**
+	 * Stub `parse-query` when no replayed handler aliases the query parser
+	 * (`pq`) or a body parser that can reach it (`pu`, `pd`), the app has no WS
+	 * route (`ws/route` parses upgrade queries), no trace, no mount, and no
+	 * root hook can read the `query` getter the error path installs
+	 */
+	query: boolean
+
+	/**
+	 * Stub the web-standard body-parse table (`adapter/web-standard/parse`,
+	 * the Bun adapter shares it) under the same gate as `query` when no
+	 * replayed handler aliases a body parser (`pf`, `pj`, `pu`, `pa`, `pt`,
+	 * `pd`): those links and the handler JIT are its only readers
+	 */
+	parse: boolean
+
+	/**
+	 * Stub `memoirist` when no route path of any app is dynamic (`:`/`*`, a
+	 * mount is `/*`) and there is no WS route: static and loose paths live in
+	 * `~map`, the router is only constructed for a dynamic path and the fetch
+	 * handler reads it as `router?.find`
+	 *
+	 * Applied at resolution, to Elysia's own `memoirist` import only (see
+	 * `ROUTER_IMPORTER_FILTER`), so the native rspack plugin, which has no
+	 * resolve hook, keeps the real router
+	 */
+	router: boolean
+
+	/**
+	 * Stub `schema-snapshot` when no route declares a schema slot (directly,
+	 * via guard `schemas`, or a mount) and no app registers a model. The route
+	 * and guard registration call `snapshotHookSchemas` for every hook, so the
+	 * stub passes a schema-free hook through and throws on one with a slot
+	 */
+	schemaSnapshot: boolean
+
+	/**
+	 * With `cookie`, also stub the jar class (`cookie/cookie`) and the
+	 * serializer (`cookie/serialize` + `cookie/lib`) when every replayed
+	 * handler is compact (`rc`: no set, cookie, error, afterResponse or trace
+	 * effect), there is no WS route, trace or mount, and no root hook reads
+	 * `set` or `cookie` (the 404 path serializes `set.cookie` hooks wrote)
+	 */
+	cookieJar: boolean
+
+	/**
+	 * Link aliases the replayed handlers use (`compile/handler/param-table`
+	 * then holds only these resolvers), or `false` to keep every one.
+	 * Live JIT routes link directly and never read the table, a replayed
+	 * handler asks only for its own aliases, so a multi-app build keeps
+	 * the union. A missing alias still fails the replay loudly
+	 */
+	params: string[] | false
+
+	/**
 	 * Stub `type/compat` so `setupTypebox` becomes a no-op, un-wiring the
 	 * TypeBox bridge from the bundle. Set in BOTH sealed (mode A) and wired
 	 * (mode B) builds. In mode A the bridge is severed entirely. Every captured
@@ -306,6 +369,12 @@ export const NO_STUB: StubPlan = {
 	cookie: false,
 	trace: false,
 	sucrose: false,
+	query: false,
+	parse: false,
+	router: false,
+	schemaSnapshot: false,
+	cookieJar: false,
+	params: false,
 	compat: false,
 	bridge: false,
 	typeboxValue: false,
@@ -350,7 +419,9 @@ export function planFromReport(
 	/** `exact-mirror` resolves from the elysia package at build time. */
 	exactMirror: boolean = false,
 	/** Manifest key, names the app in a multi-app build's errors */
-	key = ''
+	key = '',
+	/** Build-time evidence for the module stubs below, absent = keep them */
+	evidence?: StubEvidence
 ): { plan: StubPlan; mode: BridgeMode } {
 	const jit = report.jit
 
@@ -361,6 +432,12 @@ export function planFromReport(
 				`${report.reasons.join(', ') || 'unknown'}).` +
 				` Use strip: 'auto' to skip stubbing when the app is not fully precompiled.`
 		)
+
+	const cookie = jit && !aliases.has('cc') && !wsCookie
+	// The module stubs below also need `jit`: a route the build never saw then
+	// fails at compile anyway, so a stub can't break an app that serves today.
+	// `quiet`: nothing outside a frozen route program reaches the request
+	const quiet = !!evidence && jit && !hasWS && !mayTrace && !evidence.hasMount
 
 	const mode: BridgeMode = !jit
 		? 'off'
@@ -380,15 +457,62 @@ export function planFromReport(
 				!aliases.has('va') &&
 				!aliases.has('cc') &&
 				!aliases.has('tr'),
-			cookie: jit && !aliases.has('cc') && !wsCookie,
+			cookie,
 			trace: !aliases.has('tr') && (jit || !mayTrace),
 			sucrose: jit,
+			query:
+				quiet &&
+				!aliases.has('pq') &&
+				!aliases.has('pu') &&
+				!aliases.has('pd') &&
+				!evidence!.rootReads.query,
+			parse:
+				quiet && !BODY_PARSE_ALIASES.some((name) => aliases.has(name)),
+			router: !!evidence && jit && !hasWS && evidence.staticPaths,
+			schemaSnapshot: !!evidence && jit && evidence.schemaFree,
+			cookieJar:
+				cookie &&
+				quiet &&
+				evidence!.allCompact &&
+				!evidence!.rootReads.set &&
+				!evidence!.rootReads.cookie,
+			params: [...aliases].sort(),
 			...bridgePlan(mode, exactMirror),
 			adapter: adapterStub,
 			isProduction: productionStub
 		},
 		mode
 	}
+}
+
+/** What the build-time replay saw beyond handler aliases, see `planFromReport` */
+export interface StubEvidence {
+	/** no route path contains `:` or `*` */
+	staticPaths: boolean
+	/** no route schema slot and no registered model */
+	schemaFree: boolean
+	/** every captured HTTP handler aliases the compact response mapper `rc` */
+	allCompact: boolean
+	/** a route forwards to a mounted handler */
+	hasMount: boolean
+	/** sucrose over the root hook chain, the hooks a 404 / error runs */
+	rootReads: { query: boolean; set: boolean; cookie: boolean }
+}
+
+const SCHEMA_SLOTS = [...REQUEST_SLOTS, 'response'] as const
+
+/** link aliases that read the adapter body-parse table, see `StubPlan.parse` */
+const BODY_PARSE_ALIASES = ['pf', 'pj', 'pu', 'pa', 'pt', 'pd'] as const
+
+/** a hook (or one of its guard `schemas`) declares a schema slot */
+const hasSchemaSlot = (hook: unknown): boolean => {
+	if (!hook || typeof hook !== 'object') return false
+	const record = hook as Record<string, unknown>
+
+	return (
+		SCHEMA_SLOTS.some((slot) => record[slot] != null) ||
+		(Array.isArray(record.schemas) && record.schemas.some(hasSchemaSlot))
+	)
 }
 
 /** TypeBox wiring follows the mode, see `BridgeMode` */
@@ -403,7 +527,8 @@ const MODE_RANK = { off: 0, wired: 1, sealed: 2 } as const
 
 // every `StubPlan` flag is classified: these drop a module, so a multi-app
 // bundle stubs one only when every app can; the rest follow the merged mode
-// (`bridgePlan`) or are the same for every app (`adapter`, `isProduction`)
+// (`bridgePlan`), are the same for every app (`adapter`, `isProduction`) or
+// are unioned (`params`)
 const REMOVAL_FLAGS = {
 	jit: 0,
 	staticClone: 0,
@@ -411,11 +536,19 @@ const REMOVAL_FLAGS = {
 	reconstruct: 0,
 	cookie: 0,
 	trace: 0,
-	sucrose: 0
+	sucrose: 0,
+	query: 0,
+	parse: 0,
+	router: 0,
+	schemaSnapshot: 0,
+	cookieJar: 0
 } satisfies Record<
 	Exclude<
 		keyof StubPlan,
-		keyof ReturnType<typeof bridgePlan> | 'adapter' | 'isProduction'
+		| keyof ReturnType<typeof bridgePlan>
+		| 'adapter'
+		| 'isProduction'
+		| 'params'
 	>,
 	0
 >
@@ -431,15 +564,21 @@ export function mergePlans(
 ): { plan: StubPlan; mode: BridgeMode } {
 	const plan = { ...plans[0]!.plan }
 	let mode = plans[0]!.mode
+	const params = new Set<string>()
 
 	for (const each of plans) {
 		if (MODE_RANK[each.mode] < MODE_RANK[mode]) mode = each.mode
+		if (each.plan.params)
+			for (const name of each.plan.params) params.add(name)
+		else plan.params = false
 
 		for (const key in REMOVAL_FLAGS) {
 			const flag = key as keyof typeof REMOVAL_FLAGS
 			plan[flag] &&= each.plan[flag]
 		}
 	}
+
+	if (plan.params) plan.params = [...params].sort()
 
 	return { plan: { ...plan, ...bridgePlan(mode, exactMirror) }, mode }
 }
@@ -503,12 +642,26 @@ export function resolveExactMirror(from: string): boolean {
 	}
 }
 
+/**
+ * Every stub and rewrite filter is a path suffix (`elysia/(dist|src)/...`), so
+ * it is only ever tested on a module under the resolved package's own `dist/`
+ * or `src/`: a user file that mirrors the suffix elsewhere keeps its code
+ */
 export function makeIsElysiaModule(elysiaRoot: string) {
 	// To Posix for Windows (curse you, Microsoft)
-	const root = elysiaRoot.replace(/\\/g, '/')
+	const root = realPath(elysiaRoot).replace(/\\/g, '/')
+	const dist = root + '/dist/'
+	const src = root + '/src/'
+	const under = (posix: string) =>
+		posix.startsWith(dist) || posix.startsWith(src)
 	return (path: string) => {
-		const posix = path.replace(/\\/g, '/')
-		return posix.startsWith(root + '/') && ELYSIA_MODULE_FILTER.test(path)
+		if (!ELYSIA_MODULE_FILTER.test(path)) return false
+		// a bundler may hand out the symlinked path (`/var` for `/private/var`,
+		// pnpm's store), the resolver the real one
+		return (
+			under(path.replace(/\\/g, '/')) ||
+			under(realPath(path).replace(/\\/g, '/'))
+		)
 	}
 }
 
@@ -520,8 +673,38 @@ export const bunAdapterStubSource =
 	`export const BunAdapter={parse:{},response:{},listen:e}\n` +
 	`export function collectStaticRoutes(){}\n`
 
+/**
+ * `memoirist` is stubbed by resolution, not by path: only Elysia's own import
+ * gets the throwing class, a user module importing memoirist keeps the real one
+ */
+export const ROUTER_IMPORTER_FILTER =
+	/[\\/]elysia[\\/](dist|src)[\\/](base|ws[\\/][^\\/]+)\.(m?js|cjs|ts)$/
+
+export const routerStubSource =
+	`export class Memoirist{constructor(){throw new Error("[elysia-aot] dynamic router was stripped (strip mode) but a dynamic route path was registered. Rebuild with strip:false.")}}\n` +
+	`export default Memoirist\n`
+
+/**
+ * `deuri` under the same `router` flag: `handler/fetch` decodes params only
+ * after a router hit, so with the router stubbed its import is dead. Scoped to
+ * that importer; `parse-query` and `cookie/utils` keep theirs (own flags)
+ */
+export const DEURI_IMPORTER_FILTER =
+	/[\\/]elysia[\\/](dist|src)[\\/]handler[\\/]fetch\.(m?js|cjs|ts)$/
+
+export const deuriStubSource = `export default function(){throw new Error("[elysia-aot] param decoder was stripped (strip mode) but a dynamic route matched. Rebuild with strip:false.")}\n`
+
+export const PARAM_TABLE_FILTER =
+	/[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]handler[\\/]param-table\.(m?js|ts)$/
+
+/** `param-table` holding only the resolvers of `aliases`, see `StubPlan.params` */
+export const paramTableSource = (aliases: string[]): string =>
+	(aliases.length
+		? `import { ${aliases.join(', ')} } from './param-resolvers'\n`
+		: '') + `export const handlerParams = { ${aliases.join(', ')} }\n`
+
 export const STUB_SOURCES: Record<
-	Exclude<keyof StubPlan, 'adapter' | 'isProduction'>,
+	Exclude<keyof StubPlan, 'adapter' | 'isProduction' | 'router' | 'params'>,
 	Array<{ filter: RegExp; source: string }>
 > = {
 	staticClone: [
@@ -536,7 +719,9 @@ export const STUB_SOURCES: Record<
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] handler compiler JIT was stripped (strip mode) but a route needed runtime compilation. Rebuild with strip:false.")}\n` +
 				`export function compileHandlerJit(){return e()}\n` +
-				`export function createInlineHandler(){return e()}\n` +
+				`export function inlineBareRoute(){return e()}\n` +
+				// no lane: the live compile that follows throws
+				`export function compactBeforeHandleLane(){}\n` +
 				`export function setCaptureHeaderShorthand(){}\n` +
 				// a stripped bundle never captures, so it targets the runtime
 				`export const targetsBun=()=>typeof Bun!=="undefined"\n`
@@ -622,6 +807,52 @@ export const STUB_SOURCES: Record<
 				`	if (isBun) Bun.gc()\n` +
 				`	else globalThis.gc?.()\n` +
 				`}\n`
+		}
+	],
+	query: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]parse-query\.(m?js|ts)$/,
+			source:
+				`const e=()=>{throw new Error("[elysia-aot] query parser was stripped (strip mode) but a request read query or a urlencoded body. Rebuild with strip:false.")}\n` +
+				`export function parseQueryFromURL(){return e()}\n` +
+				`export function parseQuery(){return e()}\n`
+		}
+	],
+	parse: [
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]adapter[\\/]web-standard[\\/]parse\.(m?js|ts)$/,
+			source:
+				`const e=()=>{throw new Error("[elysia-aot] body parser was stripped (strip mode) but a request body was parsed. Rebuild with strip:false.")}\n` +
+				`export const parse={arrayBuffer:e,formData:e,json:e,text:e,urlencoded:e,default:e}\n`
+		}
+	],
+	schemaSnapshot: [
+		{
+			// called for every route and guard hook, a schema-free one passes through
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]schema-snapshot\.(m?js|ts)$/,
+			source:
+				`const e=()=>{throw new Error("[elysia-aot] schema snapshot was stripped (strip mode) but a schema or model was registered. Rebuild with strip:false.")}\n` +
+				`const s=(t)=>t!=null&&(t.body!=null||t.query!=null||t.params!=null||t.headers!=null||t.cookie!=null||t.response!=null)\n` +
+				`export function snapshotSchema(v){return v===null||typeof v!=="object"||"~standard" in v?v:e()}\n` +
+				`export function snapshotHookSchemas(h){return h&&(s(h)||Array.isArray(h.schemas)&&h.schemas.some(s))?e():h}\n`
+		}
+	],
+	cookieJar: [
+		{
+			// no jar exists to be returned as a response, `buildCookieJar` is stubbed
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]cookie\.(m?js|ts)$/,
+			source: `export class Cookie{constructor(){throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a route used cookies. Rebuild with strip:false.")}static isCookie(){return false}}\n`
+		},
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]serialize\.(m?js|ts)$/,
+			source: `export function serializeCookie(){throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a response set a cookie. Rebuild with strip:false.")}\n`
+		},
+		{
+			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]lib\.(m?js|ts)$/,
+			source:
+				`const e=()=>{throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a route used cookies. Rebuild with strip:false.")}\n` +
+				`export function parse(){return e()}\n` +
+				`export function serialize(){return e()}\n`
 		}
 	],
 	compat: [
@@ -1020,6 +1251,7 @@ export async function generateCompiledArtifacts(
 			moduleCondition,
 			registerFrom: options?.registerFrom,
 			reconstructFrom: options?.reconstructFrom,
+			routeShapeFrom: options?.routeShapeFrom,
 			lazy: options?.lazy,
 			target: options?.target
 		}
@@ -1071,6 +1303,13 @@ export async function generateCompiledArtifacts(
 			let routesForbidSeal = false
 			// WS cookies emit no `cc` alias, see `planFromReport`
 			let wsCookie = false
+			const hasModels = (instance: unknown) =>
+				isNotEmpty(
+					(instance as App | undefined)?.['~ext']?.models ?? {}
+				)
+			let schemaFree = !hasModels(typedApp)
+			let staticPaths = true
+			let hasMount = false
 			for (const route of history) {
 				const method = route[0] as string
 				const path = route[1] as string
@@ -1104,6 +1343,20 @@ export async function generateCompiledArtifacts(
 					macroScope
 				) as Record<string, unknown> | undefined
 				runIntrospect(hooks)
+
+				if (path.includes(':') || path.includes('*'))
+					staticPaths = false
+				if (
+					(route[2] as { '~mount'?: unknown } | undefined)?.['~mount']
+				)
+					hasMount = true
+				if (
+					schemaFree &&
+					(hasModels(instance) ||
+						hasSchemaSlot(hook) ||
+						hasSchemaSlot(hooks))
+				)
+					schemaFree = false
 
 				if (
 					method === 'WS' &&
@@ -1189,7 +1442,21 @@ export async function generateCompiledArtifacts(
 				productionStub,
 				wsCookie,
 				exactMirror,
-				artifacts.key
+				artifacts.key,
+				{
+					staticPaths,
+					schemaFree: schemaFree && !hasMount,
+					allCompact: artifacts.handlers.every(
+						(handler) =>
+							!handler.code ||
+							handler.alias.split(',').includes('rc')
+					),
+					hasMount,
+					rootReads: sucrose(
+						undefined,
+						flattenChain(typedApp['~hookChain'])
+					)
+				}
 			)
 
 			if (options?.target === 'workerd') {

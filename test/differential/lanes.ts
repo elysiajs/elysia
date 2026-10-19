@@ -14,6 +14,7 @@ import { captureArtifacts } from '../../src/plugin/aot/source'
 import { Reconstruct } from '../../src/compile/aot-reconstruct'
 import { installReconstructImpl } from '../../src/compile/aot-emit'
 import { buildCoercedFromPlan } from '../../src/type/coerce-plan'
+import { routeShape } from '../../src/compile/handler/route-shape'
 
 export type Define = (app: AnyElysia) => AnyElysia
 
@@ -227,11 +228,13 @@ const evalManifest = (source: string): void => {
 		.replace(/^export const /gm, 'const ')
 		.replace(/^export default .*$/gm, '')
 	// eslint-disable-next-line no-new-func, sonarjs/code-eval
-	new Function('Compiled', 'Reconstruct', 'buildCoercedFromPlan', body)(
-		Compiled,
-		Reconstruct,
-		buildCoercedFromPlan
-	)
+	new Function(
+		'Compiled',
+		'Reconstruct',
+		'buildCoercedFromPlan',
+		'routeShape',
+		body
+	)(Compiled, Reconstruct, buildCoercedFromPlan, routeShape)
 }
 
 // Capture is process-global and non-reentrant. Restore the compiled registry

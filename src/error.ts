@@ -430,7 +430,6 @@ export class ValidationError extends ElysiaError {
 	readonly code = 'validation'
 
 	schema?: unknown
-	declare message: string
 
 	allowUnsafeValidationDetails = false
 
@@ -553,6 +552,21 @@ export class ValidationError extends ElysiaError {
 	}
 
 	declare errors: any[]
+
+	// in the class body, not a top-level `defineProperty`: a bundler then
+	// drops the unused class from an app that never validates
+	get message(): string {
+		return this['~resolve']().message
+	}
+
+	set message(v: string) {
+		defineData(this, 'message', v, false)
+	}
+
+	/** @internal brand checked instead of `instanceof`, which would keep the class */
+	get '~verr'(): true {
+		return true
+	}
 
 	get customError(): unknown {
 		return this['~resolve']().custom
@@ -796,17 +810,6 @@ export class ValidationError extends ElysiaError {
 		return problemResponse(this.payload, headers)
 	}
 }
-
-Object.defineProperty(ValidationError.prototype, 'message', {
-	get(this: ValidationError) {
-		return this['~resolve']().message
-	},
-	set(this: ValidationError, v: string) {
-		defineData(this, 'message', v, false)
-	},
-	enumerable: false,
-	configurable: true
-})
 
 const emptyHttpStatus = new Set([101, 204, 205, 304, 307, 308])
 

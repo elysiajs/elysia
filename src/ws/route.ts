@@ -26,8 +26,7 @@ import {
 import {
 	composeRouteHook,
 	localMacroRoot,
-	resolveWSLocalHook,
-	routeShape
+	resolveWSLocalHook
 } from '../compile/handler'
 import {
 	Capture,
@@ -414,10 +413,10 @@ export function buildWSRoute(
 			path: route[1],
 			alias: '',
 			code: '',
-			k: routeShape(composed, undefined, app)
+			k: Compiled.routeShape?.(composed, undefined, app)
 		})
 	else if (Compiled.hasProgram(programId)) {
-		const shape = routeShape(composed, undefined, app)
+		const shape = Compiled.routeShape?.(composed, undefined, app)
 		live = shape === undefined || captured?.k !== shape
 	}
 

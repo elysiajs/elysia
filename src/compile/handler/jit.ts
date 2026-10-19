@@ -70,7 +70,16 @@ import { Reconstruct } from './reconstruct'
 import { Capture, inAotBuild } from '../aot'
 import { JITProbe } from '../jit-probe'
 
-import { requestId, evictOldestHalf, fnv1a } from '../../utils'
+import {
+	compactBeforeHandleConflicts,
+	compactBeforeHandlePrefix,
+	evictOldestHalf,
+	fnv1a,
+	isCompactBeforeHandleOnly,
+	requestId,
+	type ChainNode,
+	type CompactBeforeHandlePrefix
+} from '../../utils'
 
 import type { Link } from './utils'
 import type { Context } from '../../context'
@@ -331,7 +340,7 @@ function schemaMediaKind(schema: any): number | undefined {
 const fromArgs = (type: string, isAsync: boolean) =>
 	`'${type}'${isAsync ? ',true' : ''}`
 
-export const createInlineHandler = (
+const createInlineHandler = (
 	map: (value: unknown, ...rest: unknown[]) => unknown,
 	h: (context: Context) => unknown
 ) =>
@@ -377,6 +386,63 @@ const createInlineDefaultHeaderHandler = (
 
 		return map(r, c.set, c.request, true)
 	}) as CompiledHandler
+
+const isBareArrow = /^(?:async\s*)?\(\s*\)\s*=>/
+const isSucroseOpaque = /arguments|eval|\[native code\]/
+
+/**
+ * Live-JIT only: a context-free arrow on a bare route maps its value
+ * directly, no compiled pipeline. Capture emits the pipeline instead, so a
+ * replayed route never needs this module
+ */
+export function inlineBareRoute(
+	handler: Function,
+	adapter: ElysiaAdapter
+): CompiledHandler | undefined {
+	if (Capture.isAotBuildEnv() || inAotBuild()) return
+
+	// A forged own `toString` makes sucrose widen every channel
+	if (Object.hasOwn(handler, 'toString')) return
+
+	const source = Function.prototype.toString.call(handler)
+	if (!isBareArrow.test(source) || isSucroseOpaque.test(source)) return
+
+	const compact = adapter.response.compact
+	return compact
+		? createInlineHandler(compact as any, handler as any)
+		: undefined
+}
+
+/**
+ * Live-JIT only: the inherited `beforeHandle` chain as a compact prefix the
+ * HTTP JIT runs ahead of the merged hook. A replayed route never asks
+ * (`allowCompactPrefix` is `!reconstructed`), so the sealed stub of this
+ * module answers "no lane"
+ */
+export function compactBeforeHandleLane(
+	localHook: Partial<AnyLocalHook> | undefined,
+	flatAppHook: Partial<AnyLocalHook> | undefined,
+	inheritedChain: ChainNode | undefined,
+	named: boolean | undefined,
+	hasCallback: boolean
+): CompactBeforeHandlePrefix | undefined {
+	if (
+		hasCallback ||
+		inAotBuild() ||
+		Capture.isAotBuildEnv() ||
+		!isCompactBeforeHandleOnly(localHook as any) ||
+		!isCompactBeforeHandleOnly(flatAppHook as any)
+	)
+		return
+
+	const prefix = compactBeforeHandlePrefix(inheritedChain)
+	return prefix &&
+		!named &&
+		!compactBeforeHandleConflicts(localHook as any) &&
+		!compactBeforeHandleConflicts(flatAppHook as any)
+		? prefix
+		: undefined
+}
 
 export interface CompileHandlerJitOptions {
 	method: string

@@ -63,3 +63,48 @@ describe('decorate is not disposed on stop', () => {
 		expect(log).toEqual([])
 	})
 })
+
+// A derive aliasing a nested decorated value must not dispose the borrow.
+// Before the first router publish only the registration-time mark protects it,
+// and a request served while an async plugin is pending hits that window
+describe('decorate is not disposed through a derive alias', () => {
+	it('keeps an app-level decorated value served while a plugin is pending', async () => {
+		const log: string[] = []
+		const pool = handed(log)
+		let release!: () => void
+		const gate = new Promise<void>((r) => (release = r))
+
+		const app = new Elysia()
+			.decorate('db', { pool })
+			.use(gate.then(() => new Elysia({ name: 'late' })))
+			.derive(({ db }) => ({ alias: db.pool }))
+			.get('/', () => 'ok')
+
+		const response = app.handle('/')
+		await Bun.sleep(5)
+		release()
+
+		expect(await response.then((r) => r.text())).toBe('ok')
+		expect(log).toEqual([])
+	})
+
+	it("keeps a plugin's decorated value served while a plugin is pending", async () => {
+		const log: string[] = []
+		const pool = handed(log)
+		let release!: () => void
+		const gate = new Promise<void>((r) => (release = r))
+
+		const app = new Elysia()
+			.use(new Elysia({ name: 'dp' }).decorate('db', { pool }))
+			.use(gate.then(() => new Elysia({ name: 'late' })))
+			.derive(({ db }) => ({ alias: db.pool }))
+			.get('/', () => 'ok')
+
+		const response = app.handle('/')
+		await Bun.sleep(5)
+		release()
+
+		expect(await response.then((r) => r.text())).toBe('ok')
+		expect(log).toEqual([])
+	})
+})

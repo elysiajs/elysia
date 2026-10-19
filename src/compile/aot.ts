@@ -2,8 +2,9 @@ import { env } from '../universal'
 import { nullObject } from '../utils'
 import packageJson from '../../package.json'
 import type { CoerceNode } from '../type/coerce'
+import type { routeShape } from './handler/route-shape'
 
-export const AOT_MANIFEST_FORMAT = 7
+export const AOT_MANIFEST_FORMAT = 8
 const AOT_ABI = `${packageJson.version}:${AOT_MANIFEST_FORMAT}`
 
 export interface AotFingerprint {
@@ -240,6 +241,7 @@ export interface ReconstructImpl {
 }
 
 let reconstructImpl: ReconstructImpl | undefined
+let routeShapeImpl: typeof routeShape | undefined
 
 export function reconstruct() {
 	if (reconstructImpl === undefined)
@@ -304,6 +306,19 @@ export abstract class Compiled {
 
 	static set reconstruct(impl: ReconstructImpl | undefined) {
 		reconstructImpl = impl
+	}
+
+	/**
+	 * Route checksum walker, installed by the generated manifest (and the
+	 * capture side) so a plain bundle never carries it. Absent: every replay
+	 * is unprovable and `compileHandler` compiles live
+	 */
+	static get routeShape(): typeof routeShape | undefined {
+		return routeShapeImpl
+	}
+
+	static set routeShape(impl: typeof routeShape | undefined) {
+		routeShapeImpl = impl
 	}
 
 	static getHandler(

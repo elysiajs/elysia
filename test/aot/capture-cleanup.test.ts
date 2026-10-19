@@ -22,10 +22,15 @@ afterEach(() => {
 })
 
 describe('capture cleanup', () => {
+	// `response: 'user'` names a model that does not exist, so the router
+	// build inside the capture throws (a registration-time throw would never
+	// reach the capture)
 	it('leaves capture inactive after a failed build', async () => {
-		const bad = new Elysia()
-			.model('user', undefined as any) // deliberately broken model
-			.get('/', { response: 'user' }, () => 'ok')
+		const bad = new Elysia().get(
+			'/',
+			{ response: 'user' } as any,
+			() => 'ok'
+		)
 
 		await expect(captureArtifacts(bad as any)).rejects.toThrow()
 
@@ -33,9 +38,11 @@ describe('capture cleanup', () => {
 	})
 
 	it('allows a subsequent capture after a failure', async () => {
-		const bad = new Elysia()
-			.model('user', undefined as any)
-			.get('/', { response: 'user' }, () => 'ok')
+		const bad = new Elysia().get(
+			'/',
+			{ response: 'user' } as any,
+			() => 'ok'
+		)
 
 		await expect(captureArtifacts(bad as any)).rejects.toThrow()
 
