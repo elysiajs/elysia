@@ -157,7 +157,10 @@ export const responseToSetHeaders = (
 				Object.assign(set.headers, response.headers.toJSON())
 			else
 				for (const [key, value] of response.headers.entries())
-					if (key in set.headers) set.headers[key] = value
+					if (key === 'set-cookie')
+						set.headers['set-cookie'] =
+							response.headers.getSetCookie()
+					else set.headers[key] = value
 		}
 
 		if (set.status === 200) set.status = response.status
@@ -198,7 +201,9 @@ export const responseToSetHeaders = (
 
 		if (key === 'content-encoding') continue
 
-		if (key in set.headers) set.headers[key] = value
+		if (key === 'set-cookie')
+			set.headers['set-cookie'] = response.headers.getSetCookie()
+		else set.headers[key] = value
 	}
 
 	return set
@@ -463,17 +468,14 @@ export function mergeHeaders(
 	const headers = new Headers(responseHeaders)
 
 	// Merge headers: Response headers take precedence, set.headers fill in non-conflicting ones
-	if (setHeaders instanceof Headers)
+	if (setHeaders instanceof Headers) {
 		for (const key of setHeaders.keys()) {
-			if (key === 'set-cookie') {
-				if (headers.has('set-cookie')) continue
-
-				for (const cookie of setHeaders.getSetCookie())
-					headers.append('set-cookie', cookie)
-			} else if (!responseHeaders.has(key))
+			if (key !== 'set-cookie' && !responseHeaders.has(key))
 				headers.set(key, setHeaders?.get(key) ?? '')
 		}
-	else
+		for (const cookie of setHeaders.getSetCookie())
+			headers.append('set-cookie', cookie)
+	} else
 		for (const key in setHeaders)
 			if (key === 'set-cookie')
 				headers.append(key, setHeaders[key] as any)
@@ -507,13 +509,19 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 			!(newResponse as Response).headers.has('content-length') &&
 			(newResponse as Response).headers.get('transfer-encoding') ===
 				'chunked'
-		)
+		) {
+			set.status = newResponse.status
+			// The merged Response already includes route cookies. Do not serialize them again.
 			return handleStream(
 				streamResponse(newResponse as Response),
-				responseToSetHeaders(newResponse as Response, set),
+				responseToSetHeaders(newResponse as Response, {
+					headers: {},
+					status: set.status
+				}),
 				request,
 				true // don't auto-format SSE for pre-formatted Response
 			) as any
+		}
 
 		return newResponse
 	}
