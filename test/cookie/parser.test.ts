@@ -32,13 +32,13 @@ it('keeps decoding and request isolation across raw cookie paths', async () => {
 		parseCookieRawSync,
 		parseCookieRawDeferred
 	]) {
-		const header = 'data=%7B%22ok%22%3Atrue%7D; bad=%E0%A4%A; __proto__=bad'
+		const header = 'data=%7B%22ok%22%3Atrue%7D; bad=%GG; __proto__=bad'
 		const first = await read(header, config)
 		const second = await read(header, config)
 		expect(first).not.toBe(second)
 		expect(Object.getPrototypeOf(first)).toBeNull()
 		expect(Object.keys(first)).toEqual(['data', 'bad'])
-		expect(first.bad).toBe('%E0%A4%A')
+		expect(first.bad).toBe('%GG')
 		expect(first.data).toEqual(
 			read === parseCookieRawDeferred
 				? '%7B%22ok%22%3Atrue%7D'
