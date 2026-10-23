@@ -1,6 +1,7 @@
 import {
 	alignStubExtensions,
 	generateCompiledArtifacts,
+	generateCompiledArtifactsWithDefines,
 	realPath,
 	resolveEntry,
 	resolveEntryModuleKind,
@@ -51,7 +52,8 @@ export interface AotPluginHooks {
 export const createAotPluginHooks = (
 	entry: string,
 	options?: ElysiaAotOptions,
-	moduleCondition: AotModuleCondition = resolveEntryModuleKind(entry)
+	moduleCondition: AotModuleCondition = resolveEntryModuleKind(entry),
+	capture?: { define?: Record<string, string>; tsconfig?: string }
 ): AotPluginHooks => {
 	const entryPath = resolveEntry(entry)
 	const entryPosix = toPosix(entryPath)
@@ -66,6 +68,11 @@ export const createAotPluginHooks = (
 	}
 
 	const treeShake = options?.treeShake ?? true
+	const captureDefine =
+		capture?.define && Object.keys(capture.define).length
+			? { ...capture.define }
+			: undefined
+	const captureTsconfig = capture?.tsconfig
 	let source = ''
 	let virtualType: string | undefined
 	let stub: StubPlan = { ...NO_STUB }
@@ -73,11 +80,19 @@ export const createAotPluginHooks = (
 
 	return {
 		async buildStart() {
-			const generated = await generateCompiledArtifacts(
-				entry,
-				options,
-				moduleCondition
-			)
+			const generated = captureDefine
+				? await generateCompiledArtifactsWithDefines(
+						entry,
+						options,
+						moduleCondition,
+						captureDefine,
+						captureTsconfig
+					)
+				: await generateCompiledArtifacts(
+						entry,
+						options,
+						moduleCondition
+					)
 
 			source = generated.source
 			stub = generated.stub
