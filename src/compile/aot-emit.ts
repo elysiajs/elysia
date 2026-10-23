@@ -4,14 +4,12 @@
  * Kept out of `aot-reconstruct.ts` (the runtime-shipped `elysia/reconstruct`
  * module) so sealed bundles don't carry them
  */
-import { Compiled, type CheckBuildResult } from './aot'
+import type { CheckBuildResult } from './aot'
 import {
 	collectExternals,
 	collectMirrorCodecs,
-	collectMirrorUnions,
-	Reconstruct
+	collectMirrorUnions
 } from './aot-reconstruct'
-import { routeShape } from './handler/route-shape'
 
 export function reconstructCheck(build: CheckBuildResult): {
 	defs: string
@@ -182,9 +180,4 @@ export function captureMirrorCodecs(
 		if (codecs[i] !== truthCodecs[i]) return false
 
 	return true
-}
-
-export function installReconstructImpl() {
-	Compiled.reconstruct = Reconstruct
-	Compiled.routeShape = routeShape
 }

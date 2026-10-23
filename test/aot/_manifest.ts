@@ -8,10 +8,12 @@ import {
 	type HandlerManifest,
 	type CompiledProgramRegistration
 } from '../../src/compile/aot'
-import { Source, installReconstructImpl } from '../../src/compile/aot-emit'
+import { Source } from '../../src/compile/aot-emit'
+import { Reconstruct } from '../../src/compile/aot-reconstruct'
 
 // Reconstruct in-process manifests through the same table as generated modules.
-installReconstructImpl()
+Compiled.reconstruct = Reconstruct
+Compiled.routeShape = routeShape
 
 import { expect } from 'bun:test'
 import type { AnyElysia } from '../../src'

@@ -12,7 +12,7 @@ import {
 import { Validator } from '../../src/validator'
 import { captureArtifacts } from '../../src/plugin/aot/source'
 import { Reconstruct } from '../../src/compile/aot-reconstruct'
-import { installReconstructImpl } from '../../src/compile/aot-emit'
+import { installReconstructImpl } from '../../src/compile/aot-capture'
 import { buildCoercedFromPlan } from '../../src/type/coerce-plan'
 import { routeShape } from '../../src/compile/handler/route-shape'
 
