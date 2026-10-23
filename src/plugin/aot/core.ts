@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import { dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Worker } from 'node:worker_threads'
+import { fork } from 'node:child_process'
 import {
 	captureArtifacts,
 	emitModule,
@@ -1074,6 +1075,83 @@ const workerUrl = (): URL => {
 	const moduleUrl = import.meta.url
 
 	return new URL('./worker' + siblingModuleExt(moduleUrl), moduleUrl)
+}
+
+/** @internal Capture Bun build-time defines with the runtime's own parser. */
+export async function generateCompiledArtifactsWithDefines(
+	file: string,
+	options: ElysiaAotOptions | undefined,
+	moduleCondition: AotModuleCondition,
+	define: Record<string, string>,
+	tsconfig?: string
+): Promise<CompiledArtifacts> {
+	const entry = resolveEntry(file)
+	// The capture bootstrap lives in Elysia's directory. Use the app's native
+	// tsconfig instead; Bun resolves its `extends`, JSX and path options.
+	if (!tsconfig) {
+		let folder = dirname(entry)
+		for (;;) {
+			const candidate = join(folder, 'tsconfig.json')
+			if (existsSync(candidate)) {
+				tsconfig = candidate
+				break
+			}
+			const parent = dirname(folder)
+			if (parent === folder) break
+			folder = parent
+		}
+	}
+	const child = fork(
+		fileURLToPath(workerUrl()),
+		[JSON.stringify({ file: entry, options, moduleCondition })],
+		{
+			execPath: process.execPath,
+			execArgv: [
+				...(tsconfig ? ['--tsconfig-override', resolve(tsconfig)] : []),
+				...Object.entries(define).flatMap(([key, value]) => [
+					'--define',
+					`${key}:${value}`
+				])
+			],
+			stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
+			serialization: 'advanced'
+		}
+	)
+	const exit = new Promise<void>((resolve) => {
+		child.once('exit', () => resolve())
+		child.once('error', () => resolve())
+	})
+
+	try {
+		return await new Promise<CompiledArtifacts>((resolve, reject) => {
+			let received = false
+			child.once('message', (result: IsolatedGenerationResult) => {
+				received = true
+				if (result.ok) return resolve(result.artifacts)
+
+				const error = new Error(
+					`[elysia-aot] capture failed for "${entry}": ${result.error.message}`
+				)
+				error.name = result.error.name
+				if (result.error.stack)
+					error.stack += '\nCaused by:\n' + result.error.stack
+				reject(error)
+			})
+			child.once('error', reject)
+			child.once('exit', (code) => {
+				if (!received)
+					reject(
+						new Error(
+							`[elysia-aot] capture process for "${entry}" exited with code ${code}`
+						)
+					)
+			})
+		})
+	} finally {
+		// Capture is disposable even when application code handles SIGTERM.
+		child.kill('SIGKILL')
+		await exit
+	}
 }
 
 /** @internal Re-evaluate an entry in a disposable worker for watch rebuilds. */
