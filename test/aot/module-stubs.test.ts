@@ -46,23 +46,36 @@ const REAL = {
 	cookieJar: 'function serialize(name'
 } as const
 
-/** `deuri` ships with the router: `decodeParams` runs only after a router hit */
-const REAL_DEURI = 'TRANSITION_MASK'
 const DEURI_MARKER = 'param decoder was stripped'
 
 type Stub = keyof typeof MARKER
 
 const built: string[] = []
 
-async function build(name: string) {
+async function build(name: string, expectedRealDeuri?: boolean) {
 	const entry = `test/aot/fixtures/stub-modules-${name}-app.ts`
+	const plugin = bunAot(entry, {
+		registerFrom: REGISTER_FROM,
+		routeShapeFrom: ROUTE_SHAPE_FROM
+	})
+	let resolvedRealDeuri = false
 	const result = await Bun.build({
 		entrypoints: [entry],
 		plugins: [
-			bunAot(entry, {
-				registerFrom: REGISTER_FROM,
-				routeShapeFrom: ROUTE_SHAPE_FROM
-			})
+			expectedRealDeuri === undefined
+				? plugin
+				: {
+						...plugin,
+						async setup(build) {
+							await plugin.setup(build)
+							// Stripped imports are handled by AOT first. Observe only
+							// imports left to normal resolution, without replacing them.
+							build.onResolve({ filter: /^deuri$/ }, () => {
+								resolvedRealDeuri = true
+								return undefined
+							})
+						}
+					}
 		],
 		target: 'bun'
 	})
@@ -70,6 +83,8 @@ async function build(name: string) {
 		throw new Error(
 			`build failed: ${result.logs.map((l) => l.message).join('\n')}`
 		)
+	if (expectedRealDeuri !== undefined)
+		expect(resolvedRealDeuri).toBe(expectedRealDeuri)
 	return await result.outputs[0]!.text()
 }
 
@@ -111,7 +126,7 @@ afterEach(async () => {
 
 describe('AOT module stubs', () => {
 	it('stubs query, body parse, router, schema snapshot and cookie jar for a static app', async () => {
-		const text = await build('static')
+		const text = await build('static', false)
 		expect(stubbed(text)).toEqual({
 			query: true,
 			parse: true,
@@ -123,7 +138,6 @@ describe('AOT module stubs', () => {
 		// nothing validates: the error path's brand check keeps no class
 		expect(text).not.toContain('class ValidationError')
 		expect(text).toContain(DEURI_MARKER)
-		expect(text).not.toContain(REAL_DEURI)
 
 		const app = await load(text)
 		const res = await app.handle(req('/?ignored=1'))
@@ -140,7 +154,7 @@ describe('AOT module stubs', () => {
 	})
 
 	it('keeps the router for a dynamic path', async () => {
-		const text = await build('param')
+		const text = await build('param', true)
 		expect(stubbed(text)).toEqual({
 			query: true,
 			parse: true,
@@ -148,7 +162,6 @@ describe('AOT module stubs', () => {
 			schemaSnapshot: true,
 			cookieJar: true
 		})
-		expect(text).toContain(REAL_DEURI)
 		expect(text).not.toContain(DEURI_MARKER)
 
 		const app = await load(text)
@@ -276,9 +289,8 @@ describe('AOT module stubs', () => {
 	})
 
 	it('stubs only the fetch handler deuri import, a user import keeps the real one', async () => {
-		const text = await build('user-deuri')
+		const text = await build('user-deuri', true)
 		expect(text).toContain(DEURI_MARKER)
-		expect(text).toContain(REAL_DEURI)
 
 		const app = await load(text)
 		await expect(app.handle(req('/')).then((r) => r.text())).resolves.toBe(
@@ -382,11 +394,10 @@ describe('AOT module stubs', () => {
 	// package's dist/ or src/ may match it, a user file at a mirrored path
 	// keeps its code (it would throw at import if replaced)
 	it('stubs only modules under the resolved package root', async () => {
-		const text = await build('mirrored-path')
+		const text = await build('mirrored-path', true)
 		expect(stubbed(text)).toMatchObject({ query: true, router: true })
 		expect(text).toContain('user parse-query')
 		expect(text).toContain(DEURI_MARKER)
-		expect(text).toContain(REAL_DEURI)
 
 		const app = await load(text)
 		await expect(app.handle(req('/')).then((r) => r.text())).resolves.toBe(
