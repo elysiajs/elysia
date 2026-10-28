@@ -6,6 +6,9 @@ export interface ElysiaAotVitePlugin
 	name: string
 	enforce?: 'pre'
 	apply?: 'build'
+	applyToEnvironment?(environment: {
+		config: { command: 'build' | 'serve'; consumer: 'client' | 'server' }
+	}): boolean
 }
 
 /**
@@ -32,6 +35,15 @@ export const aot = (
 		name: 'elysia-aot',
 		enforce: 'pre',
 		apply: 'build',
+		applyToEnvironment(environment) {
+			// Cloudflare builds public assets in a separate client graph.
+			// Dev still needs the client buildStart hook to capture the app.
+			return (
+				options?.target !== 'workerd' ||
+				environment.config.command !== 'build' ||
+				environment.config.consumer === 'server'
+			)
+		},
 		buildStart: hooks.buildStart,
 		buildEnd: hooks.buildEnd,
 		resolveId: hooks.resolveId,
