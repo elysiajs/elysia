@@ -2,7 +2,7 @@ import type { useTypebox as bridgeUseTypebox } from './bridge'
 
 import { Compile } from 'typebox/compile'
 import { Ref } from 'typebox/type'
-import { Create, Decode, HasCodec, Clone, Check } from 'typebox/value'
+import { Create, Decode, HasCodec, Clone, Check, Errors } from 'typebox/value'
 import { Settings } from 'typebox/system'
 
 import { applyCoercions } from './coerce'
@@ -53,5 +53,6 @@ export {
 	Intersect,
 	Ref,
 	Clone,
-	Check
+	Check,
+	Errors
 }

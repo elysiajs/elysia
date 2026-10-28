@@ -26,13 +26,25 @@ export function carryRefine(original: any, leaf: any) {
 			? codec.decode(input)
 			: input
 
+	const own: any[] = leaf['~refine'] ?? []
+	// a coerced number's range, the only refine a leaf carries
+	const range = own[0]
+
 	return Object.defineProperty(cloneNode(leaf, leaf), '~refine', {
-		value: refine.map((refinement: any) => ({
-			...refinement,
-			check: (value: unknown) => refinement.check(decoded(value)),
-			// the message sees the value the predicate saw
-			error: (value: unknown) => refinement.error(decoded(value))
-		}))
+		value: [
+			// the leaf's own range check stays; copied, as the leaf is shared
+			// and a validator wraps the checks of an impure refine group
+			...own.map((refinement) => ({ ...refinement })),
+			...refine.map((refinement: any) => ({
+				...refinement,
+				// a validator may run every check of the group, but as in a
+				// body schema, a user refine never sees a value out of range
+				check: (value: unknown) =>
+					(range && !range.check(value)) ||
+					refinement.check(decoded(value)),
+				error: (value: unknown) => refinement.error(decoded(value))
+			}))
+		]
 	})
 }
 

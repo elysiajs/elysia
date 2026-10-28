@@ -1005,13 +1005,24 @@ export function problemBody(
 
 export function problemResponse(p: Problem, headers?: Record<string, any>) {
 	const body = problemBody(p)
-	const response = new Response(
-		emptyHttpStatus.has(body.status) ? null : JSON.stringify(body),
-		{
-			status: body.status,
-			headers: { ...headers, 'content-type': PROBLEM_JSON }
+
+	let json: string | null = null
+	// A bigint (a `10n` limit in a validation `expected` or error params) has
+	// no JSON form: only then retry with its decimal string, lossless. A cycle
+	// still throws
+	if (!emptyHttpStatus.has(body.status))
+		try {
+			json = JSON.stringify(body)
+		} catch {
+			json = JSON.stringify(body, (_, value) =>
+				typeof value === 'bigint' ? value + '' : value
+			)
 		}
-	)
+
+	const response = new Response(json, {
+		status: body.status,
+		headers: { ...headers, 'content-type': PROBLEM_JSON }
+	})
 
 	skipClone.add(response)
 

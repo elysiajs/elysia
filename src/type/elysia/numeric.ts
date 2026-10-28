@@ -3,6 +3,7 @@ import type { Type } from 'typebox'
 import type { TNumberOptions, TSchema } from 'typebox'
 
 import { isEmpty } from '../../utils'
+import { Errors } from '../bridge'
 import { ELYSIA_TYPES } from '../constants'
 import { pureRefine } from '../shared'
 import { NumberType } from './number'
@@ -56,16 +57,28 @@ function isDecimalString(value: string) {
 	return digits < 309 || Number.isFinite(+value)
 }
 
-function inRange(n: number, c: TNumberOptions) {
-	if (typeof c.minimum === 'number' && n < c.minimum) return false
-	if (typeof c.maximum === 'number' && n > c.maximum) return false
-	if (typeof c.exclusiveMinimum === 'number' && n <= c.exclusiveMinimum)
-		return false
-	if (typeof c.exclusiveMaximum === 'number' && n >= c.exclusiveMaximum)
-		return false
-	if (typeof c.multipleOf === 'number' && n % c.multipleOf !== 0) return false
+// TypeBox takes a number or a bigint limit, compared natively
+const isLimit = (limit: unknown): limit is number | bigint =>
+	typeof limit === 'number' || typeof limit === 'bigint'
 
-	return true
+// TypeBox's range check, without its message: a fraction fails a bigint
+// `multipleOf` (TypeBox's `BigInt(n)` would throw)
+function inRange(n: number, c: TNumberOptions) {
+	if (isLimit(c.exclusiveMaximum) && n >= c.exclusiveMaximum) return false
+	if (isLimit(c.exclusiveMinimum) && n <= c.exclusiveMinimum) return false
+	if (isLimit(c.maximum) && n > c.maximum) return false
+	if (isLimit(c.minimum) && n < c.minimum) return false
+
+	const d = c.multipleOf as unknown
+	if (typeof d === 'bigint')
+		return Number.isInteger(n) && BigInt(n) % d === 0n
+
+	if (typeof d !== 'number' || (Number.isInteger(n) && (1 / d) % 1 === 0))
+		return true
+
+	// TypeBox's float tolerance: 0.3 is a multiple of 0.1
+	const mod = n % d
+	return Math.min(Math.abs(mod), Math.abs(mod - d)) < 1e-10
 }
 
 // `base` or a numeric string matching `grammar`, decoded to a number
@@ -97,20 +110,36 @@ export function numericString(
 
 		const [constraints, meta] = getMeta(property)
 		const c = constraints as TNumberOptions
+
 		const number = base(constraints)
-		const stringified = Decode(
-			Refine(
-				StringType(),
-				(value) => grammar(value) && inRange(+value, c),
-				() => message
+
+		const node: any = Refine(
+			Union(
+				[
+					number,
+					Decode(
+						Refine(StringType(), grammar, () => message),
+						(value) => +value
+					)
+				] as any,
+				meta
 			),
-			(value) => +value
+			(value) => typeof value !== 'string' || inRange(+value, c),
+			// failure only: TypeBox words the range, in its active locale
+			(value) => {
+				try {
+					return Errors(number, +value)[0]?.message ?? message
+				} catch {
+					return message
+				}
+			}
 		)
 
-		// pure: reads only `c`, which is never mutated after `getMeta`
-		pureRefine(stringified)
+		// after `Refine`, which clones the branches. Pure: reads only `c`,
+		// which is never mutated after `getMeta`
+		pureRefine(node.anyOf[1])
 
-		return elyType(tag, Union([number, stringified] as any, meta))
+		return elyType(tag, pureRefine(node))
 	}
 }
 
