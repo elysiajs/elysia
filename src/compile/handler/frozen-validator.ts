@@ -298,7 +298,10 @@ class FrozenSlotValidator {
 			if (normalize !== false) this.#clean = both.clean
 		}
 
-		this.#hasOptional = !!(schema as any)?.['~optional']
+		// as TypeBoxValidator: t.MaybeEmpty is optional as a property only
+		this.#hasOptional =
+			!!(schema as any)?.['~optional'] &&
+			(schema as any)['~elyTyp'] !== ELYSIA_TYPES.MaybeEmpty
 		this.#noValidate =
 			(schema as any)?.['~elyTyp'] === ELYSIA_TYPES.NoValidate
 

@@ -1149,11 +1149,17 @@ class Deferred extends HTTPError<'DEFERRED'> {
 		() => 'ok'
 	)
 
-	// Neither is a WebSocket hook's: it is sent as a frame
+	// Neither is a WebSocket beforeHandle's: it is sent as a frame
 	new Elysia().ws('/', {
 		response: t.String(),
 		message() {},
-		beforeHandle: () => 'ok',
+		beforeHandle: () => 'ok'
+	})
+
+	// @ts-expect-error a WebSocket afterHandle runs after the send: its value is dropped
+	new Elysia().ws('/', {
+		response: t.String(),
+		message() {},
 		afterHandle: () => 'ok'
 	})
 

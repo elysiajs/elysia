@@ -3,7 +3,7 @@ import type {
 	ServerWebSocketSendStatus,
 	BufferSource,
 	WebSocketReadyState,
-	FlattenResponse,
+	WSResponsePayload,
 	WSResponseValidator,
 	WSValidatorLike
 } from './types'
@@ -60,6 +60,18 @@ export function trackWSSettling(
 	result.then(release, release)
 }
 
+// A Response or Blob body JSON-encodes to "{}" as a frame: the handler's
+// return sends the body instead. Plain data (the common case) is cleared by
+// its prototype before any class check
+export const isHTTPBody = (value: unknown): value is Response | Blob => {
+	if (typeof value !== 'object' || value === null) return false
+
+	const proto = Object.getPrototypeOf(value)
+	if (proto === Object.prototype || proto === Array.prototype) return false
+
+	return value instanceof Response || value instanceof Blob
+}
+
 function memoize<T>(view: ElysiaWS<any>, key: string, value: T): T {
 	const self = view.raw.data.elysia ?? view
 
@@ -84,6 +96,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		this.raw = raw
 
 		if (context) {
+			// keep in step with the `wsMembers` check at the upgrade (route.ts)
 			for (const key in context) {
 				if (key === 'ws' || key === 'body') continue
 
@@ -121,7 +134,6 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 	declare readonly subscribe: ServerWebSocket['subscribe']
 	declare readonly unsubscribe: ServerWebSocket['unsubscribe']
 	declare readonly isSubscribed: ServerWebSocket['isSubscribed']
-	declare readonly cork: ServerWebSocket['cork']
 	declare readonly remoteAddress: string
 	declare readonly binaryType:
 		| 'nodebuffer'
@@ -130,7 +142,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		| undefined
 
 	get send(): (
-		data: FlattenResponse<Route['response']> | BufferSource,
+		data: WSResponsePayload<Route['response']> | BufferSource,
 		compress?: boolean
 	) => ServerWebSocketSendStatus {
 		const self = (this.raw.data.elysia as ElysiaWS<Route>) ?? this
@@ -138,14 +150,14 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 	}
 
 	get ping(): (
-		data?: FlattenResponse<Route['response']> | BufferSource
+		data?: WSResponsePayload<Route['response']> | BufferSource
 	) => ServerWebSocketSendStatus {
 		const self = (this.raw.data.elysia as ElysiaWS<Route>) ?? this
 		return memoize(this, 'ping', self.#control.bind(self, 'ping'))
 	}
 
 	get pong(): (
-		data?: FlattenResponse<Route['response']> | BufferSource
+		data?: WSResponsePayload<Route['response']> | BufferSource
 	) => ServerWebSocketSendStatus {
 		const self = (this.raw.data.elysia as ElysiaWS<Route>) ?? this
 		return memoize(this, 'pong', self.#control.bind(self, 'pong'))
@@ -153,7 +165,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 
 	get publish(): (
 		topic: string,
-		data: FlattenResponse<Route['response']> | BufferSource,
+		data: WSResponsePayload<Route['response']> | BufferSource,
 		compress?: boolean
 	) => ServerWebSocketSendStatus {
 		const self = (this.raw.data.elysia as ElysiaWS<Route>) ?? this
@@ -163,6 +175,15 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 	get close(): (code?: number, reason?: string) => void {
 		const self = (this.raw.data.elysia as ElysiaWS<Route>) ?? this
 		return memoize(this, 'close', self.#close.bind(self))
+	}
+
+	// Native batching, but the callback gets this wrapper (not the raw
+	// socket) so `send` still encodes and validates.
+	get cork(): <R>(callback: (ws: this) => R) => R {
+		const self = (this.raw.data.elysia as ElysiaWS<Route>) ?? this
+		return memoize(this, 'cork', (callback: (ws: any) => any) =>
+			self.raw.cork(() => callback(self))
+		)
 	}
 
 	get id(): string {
@@ -227,7 +248,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 	}
 
 	#send(
-		data: FlattenResponse<Route['response']> | BufferSource,
+		data: WSResponsePayload<Route['response']> | BufferSource,
 		compress?: boolean
 	): ServerWebSocketSendStatus {
 		if (data === undefined) return 0
@@ -243,7 +264,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 
 	#control(
 		kind: 'ping' | 'pong',
-		data?: FlattenResponse<Route['response']> | BufferSource
+		data?: WSResponsePayload<Route['response']> | BufferSource
 	): ServerWebSocketSendStatus {
 		if (data === undefined) return this.raw[kind]()
 		if (data instanceof ArrayBuffer || ArrayBuffer.isView(data))
@@ -258,7 +279,7 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 
 	#publish(
 		topic: string,
-		data: FlattenResponse<Route['response']> | BufferSource,
+		data: WSResponsePayload<Route['response']> | BufferSource,
 		compress?: boolean
 	): ServerWebSocketSendStatus {
 		if (data === undefined) return 0
@@ -320,7 +341,6 @@ const rawPassthroughKeys = [
 	'subscribe',
 	'unsubscribe',
 	'isSubscribed',
-	'cork',
 	'remoteAddress',
 	'binaryType'
 ] as const
@@ -341,6 +361,16 @@ for (const key of rawPassthroughKeys)
 			)
 		}
 	})
+
+// Members a copied context key would land on: assigning one throws (getters)
+// or breaks the connection (`raw`, the own field that takes `constructor`'s
+// slot). The upgrade checks them with the same `for..in` as the copy: a
+// non-enumerable key is never copied, so never collides
+export const wsMembers = new Set(
+	Object.getOwnPropertyNames(ElysiaWS.prototype).map((key) =>
+		key === 'constructor' ? 'raw' : key
+	)
+)
 
 export function isGeneratorObject(value: unknown): boolean {
 	if (value == null || typeof value !== 'object') return false

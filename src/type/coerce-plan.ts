@@ -2,7 +2,7 @@ import { Decode, Refine } from './typebox-type'
 
 import { ELYSIA_TYPES } from './constants'
 import { nullObject, evictOldestHalf } from '../utils'
-import { coerceLeafCache } from './shared'
+import { cloneNode, coerceLeafCache, pureRefine } from './shared'
 
 import { Numeric } from './elysia/numeric'
 import { BooleanString } from './elysia/boolean-string'
@@ -13,10 +13,122 @@ import { StringType } from './elysia/string'
 import { Union } from './elysia/union'
 import { elyType, getMeta } from './elysia/utils'
 
+export function carryRefine(original: any, leaf: any) {
+	const refine = original?.['~refine']
+	if (!refine) return leaf
+
+	const value = leaf.anyOf[0]
+	const codec = leaf.anyOf[1]['~codec']
+	const decoded = (input: unknown) =>
+		typeof input === 'string' &&
+		value.const !== input &&
+		!value.enum?.includes(input)
+			? codec.decode(input)
+			: input
+
+	return Object.defineProperty(cloneNode(leaf, leaf), '~refine', {
+		value: refine.map((refinement: any) => ({
+			...refinement,
+			check: (value: unknown) => refinement.check(decoded(value)),
+			// the message sees the value the predicate saw
+			error: (value: unknown) => refinement.error(decoded(value))
+		}))
+	})
+}
+
+export function carryCodec(original: any, leaf: any) {
+	const codec = original?.['~codec']
+	if (!codec) return leaf
+
+	const withDecode = (branch: any, decode: (value: any) => unknown) =>
+		Object.defineProperty(cloneNode(branch, branch), '~codec', {
+			value: { decode, encode: codec.encode }
+		})
+
+	const [value, string] = leaf.anyOf
+	const out = cloneNode(leaf, leaf)
+	out.anyOf = [
+		// t.Literal / t.Enum: the value branch is the codec node itself
+		value['~codec'] ? value : withDecode(value, codec.decode),
+		withDecode(string, (input) =>
+			codec.decode(string['~codec'].decode(input))
+		)
+	]
+
+	return out
+}
+
+export const acceptsEmpty = (node: any) =>
+	(node.type === 'string' &&
+		node.minLength === undefined &&
+		node.pattern === undefined &&
+		node.format === undefined &&
+		node.const === undefined &&
+		node.enum === undefined &&
+		!node['~refine'] &&
+		!node['~codec']) ||
+	node.const === '' ||
+	!!node.enum?.includes('') ||
+	!!node.anyOf?.some(acceptsEmpty)
+
+// t.MaybeEmpty in a string slot (query, headers, params, form): `?m=` is the
+// empty value, decoded to `undefined` like an absent key
+let emptyString: any
+export const emptyAsUndefined = () =>
+	(emptyString ??= Object.freeze(
+		pureRefine(
+			Decode(
+				Refine(
+					StringType(),
+					(value) => value === '',
+					() => 'must be empty'
+				),
+				() => undefined
+			)
+		)
+	))
+
+// a number/boolean t.Literal / t.Enum / t.UnionEnum in a string slot: the
+// node itself, or its string form decoded back to the value
+export function constString(original: any) {
+	// registered for Literal / Enum / UnionEnum only: one of the two is set
+	const values: unknown[] =
+		'const' in original ? [original.const] : original.enum
+
+	const map = new Map<string, unknown>()
+	for (const value of values)
+		if (typeof value === 'number' || typeof value === 'boolean')
+			map.set(value + '', value)
+
+	if (!map.size) return null
+
+	return elyType(
+		ELYSIA_TYPES.ConstString,
+		Union([
+			original,
+			pureRefine(
+				Decode(
+					Refine(
+						StringType(),
+						(value) => map.has(value),
+						() =>
+							'const' in original
+								? 'must be equal to constant'
+								: 'must be equal to one of the allowed values'
+					),
+					(value) => map.get(value)
+				)
+			)
+		])
+	)
+}
+
 export const COERCE_LEAF_CTOR = {
 	[ELYSIA_TYPES.Numeric]: Numeric,
 	[ELYSIA_TYPES.Integer]: IntegerString,
-	[ELYSIA_TYPES.BooleanString]: BooleanString
+	[ELYSIA_TYPES.BooleanString]: BooleanString,
+	// from the captured `const` / `enum`
+	[ELYSIA_TYPES.ConstString]: constString
 } as const
 
 export interface CoerceLeaf {
@@ -38,6 +150,9 @@ export interface CoerceObjStr {
 export interface CoerceUnion {
 	// anyof per coercion (index → leaf / objstr / union / nested plan)
 	u: (CoerceNode | null)[]
+	// t.MaybeEmpty in a string slot: append `emptyAsUndefined` (not `e`, a
+	// leaf's key)
+	em?: 1
 }
 
 export type CoerceNode = CoerceLeaf | CoerceObjStr | CoerceUnion | CoercePlan
@@ -84,6 +199,10 @@ const rebuildObjStrShape: RebuildObjStr = (original, site) => {
 		inner = ArrayType(rest.items ?? nullObject(), constraints)
 		meta = m
 	}
+
+	// as coerce.ts `keepHidden`: the refine lives on the inner node
+	if (original['~refine'])
+		Object.defineProperty(inner, '~refine', { value: original['~refine'] })
 
 	const node = elyType(
 		isObject ? ELYSIA_TYPES.ObjectString : ELYSIA_TYPES.ArrayString,
@@ -158,6 +277,9 @@ function rebuildCoerceNode<T>(
 			}
 		}
 
+		// per use, the cached leaf is shared
+		leaf = carryCodec(original, carryRefine(original, leaf))
+
 		// per-use `~optional` wrapper (don't mutate the shared frozen leaf)
 		if ('o' in node)
 			return Object.defineProperty(Object.create(leaf), '~optional', {
@@ -204,6 +326,7 @@ function rebuildUnion(
 			? buildCoerceNode(branch, site.u[i]!, seen, objStr, memo)
 			: branch
 	)
+	if (site.em) out.anyOf.push(emptyAsUndefined())
 
 	return out
 }

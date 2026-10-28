@@ -138,6 +138,21 @@ Behavior Change:
 - `secrets` is no longer a typed or forwarded property of `cookie.<name>`, and the cookie mutation APIs `set()`, `update()` and the `cookie` setter reject an object with a `secrets` key (a type error, and a throw at runtime) instead of sending the cookie unsigned. An updater callback now receives a copy, so a rejected update leaves the cookie unchanged. Signing comes only from the app or route cookie config
 - `t.UnionEnum` no longer sets an implicit `default` of its first value: a missing required field is now a `422` instead of being filled with that value, a missing optional field stays absent, and the schema no longer carries `default` (visible in OpenAPI output). Pass `default` explicitly to keep the old behaviour
 - `app.routes[i].hooks.response` and a macro `introspect` now get a copy of the route's status map (an empty `response: {}` stays the route's own), since equal maps are shared: a write no longer reaches other routes (an `introspect` write to a guard's map used to reach every route of the guard), and a write through `app.routes` no longer changes the route's validation. A `schema: 'merge'` guard's map (`hooks.schemas[i].response`) is frozen, not copied: an `introspect` writing into it now throws, failing the route's compile and `app.routes`
+- a named plugin installed by a child and then `.use()`d by the parent now applies its `plugin`-scope hooks, `derive`, guard schemas and macro guards to the parent's routes; the parent's `.use()` was skipped, so a plugin's auth `beforeHandle` never ran on them (1.x enforced it)
+- named plugins are deduplicated per registration: a plugin's `global` hook no longer shadows its other hooks of the same event (a `global` logger dropped a `plugin`-scope auth guard), and one function registered twice runs twice
+- a parent's later routes run a named plugin's hooks in the plugin's own order, even when part of it arrived earlier through a child (a `derive` before the `global` hook that reads it)
+- hooks added to a named plugin after it was installed arrive through a later `.use()` by another path; repeating `.use(p)` on the same instance still adds nothing
+- same-name plugin instances match by registration order: an identically built factory instance is the same plugin, and config variants of one `name` need their own `seed` (development warns when same-name instances register different hooks)
+- an empty registration (`guard({})`, `onRequest([])`) takes no part in named-plugin identity, so `onRequest([])` no longer uses up the plugin's once-per-app `request` install; `request` hooks added to an already-installed named plugin are still ignored
+- a guard holding both `request` and `beforeHandle`, lifted by a group and then `.use()`d directly, keeps its `beforeHandle`
+- an unnamed plugin `.use()`d twice inside a named plugin runs twice on the parent's routes too, as in 1.x
+- a named plugin seen through a child only adds the `decorate`, `state`, `model`, `headers`, `parser` and macro entries the parent lacks, never overriding the parent's
+- AOT: a manifest built before the named-plugin dedup change no longer matches routes whose plugin hooks changed (they compile at runtime, or fail with the JIT stripped); rebuild it
+- [Type] a `headers` schema key with an uppercase letter is a type error: request header names arrive lowercased, so it never matched. There is no runtime check
+- [Type] route, guard and macro `parse` / `transform` contexts are typed raw, as they run before validation: headers unvalidated, params strings, body `unknown`, query as parsed (a key with an array schema is always an array), `cookie` `undefined`, no `derive` keys
+- a WebSocket upgrade throws when a `derive` / `decorate` key collides with a WebSocket member (`send`, `raw`, `subscribe`, …) instead of breaking the connection
+- [Type] WebSocket: `body` is possibly `undefined` in the hooks that run at the upgrade (`transform`, `beforeHandle`, `error`), and `ws.defer` is no longer typed (a socket has none)
+- [Type] WebSocket `send` / `publish` / a returned value take the `200` schema's shape (other statuses go through `status()`), `afterHandle` returns `void` (its value is dropped) and `afterResponse`'s `responseValue` is `unknown`
 
 Improvement:
 
@@ -214,6 +229,33 @@ Bug fix:
 - a failed router build left the app marked as built, so a retry answered 404 for every route
 - many `.group()` / `.guard()` callbacks that each `.use()` a plugin with many `global` hooks overflowed the stack at compile (`Maximum call stack size exceeded`); those hooks now stay inside each callback
 - AOT: the stripped `flushMemory()` now makes the same `Bun.gc()` / optional `globalThis.gc?.()` call as the unstripped helper
+- [#2024](https://github.com/elysiajs/elysia/issues/2024) an AOT wired build crashed at startup with `The superclass is not a constructor` (e.g. a response schema with a `t.Union` of literals)
+- [#2031](https://github.com/elysiajs/elysia/issues/2031) [Type] a generic macro's returned schema was typed at its constraint; a `$type` lambda's `body` / `query` / `params` / `headers` / `cookie` / `response` members now type it per call site
+- error hooks get `cookie` after a parse, transform, validation or cookie-signature failure (reading it crashed into a `500`); those cookies are not validated, signed ones are verified on read
+- setting a cookie whose schema field is a codec (e.g. `t.Date`) sends, and signs, the encoded value, so the next request reads it back instead of failing with `422`
+- a codec (`t.Date`, `t.Codec(...)`) or refinement inside a `.model()` or `t.Ref` schema was never decoded or enforced
+- `t.Cyclic` lost every codec and query / params / headers coercion inside it
+- `t.Codec`, `t.Refine` or `t.Unsafe` over a `t.Object` at a schema root was rejected as "not a schema"
+- `t.Refine` over a coerced `t.Number` / `t.Integer` / `t.Boolean` in query, params or headers runs on the decoded value, and its message callback gets that value
+- a number or boolean `t.Literal`, `t.Enum` or `t.UnionEnum` in query, params, headers or a form body failed validation, the value arriving as a string
+- `t.MaybeEmpty` properties are optional, and in query, params, headers or a form body an empty value (`?m=`) for a non-string `t.MaybeEmpty` is `undefined`
+- a `t.Form` body coerces its fields like a query (`n=9` for `t.Number()`, repeated keys for `t.Array(t.Number())`); it only did when the schema had a file
+- a root body `t.Union` of scalars (`t.Union([t.Number(), t.Boolean()])`) and a root query `t.Union` of objects did not coerce their members
+- `ws.cork(callback)` passed the raw Bun socket, so `send` inside it skipped encoding and validation; it now gets the Elysia wrapper
+- a `Response` or `Blob` returned from a WebSocket handler sends its body (text, or bytes when binary) instead of `{}`
+- [Type] joining a prefix ending in `/` with a path starting with `/` (`'/api/'` + `'/x'`) typed the route as `/api//x` in Eden
+- [Type] `.route('GET', …)` keyed its method uppercase in Eden; it is lowercase like `.get()`
+- [Type] a route under a param prefix or group was typed with an impossible `422`, and a refined `params` schema lost its `422`
+- [Type] a status only known as `number` (`status(code as number, …)`) wiped the whole response map, `200` included; it is now keyed `default` (needs a matching Eden release)
+- [Type] `status()` with an empty status (`204`, `304`, …) is typed `undefined` and a nullish body as the status text; a union code (`status(c ? 401 : 403, …)`) types its body at each status, a macro hook's included
+- [Type] a handler returning `T | undefined` keeps `T` at `200`, and a macro `beforeHandle` / `afterHandle` returning `null` keeps it in the response type
+- [Type] a route registered again at the same path and method types as the later one, which the router serves, instead of `never`
+- [Type] a hook without a scope on `new Elysia({ as })` types with that default scope
+- [Type] a function macro set to `false` is typed as applied, since it is still called; an object macro option only known as `boolean` (or left optional) keeps its statuses, its `derive` keys optional
+- [Type] a macro `derive` that may return nothing adds its keys as optional
+- [Type] an error hook's answer is typed at its status even where the route's response schema declares that status (it is not validated), for route, guard, macro and `.onError()` hooks; a route or macro `error` hook returning an `Error` is typed at the error's status, like a guard's
+- [Type] routes of a `.use()`d plugin carry the parent's guard schemas and prefix params, as they are validated with them
+- [Type] the `422` validation body's `expected` is typed `unknown` (the schema's example value, not a string) and its `errors` list is typed
 
 Chore:
 

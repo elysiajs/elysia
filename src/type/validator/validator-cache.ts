@@ -31,10 +31,10 @@ export function fnKey(fn: Function) {
 }
 
 // `mode` tracks whether a value sits on the structural path that isOpaque and
-// hasRef are defined over the same child set `schemaSome` descends:
+// hasRef are defined over: the child set `schemaSome` descends, plus `$defs`:
 //   NODE       a schema node; its flags count
 //   CONTAINER  holds schema nodes as its members (`properties`, `anyOf`, …)
-//   OFF        ordinary JSON data (`required`, `enum`, `$defs`, `default`, …)
+//   OFF        ordinary JSON data (`required`, `enum`, `default`, …)
 const OFF = 0
 const NODE = 1
 const CONTAINER = 2
@@ -60,8 +60,11 @@ interface WalkState {
 
 function childMode(key: string, value: unknown): number {
 	switch (key) {
+		// `$defs`: t.Cyclic holds its schemas there, a refine or codec in one
+		// must make the schema identity-only or two routes share a validator
 		case 'properties':
 		case 'patternProperties':
+		case '$defs':
 			return CONTAINER
 
 		case 'items':

@@ -4,6 +4,7 @@ import type {
 	BaseMacro,
 	DocumentDecoration,
 	ErrorHandler,
+	HeadersKeyCheck,
 	InlineHandlerResponse,
 	InternalRoute,
 	MaybeArray,
@@ -13,7 +14,6 @@ import type {
 	RouteSchema,
 	SingletonBase,
 	TransformHandler,
-	AfterResponseHandler,
 	MapResponse
 } from '../types'
 
@@ -108,6 +108,11 @@ export interface WebSocketHandler<T = undefined> {
 export type FlattenResponse<Response extends RouteSchema['response']> =
 	{} extends Response ? unknown : Response[keyof Response]
 
+// A plain send/publish/return is validated against the 200 schema (the
+// first one when there is no 200); other statuses go through `status()`
+export type WSResponsePayload<Response extends RouteSchema['response']> =
+	Response extends { 200: infer R } ? R : FlattenResponse<Response>
+
 // Forward reference to the ElysiaWS class; the actual class is
 // value-imported from `./context` to avoid a cycle.
 export interface ElysiaWSLike<
@@ -115,14 +120,14 @@ export interface ElysiaWSLike<
 	Route extends RouteSchema = {}
 > {
 	send(
-		data: FlattenResponse<Route['response']> | BufferSource,
+		data: WSResponsePayload<Route['response']> | BufferSource,
 		compress?: boolean
 	): ServerWebSocketSendStatus
 	close(code?: number, reason?: string): void
 	terminate(): void
 	publish(
 		topic: string,
-		data: FlattenResponse<Route['response']> | BufferSource,
+		data: WSResponsePayload<Route['response']> | BufferSource,
 		compress?: boolean
 	): ServerWebSocketSendStatus
 	subscribe(topic: string): void
@@ -139,16 +144,16 @@ export interface ElysiaWSLike<
 export type WSHandlerResult<Response> = {} extends Response
 	? unknown
 	:
-			| FlattenResponse<Response>
+			| WSResponsePayload<Response>
 			| InlineHandlerResponse<Response>
 			| void
 			| Generator<
-					FlattenResponse<Response>,
-					FlattenResponse<Response> | void
+					WSResponsePayload<Response>,
+					WSResponsePayload<Response> | void
 			  >
 			| AsyncGenerator<
-					FlattenResponse<Response>,
-					FlattenResponse<Response> | void
+					WSResponsePayload<Response>,
+					WSResponsePayload<Response> | void
 			  >
 
 export type WSHandlerResponse<Handler> = Handler extends (
@@ -195,6 +200,19 @@ interface TypedWebSocketHandler<
 	pong?: LifecycleFn<Ctx, Buffer | string, Route['response']>
 }
 
+// transform, beforeHandle and error also run at the upgrade, before any
+// message, so `body` may be undefined there
+type UpgradeSchema<Schema extends RouteSchema> = Omit<Schema, 'body'> & {
+	body: Schema['body'] | undefined
+}
+
+// Context has no `defer` on a socket
+type WSContext<
+	Schema extends RouteSchema,
+	Singleton extends SingletonBase
+> = Omit<Context<Schema, Singleton>, 'body' | 'defer'> &
+	Omit<ElysiaWSLike<Context<Schema, Singleton>, Schema>, 'body'>
+
 export type WSLocalHook<
 	Input extends BaseMacro,
 	Schema extends RouteSchema,
@@ -202,20 +220,37 @@ export type WSLocalHook<
 > = Prettify<Input> & {
 	detail?: DocumentDecoration
 
+	// A function is never the options object: without this, a handler that
+	// fails the `(path, handler)` overload is silently taken as options
+	[Symbol.hasInstance]?: never
+
 	// Object → static upgrade headers; function → computed from upgrade ctx.
 	upgrade?: Record<string, unknown> | ((context: Context) => unknown)
 
 	parse?: MaybeArray<WSParseHandler<Schema>>
-	transform?: MaybeArray<TransformHandler<Schema, Singleton>>
+	transform?: MaybeArray<TransformHandler<UpgradeSchema<Schema>, Singleton>>
 	beforeHandle?: MaybeArray<
-		OptionalHandler<Schema, Singleton, undefined, 'local', never>
+		OptionalHandler<
+			UpgradeSchema<Schema>,
+			Singleton,
+			undefined,
+			'local',
+			never
+		>
 	>
+	// runs after the message is sent: what it returns is dropped
 	afterHandle?: MaybeArray<
-		OptionalHandler<Schema, Singleton, undefined, 'local', never>
+		(context: Context<Schema, Singleton>) => MaybePromise<void>
 	>
 	mapResponse?: MaybeArray<MapResponse<Schema, Singleton>>
-	afterResponse?: MaybeArray<AfterResponseHandler<Schema, Singleton>>
-	error?: MaybeArray<ErrorHandler<[], Schema, Singleton>>
+	// a socket has no response: `responseValue` is only what the last
+	// `mapResponse` was handed, if any
+	afterResponse?: MaybeArray<
+		(
+			context: Context<Schema, Singleton> & { responseValue: unknown }
+		) => MaybePromise<unknown>
+	>
+	error?: MaybeArray<ErrorHandler<[], UpgradeSchema<Schema>, Singleton>>
 	tags?: DocumentDecoration['tags']
 
 	// Bun server-level knobs (folded into the global `websocket: {...}` config).
@@ -230,12 +265,10 @@ export type WSLocalHook<
 		// The handler arg is the `ElysiaWS` instance: route context props
 		// (params/query/headers/derive) are spread TOP-LEVEL alongside the ws
 		// methods (send/publish/subscribe/…), matching the runtime instance.
-		Omit<Context<Schema, Singleton>, 'body'> &
-			Omit<ElysiaWSLike<Context<Schema, Singleton>, Schema>, 'body'> & {
-				body: never
-			},
+		WSContext<Schema, Singleton> & { body: never },
 		Schema
-	>
+	> &
+	HeadersKeyCheck<Input, Schema['headers']>
 
 export type AnyWSLocalHook = WSLocalHook<any, any, any>
 
@@ -243,10 +276,7 @@ export type WSMessageHandler<
 	Schema extends RouteSchema,
 	Singleton extends SingletonBase
 > = LifecycleFn<
-	Omit<Context<Schema, Singleton>, 'body'> &
-		Omit<ElysiaWSLike<Context<Schema, Singleton>, Schema>, 'body'> & {
-			body: Schema['body']
-		},
+	WSContext<Schema, Singleton> & { body: Schema['body'] },
 	Schema['body'],
 	Schema['response']
 >

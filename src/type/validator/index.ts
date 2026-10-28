@@ -30,6 +30,7 @@ import {
 
 import { ELYSIA_TYPES } from '../constants'
 import {
+	cloneNode,
 	dropCompiledSource,
 	isPureRefinement,
 	replaceFunction
@@ -356,6 +357,58 @@ export function shallowMergeObjects(members: any[]): TSchema | null {
 
 let inlineRefId = 0
 
+// TypeBox Module() rebuilds Object/Array/Union/Record nodes from enumerable
+// keys only, dropping hidden `~codec`/`~refine` (eg. t.Date, t.Codec(t.Object))
+function restoreHidden(src: any, dst: any, models: Record<string, any>) {
+	if (!dst || typeof dst !== 'object' || dst['~kind'] === 'Cyclic') return
+
+	while (src?.['~kind'] === 'Ref' && dst['~kind'] !== 'Ref')
+		src = models[src.$ref]
+
+	if (!src || src === dst || src['~kind'] !== dst['~kind']) return
+
+	if (src['~kind'])
+		for (const key of Object.getOwnPropertyNames(src)) {
+			const descriptor = Object.getOwnPropertyDescriptor(src, key)!
+			if (!descriptor.enumerable && !(key in dst))
+				Object.defineProperty(dst, key, descriptor)
+		}
+
+	for (const key in dst) restoreHidden(src[key], dst[key], models)
+}
+
+function module(models: Record<string, TSchema>) {
+	const instantiated: any = Module(models)
+
+	for (const key in models)
+		restoreHidden(models[key], instantiated[key], models)
+
+	return instantiated
+}
+
+function opaqueCodecs(node: any, memo = new Map<object, any>()): any {
+	if (!node || typeof node !== 'object') return node
+	if (node['~codec']) return {}
+
+	let out = memo.get(node)
+	if (out) return out
+
+	memo.set(node, (out = node))
+
+	for (const key in node) {
+		const next = opaqueCodecs(node[key], memo)
+		if (next === node[key]) continue
+
+		if (out === node)
+			out = Array.isArray(node) ? node.slice() : cloneNode(node, node)
+
+		out[key] = next
+	}
+
+	memo.set(node, out)
+	return out
+}
+
 const LAZY_JIT_THRESHOLD = 16
 
 export function schemaMayHaveAsyncRefine(
@@ -570,7 +623,7 @@ export class TypeBoxValidator<
 					out[modelName] = value as TSchema
 				}
 
-				moduleCache.set(options.models, (modelModule = Module(out)))
+				moduleCache.set(options.models, (modelModule = module(out)))
 			}
 			schema = (modelModule as any)[name]
 
@@ -585,12 +638,10 @@ export class TypeBoxValidator<
 				: schemaSome(schema, (n) => !!n.$ref)
 			if (schemaHasRef) {
 				const id = `inline@${++inlineRefId}`
-				schema = (
-					Module({
-						...options.models,
-						[id]: schema
-					} as Record<string, TSchema>) as any
-				)[id]
+				schema = module({
+					...options.models,
+					[id]: schema
+				} as Record<string, TSchema>)[id]
 			}
 		}
 
@@ -740,10 +791,24 @@ export class TypeBoxValidator<
 
 		this.#noValidate = originalElyTyp === ELYSIA_TYPES.NoValidate
 		this.#isForm = originalElyTyp === ELYSIA_TYPES.Form
-		this.#hasOptional = !!(this.schema as any)?.['~optional']
+		// t.MaybeEmpty is optional as a property only: its own check (and any
+		// refine on it) still runs on an empty root
+		this.#hasOptional =
+			!!(this.schema as any)?.['~optional'] &&
+			(this.schema as any)['~elyTyp'] !== ELYSIA_TYPES.MaybeEmpty
 
 		if (frozen?.ic)
 			reconstruct().reconstructInnerCodecs(frozen.ic, this.schema)
+
+		// TypeBox Clean, over the schema with each codec opaque (`opaqueCodecs`)
+		let typeboxSchema: TSchema | undefined
+		const typeboxClean = (value: unknown) =>
+			Clean(
+				(typeboxSchema ??= this.hasCodec
+					? opaqueCodecs(this.schema)
+					: this.schema),
+				value
+			)
 
 		if (isFrozen && frozen!.cm) {
 			const both = reconstruct().instantiateFrozenBoth(
@@ -756,7 +821,7 @@ export class TypeBoxValidator<
 				options?.normalize === false
 					? undefined
 					: schemaHasDangerousProperties(this.schema)
-						? (value) => Clean(this.schema, value)
+						? typeboxClean
 						: both.clean
 		} else {
 			if (isFrozen)
@@ -793,7 +858,7 @@ export class TypeBoxValidator<
 					options?.normalize === 'typebox' ||
 					schemaHasDangerousProperties(this.schema)
 				)
-					this.Clean = (value) => Clean(this.schema, value)
+					this.Clean = typeboxClean
 				else {
 					const aot = options?.aot
 					const slot = options?.slot
@@ -828,7 +893,7 @@ export class TypeBoxValidator<
 
 						const createMirror = getExactMirror()
 						this.Clean = !createMirror
-							? (value) => Clean(this.schema, value)
+							? typeboxClean
 							: (createMirror(schema, {
 									Compile,
 									sanitize: options?.sanitize
@@ -838,8 +903,7 @@ export class TypeBoxValidator<
 			} catch (error) {
 				warnMirrorFailure(schema, error)
 
-				if (options?.normalize !== false)
-					this.Clean = (value) => Clean(this.schema, value)
+				if (options?.normalize !== false) this.Clean = typeboxClean
 			}
 		}
 

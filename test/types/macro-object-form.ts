@@ -212,11 +212,11 @@ import { expectTypeOf } from 'expect-type'
 }
 
 // A fn-form macro that conditionally returns `undefined` (early `return`)
-// still contributes its schema and derived values to the route. The raw
-// `Hooks | undefined` return must be NonNullable'd before indexing —
-// otherwise the indexed access is an error type (`any`) and
-// FunctionArrayReturnType's `any[]` guard collapses the macro's whole
-// contribution to `never`.
+// still contributes to the route: its validator may run (422) and a client
+// sends its body. But the call may return nothing, so the handler can't rely
+// on it: the body is typed unvalidated and the derived key optional (the
+// raw `Hooks | undefined` is still NonNullable'd before indexing, or the
+// whole contribution would collapse to `never`)
 {
 	new Elysia()
 		.macro({
@@ -230,8 +230,8 @@ import { expectTypeOf } from 'expect-type'
 			}
 		})
 		.post('/', { auth: true }, ({ body, user }) => {
-			expectTypeOf(body).toEqualTypeOf<{ x: string }>()
-			expectTypeOf(user).toEqualTypeOf<'a'>()
+			expectTypeOf(body).toBeUnknown()
+			expectTypeOf(user).toEqualTypeOf<'a' | undefined>()
 
 			return 'ok'
 		})

@@ -17,6 +17,8 @@ export interface FieldCookieConfig {
 
 export interface CompiledCookieConfig {
 	defaults: Partial<BaseCookie>
+	// a codec field's `~codec.encode`: the value is set decoded, sent encoded
+	encode?: Record<string, (value: unknown) => unknown>
 	fields: Record<string, FieldCookieConfig>
 	globalSign: true | string[] | undefined
 	globalSignSet?: Set<string>
@@ -63,6 +65,8 @@ const hasUsableSecret = (
 interface Gathered {
 	config: AppCookieConfig
 	fields: Record<string, AppCookieConfig>
+	// each field's schema, past any `$ref`
+	schemas?: Record<string, any>
 }
 
 const emptyGathered = (): Gathered => ({
@@ -123,6 +127,24 @@ function foldConfig(into: Record<string, any>, config: any) {
 	}
 }
 
+function fieldCodec(schema: any): ((value: unknown) => unknown) | undefined {
+	// a TypeBox codec always carries both directions
+	const encode = schema?.['~codec']?.encode
+	if (encode) return encode
+
+	let found: ((value: unknown) => unknown) | undefined
+	for (const member of schema?.anyOf ?? []) {
+		const kind = member?.['~kind']
+		if (kind === 'Null' || kind === 'Undefined') continue
+
+		const codec = fieldCodec(member)
+		if (!codec || found) return
+		found = codec
+	}
+
+	return found
+}
+
 export function compileCookieConfig(
 	routeSchema: AnySchema | string | undefined,
 	appConfig: AppCookieConfig | undefined,
@@ -163,8 +185,13 @@ export function compileCookieConfig(
 			foldConfig(into.config, schema.config)
 			for (const name in schema.properties)
 				gather(schema.properties[name], into, name, new Set())
-		} else if (schema.config)
-			foldConfig((into.fields[field] ??= nullObject()), schema.config)
+		} else {
+			if (typeof ref !== 'string')
+				(into.schemas ??= nullObject())[field] ??= schema
+
+			if (schema.config)
+				foldConfig((into.fields[field] ??= nullObject()), schema.config)
+		}
 
 		if (targets.length > 1) {
 			// ambiguous name: candidates must agree but `sign`
@@ -177,6 +204,8 @@ export function compileCookieConfig(
 					throw badRefError()
 
 				foldConfig(into.config, from.config)
+				for (const name in from.schemas)
+					(into.schemas ??= nullObject())[name] ??= from.schemas[name]
 				for (const name in from.fields)
 					foldConfig(
 						(into.fields[name] ??= nullObject()),
@@ -278,8 +307,15 @@ export function compileCookieConfig(
 				throw InvalidCookie.secret(name)
 	}
 
+	let encode: CompiledCookieConfig['encode']
+	for (const name in route.schemas) {
+		const codec = fieldCodec(route.schemas[name])
+		if (codec) (encode ??= nullObject())[name] = codec
+	}
+
 	return {
 		defaults,
+		encode,
 		fields,
 		globalSign,
 		globalSignSet: Array.isArray(globalSign)

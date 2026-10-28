@@ -59,6 +59,9 @@ const cases: Record<string, string> = {
 	lastTagsHook: `new Elysia().get('/', { tags: ['a'] }, () => 'ok' as const)`,
 	lastDetailHook: `new Elysia().get('/', { detail: { hide: true } }, () => 'ok' as const)`,
 	lastParseHook: `new Elysia().post('/', { parse: 'json' }, ({ body }) => body)`,
+	// t.MaybeEmpty returns the named TMaybeEmpty: it must be exported to print
+	maybeEmpty: `new Elysia().post('/', { body: t.Object({ v: t.MaybeEmpty(t.String()) }) }, ({ body }) => body)${next}`,
+	lastMaybeEmpty: `new Elysia().post('/', { body: t.MaybeEmpty(t.Object({ v: t.String() })) }, ({ body }) => body)`,
 	wsHook: `socket.onBeforeHandle(() => new OutOfCredit()).ws('/ws', { message() {} })${next}`,
 	wsHandled: `socket.onError(OutOfCredit, () => status(418, 'handled' as const)).onBeforeHandle(() => new Lib()).ws('/ws', { message() {} })${next}`,
 	wsRouteHook: `socket.ws('/ws', { beforeHandle: () => new OutOfCredit(), message() {} })${next}`,
@@ -70,6 +73,9 @@ const cases: Record<string, string> = {
 }
 
 const root = fileURLToPath(new URL('..', import.meta.url))
+const exportMap: Record<string, unknown> = JSON.parse(
+	readFileSync(join(root, 'package.json'), 'utf8')
+).exports
 // real path, or tsc prints every error path relative through the symlink
 const dir = realpathSync(mkdtempSync(join(tmpdir(), 'elysia-dts-emit-')))
 
@@ -133,6 +139,14 @@ try {
 		const named = importsInResponse(source)
 		if (named.length)
 			failures.push(`${name}: response prints ${named.join(', ')}`)
+
+		// the paths mapping resolves any dist file, a published package only
+		// its `exports`: a deep path there is TS2883 for a real consumer
+		for (const [, path] of source.matchAll(/import\("elysia(\/[^"]*)?"\)/g))
+			if (!(`.${path ?? ''}` in exportMap))
+				failures.push(
+					`${name}: prints unexported import("elysia${path}")`
+				)
 
 		console.log(`${name}: ${source.length} bytes`)
 	}

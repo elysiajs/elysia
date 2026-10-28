@@ -170,6 +170,46 @@ export class NotFound extends ElysiaError {
 	}
 }
 
+// Defined beside `ElysiaError`, not in `cookie/error`: an AOT wired build
+// statically links `error -> type/bridge-live -> validator -> ... ->
+// cookie/*`, so a subclass module in that cycle evaluates before its base
+// class exists (#2024). `cookie/error` re-exports it
+export class InvalidCookie extends ElysiaError {
+	status = 400 as const
+	readonly code = 'invalid-cookie'
+
+	constructor(
+		public key?: string,
+		public response = key
+			? `"${key}" is an invalid cookie`
+			: 'Invalid Cookie',
+		status?: number
+	) {
+		super(response)
+
+		if (status) this.status = status as any
+	}
+
+	static signature(key: string) {
+		return new InvalidCookie(key, `"${key}" has invalid cookie signature`)
+	}
+
+	static secret(
+		key?: string
+	): Omit<InvalidCookie, 'status'> & { status: 500 } {
+		const advice = `${key ? `Cookie "${key}"` : 'A cookie'} is signed but \`cookie.secrets\` is missing or empty`
+
+		const error = new InvalidCookie(
+			key,
+			isProduction() ? 'Internal Server Error' : advice,
+			500
+		)
+		error.message = advice
+
+		return error as any
+	}
+}
+
 export class ParseError extends ElysiaError {
 	status = 400 as const
 	response = 'Bad Request'
@@ -928,7 +968,10 @@ export type ValidationErrorResponse = {
 	on: string
 	found?: unknown
 	property?: string
-	expected?: string
+	// a value the schema accepts (its example), of the schema's type
+	expected?: unknown
+	// every issue, outside production
+	errors?: { message?: string; [key: string]: unknown }[]
 }
 
 export type ProblemResponseBody<Status extends number, P> = Omit<

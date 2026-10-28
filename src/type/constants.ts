@@ -14,7 +14,8 @@ export const ELYSIA_TYPES = {
 	Form: 12,
 	ArrayBuffer: 13,
 	Uint8Array: 14,
-	NoValidate: 15
+	NoValidate: 15,
+	ConstString: 16
 } as const
 
 export type ELYSIA_TYPES = typeof ELYSIA_TYPES

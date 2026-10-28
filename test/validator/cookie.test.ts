@@ -659,4 +659,22 @@ describe('Cookie Validation', () => {
 		expect(innerValue).toBe(9)
 		expect(typeof innerValue).toBe('number')
 	})
+
+	// t.MaybeEmpty is optional as a property only: as the root cookie schema an
+	// empty jar must still be validated, not skipped
+	it('root t.MaybeEmpty cookie still validates an empty jar', async () => {
+		const app = new Elysia().get(
+			'/',
+			{ cookie: t.MaybeEmpty(t.Object({ sid: t.String() })) },
+			() => 'ok'
+		)
+
+		const [valid, empty] = await Promise.all([
+			app.handle('/', { headers: { Cookie: 'sid=1' } }),
+			app.handle('/')
+		])
+
+		expect(valid.status).toBe(200)
+		expect(empty.status).toBe(422)
+	})
 })

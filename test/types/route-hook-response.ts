@@ -173,6 +173,51 @@ const ok = () => 'ok' as const
 	}>()
 }
 
+// An `Error` an error hook returns is served at its own status (402 for
+// `OutOfCredit`, an unhandled 500 for `Lib`), not re-dispatched: a route's own
+// hook and a macro's type the same as a guard's
+{
+	const thrower = () => 'ok' as const
+
+	const route = new Elysia().get(
+		'/',
+		{ error: () => new OutOfCredit() },
+		thrower
+	)
+	const guard = new Elysia()
+		.guard({ error: () => new OutOfCredit() })
+		.get('/', thrower)
+	const macro = new Elysia()
+		.macro({ m: { error: () => new OutOfCredit() } })
+		.get('/', { m: true }, thrower)
+
+	type Guarded = (typeof guard)['~Routes']['get']['response']
+
+	expectTypeOf<Guarded[402]['code']>().toEqualTypeOf<'OUT_OF_CREDIT'>()
+	expectTypeOf<
+		(typeof route)['~Routes']['get']['response']
+	>().toEqualTypeOf<Guarded>()
+	expectTypeOf<
+		(typeof macro)['~Routes']['get']['response']
+	>().toEqualTypeOf<Guarded>()
+
+	const foreign = new Elysia().get(
+		'/',
+		{ error: () => new Lib('mapped') },
+		thrower
+	)
+	const foreignGuard = new Elysia()
+		.guard({ error: () => new Lib('mapped') })
+		.get('/', thrower)
+
+	expectTypeOf<
+		keyof (typeof foreign)['~Routes']['get']['response']
+	>().toEqualTypeOf<200 | 500>()
+	expectTypeOf<
+		(typeof foreign)['~Routes']['get']['response']
+	>().toEqualTypeOf<(typeof foreignGuard)['~Routes']['get']['response']>()
+}
+
 // A hook typed to return `unknown` adds nothing, and doesn't hide what another
 // hook of the route answers with
 {
@@ -346,7 +391,8 @@ const ok = () => 'ok' as const
 	expectTypeOf<Routes['options']['response']>().toEqualTypeOf<Denied>()
 	expectTypeOf<Routes['query']['response']>().toEqualTypeOf<Denied>()
 	expectTypeOf<Routes['head']['response']>().toEqualTypeOf<Denied>()
-	expectTypeOf<Routes['PURGE']['response']>().toEqualTypeOf<Denied>()
+	// `.route()` keys the method lowercase, as the other methods
+	expectTypeOf<Routes['purge']['response']>().toEqualTypeOf<Denied>()
 }
 
 // An `Error` a `beforeHandle` returns goes through `.onError(Class)` dispatch
@@ -682,4 +728,200 @@ const ok = () => 'ok' as const
 		ok
 	)
 	new Elysia().all('/', { query: t.Object({}), detail: { summary: 's' } }, ok)
+}
+
+// A handler returning `T | undefined` is served at 200 either way, the
+// `undefined` as an empty body, so `T` stays at 200 (with `undefined` for the
+// empty one). A hook's `undefined` still passes on to the handler: it adds no
+// 200 of its own
+{
+	const flip = (n: number) => (n > 0 ? ('x' as const) : undefined)
+
+	const app = new Elysia()
+		.get('/maybe/:n', ({ params }) => flip(+params.n))
+		.get('/async', async () => flip(Math.random()))
+		.get(
+			'/hook',
+			{
+				beforeHandle: () =>
+					Math.random() ? status(401, 'no') : undefined
+			},
+			() => flip(1)
+		)
+		.get('/void', () => {})
+
+	type Routes = (typeof app)['~Routes']
+
+	expectTypeOf<Routes['maybe'][':n']['get']['response']>().toEqualTypeOf<{
+		200: 'x' | undefined
+	}>()
+	expectTypeOf<Routes['async']['get']['response']>().toEqualTypeOf<{
+		200: 'x' | undefined
+	}>()
+	expectTypeOf<Routes['hook']['get']['response']>().toEqualTypeOf<{
+		200: 'x' | undefined
+		401: 'no'
+	}>()
+	// `undefined` beside only a status is still served as an empty 200
+	const statusOrNothing = new Elysia().get('/', () =>
+		Math.random() ? status(201, 'made' as const) : undefined
+	)
+	expectTypeOf<
+		(typeof statusOrNothing)['~Routes']['get']['response']
+	>().toEqualTypeOf<{ 200: undefined; 201: 'made' }>()
+
+	// nothing but `undefined` declares no body: unchanged
+	expectTypeOf<Routes['void']['get']['response']>().toEqualTypeOf<{}>()
+
+	const guarded = new Elysia()
+		.guard({
+			beforeHandle: () => (Math.random() ? status(401, 'no') : undefined)
+		})
+		.get('/', () => 'ok' as const)
+
+	expectTypeOf<
+		(typeof guarded)['~Routes']['get']['response']
+	>().toEqualTypeOf<{
+		200: 'ok'
+		401: 'no'
+	}>()
+}
+
+// A response schema validates what the handler and the before/after hooks
+// answer, never what an error hook does: an error hook's `status(401,
+// 'plain')` is served as 'plain' even where the schema declares 401 as
+// `{ msg }`. Both stay possible (another hook may answer 401 by the schema),
+// so the status types their union, for every kind of error hook
+{
+	const Msg = t.Object({ msg: t.String() })
+	const schema = { response: { 200: t.String(), 401: Msg } }
+	const boom = (): string => {
+		throw new Error('x')
+	}
+	const plain = () => status(401, 'plain' as const)
+	type Answered = { 200: string; 401: 'plain' | { msg: string } }
+
+	const route = new Elysia().get('/', { ...schema, error: plain }, boom)
+	const local = new Elysia().onError(plain).get('/', schema, boom)
+	const global = new Elysia()
+		.use(new Elysia().onError('global', plain))
+		.get('/', schema, boom)
+	const guard = new Elysia().guard({ error: plain }).get('/', schema, boom)
+	const macro = new Elysia()
+		.macro({ m: { error: plain } })
+		.get('/', { ...schema, m: true }, boom)
+	const scoped = new Elysia().guard({ response: { 401: Msg } }, (app) =>
+		app.onError(plain).get('/', boom)
+	)
+
+	expectTypeOf<
+		(typeof route)['~Routes']['get']['response']
+	>().toEqualTypeOf<Answered>()
+	expectTypeOf<
+		(typeof local)['~Routes']['get']['response']
+	>().toEqualTypeOf<Answered>()
+	expectTypeOf<
+		(typeof global)['~Routes']['get']['response']
+	>().toEqualTypeOf<Answered>()
+	expectTypeOf<
+		(typeof guard)['~Routes']['get']['response']
+	>().toEqualTypeOf<Answered>()
+	expectTypeOf<
+		(typeof macro)['~Routes']['get']['response']
+	>().toEqualTypeOf<Answered>()
+	expectTypeOf<
+		(typeof scoped)['~Routes']['get']['response']
+	>().toEqualTypeOf<Answered>()
+
+	// unchanged: a beforeHandle's status is the schema's, and without a
+	// schema an error hook's status is as it returns it
+	const before = new Elysia().get(
+		'/',
+		{
+			...schema,
+			beforeHandle: () =>
+				Math.random() ? status(401, { msg: 'm' }) : undefined
+		},
+		() => 'ok'
+	)
+	const bare = new Elysia().get('/', { error: plain }, () => 'ok' as const)
+
+	expectTypeOf<
+		(typeof before)['~Routes']['get']['response']
+	>().toEqualTypeOf<{
+		200: string
+		401: { msg: string }
+	}>()
+	expectTypeOf<(typeof bare)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'ok'
+		401: 'plain'
+	}>()
+}
+
+// A plain value an error hook returns for a thrown error is served at that
+// error's status (500 for a plain `Error`) as is, never checked by the
+// response schema: a schema's 500 can't claim the body alone. For a route
+// `error`, `.onError(Class)`, a guard's and a macro's `error`
+{
+	const schema = {
+		response: { 200: t.String(), 500: t.Object({ msg: t.String() }) }
+	}
+	const boom = (): string => {
+		throw new Error('x')
+	}
+	type At500<App> = App extends {
+		'~Routes': { get: { response: { 500: infer R } } }
+	}
+		? R
+		: never
+
+	const route = new Elysia().get(
+		'/',
+		{ ...schema, error: () => 'route' as const },
+		boom
+	)
+	const byClass = new Elysia()
+		.onError(Error, () => 'class' as const)
+		.get('/', schema, boom)
+	const byClassStatus = new Elysia()
+		.onError(Error, () => status(500, 'class-status' as const))
+		.get('/', schema, boom)
+	const guard = new Elysia()
+		.guard({ error: () => 'guard' as const })
+		.get('/', schema, boom)
+	const macro = new Elysia()
+		.macro({ rescue: { error: () => 'macro' as const } })
+		.get('/', { ...schema, rescue: true }, boom)
+
+	expectTypeOf<At500<typeof route>>().toEqualTypeOf<
+		'route' | { msg: string }
+	>()
+	expectTypeOf<At500<typeof byClass>>().toEqualTypeOf<
+		'class' | { msg: string }
+	>()
+	expectTypeOf<At500<typeof byClassStatus>>().toEqualTypeOf<
+		'class-status' | { msg: string }
+	>()
+	expectTypeOf<At500<typeof guard>>().toEqualTypeOf<
+		'guard' | { msg: string }
+	>()
+	expectTypeOf<At500<typeof macro>>().toEqualTypeOf<
+		'macro' | { msg: string }
+	>()
+}
+
+// An error whose status is 200 answered by a plain value is served at 500:
+// the runtime resets a 200 so an error never reads as a success
+{
+	class StatusTwoHundred extends Error {
+		readonly status = 200 as const
+	}
+
+	const app = new Elysia()
+		.onError(() => 'caught' as const)
+		.get('/', () => new StatusTwoHundred('x'))
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		500: 'caught'
+	}>()
 }

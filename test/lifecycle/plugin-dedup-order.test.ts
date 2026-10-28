@@ -1,14 +1,16 @@
-// A named plugin (`name` + `seed`) is one installation, however many paths
-// bring it in. Elysia 1 keeps its first, outermost copy: when a parent absorbs
-// a route, the route's copy of a hook is dropped if the parent already holds
-// that plugin's hook of the same lifecycle event. Everything else stays, in
-// registration order: distinct hooks of one plugin, the same function
+// A named plugin (`name` + `seed`) is one plugin, however many paths bring it
+// in, and each of its registrations runs once per route and event: when a
+// parent absorbs a route, the route's copy of a registration is dropped if
+// the parent already holds that registration's event. Everything else stays,
+// in registration order: distinct hooks of one plugin, the same function
 // registered twice, unnamed plugins, and a plugin's `local` hooks on its own
 // routes.
 //
 // Expected orders are what Elysia 1.4.30 runs for the same app (each route
 // given its own hook of the probed event, so 1.x array aliasing can't leak
-// later hooks in). Deviations from 1.x are called out where they are pinned.
+// later hooks in). Deviations from 1.x are called out where they are pinned:
+// 1.x drops every hook of a plugin's event once one arrived, Elysia 2 only
+// the same registration.
 
 import { describe, expect, it } from 'bun:test'
 import { Elysia, t, type AnyElysia } from '../../src'
@@ -1149,9 +1151,350 @@ table('a macro that moves the macro epoch while it resolves', [
 	}
 ])
 
+// A named plugin installed by a child first, then `.use()`d by the parent
+// itself: the parent gets the registrations the child did not pass on (its
+// `plugin` scope ones), once each. Elysia 1.4 dropped them when the same
+// plugin's global hook of that event had already arrived (fail-open)
+const authOf = (name = 'auth') =>
+	named(name)
+		.onBeforeHandle('global', mark('log'))
+		.derive('plugin', () => {
+			log.push('derive')
+			return { user: undefined }
+		})
+		.onBeforeHandle('plugin', ({ user, status }: any) => {
+			log.push('gate')
+			if (!user) return status(401)
+		})
+
+table('a named plugin installed below, then directly', [
+	{
+		name: 'plugin-scope gate and derive cover the parent route',
+		define: (app) => {
+			const auth = authOf()
+			return app
+				.use(new Elysia().use(auth).get('/feature', ok))
+				.use(auth)
+				.get('/admin', ok)
+		},
+		expect: {
+			'/feature': '401 log,derive,gate',
+			'/admin': '401 log,derive,gate'
+		}
+	},
+	{
+		name: 'an identically built instance (same name) does the same',
+		define: (app) =>
+			app
+				.use(new Elysia().use(authOf()).get('/feature', ok))
+				.use(authOf())
+				.get('/admin', ok),
+		expect: {
+			'/feature': '401 log,derive,gate',
+			'/admin': '401 log,derive,gate'
+		}
+	},
+	{
+		name: 'plugin-scope guard schema covers the parent route',
+		define: (app) => {
+			const p = named('query-guard').guard('plugin', {
+				query: t.Object({ q: t.String() })
+			})
+			return app.use(new Elysia().use(p)).use(p).get('/admin', ok)
+		},
+		expect: { '/admin?q=1': '200 ', '/admin': '422 ' }
+	},
+	{
+		// item 6: the global hook of the same event arrived first
+		name: 'a global hook of the same event does not shadow the gate',
+		define: (app) => {
+			const auth = named('shadow')
+				.onBeforeHandle('global', mark('log'))
+				.onBeforeHandle('plugin', ({ status }: any) => {
+					log.push('gate')
+					return status(401)
+				})
+			return app
+				.use(new Elysia().use(auth).get('/feature', ok))
+				.use(auth)
+				.get('/admin', ok)
+		},
+		expect: { '/feature': '401 log,gate', '/admin': '401 log,gate' }
+	},
+	{
+		// the parent's chain ends in the plugin's own order, so the global
+		// hook sees the derive it was declared after; a route registered
+		// before the direct use keeps what it had
+		name: "restores the plugin's order",
+		define: (app) => {
+			const p = named('ordered')
+				.derive('plugin', () => {
+					log.push('derive')
+					return { user: 'dana' }
+				})
+				.onBeforeHandle('global', ({ user }: any) => {
+					log.push(`global:${user}`)
+				})
+			return app
+				.use(new Elysia().use(p).get('/child', ok))
+				.get('/before', ok)
+				.use(p)
+				.get('/admin', ok)
+		},
+		expect: {
+			'/child': '200 derive,global:dana',
+			'/before': '200 global:undefined',
+			'/admin': '200 derive,global:dana'
+		}
+	},
+	{
+		// a `macro` the plugin defined after the child had it is added, so
+		// a guard using it gates
+		name: 'a late macro and guard of the plugin',
+		define: (app) => {
+			const p = named('late-macro').onBeforeHandle('global', mark('g'))
+			const root = app.use(new Elysia().use(p))
+			p.macro({
+				gate: {
+					beforeHandle({ status }: any) {
+						log.push('gate')
+						return status(401)
+					}
+				}
+			}).guard('plugin', { gate: true })
+
+			return root.use(p).get('/', ok)
+		},
+		expect: { '/': '401 g,gate' }
+	},
+	{
+		// a group lifts only the `request` part of a guard; a later direct
+		// use still installs the rest
+		name: 'a guard with request and beforeHandle lifted by a group',
+		define: (app) => {
+			const p = named('lift-mixed').guard('global', {
+				request: mark('req'),
+				beforeHandle: mark('bh')
+			} as any)
+			return app
+				.group('/g', (g: any) => g.use(p).get('/', ok))
+				.use(p)
+				.get('/', ok)
+		},
+		expect: { '/': '200 req,bh' }
+	}
+])
+
+// Same-name instances (D1) are one plugin: their registrations correspond by
+// the order the instance exported them
+table('registration identity of same-name instances', [
+	{
+		// an empty exported registration takes no ordinal
+		name: 'an empty exported guard does not shift the next hook',
+		define: (app) => {
+			const make = (empty: boolean) => {
+				let p = named('empty-export', 'S')
+				if (empty) p = p.guard('plugin', {})
+				return p.onBeforeHandle('global', mark(empty ? 'A' : 'B'))
+			}
+			return app
+				.use(named('ew-a').use(make(true)))
+				.use(named('ew-b').use(make(false)))
+				.get('/', ok)
+		},
+		expect: { '/': '200 A' }
+	},
+	...(['own-first', 'imported-first'] as const).flatMap((order): Case[] => {
+		const build = (app: any, path: string) => {
+			const same = mark('same')
+			const twin = named('twin', 'S').onBeforeHandle('global', same)
+			let x = named('twin', 'S')
+			x =
+				order === 'own-first'
+					? x.onBeforeHandle('global', same).use(twin)
+					: x.use(twin).onBeforeHandle('global', same)
+			return path === '/'
+				? x.get('/', ok)
+				: x.use(new Elysia().get('/c', ok))
+		}
+		return [
+			{
+				// one registration in one layer, own and imported
+				name: `own and imported twin, ${order}`,
+				define: (app) => app.use(build(app, '/')),
+				expect: { '/': '200 same' }
+			},
+			{
+				// same, on a child route: the compact beforeHandle lane
+				name: `own and imported twin, ${order}, child route`,
+				define: (app) => app.use(build(app, '/c')),
+				expect: { '/c': '200 same' }
+			}
+		]
+	}),
+	{
+		// a re-copied registration in a group callback: its error hook runs
+		// once
+		name: 'callback error hook re-copied by a direct use',
+		define: (app) => {
+			const p = named('cb-order')
+				.derive('plugin', () => {
+					log.push('derive')
+					return {}
+				})
+				.onError('global', mark('err'))
+			return app.group('/g', (g: any) =>
+				g.use(new Elysia().use(p)).use(p).get('/x', throwing)
+			)
+		},
+		expect: { '/g/x': '500 derive,err' }
+	},
+	{
+		// an empty request array takes no once-per-app request slot
+		name: 'an empty request array, then a real one',
+		define: (app) =>
+			app
+				.use(new Elysia().use(named('empty-request').onRequest([])))
+				.use(
+					new Elysia().use(
+						named('empty-request').onRequest(mark('request'))
+					)
+				)
+				.get('/', ok),
+		expect: { '/': '200 request' }
+	}
+])
+
+describe('a plugin seen below, then used directly, with macros', () => {
+	const make = () =>
+		named('macro-conflict')
+			.macro({ auth: { beforeHandle: mark('plugin-auth') } })
+			.guard('plugin', { auth: true })
+
+	it('rejects a macro the parent redefined since, as a fresh use does', () => {
+		const p = make()
+		const root = new Elysia().use(new Elysia().use(p))
+		root.macro({ auth: { beforeHandle: mark('root-auth') } })
+
+		expect(() => root.use(p)).toThrow(
+			'Macro "auth" can be only define once'
+		)
+		// still seen below only: a retry is checked again, not skipped
+		expect(() => root.use(p)).toThrow(
+			'Macro "auth" can be only define once'
+		)
+		expect(() =>
+			new Elysia()
+				.macro({ auth: { beforeHandle: mark('root-auth') } })
+				.use(make())
+		).toThrow('Macro "auth" can be only define once')
+	})
+
+	it('accepts the same plugin, and an identically built instance', async () => {
+		const root = new Elysia()
+			.use(new Elysia().use(make()))
+			.use(make())
+			.get('/', ok)
+
+		log.length = 0
+		await root.handle(new Request('http://localhost/'))
+		expect(log).toEqual(['plugin-auth'])
+	})
+})
+
+describe('same-name variants with different hooks', () => {
+	const capture = async (build: () => unknown) => {
+		const original = console.warn
+		const warnings: string[] = []
+		console.warn = (message: string) => {
+			warnings.push(message)
+		}
+		try {
+			build()
+		} finally {
+			console.warn = original
+		}
+		return warnings
+	}
+
+	it('warns once in development when a variant is skipped', async () => {
+		const warnings = await capture(() =>
+			new Elysia()
+				.use(
+					named('variant-a').use(
+						named('variant-warn').onBeforeHandle(
+							'global',
+							() => 'a'
+						)
+					)
+				)
+				.use(
+					named('variant-b').use(
+						named('variant-warn').onBeforeHandle(
+							'global',
+							() => 'b'
+						)
+					)
+				)
+				.use(
+					named('variant-c').use(
+						named('variant-warn').onBeforeHandle(
+							'global',
+							() => 'c'
+						)
+					)
+				)
+		)
+
+		expect(warnings).toHaveLength(1)
+		expect(warnings[0]).toContain('give each variant its own seed')
+	})
+
+	it('stays quiet for identically built instances', async () => {
+		const make = () =>
+			named('variant-same').onBeforeHandle('global', () => 'same')
+		const warnings = await capture(() =>
+			new Elysia()
+				.use(named('same-a').use(make()))
+				.use(named('same-b').use(make()))
+		)
+
+		expect(warnings).toEqual([])
+	})
+})
+
+describe('repeated admitting uses of same-name variants', () => {
+	// each variant's new registration comes first, so restoring the order
+	// would copy every older one again: a twin is not re-copied, and the
+	// root chain stays linear in the registrations it holds
+	it('keeps the receiver chain linear', async () => {
+		const n = 64
+		let calls = 0
+		const root = new Elysia()
+		for (let m = 1; m <= n; m++) {
+			const p = named('variant')
+			for (let i = 0; i < m; i++)
+				p.onBeforeHandle(() => {
+					calls++
+				})
+			p.as('global')
+			root.use(new Elysia().use(p))
+		}
+
+		let nodes = 0
+		for (let node = (root as any)['~hookChain']; node; node = node.parent)
+			nodes++
+		expect(nodes).toBe(n)
+
+		await root.get('/', ok).handle(new Request('http://localhost/'))
+		expect(calls).toBe(n)
+	})
+})
+
 describe('scope promotion after reading routes', () => {
 	// `.as()` changes which hooks count as installed; anything cached from
-	// an earlier read must not survive it
+	// an earlier read must not survive it. Root and child share a name, so
+	// root's A, exported by `.as()`, is the same registration as B (D1)
 	for (const warm of [false, true])
 		it(`root.as(global) applies the same with ${warm ? 'a warm' : 'a cold'} cache`, async () => {
 			const root = named('X').onBeforeHandle(mark('A'))
@@ -1279,10 +1622,52 @@ describe('compact beforeHandle prefix', () => {
 		expect(prefixOf(named('feature').get('/r', ok))).toBe(2)
 	})
 
-	it('stays off for a named plugin registration', () => {
+	// a `local` registration has no key: nothing in the route's chain can
+	// drop, so the compact lane stays on
+	it('stays on for a named plugin local registration', () => {
 		expect(
 			prefixOf(named('feature').onBeforeHandle(mark('F')).get('/r', ok))
-		).toBeUndefined()
+		).toBe(2)
+	})
+
+	it('drops a memoized prefix when a late .as() repeats a twin key', () => {
+		// `.as()` names the local hook with the key the same-name twin put on
+		// the chain: one registration (D1), and the memoized prefix of the
+		// two must not survive
+		const twin = named('cm', 1).onBeforeHandle('global', mark('twin'))
+		const x = named('cm', 1)
+			.use(twin)
+			.onBeforeHandle(mark('own'))
+			.use(new Elysia().get('/c', ok)) as any
+		const route = x['~routes'].find((r: any) => r[1] === '/c')
+		const compose = () =>
+			composeRouteHook(
+				route[3],
+				route[4],
+				route[5],
+				route[6],
+				x,
+				route[7],
+				true
+			) as any
+		const run = (hook: any) => {
+			log.length = 0
+			const fns: Function[] = []
+			for (let c = hook?.['~beforeHandlePrefix']?.tail; c; c = c.parent)
+				fns.unshift(...c.values)
+			for (const fn of [].concat(hook?.beforeHandle ?? [])) fns.push(fn)
+			for (const fn of fns) fn({})
+			return log.slice()
+		}
+
+		const before = compose()
+		expect(before['~beforeHandlePrefix'].length).toBe(2)
+		expect(run(before)).toEqual(['twin', 'own'])
+
+		x.as('global')
+		const after = compose()
+		expect(after?.['~beforeHandlePrefix']).toBeUndefined()
+		expect(run(after)).toEqual(['own'])
 	})
 
 	it('stays off for a named plugin the route chain installs', () => {

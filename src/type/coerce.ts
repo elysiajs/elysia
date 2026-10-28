@@ -12,7 +12,12 @@ import { IntegerString } from './elysia/integer-string'
 import { nullObject } from '../utils'
 
 import {
+	acceptsEmpty,
+	carryCodec,
+	carryRefine,
 	COERCE_LEAF_CTOR,
+	constString,
+	emptyAsUndefined,
 	buildCoercedFromPlan as buildCoercedFromScalarPlan,
 	type CoerceLeaf,
 	type CoerceNode,
@@ -42,12 +47,17 @@ interface CoerceOptions {
 	 * Only root object
 	 */
 	rootPropertiesOnly?: boolean
+	/**
+	 * A string slot: an empty string for a non-string t.MaybeEmpty is empty
+	 */
+	emptyString?: boolean
 }
 
 // The replacement factory receives the ORIGINAL schema node, which doubles
 // as the options bag (constraints like `minimum` carry over to the new type)
 type CoerceTo = (
-	schema: BaseSchema & TSchemaOptions
+	schema: BaseSchema & TSchemaOptions,
+	node: BaseSchema
 ) => TSchema | BaseSchema | null
 
 /**
@@ -99,10 +109,15 @@ export function coerce(
 
 		if (canReplace && kind && !skipRootTransform) {
 			const to = transformMap.get(kind)
-			if (to) {
+			const structural = kind === 'Object' || kind === 'Array'
+
+			if (to && !(structural && (node as any)['~codec'])) {
 				const { type, ...rest } = node
-				let result = to(rest)
+				let result = to(rest, node)
 				if (result !== null) {
+					if (!structural)
+						result = carryCodec(node, carryRefine(node, result))
+
 					if ('~optional' in node) {
 						if (Object.isFrozen(result))
 							result = Object.create(result)
@@ -128,7 +143,8 @@ export function coerce(
 			let newArr: BaseSchema[] | undefined
 			for (let i = 0, len = arr.length; i < len; i++) {
 				const item = arr[i]!
-				const r = walk(item, false, isRootProperty)
+				// a root union / intersect member is a root as well
+				const r = walk(item, isRoot, isRootProperty)
 
 				if (r !== item) {
 					newArr ??= arr.slice()
@@ -140,6 +156,15 @@ export function coerce(
 				out = cloneNode(node, out)
 				out[key] = newArr
 			}
+		}
+
+		if (
+			options?.emptyString &&
+			node['~elyTyp'] === ELYSIA_TYPES.MaybeEmpty &&
+			!(node.anyOf as any)?.some(acceptsEmpty)
+		) {
+			out = cloneNode(node, out)
+			out.anyOf = [...out.anyOf, emptyAsUndefined()]
 		}
 
 		// Not
@@ -237,8 +262,9 @@ export function coerce(
 				node.$ref as keyof typeof node.$defs
 			] as unknown as BaseSchema | undefined
 
+			// a Cyclic root is a wrapper, its target def is the actual root
 			if (def) {
-				const r = walk(def, false)
+				const r = walk(def, isRoot)
 				if (r !== def) {
 					out = cloneNode(node, out)
 					out.$defs = { ...node.$defs, [node.$ref!]: r }
@@ -265,19 +291,32 @@ export const coerceRoot = (): CoerceOption[] =>
 			[
 				['Number', Numeric],
 				['Boolean', BooleanString],
-				['Integer', IntegerString]
+				['Integer', IntegerString],
+				['Literal', constString],
+				['Enum', constString],
+				['UnionEnum', constString]
 			],
 			{
-				rootPropertiesOnly: true
+				rootPropertiesOnly: true,
+				emptyString: true
 			}
 		]
 	])
 
-const toObjectString = (x: BaseSchema & TSchemaOptions) =>
-	ObjectString((x.properties as TProperties) ?? {}, x)
+function keepHidden(node: any, result: any) {
+	if (node['~refine'])
+		Object.defineProperty(result.anyOf[0], '~refine', {
+			value: node['~refine']
+		})
 
-const toArrayString = (x: BaseSchema & TSchemaOptions) =>
-	ArrayString((x.items ?? {}) as any, x)
+	return result
+}
+
+const toObjectString = (x: BaseSchema & TSchemaOptions, node: BaseSchema) =>
+	keepHidden(node, ObjectString((x.properties as TProperties) ?? {}, x))
+
+const toArrayString = (x: BaseSchema & TSchemaOptions, node: BaseSchema) =>
+	keepHidden(node, ArrayString((x.items ?? {}) as any, x))
 
 let _coerceQuery: CoerceOption[] | undefined
 export const coerceQuery = (): CoerceOption[] =>
@@ -399,9 +438,11 @@ export function captureCoercePlan(
 			Array.isArray(c.anyOf) &&
 			c.anyOf.some((b: any, i: number) => b !== o?.anyOf?.[i])
 		) {
+			// t.MaybeEmpty in a string slot appends the empty branch
+			const empty = c.anyOf.at(-1) === emptyAsUndefined()
 			if (
 				!Array.isArray(o?.anyOf) ||
-				o.anyOf.length !== c.anyOf.length ||
+				o.anyOf.length !== c.anyOf.length - +empty ||
 				c.properties ||
 				c.items
 			) {
@@ -410,9 +451,9 @@ export function captureCoercePlan(
 			}
 
 			const u: (CoerceNode | null)[] = []
-			let changed = false
+			let changed = empty
 
-			for (let i = 0; i < c.anyOf.length; i++) {
+			for (let i = 0; i < o.anyOf.length; i++) {
 				if (o.anyOf[i] === c.anyOf[i]) {
 					u.push(null)
 					continue
@@ -436,7 +477,7 @@ export function captureCoercePlan(
 			}
 
 			any = true
-			return { u }
+			return empty ? { u, em: 1 } : { u }
 		}
 
 		if (
@@ -506,8 +547,8 @@ function rebuildObjStr(original: any, site: CoerceObjStr) {
 	const { type, ...rest } = original
 	const node =
 		site.os === ELYSIA_TYPES.ObjectString
-			? toObjectString(rest as any)
-			: toArrayString(rest as any)
+			? toObjectString(rest as any, original)
+			: toArrayString(rest as any, original)
 
 	if ('o' in site)
 		return Object.defineProperty(node, '~optional', {

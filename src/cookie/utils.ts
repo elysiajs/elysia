@@ -2,6 +2,7 @@ import decodeComponent from 'deuri'
 import { parse } from './lib'
 
 import { Cookie } from './cookie'
+import { cookieWire } from './serialize'
 import { nullObject } from '../utils'
 
 import type { Context } from '../context'
@@ -270,7 +271,8 @@ class CookieJarHandler {
 						nullObject(),
 						this.config.defaults,
 						this.config.fields[key]?.defaults
-					)
+					),
+			this.config.encode?.[key]
 		))
 	}
 
@@ -336,10 +338,9 @@ function collectSignPending(
 		// the success lane signed): signing again would double-sign
 		if ((property as any)['~signed'] === value) continue
 
-		if (typeof value === 'object') {
-			value = JSON.stringify(value)
-			if ((property as any)['~raw'] === value) continue
-		} else if (typeof value !== 'string') value = value + ''
+		value = cookieWire(cookies, key, property)
+		if (value === undefined) continue
+		if (typeof value !== 'string') value = value + ''
 
 		const secret = Array.isArray(r.secrets)
 			? (r.secrets[0] ?? null)

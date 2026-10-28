@@ -2,7 +2,7 @@ import type { TOptional, TSchema } from 'typebox'
 
 import { copyNonEnumerable } from '../shared'
 
-const optionalTrue = {
+export const optionalTrue = {
 	value: true,
 	enumerable: false,
 	configurable: true

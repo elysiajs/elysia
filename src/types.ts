@@ -9,6 +9,7 @@ import type {
 	ValidationError
 } from './error'
 import type { TypeBoxSchema, AnySchema, StandardSchemaV1Like } from './type'
+import type { ELYSIA_TYPES } from './type/constants'
 
 import type {
 	Static,
@@ -376,7 +377,10 @@ export type LocalHook<
 	 * - 'arrayBuffer' / 'application/octet-stream': parse body as ArrayBuffer
 	 */
 	parse?: MaybeArray<
-		| BodyHandler<Schema, Singleton & { derive: Schema['derive'] }>
+		| BodyHandler<
+				BeforeValidation<Schema>,
+				Singleton & { derive: Schema['derive'] }
+		  >
 		| ContentType
 		| Parser
 	>
@@ -384,7 +388,10 @@ export type LocalHook<
 	 * Transform context's value
 	 */
 	transform?: MaybeArray<
-		TransformHandler<Schema, Singleton & { derive: Schema['derive'] }>
+		PreValidationTransform<
+			BeforeValidation<Schema>,
+			Singleton & { derive: Schema['derive'] }
+		>
 	>
 	/**
 	 * Execute before main handler
@@ -418,6 +425,32 @@ export type LocalHook<
 	>
 	tags?: DocumentDecoration['tags']
 } & (Input extends any ? Input : Prettify<Input>)
+
+/**
+ * Header names arrive lowercased, so a `headers` schema key with an uppercase
+ * letter never matches a request: rejected here, naming the key, when the
+ * hook declares `headers` (the runtime no longer checks it)
+ */
+export type HeadersKeyCheck<Input, Headers> = Input extends { headers: {} }
+	? UppercaseKeyOf<Headers> extends infer Key extends string
+		? [Key] extends [never]
+			? {}
+			: { [_ in `headers key "${Key}" must be lowercase`]: true }
+		: {}
+	: {}
+
+// Per member of a union, literal keys only (an index signature passes)
+type UppercaseKeyOf<T> = T extends object
+	? {
+			[K in keyof T]-?: K extends string
+				? string extends K
+					? never
+					: K extends Lowercase<K>
+						? never
+						: K
+				: never
+		}[keyof T]
+	: never
 
 // A tuple too, so an array of hooks keeps each hook's own type instead of
 // collapsing into their common supertype
@@ -461,11 +494,15 @@ export type GuardLocalHook<
 	 * - 'urlencoded' / 'application/x-www-form-urlencoded': parse body as urlencoded
 	 * - 'arrayBuffer' / 'application/octet-stream': parse body as ArrayBuffer
 	 */
-	parse?: MaybeArray<BodyHandler<Schema, Singleton> | ContentType | Parser>
+	parse?: MaybeArray<
+		BodyHandler<BeforeValidation<Schema>, Singleton> | ContentType | Parser
+	>
 	/**
 	 * Transform context's value
 	 */
-	transform?: MaybeArray<TransformHandler<Schema, Singleton>>
+	transform?: MaybeArray<
+		PreValidationTransform<BeforeValidation<Schema>, Singleton>
+	>
 	/**
 	 * Execute before main handler
 	 */
@@ -487,7 +524,7 @@ export type GuardLocalHook<
 	 */
 	error?: ErrorHandle
 	tags?: DocumentDecoration['tags']
-}
+} & HeadersKeyCheck<Input, Schema['headers']>
 
 export type EventFn<T extends AppEvent> = UnwrapArray<AppHook[T]>
 
@@ -570,7 +607,22 @@ export interface RouteSchema {
 	// What a client sends (schema input), read by `~Routes`; the fields
 	// above are what the handler receives (schema output)
 	'~input'?: { body?: unknown; headers?: unknown; query?: unknown }
+	// `true` when an input validator applies that the fields above can't
+	// show, so it can answer 422: a refined params schema
+	// (`t.String({ minLength: 5 })` types the same as the path-derived
+	// `{ id: string }`), or the schema of a macro that may be off (kept out of
+	// the handler's types). `unknown` otherwise, never `false`: `false & true`
+	// would make merged schemas `never`
+	'~validates'?: unknown
 }
+
+// Optional on every shape that carries it, so a hand-built schema without it
+// still fits: absent reads as `unknown`, like an explicit no
+type ValidatesMarker<S> = S extends { '~validates'?: infer Marker }
+	? unknown extends Marker
+		? unknown
+		: true
+	: unknown
 
 // A schema without the input channel (macro, hand-built) falls back to output
 export type RouteInput<S extends RouteSchema> = '~input' extends keyof S
@@ -637,15 +689,69 @@ export type VoidHandler<
 	in out Singleton extends SingletonBase = DefaultSingleton
 > = (context: Context<Route, Singleton>) => MaybePromise<void>
 
+/**
+ * What parse and transform see: they run before validation, so the input is
+ * as received (headers unvalidated, params raw strings, body unknown), as
+ * instance-level `.onParse()`/`.onTransform()` already are. The query is
+ * parsed by its schema's shape, see `RawQuery`
+ */
+type BeforeValidation<Route extends RouteSchema> = {
+	params: { [K in keyof Route['params']]: string }
+	query: unknown extends Route['query'] ? undefined : RawQuery<Route['query']>
+	response: Route['response']
+}
+
+/**
+ * The query as parsed before validation (`parseQuery`): a key whose schema
+ * holds an array (`t.Array`, `t.ArrayString`, a union with one) is always an
+ * array, one holding objects (`t.ObjectString`, array of objects) may be
+ * JSON-parsed, any other key is the last value as a string. Keys outside the
+ * schema are any of those
+ */
+type RawQuery<Query> = {
+	[K in keyof Query]?: RawQueryValue<NonNullable<Query[K]>>
+} & { [key: string]: unknown }
+
+type RawQueryValue<V> = [Extract<V, readonly unknown[]>] extends [never]
+	? V extends object
+		? unknown
+		: string
+	: Extract<V, readonly unknown[]>[number] extends object
+		? unknown[]
+		: string[]
+
+/**
+ * A transform's context, which runs before the cookie jar is built:
+ * `cookie` is undefined there, as in parse. A WebSocket transform runs after
+ * it, see `TransformHandler`
+ */
+export type PreValidationTransform<
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = DefaultSingleton,
+	Path extends string | undefined = undefined,
+	ParamsScope extends 'local' | 'plugin' | 'global' = 'local'
+> = (
+	context: Omit<
+		LifecycleContext<Route, BeforeDerive<Singleton>, Path, ParamsScope>,
+		'cookie'
+	> & { cookie: undefined }
+) => MaybePromise<void>
+
+// `derive` runs in `beforeHandle`: parse and transform run before it, so
+// nothing it derives is on their context yet (decorators and store are)
+type BeforeDerive<Singleton extends SingletonBase> = {
+	decorator: Singleton['decorator']
+	store: Singleton['store']
+	derive: {}
+}
+
 export type TransformHandler<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = DefaultSingleton,
 	Path extends string | undefined = undefined,
 	ParamsScope extends 'local' | 'plugin' | 'global' = 'local'
 > = (
-	// `derive` runs at transform-time on this branch, so its values ARE visible
-	// in the transform context (do not empty the derive channel).
-	context: LifecycleContext<Route, Singleton, Path, ParamsScope>
+	context: LifecycleContext<Route, BeforeDerive<Singleton>, Path, ParamsScope>
 ) => MaybePromise<void>
 
 export type BodyHandler<
@@ -654,16 +760,20 @@ export type BodyHandler<
 	Path extends string | undefined = undefined,
 	ParamsScope extends 'local' | 'plugin' | 'global' = 'local'
 > = (
-	context: LifecycleContext<
-		Route,
-		Singleton & {
-			decorator: {
-				contentType: string
-			}
-		},
-		Path,
-		ParamsScope
-	>
+	// before the cookie jar is built: `cookie` is undefined
+	context: Omit<
+		LifecycleContext<
+			Route,
+			BeforeDerive<Singleton> & {
+				decorator: {
+					contentType: string
+				}
+			},
+			Path,
+			ParamsScope
+		>,
+		'cookie'
+	> & { cookie: undefined }
 ) => MaybePromise<any>
 
 export type PreHandler<
@@ -878,6 +988,7 @@ export type MergeSchema<
 				cookie: undefined extends A['cookie']
 					? B['cookie']
 					: A['cookie']
+				'~validates'?: ValidatesMarker<A> & ValidatesMarker<B>
 				response: {} extends A['response']
 					? {} extends B['response']
 						? {}
@@ -929,8 +1040,10 @@ export type MacroProperty<
 	 * Deduplication similar to Elysia.constructor.seed
 	 */
 	seed?: unknown
-	parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
-	transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
+	parse?: MaybeArray<BodyHandler<BeforeValidation<TypedRoute>, Singleton>>
+	transform?: MaybeArray<
+		PreValidationTransform<BeforeValidation<TypedRoute>, Singleton>
+	>
 	beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
 	afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
 	error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
@@ -984,10 +1097,17 @@ export interface Macro<
 	>
 }
 
-export type JoinPath<
-	A extends string,
-	B extends string
-> = B extends `/${string}` ? `${A}${B}` : `${A}/${B}`
+// Mirrors runtime `joinPath`: an empty path is the base, and exactly one
+// slash joins them (`'/api/' + '/x'` is `/api/x`, not `/api//x`)
+export type JoinPath<A extends string, B extends string> = B extends ''
+	? A
+	: A extends `${infer Base}/`
+		? B extends `/${string}`
+			? `${Base}${B}`
+			: `${A}${B}`
+		: B extends `/${string}`
+			? `${A}${B}`
+			: `${A}/${B}`
 
 type IsPathParameter<Part extends string> = Part extends `:${infer Parameter}`
 	? Parameter
@@ -1219,6 +1339,8 @@ export type ContextAppendType = 'append' | 'override'
 
 // ? Unwrap Stuff
 type OptionalField = { '~optional': true }
+// `t.MaybeEmpty` is optional as an object property only, not as a root
+type MaybeEmptyField = { '~elyTyp': ELYSIA_TYPES['MaybeEmpty'] }
 
 // A root Ref keeps its target's optional-input behavior after model resolution.
 type IsOptionalRoot<
@@ -1226,7 +1348,9 @@ type IsOptionalRoot<
 	Definitions,
 	Seen extends string = never
 > = Schema extends OptionalField
-	? true
+	? Schema extends MaybeEmptyField
+		? false
+		: true
 	: Schema extends TRef<infer Ref>
 		? Ref extends Seen
 			? false
@@ -1445,7 +1569,9 @@ type UnwrapResponseSchema<
 				>
 			}>
 		: Schema extends OptionalField
-			? Partial<StaticCyclic<Schema, Definitions>>
+			? Schema extends MaybeEmptyField
+				? StaticCyclic<Schema, Definitions>
+				: Partial<StaticCyclic<Schema, Definitions>>
 			: StaticCyclic<Schema, Definitions>
 	: Schema extends StandardSchemaV1Like
 		? NonNullable<Schema['~standard']['types']>['input']
@@ -1475,6 +1601,12 @@ export interface UnwrapRoute<
 			? ResolvePath<Path>
 			: UnwrapSchema<Schema['params'], Definitions>
 	cookie: UnwrapSchema<Schema['cookie'], Definitions>
+	// optional: internal provenance, see `RouteSchema['~validates']`
+	'~validates'?: undefined extends Schema['params']
+		? unknown
+		: {} extends Schema['params']
+			? unknown
+			: true
 	'~input': {
 		body: UnwrapInputBodySchema<Schema['body'], Definitions>
 		headers: UnwrapInputSchema<Schema['headers'], Definitions>
@@ -1556,6 +1688,7 @@ export interface IntersectIfObjectSchema<
 	query: IntersectIfObject<A['query'], B['query']>
 	params: IntersectIfObject<A['params'], B['params']>
 	cookie: IntersectIfObject<A['cookie'], B['cookie']>
+	'~validates'?: ValidatesMarker<A> & ValidatesMarker<B>
 	'~input'?: {
 		body: IntersectIfObject<RouteInput<A>['body'], RouteInput<B>['body']>
 		headers: IntersectIfObject<
@@ -1602,6 +1735,9 @@ export interface MergeScopedSchemas<
 	query: Global['query'] & Scoped['query'] & Local['query']
 	params: Global['params'] & Scoped['params'] & Local['params']
 	cookie: Global['cookie'] & Scoped['cookie'] & Local['cookie']
+	'~validates'?: ValidatesMarker<Global> &
+		ValidatesMarker<Scoped> &
+		ValidatesMarker<Local>
 	'~input'?: {
 		[K in 'body' | 'headers' | 'query']: RouteInput<Global>[K] &
 			RouteInput<Scoped>[K] &
@@ -1626,10 +1762,14 @@ export interface MergeScopedSchemas<
 	}
 }
 
-type ReturnTypeIfPossible<T, Enabled = true> = false extends Enabled
-	? {}
-	: T extends (...a: any) => infer R
-		? R
+// A function macro is called with whatever the route passes, `false`
+// included; only an object macro is skipped, and only by `false` itself. One
+// only known as `boolean` may apply: its hooks may answer, see
+// `InnerMacroToContext` for its derive
+type ReturnTypeIfPossible<T, Enabled = true> = T extends (...a: any) => infer R
+	? R
+	: [Enabled] extends [false]
+		? {}
 		: T
 
 type FunctionArrayReturnType<T> =
@@ -1658,14 +1798,19 @@ type _FunctionArrayReturnType<T, Carry = undefined> = T extends [
 		>
 	: Carry
 
+// Without `undefined`/`void`, what passes on. `null` stays: a hook returning
+// it answers, with an empty body
 type FunctionArrayReturnTypeNonNullable<T> =
 	// If nothing is provided, it will be resolved as any
 	any[] extends T
 		? never
 		: T extends any[]
 			? _FunctionArrayReturnTypeNonNullable<T>
-			: // @ts-ignore
-				NonNullable<Awaited<ReturnType<NonNullable<T>>>>
+			: Exclude<
+					// @ts-ignore
+					Awaited<ReturnType<NonNullable<T>>>,
+					undefined | void
+				>
 
 type _FunctionArrayReturnTypeNonNullable<T, Carry = undefined> = T extends [
 	infer Fn,
@@ -1673,11 +1818,12 @@ type _FunctionArrayReturnTypeNonNullable<T, Carry = undefined> = T extends [
 ]
 	? _FunctionArrayReturnTypeNonNullable<
 			Rest,
-			NonNullable<
+			Exclude<
 				Awaited<
 					// @ts-ignore Trust me bro
 					ReturnType<Fn>
-				>
+				>,
+				undefined | void
 			> extends infer A
 				? IsNever<A> extends true
 					? Carry
@@ -1705,16 +1851,46 @@ export type ExcludeElysiaResponse<T> =
 				: A & {}
 		: {}
 
-type ExtractDeriveFromMacro<A> =
-	IsNever<A> extends true
+// What a macro's `derive` adds to the context. As with `.derive()`, one that
+// may return nothing adds its keys as optional, and so does a function macro
+// that returns `derive` on some calls only (`on ? { derive } : {}`)
+type MacroDerive<Def> = (
+	Def extends unknown
+		? 'derive' extends keyof Def
+			?
+					| MacroDeriveHandler<
+							Def['derive'] extends readonly (infer Each)[]
+								? Each
+								: Def['derive']
+					  >
+					// `on ? { derive } : {}` types `{}` as `{ derive?: undefined }`
+					| (undefined extends Def['derive'] ? undefined : never)
+			: undefined
+		: never
+) extends infer D
+	? IsNever<Exclude<D, undefined>> extends true
 		? {}
-		: A extends AnyElysiaStatus
-			? A
-			: Exclude<A, AnyElysiaStatus> extends infer A
-				? IsAny<A> extends true
+		: undefined extends D
+			? Partial<Exclude<D, undefined>>
+			: D
+	: {}
+
+type MacroDeriveHandler<Fn> = Fn extends (...a: any) => infer R
+	? Awaited<R> extends infer V
+		? IsAny<V> extends true
+			? {}
+			: Extract<
+						Exclude<V, AnyElysiaStatus>,
+						Record<any, unknown>
+				  > extends infer A
+				? IsNever<A> extends true
 					? {}
-					: A
+					: undefined extends V
+						? Partial<A>
+						: A
 				: {}
+		: {}
+	: never
 
 // A raw `Error` from a macro's `derive` is carried under `~error`, see
 // `ReturnedErrorCarrier`
@@ -1740,16 +1916,25 @@ type ExtractOnlyResponseFromMacro<A> =
 					}
 			: {}
 
+// Matched per member: a union code (`status(c ? 401 : 403, ...)`) serves its
+// body at each of its statuses
 type MergeResponseStatus<A> = {
 	[status in keyof UnionToIntersect<
 		// Must be using generic to separate literal from Box<T>
 		A extends ElysiaStatus<any, any, infer Status>
-			? { [A in Status]: 1 }
+			? { [A in StatusKey<Status>]: 1 }
 			: never
-	>]: Extract<
-		A,
-		AnyElysiaStatus & { status: status }
-	>['response'] extends infer Value
+	>]: (
+		A extends AnyElysiaStatus
+			? status extends 'default'
+				? number extends A['status']
+					? ServedStatusBody<number, A['response']>
+					: never
+				: status extends A['status']
+					? ServedStatusBody<status, A['response']>
+					: never
+			: never
+	) extends infer Value
 		? IsAny<Value> extends true
 			? // @ts-ignore status is always in StatusMapBack
 				StatusMapBack[status]
@@ -1804,7 +1989,12 @@ type ExtractErrorHookFromMacro<A> =
 		? {}
 		: {
 				return: {
-					'~catch': MergeResponseStatus<A> &
+					'~catch': ([ErrorOf<A>] extends [never]
+						? MergeResponseStatus<A>
+						: UnionResponseStatus<
+								MergeResponseStatus<A>,
+								UnhandledErrorResponse<ErrorOf<A>>
+							>) &
 						(IsAny<A> extends true ? {} : { '~catchAll': A })
 				}
 			}
@@ -1856,6 +2046,13 @@ type FlattenMacroResponse<T> = T extends object
  * A function-form macro may also compute `option` from `this['context']`.
  * The hook value is then typed as `option` per route, guard, group and ws,
  * replacing the macro's declared parameter
+ *
+ * `body`, `headers`, `query`, `params`, `cookie` and `response` replace the
+ * macro's returned schema of the same name. TypeScript types a generic
+ * macro's return with its type parameter at the constraint, so this is how
+ * `<T extends AnySchema>(schema: T) => ({ response: wrap(schema) })` gets the
+ * schema of each call site:
+ * `response: ReturnType<typeof wrap<Extract<this['input'], AnySchema>>>`
  *
  * `this` is not allowed in a nested type literal
  *
@@ -1919,6 +2116,20 @@ type ElaborateOption<
 			}
 		: Option
 
+// A lambda's schema members replace the macro's returned ones, so a generic
+// macro can type what TypeScript erases to the constraint
+type MacroLambdaSchema<Def, HookValue> = Def extends {
+	$type?: infer Lambda extends MacroTypeLambda
+}
+	? [Extract<keyof Lambda, InputSchemaKey>] extends [never]
+		? Def
+		: Omit<Def, Extract<keyof Lambda, InputSchemaKey>> &
+				Pick<
+					Lambda & { input: HookValue },
+					Extract<keyof Lambda, InputSchemaKey>
+				>
+	: Def
+
 type MacroLambdaContext<Value, HookValue> =
 	NonNullable<Value> extends {
 		$type?: infer Lambda extends MacroTypeLambda
@@ -1970,85 +2181,139 @@ export type MacroToContext<
 		: {}
 >
 
+/**
+ * Whether a selected macro may not apply on a request: an object macro set
+ * to a value only known as `boolean`, an option left out (`{ auth?: boolean }`),
+ * a function macro that may return nothing, or one enabled by such a macro
+ */
+type MacroMaybeOff<Fn, Option, Value, Parent extends boolean> = [
+	Parent
+] extends [true]
+	? true
+	: undefined extends Option
+		? true
+		: Fn extends (...a: any) => any
+			? undefined extends Value
+				? true
+				: false
+			: false extends Option
+				? true
+				: false
+
+/**
+ * The schema of a macro that may not apply. When it applies it validates (so
+ * 422) and a client must send what it asks for, but when it doesn't the
+ * handler gets the input unvalidated: only the client side (`~input`) and
+ * the response keep it
+ */
+type MaybeMacroSchema<
+	Def,
+	Definitions extends DefinitionBase['typebox']
+> = UnwrapMacroSchema<
+	// @ts-ignore Trust me bro
+	Pick<Def, 'response' & keyof Def>,
+	Definitions
+> & {
+	// @ts-ignore Trust me bro
+	'~input': UnwrapMacroSchema<Def, Definitions>['~input']
+	'~validates': [
+		Extract<keyof Def, 'body' | 'headers' | 'query' | 'cookie' | 'params'>
+	] extends [never]
+		? unknown
+		: true
+}
+
 // There's only derive that can add new properties to Context
 type InnerMacroToContext<
 	MacroFn extends Macro = {},
 	SelectedMacro extends BaseMacro = {},
 	Definitions extends DefinitionBase['typebox'] = {},
-	R extends 1[] = []
-> = {} extends SelectedMacro
+	R extends 1[] = [],
+	// enabled by a macro that may not apply, see `MacroMaybeOff`
+	MaybeOff extends boolean = false
+> = [keyof SelectedMacro] extends [never]
 	? {}
 	: R['length'] extends 15
 		? {}
 		: UnionMacroContext<
 				{
-					[key in keyof SelectedMacro]: ReturnTypeIfPossible<
+					[key in keyof SelectedMacro]-?: ReturnTypeIfPossible<
 						MacroFn[key],
 						SelectedMacro[key]
 					> extends infer Value
-						? NonNullable<Value> extends infer Def
-							? {
-									// Boxed: conflicting literal metas
-									// (`'a'` vs `'b'`) would reduce the whole
-									// intersected context to never
-									meta: 'meta' extends keyof Def
-										? { value: Def['meta'] }
-										: unknown
-									derive: ExtractDeriveFromMacro<
-										Extract<
-											Exclude<
-												FunctionArrayReturnType<
-													// @ts-ignore Trust me bro
-													Def['derive']
-												>,
-												AnyElysiaStatus
+						? MacroLambdaSchema<
+								NonNullable<Value>,
+								SelectedMacro[key]
+							> extends infer Def
+							? MacroMaybeOff<
+									MacroFn[key],
+									SelectedMacro[key],
+									Value,
+									MaybeOff
+								> extends infer Maybe extends boolean
+								? {
+										// Boxed: conflicting literal metas
+										// (`'a'` vs `'b'`) would reduce the
+										// whole intersected context to never
+										meta: 'meta' extends keyof Def
+											? { value: Def['meta'] }
+											: unknown
+										// may be absent if the macro may not apply
+										derive: ([Maybe] extends [true]
+											? Partial<MacroDerive<Def>>
+											: MacroDerive<Def>) &
+											MacroLambdaContext<
+												Value,
+												SelectedMacro[key]
+											>
+									} & ([Maybe] extends [true]
+										? MaybeMacroSchema<Def, Definitions>
+										: UnwrapMacroSchema<
+												// @ts-ignore Trust me bro
+												Def,
+												Definitions
+											>) &
+										ExtractHandleHookFromMacro<
+											FunctionArrayReturnTypeNonNullable<
+												// @ts-expect-error type is checked in key mapping
+												Def['beforeHandle']
 											>,
-											Record<any, unknown>
+											'~before'
+										> &
+										ExtractHandleHookFromMacro<
+											FunctionArrayReturnTypeNonNullable<
+												// @ts-expect-error type is checked in key mapping
+												Def['afterHandle']
+											>,
+											'~after'
+										> &
+										ExtractErrorHookFromMacro<
+											FunctionArrayReturnType<
+												// @ts-expect-error type is checked in key mapping
+												Def['error']
+											>
+										> &
+										ExtractOnlyResponseFromMacro<
+											FunctionArrayReturnTypeNonNullable<
+												// @ts-expect-error type is checked in key mapping
+												Def['derive']
+											>
+										> &
+										InnerMacroToContext<
+											MacroFn,
+											// @ts-ignore trust me bro
+											Pick<
+												Def,
+												Extract<
+													keyof MacroFn,
+													keyof Def
+												>
+											>,
+											Definitions,
+											[...R, 1],
+											Maybe
 										>
-									> &
-										MacroLambdaContext<
-											Value,
-											SelectedMacro[key]
-										>
-								} & UnwrapMacroSchema<
-									// @ts-ignore Trust me bro
-									Def,
-									Definitions
-								> &
-									ExtractHandleHookFromMacro<
-										FunctionArrayReturnTypeNonNullable<
-											// @ts-expect-error type is checked in key mapping
-											Def['beforeHandle']
-										>,
-										'~before'
-									> &
-									ExtractHandleHookFromMacro<
-										FunctionArrayReturnTypeNonNullable<
-											// @ts-expect-error type is checked in key mapping
-											Def['afterHandle']
-										>,
-										'~after'
-									> &
-									ExtractErrorHookFromMacro<
-										// @ts-expect-error type is checked in key mapping
-										FunctionArrayReturnType<Def['error']>
-									> &
-									ExtractOnlyResponseFromMacro<
-										FunctionArrayReturnTypeNonNullable<
-											// @ts-expect-error type is checked in key mapping
-											Def['derive']
-										>
-									> &
-									InnerMacroToContext<
-										MacroFn,
-										// @ts-ignore trust me bro
-										Pick<
-											Def,
-											Extract<keyof MacroFn, keyof Def>
-										>,
-										Definitions,
-										[...R, 1]
-									>
+								: {}
 							: {}
 						: {}
 				}[keyof SelectedMacro]
@@ -2181,6 +2446,60 @@ export type ObjectMacroDefs<
 					>]: `Unknown macro property '${P & string}'`
 				}
 } & N
+
+/**
+ * `Routes` without the method a route re-registers at the same path: the
+ * router serves the later one, intersecting both would make it `never`. Only
+ * walks the path when that route exists
+ */
+type WithoutRoute<
+	Routes,
+	BasePath extends string,
+	Path extends string,
+	Method extends string
+> = string extends Path
+	? Routes
+	: JoinPath<BasePath, Path> extends infer Joined extends string
+		? EdenSegments<Joined> extends infer Segments
+			? HasRouteAt<Routes, Segments, Method> extends true
+				? OmitRouteAt<Routes, Segments, Method>
+				: Routes
+			: Routes
+		: Routes
+
+type HasRouteAt<Routes, Segments, Method extends string> = Segments extends [
+	infer Head,
+	...infer Rest
+]
+	? Head extends keyof Routes
+		? HasRouteAt<Routes[Head], Rest, Method>
+		: false
+	: Method extends keyof Routes
+		? true
+		: false
+
+// The nodes `CreateEden` makes for a path
+type EdenSegments<Path extends string> = Path extends `/${infer Rest}`
+	? _EdenSegments<Rest>
+	: Path extends '' | '/'
+		? []
+		: _EdenSegments<Path>
+
+type _EdenSegments<Path extends string> =
+	Path extends `${infer Start}/${infer Rest}`
+		? [Start, ..._EdenSegments<Rest>]
+		: Path extends ''
+			? []
+			: [Path]
+
+type OmitRouteAt<Routes, Segments, Method extends string> = Segments extends [
+	infer Head extends string,
+	...infer Rest
+]
+	? Omit<Routes, Head> & {
+			[_ in Head]: OmitRouteAt<Routes[Head & keyof Routes], Rest, Method>
+		}
+	: Omit<Routes, Method>
 
 // ? Unwrap Handler Stuff
 export type CreateEden<
@@ -2583,7 +2902,10 @@ export type CreateWSEdenResponse<
 type Extract200<T> = T extends AnyElysiaStatus
 	?
 			| Exclude<T, AnyElysiaStatus>
-			| Extract<T, ElysiaStatus<200, any, 200>>['response']
+			| ServedStatusBody<
+					200,
+					Extract<T, ElysiaStatus<200, any, 200>>['response']
+			  >
 	: T
 
 /**
@@ -2600,23 +2922,40 @@ type NonErrorOf<T> = T extends Error ? ('stack' extends keyof T ? never : T) : T
 
 export type ValueToResponseSchema<
 	Value,
-	Errors extends ErrorDefinition[] = []
+	Errors extends ErrorDefinition[] = [],
+	IsHandler extends boolean = false
 > = ExtractErrorFromHandle<NonErrorOf<Value>> &
 	(Errors extends [] ? {} : ExtractReturnedError<Value, Errors>) &
 	(Extract200<NonErrorOf<Value>> extends infer R200
 		? undefined extends R200
-			? {}
+			? // A hook returning nothing passes on to the next one. A handler
+				// returning nothing is served as a 200 with no body: `T` stays
+				// at 200, with `undefined` for the empty one. `unknown` says nothing
+				IsHandler extends true
+				? unknown extends R200
+					? {}
+					: Exclude<R200, void> extends infer Served
+						? IsNever<Served> extends true
+							? // only a `status()` or an `Error` besides
+								// `undefined`: that one is still an empty 200
+								IsNever<Exclude<Value, void>> extends true
+								? {}
+								: { 200: undefined }
+							: { 200: Served | undefined }
+						: {}
+				: {}
 			: IsNever<R200> extends true
 				? {}
 				: { 200: R200 }
 		: {})
 
+// The route handler's value, see `ValueToResponseSchema`
 export type ValueOrFunctionToResponseSchema<
 	T,
 	Errors extends ErrorDefinition[] = []
 > = T extends (...a: any) => MaybePromise<infer R>
-	? ValueToResponseSchema<R, Errors>
-	: ValueToResponseSchema<T, Errors>
+	? ValueToResponseSchema<R, Errors, true>
+	: ValueToResponseSchema<T, Errors, true>
 
 export type ElysiaHandlerToResponseSchema<in out Handle extends Function> =
 	Prettify<
@@ -2674,13 +3013,13 @@ export type DeriveResponse<Derivative> = 0 extends 1 & Derivative
 	? ExtractErrorFromHandle<Derivative>
 	: {
 			[R in Derivative as R extends AnyElysiaStatus
-				? R['status']
+				? StatusKey<R['status']>
 				: R extends Error
 					? 'stack' extends keyof R
 						? '~error'
 						: never
 					: never]: R extends AnyElysiaStatus
-				? Prettify<R['response']>
+				? ServedStatusBody<R['status'], Prettify<R['response']>>
 				: R
 		}
 
@@ -2737,13 +3076,15 @@ type HasInputValidator<Schema extends RouteSchema, Path extends string> =
 		Schema,
 		Exclude<InputSchemaKey, 'params' | 'response'>
 	>
-		? undefined extends Schema['params']
-			? false
-			: Schema['params'] extends ResolvePath<Path>
-				? ResolvePath<Path> extends Schema['params']
-					? false
+		? ValidatesMarker<Schema> extends true
+			? true
+			: undefined extends Schema['params']
+				? false
+				: Schema['params'] extends ResolvePath<Path>
+					? ResolvePath<Path> extends Schema['params']
+						? false
+						: true
 					: true
-				: true
 		: true
 
 export type ComposeElysiaResponse<
@@ -2768,14 +3109,78 @@ export type ComposeElysiaResponse<
 	>,
 	// A returned error is answered by its `.onError()` handler, which the
 	// response schema never checks, so the schema can't claim that status.
-	// Nor a validation error's
-	HasInputValidator<Schema, Path> extends false
-		? ReturnedErrorResponse<Handle, Errors, HookError>
-		: UnionResponseStatus<
-				ReturnedErrorResponse<Handle, Errors, HookError>,
-				ValidationResponse<Errors>
-			>
+	// Nor a validation error's, nor what an error hook answers any error with
+	UnionResponseStatus<
+		HasInputValidator<Schema, Path> extends false
+			? ReturnedErrorResponse<Handle, Errors, HookError>
+			: UnionResponseStatus<
+					ReturnedErrorResponse<Handle, Errors, HookError>,
+					ValidationResponse<Errors>
+				>,
+		// without a response schema the statuses are already in `Possibility`
+		// as is
+		// @ts-ignore
+		{} extends Schema['response']
+			? {}
+			: // @ts-ignore
+				ErrorHookAnswers<Errors, keyof Schema['response']>
+	>
 >
+
+/**
+ * What the error hooks in scope (route, guard, macro, `.onError()` of any
+ * scope, `.onError(Class)`) answer a thrown error with, at the statuses a
+ * route's response schema declares: the schema never checks them, so it
+ * can't claim those bodies. A plain value is served at the error's status:
+ * any error status for a catch-all hook or a class without a literal one
+ */
+type ErrorHookAnswers<Errors extends unknown[], Declared extends PropertyKey> =
+	ErrorHookAnswersOf<Errors, ErrorStatusOf<Declared>> extends infer Answers
+		? { [K in Declared & keyof Answers]: Answers[K] }
+		: {}
+
+// `4xx`/`5xx`: the statuses a caught error is served at
+type ErrorStatusOf<K> = K extends number
+	? `${K}` extends `4${string}` | `5${string}`
+		? K
+		: never
+	: never
+
+type ErrorHookAnswersOf<
+	Errors extends unknown[],
+	ErrorStatus extends PropertyKey
+> = Errors extends [infer Head, ...infer Rest]
+	? Head extends { error: infer E; '~return': infer R }
+		? UnionResponseStatus<
+				UnionResponseStatus<
+					[ErrorOf<R>] extends [never]
+						? ExtractErrorFromHandle<R>
+						: UnionResponseStatus<
+								ExtractErrorFromHandle<R>,
+								UnhandledErrorResponse<ErrorOf<R>>
+							>,
+					Exclude<
+						R,
+						AnyElysiaStatus | ErrorOf<R> | undefined | void
+					> extends infer Plain
+						? IsNever<Plain> extends true
+							? {}
+							: {
+									[S in (Head extends { '~catchAll': true }
+										? ErrorStatus
+										: IsNever<
+													LiteralErrorStatus<E>
+											  > extends true
+											? ErrorStatus
+											: ErrorFallbackStatus<E>) &
+										PropertyKey]: Plain
+								}
+						: {}
+				>,
+				ErrorHookAnswersOf<Rest, ErrorStatus>
+			>
+		: ErrorHookAnswersOf<Rest, ErrorStatus>
+	: {}
 
 type ReturnedErrorResponse<
 	Handle,
@@ -2790,20 +3195,66 @@ type ReturnedErrorResponse<
 		>
 
 export type ExtractErrorFromHandle<in out Handle> = {
-	[ErrorResponse in Extract<
-		Handle,
-		AnyElysiaStatus
-	> as ErrorResponse extends AnyElysiaStatus
-		? ErrorResponse['status']
-		: never]: Prettify<ErrorResponse['response']>
+	[Served in PerStatus<Extract<Handle, AnyElysiaStatus>> as StatusKey<
+		Served['status']
+	>]: ServedStatusBody<Served['status'], Prettify<Served['response']>>
 }
+
+// One entry per status a `status()` may answer at: a union code
+// (`status(c ? 200 : 204, null)`) is served differently at each
+type PerStatus<S> =
+	S extends ElysiaStatus<any, infer Body, infer Status>
+		? Status extends unknown
+			? { status: Status; response: Body }
+			: never
+		: never
+
+/**
+ * What a `status()` is served with (`ElysiaStatus` in `src/error.ts`): an
+ * empty status (204, 205, 304, 307, 308, 101) sends no body, typed
+ * `undefined` like a handler's empty 200, and a nullish body sends the
+ * status text
+ */
+type ServedStatusBody<Status, Body> = unknown extends Body
+	? Body
+	: number extends Status
+		? // any status, an empty one (no body) too. A nullish body is the
+				// status text, or the code itself for one without a name
+				| Exclude<Body, null | undefined>
+				| (IsNever<Extract<Body, null | undefined>> extends true
+						? never
+						: string | number)
+				| undefined
+		: [Status] extends [101 | 204 | 205 | 304 | 307 | 308]
+			? undefined
+			: IsNever<Extract<Body, null | undefined>> extends true
+				? Body
+				:
+						| Exclude<Body, null | undefined>
+						| (Status extends keyof StatusMapBack
+								? StatusMapBack[Status]
+								: Status)
+
+/**
+ * A status only known as `number` (`status(code as number, ...)`,
+ * `problem({ status: n })`) is keyed `default`, OpenAPI's "any other status":
+ * a `number` index signature would absorb every literal key, the 200
+ * included, and read as an empty map. Eden reads `default` as a response at
+ * some status it can't name, which may be a 2xx too
+ */
+type StatusKey<Status> = number extends Status ? 'default' : Status
 
 /**
  * Status used when an error handler returns a plain value: the error's
- * declared literal `status`, otherwise 500
+ * declared literal `status`, otherwise 500. A `200` is served as 500, as the
+ * runtime resets it (`createErrorHandler`)
  */
 type ErrorFallbackStatus<E> =
-	IsNever<LiteralErrorStatus<E>> extends true ? 500 : LiteralErrorStatus<E>
+	IsNever<LiteralErrorStatus<E>> extends true
+		? 500
+		:
+				| Exclude<LiteralErrorStatus<E>, 200>
+				| (200 extends LiteralErrorStatus<E> ? 500 : never)
 
 /**
  * `Definitions['error']` / `EphemeralType['error']` entry registered by an
@@ -2939,7 +3390,10 @@ type ValidationProblem = {
 	on: string
 	found?: unknown
 	property?: string
-	expected?: string
+	// a value the schema accepts (its example), of the schema's type
+	expected?: unknown
+	// every issue, outside production
+	errors?: { message?: string; [key: string]: unknown }[]
 }
 
 type InputValidationError = ValidationError & { status: 422 }
@@ -3356,12 +3810,86 @@ type UnionParentResponse<Own, Response> = {
 export type ResolveUsedRouteErrors<
 	Routes,
 	Errors extends ErrorDefinition[],
-	Response = {}
+	Response = {},
+	// the parent's input validators, see `ParentInput`
+	Input = never
+> = [Input] extends [never]
+	? _ResolveUsedRouteErrors<Routes, Errors, Response>
+	: string extends keyof Routes
+		? Routes
+		: WithParentInput<
+				_ResolveUsedRouteErrors<Routes, Errors, Response>,
+				Input
+			>
+
+type _ResolveUsedRouteErrors<
+	Routes,
+	Errors extends ErrorDefinition[],
+	Response
 > = Errors extends []
 	? {} extends Response
 		? Routes
 		: UsedRoutes<Routes, Errors, Response>
 	: UsedRoutes<Routes, Errors, Response>
+
+/**
+ * What the parent's guards validate on the plugin routes it `.use()`s, as a
+ * client sends it: they run on those routes too. `never` when they validate
+ * nothing, which leaves the routes as they are
+ */
+export type ParentInput<
+	M extends MetadataBase,
+	E extends EphemeralType,
+	V extends EphemeralType
+> =
+	MergeSchema<
+		V['schema'],
+		MergeSchema<E['schema'], M['schema']>
+	> extends infer Override extends RouteSchema
+		? M['schemas'] &
+				E['schemas'] &
+				V['schemas'] extends infer Merged extends RouteSchema
+			? HasInputValidator<Override, ''> extends true
+				? ParentInputOf<Override, Merged>
+				: HasInputValidator<Merged, ''> extends true
+					? ParentInputOf<Override, Merged>
+					: never
+			: never
+		: never
+
+type ParentInputOf<Override extends RouteSchema, Merged extends RouteSchema> = {
+	// a field the route doesn't declare: the parent's (`schema: 'override'`)
+	override: RouteInput<Override>
+	// every route gets these too (`schema: 'merge'`)
+	merged: RouteInput<Merged>
+}
+
+// The route's own field wins over the parent's override one, a merged one
+// always applies. Either may answer 422
+type WithParentInput<Routes, Input> = Input extends {
+	override: infer O
+	merged: infer S
+}
+	? _WithParentInput<Routes, O, S>
+	: Routes
+
+type _WithParentInput<Routes, O, S> = {
+	[K in keyof Routes]: RouteKey extends keyof Routes[K]
+		? ParentLeaf<Routes[K], O, S>
+		: _WithParentInput<Routes[K], O, S>
+}
+
+type ParentLeaf<Leaf, O, S> = {
+	[P in keyof Leaf]: P extends 'body' | 'query' | 'headers'
+		? (unknown extends Leaf[P] ? O[P & keyof O] : Leaf[P]) extends infer F
+			? P extends keyof S
+				? IntersectIfObject<F, S[P]>
+				: F
+			: never
+		: P extends 'response'
+			? UnionResponseStatus<Leaf[P], { 422: ValidationProblem }>
+			: Leaf[P]
+}
 
 // A plugin typed as `AnyElysia` keeps its `any` routes
 type UsedRoutes<
@@ -3409,6 +3937,34 @@ type PrependUsedRoutes<
 				Catches
 			>
 		: PrependUsedRoutes<Routes[K], Errors, Response, Catches>
+}
+
+/**
+ * A used plugin's routes, served under the parent's prefix (or group): its
+ * path params are on every one of them, as the router resolves them
+ */
+export type UsedRoutesUnder<
+	BasePath extends string,
+	Routes extends Record<string, unknown>
+> = BasePath extends PathParameterLike
+	? CreateEden<
+			BasePath,
+			string extends keyof Routes
+				? Routes
+				: WithPrefixParams<Routes, ResolvePath<BasePath>>
+		>
+	: CreateEden<BasePath, Routes>
+
+type WithPrefixParams<Routes, Params> = {
+	[K in keyof Routes]: RouteKey extends keyof Routes[K]
+		? {
+				// the route's own params schema wins a key both declare: it is
+				// what validates (and decodes) it
+				[P in keyof Routes[K]]: P extends 'params'
+					? Prettify<Omit<Params, keyof Routes[K][P]> & Routes[K][P]>
+					: Routes[K][P]
+			}
+		: WithPrefixParams<Routes[K], Params>
 }
 
 type MergeStatusUnion<U> = {
@@ -3488,9 +4044,10 @@ export type MergeElysiaInstances<
 								...Ephemeral['error'],
 								...Volatile['error']
 							],
-							ParentResponse<Metadata, Ephemeral, Volatile>
+							ParentResponse<Metadata, Ephemeral, Volatile>,
+							ParentInput<Metadata, Ephemeral, Volatile>
 						>
-					: CreateEden<
+					: UsedRoutesUnder<
 							Prefix,
 							ResolveUsedRouteErrors<
 								Current['~Routes'],
@@ -3499,7 +4056,8 @@ export type MergeElysiaInstances<
 									...Ephemeral['error'],
 									...Volatile['error']
 								],
-								ParentResponse<Metadata, Ephemeral, Volatile>
+								ParentResponse<Metadata, Ephemeral, Volatile>,
+								ParentInput<Metadata, Ephemeral, Volatile>
 							>
 						>)
 		>
@@ -3547,10 +4105,10 @@ type RouteHookReturn<Hook> = Hook extends (...a: any) => MaybePromise<infer R>
 		? RouteHookReturn<Each>
 		: never
 
+// An `error` hook's answer is not the handler's: see `ErrorHookStatus`
 type RouteHookValue<Hook extends RouteHookCapture> =
 	| Exclude<RouteHookReturn<Hook['beforeHandle']>, void>
 	| Exclude<RouteHookReturn<Hook['afterHandle']>, void>
-	| Extract<RouteHookReturn<Hook['error']>, AnyElysiaStatus>
 
 // What an error hook answers any error with: its `status()` returns, and the
 // `Error`s it returns, each served as an unhandled one at its own status
@@ -3596,13 +4154,14 @@ export type AddRoute<
 	Singleton,
 	Definitions,
 	Metadata,
-	Routes &
+	WithoutRoute<Routes, BasePath, Path, Method> &
 		CreateRouteEden<
 			BasePath,
 			Path,
 			{
 				[method in Method]: ComposeRoute<
-					Path,
+					// served under the prefix: its params are the route's too
+					JoinPath<BasePath, Path>,
 					Schema,
 					MacroContext,
 					Schema &
@@ -3617,8 +4176,12 @@ export type AddRoute<
 							Ephemeral['response'],
 							UnionResponseStatus<
 								Volatile['response'],
-								// @ts-ignore
-								MacroContext['return'] & {}
+								UnionResponseStatus<
+									// @ts-ignore
+									MacroContext['return'] & {},
+									// the route's own `error` hook, as a guard's
+									ErrorHookStatus<RouteHook['error']>
+								>
 							>
 						>
 					>,
@@ -3810,6 +4373,48 @@ export type GlobalHookReturn<
 // 1.x `{ as }` hook scope, `'scoped'` is `'plugin'`
 export type LegacyScope<As extends 'local' | 'scoped' | 'global'> =
 	As extends 'scoped' ? 'plugin' : As
+
+/**
+ * A scope-less hook registers at the instance's default scope
+ * (`new Elysia({ as })`), so it types like one given that scope
+ */
+export type InstanceHookReturn<
+	Scope extends EventScope,
+	BasePath extends string,
+	Singleton extends SingletonBase,
+	Definitions extends DefinitionBase,
+	Metadata extends MetadataBase,
+	Routes extends RouteBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType,
+	ResponseAddition extends PossibleResponse,
+	DeriveAddition extends Record<string, unknown> = never
+> = [Scope] extends ['local']
+	? LocalHookReturn<
+			BasePath,
+			Scope,
+			Singleton,
+			Definitions,
+			Metadata,
+			Routes,
+			Ephemeral,
+			Volatile,
+			ResponseAddition,
+			[DeriveAddition] extends [never] ? {} : DeriveAddition
+		>
+	: ScopedHookReturn<
+			Scope,
+			BasePath,
+			Scope,
+			Singleton,
+			Definitions,
+			Metadata,
+			Routes,
+			Ephemeral,
+			Volatile,
+			ResponseAddition,
+			DeriveAddition
+		>
 
 export type ScopedHookReturn<
 	HookScope extends EventScope,

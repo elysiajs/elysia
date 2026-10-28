@@ -26,6 +26,8 @@ import {
 	cloneHook,
 	flattenChain,
 	flattenChainInfo,
+	installsOverlap,
+	type Installs,
 	flattenChainMemo,
 	flattenChainMemoReadonly,
 	isNotEmpty,
@@ -420,11 +422,23 @@ export function composeRouteHook(
 		promoteDerive(localHook)
 	}
 
-	const own = flattenChainInfo(root, appHook as ChainNode, resolve)
-	let skip: ReadonlySet<number> | undefined
-	if (own?.installs && instance !== root) {
+	const own =
+		instance !== root
+			? flattenChainInfo(root, appHook as ChainNode, resolve)
+			: undefined
+
+	let skip: Installs | undefined
+	if (own?.installs) {
 		const outer = flattenChainInfo(root, inheritedChain, resolve)?.installs
-		if (outer && !outer.isDisjointFrom(own.installs)) skip = outer
+		if (outer) {
+			if (own.outer !== outer) {
+				own.outer = outer
+				// own chains hold fewer registrations: walk them
+				own.overlap = installsOverlap(own.installs, outer)
+			}
+
+			if (own.overlap) skip = outer
+		}
 	}
 
 	const flatAppHook = flattenChainMemo(
@@ -506,7 +520,7 @@ function callbackErrors(
 ) {
 	let out: Function[] | undefined
 	// a callback's copy of a named plugin the route already has stays out
-	let outer: ReadonlySet<number> | undefined | null = null
+	let outer: Installs | undefined | null = null
 
 	for (let node = start; node && 'combine' in node; node = node.combine)
 		if (node.callback) {
@@ -522,9 +536,9 @@ function callbackErrors(
 			// every registration the route has inside the callback, a
 			// propagated copy as its original; the callback's own chain is not
 			// the route's
-			const has = new Set<ChainNode>()
+			const has = new Set<unknown>()
 			const collect = (n: ChainNode) => {
-				has.add((n as { registration?: ChainNode }).registration ?? n)
+				has.add(registrationOf(n))
 				return undefined
 			}
 			flattenChain(node.inner, collect)
@@ -533,9 +547,7 @@ function callbackErrors(
 			const error = flattenChain(
 				node.callback,
 				(n) =>
-					has.has(
-						(n as { registration?: ChainNode }).registration ?? n
-					)
+					has.has(registrationOf(n))
 						? undefined
 						: resolve
 							? resolve(n)
@@ -547,6 +559,12 @@ function callbackErrors(
 
 	return out
 }
+
+// a registration: its key, else the node it copies
+const registrationOf = (n: ChainNode) =>
+	(n as { key?: string }).key ??
+	(n as { registration?: ChainNode }).registration ??
+	n
 
 const withCallbackErrors = (
 	own: Function | Function[] | undefined,

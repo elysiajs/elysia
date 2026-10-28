@@ -872,9 +872,14 @@ export function compileHandlerJit(
 			if (vali?.cookie) {
 				link(vali, 'va')
 
-				const cookieIsOptional = !!(hook?.cookie as any)?.['~optional']
+				// t.MaybeEmpty is optional as a property only: an empty root jar is still validated
+				const cookieRoot = hook?.cookie as any
+				const cookieIsOptional =
+					!!cookieRoot?.['~optional'] &&
+					cookieRoot['~elyTyp'] !== ELYSIA_TYPES.MaybeEmpty
 				const value = `va.cookie.From(_ck,${fromArgs('cookie', cookieValiIsAsync)})`
 				const validateExpr = `_ck=${cookieValiIsAsync ? awaitValue(value, arm) : value}\n`
+
 				if (cookieIsOptional)
 					code += `if(Object.keys(_ck).length){${validateExpr}}\n`
 				else code += validateExpr
@@ -1333,13 +1338,28 @@ export function compileHandlerJit(
 				`return _em(c,fbr(c,e,_fbm))\n` +
 				`}\n`
 
+			let errorJar = ''
+			if (cookieConfig) {
+				const [parseRaw, key, jarArgs] = !hasCookieSign
+					? [parseCookieRawDeferred, 'pcrd', ',undefined,1']
+					: syncCookieSign
+						? [parseCookieRawLazy, 'pcrl', ',1']
+						: [parseCookieRaw, 'pcr', '']
+
+				link(parseRaw, key)
+
+				const raw = `${key}(c.request.headers.get('cookie'),cc${asyncCookieSign ? ',1' : ''})`
+				errorJar = `c.cookie??=bcj(c.set,${asyncCookieSign ? awaitValue(raw, arm) : raw},cc${jarArgs})\n`
+			}
+
 			const errorHead = plain(
 				`c.error=e\n` +
 					(allowUnsafeDetail
 						? `if(e instanceof verr)e.allowUnsafeValidationDetails=true\n`
 						: ``) +
 					`if(e?.status)c.set.status=e.status\n` +
-					`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n`
+					`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
+					errorJar
 			)
 			if (typeof asyncMode === 'object') {
 				// `e` is live; the catch's own `_r` is only ever an await target
@@ -1357,6 +1377,9 @@ export function compileHandlerJit(
 
 			body +=
 				errorHead +
+				(abortOn && asyncCookieSign
+					? `if(${abortPeek}){${declined}return _efb(e,c)}\n`
+					: '') +
 				`let _r${hasMapResponse ? ',tmp' : ''}\n` +
 				mapError(
 					hook!.error!,

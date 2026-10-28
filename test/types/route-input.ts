@@ -431,3 +431,32 @@ import { type } from 'arktype'
 		'~input' extends keyof Route ? true : false
 	>().toEqualTypeOf<false>()
 }
+
+// `t.MaybeEmpty` is optional as an object property (an empty value may be an
+// absent key), not as a root: a root body is the object, `null` or
+// `undefined`, never a partial object
+{
+	const app = new Elysia()
+		.post(
+			'/root',
+			{ body: t.MaybeEmpty(t.Object({ name: t.String() })) },
+			({ body }) => {
+				expectTypeOf(body).toEqualTypeOf<
+					{ name: string } | null | undefined
+				>()
+
+				return 'ok'
+			}
+		)
+		.post(
+			'/prop',
+			{ body: t.Object({ m: t.MaybeEmpty(t.Number()) }) },
+			({ body }) => {
+				expectTypeOf(body).toEqualTypeOf<{
+					m?: number | null | undefined
+				}>()
+
+				return 'ok'
+			}
+		)
+}

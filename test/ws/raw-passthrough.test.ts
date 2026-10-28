@@ -13,8 +13,7 @@ describe('WebSocket raw passthrough getters', () => {
 			'publishBinary',
 			'subscribe',
 			'unsubscribe',
-			'isSubscribed',
-			'cork'
+			'isSubscribed'
 		] as const
 
 		const raw: any = {

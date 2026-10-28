@@ -32,6 +32,47 @@ describe('WebSocket message', () => {
 		app.stop()
 	})
 
+	// cork is typed to hand its callback the Elysia wrapper; a raw
+	// passthrough gave it the Bun socket, so w.id was undefined and
+	// send({}) went out as "[object Object]" with no response validation.
+	it("cork's callback receives the Elysia wrapper so send() encodes and validates", async () => {
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws', {
+				response: t.Object({ n: t.Number() }),
+				message(ws) {
+					const result = ws.cork((w) => {
+						w.send({ n: 1 })
+						w.send({ n: 'bad' } as any)
+						w.send({ n: typeof w.id === 'string' && w.id === ws.id ? 3 : 0 })
+						return 'corked'
+					})
+					const { cork } = ws
+					cork((w) => w.send({ n: 2 }))
+					ws.send({ n: result === 'corked' ? 4 : 0 })
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+		ws.send('go')
+
+		const frames: unknown[] = []
+		for (let i = 0; i < 5; i++) frames.push((await wsMessage(ws)).data)
+
+		expect(JSON.parse(frames[0] as string)).toEqual({ n: 1 })
+		// invalid payload is refused with the validation error, not sent raw
+		expect(frames[1]).not.toBe('[object Object]')
+		expect(String(frames[1])).toContain('n')
+		expect(JSON.parse(frames[2] as string)).toEqual({ n: 3 })
+		expect(JSON.parse(frames[3] as string)).toEqual({ n: 2 })
+		expect(JSON.parse(frames[4] as string)).toEqual({ n: 4 })
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
 	it('should respond with remoteAddress', async () => {
 		const app = new Elysia()
 			.use(websocket())

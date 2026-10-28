@@ -222,6 +222,14 @@ export type ChainNode =
 			origin?: number
 			// Node a propagated one copies: the registration itself
 			registration?: ChainNode
+			// Registration identity `hash:n`: the n-th registration the first
+			// named instance it reached exported (pushed as `plugin`/`global`,
+			// adopted from an unnamed child, or promoted by `.as()`). Copies
+			// keep it
+			key?: string
+			// self or an ancestor repeats a key of the chain: the earlier
+			// occurrence is shadowed, see `flattenChain`
+			dup?: true
 	  }
 	| {
 			combine: ChainNode | undefined
@@ -288,7 +296,8 @@ export function compactBeforeHandleConflicts(
 }
 
 export function compactBeforeHandlePrefix(start: ChainNode | undefined) {
-	if (!start) return
+	// `dup` reaches the tail, and `.as()` may set it after a memo was made
+	if (!start || (start as { dup?: true }).dup) return
 
 	const pending: Array<{
 		node: Extract<ChainNode, { added: Partial<AppHook> }>
@@ -305,7 +314,8 @@ export function compactBeforeHandlePrefix(start: ChainNode | undefined) {
 			break
 		}
 
-		if (cached === undefined && !('combine' in node)) {
+		// a shadowing copy reorders the chain, see `flattenChain`
+		if (cached === undefined && !('combine' in node) && !node.dup) {
 			const values = compactBeforeHandleValues(node.added)
 			if (values !== false) {
 				pending.push({ node, values })
@@ -355,29 +365,108 @@ export function compactBeforeHandlePrefix(start: ChainNode | undefined) {
 	return prefix.length ? prefix : undefined
 }
 
-// A chain entry installs one plugin's lifecycle event, as the pair
-// `origin * 16 + slot`; a slot is the event's index in `lifecycleEvents`
-// (Elysia 1 compares checksums per event array). `derive` lowers into
-// `beforeHandle` but is its own lifecycle; schemas never deduplicate
+// A registration (`ChainNode.key`) installs one bit per lifecycle event it
+// holds; the bit is the event's index in `lifecycleEvents`. `derive` lowers
+// into `beforeHandle` but is its own lifecycle; schemas never deduplicate
 const deriveSlot = 15
 
-const withLayer = (outer: ReadonlySet<number> | undefined, layer: number[]) =>
-	new Set([...(outer ?? []), ...layer])
+export type Installs = ReadonlyMap<string, number>
+
+// a finished layer is not written again: with no outer one it is reused
+const withLayer = (outer: Installs | undefined, layer: Map<string, number>) => {
+	if (!outer?.size) return layer
+	const merged = new Map(outer)
+	for (const [id, bits] of layer) merged.set(id, (merged.get(id) ?? 0) | bits)
+	return merged
+}
+
+/** Whether `a` and `b` install any event of one registration */
+export const installsOverlap = (a: Installs, b: Installs) => {
+	for (const [id, bits] of a) if ((b.get(id) ?? 0) & bits) return true
+	return false
+}
+
+// event bits a registration installs, see `flattenChain`
+function installBits(added: Partial<AppHook> | undefined) {
+	let bits = 0
+	if (!added) return bits
+
+	const derives = deriveQueues(
+		(added as { '~deriveEntries'?: DeriveEntry[] })['~deriveEntries']
+	)
+
+	for (const key in added) {
+		const v = (added as any)[key]
+		const slot = lifecycleEvents.indexOf(key)
+		if (v == null || slot === -1) continue
+
+		if (key === 'beforeHandle')
+			for (const fn of Array.isArray(v) ? v : [v])
+				bits |=
+					1 <<
+					(derives?.get(fn)?.shift() === undefined
+						? slot
+						: deriveSlot)
+		else if (!Array.isArray(v) || v.length) bits |= 1 << slot
+	}
+
+	return bits
+}
+
+/**
+ * Events of each node a later node of its chain installs again: a
+ * registration copied again (`ChainNode.dup`) runs at its last position
+ */
+function shadowed(
+	head: ChainNode,
+	resolveAdded:
+		| ((node: ChainNode) => Partial<AppHook> | undefined)
+		| undefined
+) {
+	let node: ChainNode | undefined
+
+	const shadow = new Map<ChainNode, number>()
+	const later = new Map<string, number>()
+
+	for (node = head; node; node = (node as { parent?: ChainNode }).parent) {
+		const id = (node as { key?: string }).key
+		if (id === undefined) continue
+
+		const held = later.get(id) ?? 0
+		if (held) shadow.set(node, held)
+
+		later.set(
+			id,
+			held |
+				installBits(
+					resolveAdded
+						? resolveAdded(node)
+						: (node as { added: Partial<AppHook> }).added
+				)
+		)
+	}
+
+	return shadow
+}
 
 export interface ChainInfo {
-	// `(plugin, lifecycle)` pairs the chain installs
-	installs?: ReadonlySet<number>
+	// event bits of each registration the chain installs
+	installs?: Installs
 	// any registration belongs to a named plugin
 	named?: true
+	// last outer installs compared with, and whether they overlapped: the
+	// routes of one chain ask with the same pair
+	outer?: Installs
+	overlap?: boolean
 }
 
 /**
  * Walk the chain tail-first into a fresh `Partial<AppHook>`
  *
  * Each instance chain a combine node links is one layer, outermost first.
- * A named plugin's hook is skipped when an outer layer, or `skip`, already
- * installed that plugin's same lifecycle event: it runs once, at its
- * outermost position. Within a layer every registration stays
+ * A registration (`key`) is skipped when an outer layer, or `skip`, already
+ * installed it: it runs once, at its outermost position. Within a layer
+ * every registration stays
  *
  * Explicit-stack walk (no recursion) so it works uniformly for linear
  * chains and combine nodes without risking stack overflow on deep chains
@@ -385,7 +474,7 @@ export interface ChainInfo {
 export function flattenChain(
 	start: ChainNode | undefined,
 	resolveAdded?: (node: ChainNode) => Partial<AppHook> | undefined,
-	skip?: ReadonlySet<number>,
+	skip?: Installs,
 	info?: ChainInfo
 ): Partial<AppHook> | undefined {
 	if (!start) return
@@ -397,11 +486,13 @@ export function flattenChain(
 
 	// installed by the outer layers, by the current one
 	let outer = skip
-	let layer: number[] | undefined
+	let layer: Map<string, number> | undefined
 	// derive entry of each `beforeHandle` occurrence, once one is a derive
 	let roles: (DeriveEntry | undefined)[] | undefined
 	// narrowest wins, local > plugin > global like the inferred route type
 	let ranks: Record<string, number> | undefined
+	// events a later node of the chain being walked installs again
+	let shadow: Map<ChainNode, number> | undefined
 
 	while (nodes.length) {
 		const node = nodes.pop()!
@@ -409,9 +500,9 @@ export function flattenChain(
 
 		// end of a layer: it is outer to the rest
 		if (phase === 2) {
-			if (layer?.length) {
+			if (layer?.size) {
 				outer = withLayer(outer, layer)
-				layer.length = 0
+				layer = undefined
 			}
 
 			// an inner layer is closer to the route
@@ -422,21 +513,23 @@ export function flattenChain(
 
 		if (phase === 1) {
 			// only a registration node gets here, never a combine one
-			const { origin, propagated, scope } = node as Extract<
-				ChainNode,
-				{ added: unknown }
-			>
-			if (info && origin !== undefined) info.named = true
+			const {
+				key: id,
+				propagated,
+				scope
+			} = node as Extract<ChainNode, { added: unknown }>
+			// an exported registration runs each event once, at its outermost
+			// layer (a `local` one has no key: its instance's own, Elysia 1)
+			const counted = id !== undefined
+			if (info && counted) info.named = true
+			const done = counted
+				? (outer?.get(id) ?? 0) | (shadow?.get(node) ?? 0)
+				: 0
+			let bits = 0
 
 			const added = resolveAdded
 				? resolveAdded(node)
 				: (node as { added: Partial<AppHook> }).added
-
-			const base =
-				origin !== undefined &&
-				(propagated || scope === 'plugin' || scope === 'global')
-					? origin * 16
-					: undefined
 
 			const derives = deriveQueues(
 				(added as { '~deriveEntries'?: DeriveEntry[] })?.[
@@ -456,12 +549,12 @@ export function flattenChain(
 						for (const fn of Array.isArray(v) ? v : [v]) {
 							const entry = derives?.get(fn)?.shift()
 
-							if (base !== undefined) {
-								const pair =
-									base +
+							if (counted) {
+								const bit =
+									1 <<
 									(entry === undefined ? slot : deriveSlot)
-								if (outer?.has(pair)) continue
-								;(layer ??= []).push(pair)
+								if (done & bit) continue
+								bits |= bit
 							}
 
 							const list = (result.beforeHandle ??=
@@ -474,11 +567,10 @@ export function flattenChain(
 						continue
 					}
 
-					if (base !== undefined && slot !== -1) {
-						if (outer?.has(base + slot)) continue
+					if (counted && slot !== -1) {
+						if (done & (1 << slot)) continue
 						// no hook, no installation
-						if (!Array.isArray(v) || v.length)
-							(layer ??= []).push(base + slot)
+						if (!Array.isArray(v) || v.length) bits |= 1 << slot
 					}
 
 					if (slot !== -1 || key === 'schemas') {
@@ -509,6 +601,11 @@ export function flattenChain(
 					} else (result as any)[key] = v
 				}
 
+			if (bits) {
+				layer ??= new Map()
+				layer.set(id!, (layer.get(id!) ?? 0) | bits)
+			}
+
 			continue
 		}
 
@@ -525,17 +622,23 @@ export function flattenChain(
 				phases.push(0)
 			}
 		} else {
+			// a chain's tail: its nodes are walked next, nothing in between
+			if (phase === 0)
+				shadow = (node as { dup?: true }).dup
+					? shadowed(node, resolveAdded)
+					: undefined
+
 			// Append self after its parent has been visited/appended.
 			nodes.push(node)
 			phases.push(1)
 			if (node.parent) {
 				nodes.push(node.parent)
-				phases.push(0)
+				phases.push(3)
 			}
 		}
 	}
 
-	if (info) info.installs = layer?.length ? withLayer(outer, layer) : outer
+	if (info) info.installs = layer?.size ? withLayer(outer, layer) : outer
 
 	if (roles)
 		(result as any)['~deriveEntries'] = occurrenceDeriveEntries(
@@ -565,6 +668,8 @@ interface FlattenMemo {
 	per: WeakMap<ChainNode, Partial<AppHook>>
 	info: WeakMap<ChainNode, ChainInfo>
 	skipped?: WeakMap<ChainNode, WeakMap<object, Partial<AppHook>>>
+	// chains whose info was asked for and has no named registration
+	plain?: WeakSet<ChainNode>
 }
 
 const flattenChainMemos = new WeakMap<object, FlattenMemo>()
@@ -596,7 +701,10 @@ export function flattenChainInfo(
 
 	// the bucket from before resolving: a macro may move the epoch on
 	const bucket = flattenMemoOf(root)
-	flattenChainMemoReadonly(root, start, resolveAdded)
+	const known = bucket.info.get(start)
+	if (known || bucket.plain?.has(start)) return known
+
+	flattenChainMemoReadonly(root, start, resolveAdded, undefined, true)
 
 	// none kept for a chain without a named plugin
 	return bucket.info.get(start)
@@ -606,7 +714,10 @@ export function flattenChainMemoReadonly(
 	root: object,
 	start: ChainNode | undefined,
 	resolveAdded?: (node: ChainNode) => Partial<AppHook> | undefined,
-	skip?: ReadonlySet<number>
+	skip?: Installs,
+	// keep what the chain installs (`flattenChainInfo`): a route's own chain
+	// at the root never asks, and a wide one is a large map
+	withInfo = false
 ): Partial<AppHook> | undefined {
 	if (!start) return
 
@@ -621,13 +732,17 @@ export function flattenChainMemoReadonly(
 	}
 
 	let cached = memo.get(skip ?? start)
-	if (cached === undefined) {
-		// what the chain itself installs, not a skipping flatten
-		const info: ChainInfo | undefined = skip ? undefined : {}
-		cached = flattenChain(start, resolveAdded, skip, info) ?? emptyFlatten
-		memo.set(skip ?? start, cached)
+	// what the chain itself installs, not a skipping flatten
+	// asked by `flattenChainInfo` only when it has none for the chain yet
+	if (cached === undefined || withInfo) {
+		const info: ChainInfo | undefined = withInfo ? {} : undefined
+		const flat =
+			flattenChain(start, resolveAdded, skip, info) ?? emptyFlatten
+		if (cached === undefined) memo.set(skip ?? start, (cached = flat))
 
-		if (info?.named) bucket.info.set(start, info)
+		if (info)
+			if (info.named) bucket.info.set(start, info)
+			else (bucket.plain ??= new WeakSet()).add(start)
 	}
 
 	if (cached !== emptyFlatten) return cached
@@ -637,7 +752,7 @@ export function flattenChainMemo(
 	root: object,
 	start: ChainNode | undefined,
 	resolveAdded?: (node: ChainNode) => Partial<AppHook> | undefined,
-	skip?: ReadonlySet<number>
+	skip?: Installs
 ): Partial<AppHook> | undefined {
 	const cached = flattenChainMemoReadonly(root, start, resolveAdded, skip)
 	if (cached) return cloneHook(cached)

@@ -36,14 +36,19 @@ export class Cookie<T = any> implements BaseCookie {
 	#name: string
 	#setRef: { cookie?: Record<string, BaseCookie> }
 	#initial: Partial<BaseCookie>
+	#encode?: (value: unknown) => unknown
+	#encodedJar?: object
 
 	constructor(
 		name: string,
 		setRef: { cookie?: Record<string, BaseCookie> },
-		initial: Partial<BaseCookie> = Object.create(null)
+		initial: Partial<BaseCookie> = Object.create(null),
+		// the field schema's codec encode, run when the cookie is sent
+		encode?: (value: unknown) => unknown
 	) {
 		this.#name = name
 		this.#setRef = setRef
+		this.#encode = encode
 		this.#initial = initial
 	}
 
@@ -52,13 +57,28 @@ export class Cookie<T = any> implements BaseCookie {
 	}
 
 	get #jar(): Record<string, BaseCookie> {
-		return (this.#setRef.cookie ??= Object.create(null))
+		const jar = (this.#setRef.cookie ??= Object.create(null))
+
+		if (this.#encode && this.#encodedJar !== jar) {
+			this.#encodedJar = jar
+
+			let encoders = (jar as any)['~encode']
+			if (!encoders)
+				Object.defineProperty(jar, '~encode', {
+					value: (encoders = nullObject())
+				})
+
+			encoders[this.#name] = this.#encode
+		}
+
+		return jar
 	}
 
 	get cookie(): BaseCookie {
 		const c = this.#setRef.cookie?.[this.#name] ?? this.#initial
 		if (c && '~unsign' in c)
 			resolvePendingCookie(c as Record<string, any>, this.#name)
+
 		return c
 	}
 
@@ -149,6 +169,8 @@ export class Cookie<T = any> implements BaseCookie {
 			maxAge: 0,
 			value: ''
 		})
+		// its '' is no decoded value to encode
+		Object.defineProperty(this.cookie, '~remove', { value: 1 })
 
 		return this
 	}

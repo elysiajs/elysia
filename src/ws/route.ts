@@ -4,6 +4,7 @@ import {
 	isBridgeNotInitialized
 } from '../compile/handler/frozen-validator'
 import { isBridgeLive } from '../type/bridge'
+import { ELYSIA_TYPES } from '../type/constants'
 import { assignOwn, isSocketQuiet, nullObject } from '../utils'
 import { frozenRootOf } from '../generation'
 import { sucrose } from '../sucrose'
@@ -39,7 +40,9 @@ import {
 import {
 	ElysiaWS,
 	isGeneratorObject,
+	isHTTPBody,
 	trackWSSettling,
+	wsMembers,
 	type WSConnectionData
 } from './context'
 import { createMessageParser } from './parser'
@@ -151,6 +154,22 @@ export function drainWaiters(ws: ElysiaWS<any>) {
 	for (const fn of waiters) fn()
 }
 
+const textBody = /(?:^text\/)|(?:[/+](?:json|xml)\b)/i
+
+// A Response sends its body (text unless typed binary), a Blob its bytes
+async function frameOfHTTPBody(
+	value: Response | Blob
+): Promise<string | ArrayBuffer | undefined> {
+	if (value instanceof Blob) return value.arrayBuffer()
+	if (!value.body) return
+
+	// no content-type reads as text: Bun omits it for `new Response('…')`
+	const type = value.headers.get('content-type')
+	return type === null || textBody.test(type)
+		? value.text()
+		: value.arrayBuffer()
+}
+
 export async function handleWSResponse(
 	ws: ElysiaWS<any>,
 	value: unknown,
@@ -175,9 +194,10 @@ export async function handleWSResponse(
 
 				if (yielded === undefined) continue
 
-				const mapped = mapResponses.length
+				let mapped = mapResponses.length
 					? await applyMapResponse(ws, yielded, mapResponses)
 					: yielded
+				if (isHTTPBody(mapped)) mapped = await frameOfHTTPBody(mapped)
 
 				let status = (ws as any).send(mapped)
 				const canBackpressure = !isEmptyPayload(mapped)
@@ -208,10 +228,10 @@ export async function handleWSResponse(
 		}
 	}
 
-	const mapped = mapResponses.length
+	let mapped = mapResponses.length
 		? await applyMapResponse(ws, value, mapResponses)
 		: value
-
+	if (isHTTPBody(mapped)) mapped = await frameOfHTTPBody(mapped)
 	;(ws as any).send(mapped)
 }
 
@@ -467,7 +487,11 @@ export function buildWSRoute(
 	const defaultResponseValidator =
 		responseValidator?.get(200) ?? responseValidator?.values().next().value
 
-	const cookieIsOptional = !!(composed.cookie as any)?.['~optional']
+	const cookieRoot = composed.cookie as any
+	// t.MaybeEmpty is optional as a property only: an empty root jar is still validated
+	const cookieIsOptional =
+		!!cookieRoot?.['~optional'] &&
+		cookieRoot['~elyTyp'] !== ELYSIA_TYPES.MaybeEmpty
 
 	const queryChannels = getQueryParseChannels(
 		(validators.query as any)?.schema
@@ -660,7 +684,10 @@ export function buildWSRoute(
 
 				try {
 					await handleWSResponse(errCtx, r, mapResponses)
-				} catch {}
+				} catch (thrown) {
+					// it failed to send (a body read threw): say so, not nothing
+					await sendErrorFrame(ws, thrown)
+				}
 
 				return
 			}
@@ -696,12 +723,13 @@ export function buildWSRoute(
 	function finishMessageResult(ws: ElysiaWS<any>, value: unknown) {
 		if (value === undefined) return
 
-		if (isGeneratorObject(value))
-			return handleWSResponse(ws, value, mapResponses).catch((error) =>
-				handleError(ws, error)
-			)
-
+		// classifying may run a Proxy's traps: inside the try, so a throw
+		// reaches the error hooks
 		try {
+			if (isGeneratorObject(value) || isHTTPBody(value))
+				return handleWSResponse(ws, value, mapResponses).catch(
+					(error) => handleError(ws, error)
+				)
 			;(ws as any).send(value)
 		} catch (error) {
 			return handleError(ws, error)
@@ -1043,6 +1071,12 @@ export function buildWSRoute(
 					)
 				}
 			}
+
+			for (const key in context)
+				if (wsMembers.has(key))
+					throw new Error(
+						`[Elysia] WS ${route[1]}: context key "${key}" (from derive or decorate) collides with a WebSocket property; rename it`
+					)
 
 			let upgradeHeaders: Record<string, string> | undefined
 			if (hook.upgrade != null) {
