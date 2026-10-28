@@ -1,7 +1,11 @@
-import { Elysia, t, ValidationError } from '../../src'
+import { fileTypeFromBlob } from 'file-type'
+
+import { Elysia, t, ValidationError, setFileTypeDetector } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { post, upload } from '../utils'
+import { post, upload, json } from '../utils'
+
+setFileTypeDetector(fileTypeFromBlob)
 
 describe('Body Validator', () => {
 	it('skip body parsing if body is empty but headers is present', async () => {
@@ -20,38 +24,48 @@ describe('Body Validator', () => {
 	})
 
 	it('validate single', async () => {
-		const app = new Elysia().post('/', ({ body: { name } }) => name, {
-			body: t.Object({
-				name: t.String()
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					name: t.String()
+				})
+			},
+			({ body: { name } }) => name
+		)
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose'
 			})
 		)
 
-		expect(await res.text()).toBe('sucrose')
+		await expect(res.text()).resolves.toBe('sucrose')
 		expect(res.status).toBe(200)
 	})
 
 	it('validate multiple', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({
-				name: t.String(),
-				job: t.String(),
-				trait: t.String()
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					name: t.String(),
+					job: t.String(),
+					trait: t.String()
+				})
+			},
+			({ body }) => body
+		)
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose',
 				job: 'alchemist',
 				trait: 'dog'
 			})
 		)
 
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			trait: 'dog'
@@ -60,15 +74,20 @@ describe('Body Validator', () => {
 	})
 
 	it('parse without reference', async () => {
-		const app = new Elysia().post('/', () => '', {
-			body: t.Object({
-				name: t.String(),
-				job: t.String(),
-				trait: t.String()
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					name: t.String(),
+					job: t.String(),
+					trait: t.String()
+				})
+			},
+			() => ''
+		)
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose',
 				job: 'alchemist',
 				trait: 'dog'
@@ -79,21 +98,26 @@ describe('Body Validator', () => {
 	})
 
 	it('validate optional', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({
-				name: t.String(),
-				job: t.String(),
-				trait: t.Optional(t.String())
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					name: t.String(),
+					job: t.String(),
+					trait: t.Optional(t.String())
+				})
+			},
+			({ body }) => body
+		)
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose',
 				job: 'alchemist'
 			})
 		)
 
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
 			job: 'alchemist'
 		})
@@ -101,24 +125,29 @@ describe('Body Validator', () => {
 	})
 
 	it('parse single numeric', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({
-				name: t.String(),
-				job: t.String(),
-				trait: t.Optional(t.String()),
-				age: t.Numeric()
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					name: t.String(),
+					job: t.String(),
+					trait: t.Optional(t.String()),
+					age: t.Numeric()
+				})
+			},
+			({ body }) => body
+		)
 
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose',
 				job: 'alchemist',
 				age: '16'
 			})
 		)
 
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			age: 16
@@ -128,17 +157,22 @@ describe('Body Validator', () => {
 	})
 
 	it('parse multiple numeric', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({
-				name: t.String(),
-				job: t.String(),
-				trait: t.Optional(t.String()),
-				age: t.Numeric(),
-				rank: t.Numeric()
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					name: t.String(),
+					job: t.String(),
+					trait: t.Optional(t.String()),
+					age: t.Numeric(),
+					rank: t.Numeric()
+				})
+			},
+			({ body }) => body
+		)
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose',
 				job: 'alchemist',
 				age: '16',
@@ -146,7 +180,7 @@ describe('Body Validator', () => {
 			})
 		)
 
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			age: 16,
@@ -156,23 +190,28 @@ describe('Body Validator', () => {
 	})
 
 	it('parse single integer', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({
-				name: t.String(),
-				job: t.String(),
-				trait: t.Optional(t.String()),
-				age: t.Integer()
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					name: t.String(),
+					job: t.String(),
+					trait: t.Optional(t.String()),
+					age: t.Integer()
+				})
+			},
+			({ body }) => body
+		)
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose',
 				job: 'alchemist',
 				age: '16'
 			})
 		)
 
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			age: 16
@@ -182,17 +221,22 @@ describe('Body Validator', () => {
 	})
 
 	it('parse multiple integers', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({
-				name: t.String(),
-				job: t.String(),
-				trait: t.Optional(t.String()),
-				age: t.Integer(),
-				rank: t.Integer()
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					name: t.String(),
+					job: t.String(),
+					trait: t.Optional(t.String()),
+					age: t.Integer(),
+					rank: t.Integer()
+				})
+			},
+			({ body }) => body
+		)
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose',
 				job: 'alchemist',
 				age: '16',
@@ -200,7 +244,7 @@ describe('Body Validator', () => {
 			})
 		)
 
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			age: 16,
@@ -210,19 +254,24 @@ describe('Body Validator', () => {
 	})
 
 	it('rejects malformed integer from array object', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Array(
-				t.Object({
-					name: t.String(),
-					job: t.String(),
-					trait: t.Optional(t.String()),
-					age: t.Integer(),
-					rank: t.Integer()
-				})
-			)
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Array(
+					t.Object({
+						name: t.String(),
+						job: t.String(),
+						trait: t.Optional(t.String()),
+						age: t.Integer(),
+						rank: t.Integer()
+					})
+				)
+			},
+			({ body }) => body
+		)
 		const res = await app.handle(
-			post('/', [
+			'/',
+			json([
 				{
 					name: 'sucrose',
 					job: 'alchemist',
@@ -236,24 +285,32 @@ describe('Body Validator', () => {
 	})
 
 	it('rejects malformed integer directly in array', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Array(t.Integer())
-		})
-		const res = await app.handle(post('/', [1, 2, 3, 4.2]))
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Array(t.Integer())
+			},
+			({ body }) => body
+		)
+		const res = await app.handle('/', json([1, 2, 3, 4.2]))
 
 		expect(res.status).toBe(422)
 	})
 	it('validate empty body', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Union([
-				t.Undefined(),
-				t.Object({
-					name: t.String(),
-					job: t.String(),
-					trait: t.Optional(t.String())
-				})
-			])
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Union([
+					t.Undefined(),
+					t.Object({
+						name: t.String(),
+						job: t.String(),
+						trait: t.Optional(t.String())
+					})
+				])
+			},
+			({ body }) => body
+		)
 		const res = await app.handle(
 			new Request('http://localhost/', {
 				method: 'POST'
@@ -261,22 +318,26 @@ describe('Body Validator', () => {
 		)
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('')
+		await expect(res.text()).resolves.toBe('')
 	})
 
 	it('validate empty body with partial', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Union([
-				t.Undefined(),
-				t.Object({
-					name: t.String(),
-					job: t.String(),
-					trait: t.Optional(t.String()),
-					age: t.Numeric(),
-					rank: t.Numeric()
-				})
-			])
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Union([
+					t.Undefined(),
+					t.Object({
+						name: t.String(),
+						job: t.String(),
+						trait: t.Optional(t.String()),
+						age: t.Numeric(),
+						rank: t.Numeric()
+					})
+				])
+			},
+			({ body }) => body
+		)
 		const res = await app.handle(
 			new Request('http://localhost/', {
 				method: 'POST'
@@ -284,19 +345,24 @@ describe('Body Validator', () => {
 		)
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toEqual('')
+		await expect(res.text()).resolves.toEqual('')
 	})
 
 	it('normalize by default', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({
-				name: t.String()
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					name: t.String()
+				})
+			},
+			({ body }) => body
+		)
 
 		const res = await app
 			.handle(
-				post('/', {
+				'/',
+				json({
 					name: 'sucrose',
 					job: 'alchemist'
 				})
@@ -311,16 +377,17 @@ describe('Body Validator', () => {
 	it('strictly validate if not normalize', async () => {
 		const app = new Elysia({ normalize: false }).post(
 			'/',
-			({ body }) => body,
 			{
 				body: t.Object({
 					name: t.String()
 				})
-			}
+			},
+			({ body }) => body
 		)
 
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose',
 				job: 'alchemist'
 			})
@@ -330,15 +397,19 @@ describe('Body Validator', () => {
 	})
 
 	it('validate maybe empty body', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.MaybeEmpty(
-				t.Object({
-					name: t.String(),
-					job: t.String(),
-					trait: t.Optional(t.String())
-				})
-			)
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.MaybeEmpty(
+					t.Object({
+						name: t.String(),
+						job: t.String(),
+						trait: t.Optional(t.String())
+					})
+				)
+			},
+			({ body }) => body
+		)
 		const res = await app.handle(
 			new Request('http://localhost/', {
 				method: 'POST'
@@ -346,37 +417,43 @@ describe('Body Validator', () => {
 		)
 
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('')
+		await expect(res.text()).resolves.toBe('')
 	})
 
 	it('validate record', async () => {
-		const app = new Elysia().post('/', ({ body: { name } }) => name, {
-			body: t.Record(t.String(), t.String())
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Record(t.String(), t.String())
+			},
+			({ body: { name } }) => name
+		)
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose'
 			})
 		)
 
-		expect(await res.text()).toBe('sucrose')
+		await expect(res.text()).resolves.toBe('sucrose')
 		expect(res.status).toBe(200)
 	})
 
 	it('validate record inside object', async () => {
 		const app = new Elysia().post(
 			'/',
-			({ body: { name, friends } }) =>
-				`${name} ~ ${Object.keys(friends).join(' + ')}`,
 			{
 				body: t.Object({
 					name: t.String(),
 					friends: t.Record(t.String(), t.String())
 				})
-			}
+			},
+			({ body: { name, friends } }) =>
+				`${name} ~ ${Object.keys(friends).join(' + ')}`
 		)
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose',
 				friends: {
 					amber: 'wizard',
@@ -385,14 +462,18 @@ describe('Body Validator', () => {
 			})
 		)
 
-		expect(await res.text()).toBe('sucrose ~ amber + lisa')
+		await expect(res.text()).resolves.toBe('sucrose ~ amber + lisa')
 		expect(res.status).toBe(200)
 	})
 
 	it('validate optional primitive', async () => {
-		const app = new Elysia().post('/', ({ body }) => body ?? 'sucrose', {
-			body: t.Optional(t.String())
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Optional(t.String())
+			},
+			({ body }) => body ?? 'sucrose'
+		)
 
 		const [valid, invalid] = await Promise.all([
 			app.handle(
@@ -411,29 +492,30 @@ describe('Body Validator', () => {
 			)
 		])
 
-		expect(await valid.text()).toBe('sucrose')
+		await expect(valid.text()).resolves.toBe('sucrose')
 		expect(valid.status).toBe(200)
 
-		expect(await invalid.text()).toBe('sucrose')
+		await expect(invalid.text()).resolves.toBe('sucrose')
 		expect(invalid.status).toBe(200)
 	})
 
 	it('validate optional object', async () => {
 		const app = new Elysia().post(
 			'/',
-			({ body }) => body?.name ?? 'sucrose',
 			{
 				body: t.Optional(
 					t.Object({
 						name: t.String()
 					})
 				)
-			}
+			},
+			({ body }) => body?.name ?? 'sucrose'
 		)
 
 		const [valid, invalid] = await Promise.all([
 			app.handle(
-				post('/', {
+				'/',
+				json({
 					name: 'sucrose'
 				})
 			),
@@ -444,26 +526,31 @@ describe('Body Validator', () => {
 			)
 		])
 
-		expect(await valid.text()).toBe('sucrose')
+		await expect(valid.text()).resolves.toBe('sucrose')
 		expect(valid.status).toBe(200)
 
-		expect(await invalid.text()).toBe('sucrose')
+		await expect(invalid.text()).resolves.toBe('sucrose')
 		expect(invalid.status).toBe(200)
 	})
 
 	it('create default object body', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({
-				username: t.String(),
-				password: t.String(),
-				email: t.Optional(t.String({ format: 'email' })),
-				isSuperuser: t.Boolean({ default: false })
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					username: t.String(),
+					password: t.String(),
+					email: t.Optional(t.String({ format: 'email' })),
+					isSuperuser: t.Boolean({ default: false })
+				})
+			},
+			({ body }) => body
+		)
 
 		const value = await app
 			.handle(
-				post('/', {
+				'/',
+				json({
 					username: 'nagisa',
 					password: 'hifumi_daisuki',
 					email: 'kirifuji_nagisa@trinity.school'
@@ -480,31 +567,55 @@ describe('Body Validator', () => {
 	})
 
 	it('create default string body', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.String({ default: 'hifumi_daisuki' })
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.String({ default: 'hifumi_daisuki' })
+			},
+			({ body }) => body
+		)
 
 		const value = await app.handle(post('/')).then((x) => x.text())
 
 		expect(value).toBe('hifumi_daisuki')
 	})
 
-	it('escapes single quote in default string body', async () => {
-		const payload = "hifumi';globalThis.__bodyDefaultValueInjection=1;//"
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.String({ default: payload })
+	// GHSA-gmm9-qwx3-2m3h: a schema default must never reach generated code
+	// unescaped. The `;//` payload is the advisory's original (it breaks a
+	// statement-per-line emitter); the `'+(…)+'` payload is expression-shaped so
+	// it survives a single-line emitter, which is the shape this branch emits.
+	// A root-scalar default is assigned directly rather than emitted, so this
+	// pair guards against scalar defaults ever becoming codegen'd; the emitter
+	// itself is covered with teeth by the query/header/params counterparts.
+	for (const payload of [
+		"hifumi';globalThis.__bodyDefaultValueInjection=1;//",
+		"hifumi'+(globalThis.__bodyDefaultValueInjection=1,'')+'"
+	])
+		it(`escapes single quote in default string body: ${payload}`, async () => {
+			const app = new Elysia().post(
+				'/',
+				{
+					body: t.String({ default: payload })
+				},
+				({ body }) => body
+			)
+
+			const value = await app.handle(post('/')).then((x) => x.text())
+
+			expect(
+				(globalThis as any).__bodyDefaultValueInjection
+			).toBeUndefined()
+			expect(value).toBe(payload)
 		})
-
-		const value = await app.handle(post('/')).then((x) => x.text())
-
-		expect((globalThis as any).__bodyDefaultValueInjection).toBeUndefined()
-		expect(value).toBe(payload)
-	})
 
 	it('create default boolean body', async () => {
-		const app = new Elysia().post('/', ({ body }) => typeof body, {
-			body: t.Boolean({ default: true })
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Boolean({ default: true })
+			},
+			({ body }) => typeof body
+		)
 
 		const value = await app.handle(post('/')).then((x) => x.text())
 
@@ -512,9 +623,13 @@ describe('Body Validator', () => {
 	})
 
 	it('create default number body', async () => {
-		const app = new Elysia().post('/', ({ body }) => typeof body, {
-			body: t.Number({ default: 1 })
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Number({ default: 1 })
+			},
+			({ body }) => typeof body
+		)
 
 		const value = await app.handle(post('/')).then((x) => x.text())
 
@@ -522,9 +637,13 @@ describe('Body Validator', () => {
 	})
 
 	it('create default numeric body', async () => {
-		const app = new Elysia().post('/', ({ body }) => typeof body, {
-			body: t.Numeric({ default: 1 })
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Numeric({ default: 1 })
+			},
+			({ body }) => typeof body
+		)
 
 		const value = await app.handle(post('/')).then((x) => x.text())
 
@@ -532,9 +651,13 @@ describe('Body Validator', () => {
 	})
 
 	it('coerce number to numeric', async () => {
-		const app = new Elysia().post('/', ({ body }) => typeof body, {
-			body: t.Number()
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Number()
+			},
+			({ body }) => typeof body
+		)
 
 		const response = await app.handle(
 			new Request('http://localhost/', {
@@ -550,14 +673,19 @@ describe('Body Validator', () => {
 	})
 
 	it("don't coerce number object to numeric", async () => {
-		const app = new Elysia().post('/', ({ body: { id } }) => typeof id, {
-			body: t.Object({
-				id: t.Number()
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					id: t.Number()
+				})
+			},
+			({ body: { id } }) => typeof id
+		)
 
 		const response = await app.handle(
-			post('/', {
+			'/',
+			json({
 				id: '1'
 			})
 		)
@@ -566,9 +694,13 @@ describe('Body Validator', () => {
 	})
 
 	it('coerce string to boolean', async () => {
-		const app = new Elysia().post('/', ({ body }) => typeof body, {
-			body: t.Boolean()
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Boolean()
+			},
+			({ body }) => typeof body
+		)
 
 		const response = await app.handle(
 			new Request('http://localhost/', {
@@ -584,14 +716,19 @@ describe('Body Validator', () => {
 	})
 
 	it("don't coerce string object to boolean", async () => {
-		const app = new Elysia().post('/', ({ body: { id } }) => typeof id, {
-			body: t.Object({
-				id: t.Boolean()
-			})
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					id: t.Boolean()
+				})
+			},
+			({ body: { id } }) => typeof id
+		)
 
 		const response = await app.handle(
-			post('/', {
+			'/',
+			json({
 				id: 'true'
 			})
 		)
@@ -600,19 +737,24 @@ describe('Body Validator', () => {
 	})
 
 	it('handle optional at root', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Optional(
-				t.Object({
-					id: t.Numeric()
-				})
-			)
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Optional(
+					t.Object({
+						id: t.Numeric()
+					})
+				)
+			},
+			({ body }) => body
+		)
 
 		const res = await Promise.all([
 			app.handle(post('/')).then((x) => x.json()),
 			app
 				.handle(
-					post('/', {
+					'/',
+					json({
 						id: 1
 					})
 				)
@@ -635,7 +777,7 @@ describe('Body Validator', () => {
 			})
 		)
 
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			tea_party: ['nagisa', 'mika', 'seia']
 		})
 		expect(res.status).toBe(200)
@@ -651,35 +793,38 @@ describe('Body Validator', () => {
 
 		const person = t.Object({
 			name: t.String(),
-			job: t.Ref(job)
+			job: t.Ref('job')
 		})
 
-		const app = new Elysia()
-			.model({ job, person })
-			.post('/', ({ body: { name, job } }) => `${name} - ${job.name}`, {
+		const app = new Elysia().model({ job, person }).post(
+			'/',
+			{
 				body: person
-			})
+			},
+			({ body: { name, job } }) => `${name} - ${job.name}`
+		)
 
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose',
 				job: { name: 'alchemist' }
 			})
 		)
 
-		expect(await res.text()).toBe('sucrose - alchemist')
+		await expect(res.text()).resolves.toBe('sucrose - alchemist')
 		expect(res.status).toBe(200)
 	})
 
 	it('handle file upload', async () => {
 		const app = new Elysia().post(
 			'/single',
-			({ body: { file } }) => file.size,
 			{
 				body: t.Object({
 					file: t.File()
 				})
-			}
+			},
+			({ body: { file } }) => file.size
 		)
 
 		const { request, size } = upload('/single', {
@@ -699,9 +844,13 @@ describe('Body Validator', () => {
 					image: t.Optional(t.Files())
 				})
 			})
-			.post('/', ({ body }) => 'ok', {
-				body: 'a'
-			})
+			.post(
+				'/',
+				{
+					body: 'a'
+				},
+				({ body }) => 'ok'
+			)
 
 		const { request } = upload('/', {
 			message: 'Hello, world!'
@@ -714,27 +863,39 @@ describe('Body Validator', () => {
 
 	it('handle file prefix', async () => {
 		const app = new Elysia()
-			.post('/pass1', ({ body: { file } }) => file.size, {
-				body: t.Object({
-					file: t.File({
-						type: 'image/*'
+			.post(
+				'/pass1',
+				{
+					body: t.Object({
+						file: t.File({
+							type: 'image/*'
+						})
 					})
-				})
-			})
-			.post('/pass2', ({ body: { file } }) => file.size, {
-				body: t.Object({
-					file: t.File({
-						type: ['application/*', 'image/*']
+				},
+				({ body: { file } }) => file.size
+			)
+			.post(
+				'/pass2',
+				{
+					body: t.Object({
+						file: t.File({
+							type: ['application/*', 'image/*']
+						})
 					})
-				})
-			})
-			.post('/fail', ({ body: { file } }) => file.size, {
-				body: t.Object({
-					file: t.File({
-						type: 'application/*'
+				},
+				({ body: { file } }) => file.size
+			)
+			.post(
+				'/fail',
+				{
+					body: t.Object({
+						file: t.File({
+							type: 'application/*'
+						})
 					})
-				})
-			})
+				},
+				({ body: { file } }) => file.size
+			)
 
 		{
 			const { request, size } = upload('/pass1', {
@@ -751,7 +912,7 @@ describe('Body Validator', () => {
 			})
 
 			const response = await app.handle(request).then((r) => r.text())
-			// expect(+response).toBe(size)
+			expect(+response).toBe(size)
 		}
 
 		{
@@ -766,27 +927,39 @@ describe('Body Validator', () => {
 
 	it('handle file type', async () => {
 		const app = new Elysia()
-			.post('/pass1', ({ body: { file } }) => file.size, {
-				body: t.Object({
-					file: t.File({
-						type: 'image/jpeg'
+			.post(
+				'/pass1',
+				{
+					body: t.Object({
+						file: t.File({
+							type: 'image/jpeg'
+						})
 					})
-				})
-			})
-			.post('/pass2', ({ body: { file } }) => file.size, {
-				body: t.Object({
-					file: t.File({
-						type: ['image/png', 'image/jpeg']
+				},
+				({ body: { file } }) => file.size
+			)
+			.post(
+				'/pass2',
+				{
+					body: t.Object({
+						file: t.File({
+							type: ['image/png', 'image/jpeg']
+						})
 					})
-				})
-			})
-			.post('/fail', ({ body: { file } }) => file.size, {
-				body: t.Object({
-					file: t.File({
-						type: 'image/png'
+				},
+				({ body: { file } }) => file.size
+			)
+			.post(
+				'/fail',
+				{
+					body: t.Object({
+						file: t.File({
+							type: 'image/png'
+						})
 					})
-				})
-			})
+				},
+				({ body: { file } }) => file.size
+			)
 
 		{
 			const { request, size } = upload('/pass1', {
@@ -819,14 +992,14 @@ describe('Body Validator', () => {
 	it('validate actual file', async () => {
 		const app = new Elysia().post(
 			'/upload',
-			({ body: { file } }) => file.size,
 			{
 				body: t.Object({
 					file: t.File({
 						type: 'image'
 					})
 				})
-			}
+			},
+			({ body: { file } }) => file.size
 		)
 
 		{
@@ -851,14 +1024,14 @@ describe('Body Validator', () => {
 	it('validate actual file with multiple type', async () => {
 		const app = new Elysia().post(
 			'/upload',
-			({ body: { file } }) => file.size,
 			{
 				body: t.Object({
 					file: t.File({
 						type: ['image/png', 'image/jpeg']
 					})
 				})
-			}
+			},
+			({ body: { file } }) => file.size
 		)
 
 		{
@@ -890,25 +1063,29 @@ describe('Body Validator', () => {
 	})
 
 	it('validate actual file type union', async () => {
-		const app = new Elysia().post('/', ({ body }) => 'ok', {
-			body: t.Union([
-				t.Object({
-					hello: t.String(),
-					file: t.File({
-						type: 'image'
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Union([
+					t.Object({
+						hello: t.String(),
+						file: t.File({
+							type: 'image'
+						})
+					}),
+					t.Object({
+						world: t.String(),
+						image: t.File({
+							type: 'image'
+						})
+					}),
+					t.Object({
+						donQuixote: t.String()
 					})
-				}),
-				t.Object({
-					world: t.String(),
-					image: t.File({
-						type: 'image'
-					})
-				}),
-				t.Object({
-					donQuixote: t.String()
-				})
-			])
-		})
+				])
+			},
+			({ body }) => 'ok'
+		)
 
 		// case 1 pass
 		{
@@ -966,25 +1143,29 @@ describe('Body Validator', () => {
 	})
 
 	it('validate actual file type union with multiple file type', async () => {
-		const app = new Elysia().post('/', ({ body }) => 'ok', {
-			body: t.Union([
-				t.Object({
-					hello: t.String(),
-					file: t.File({
-						type: 'image'
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Union([
+					t.Object({
+						hello: t.String(),
+						file: t.File({
+							type: 'image'
+						})
+					}),
+					t.Object({
+						world: t.String(),
+						image: t.File({
+							type: ['image/png', 'image/jpeg']
+						})
+					}),
+					t.Object({
+						donQuixote: t.String()
 					})
-				}),
-				t.Object({
-					world: t.String(),
-					image: t.File({
-						type: ['image/png', 'image/jpeg']
-					})
-				}),
-				t.Object({
-					donQuixote: t.String()
-				})
-			])
-		})
+				])
+			},
+			({ body }) => 'ok'
+		)
 
 		// case 1 pass
 		{
@@ -1053,13 +1234,17 @@ describe('Body Validator', () => {
 	})
 
 	it('validate actual files', async () => {
-		const app = new Elysia().post('/', () => 'ok', {
-			body: t.Object({
-				file: t.Files({
-					type: 'image'
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					file: t.Files({
+						type: 'image'
+					})
 				})
-			})
-		})
+			},
+			() => 'ok'
+		)
 
 		// case 1 fail: contains fake image
 		{
@@ -1095,17 +1280,21 @@ describe('Body Validator', () => {
 	})
 
 	it('handle body using Transform with Intersect ', async () => {
-		const app = new Elysia().post('/test', ({ body }) => body, {
-			body: t.Intersect([
-				t.Object({ foo: t.String() }),
-				t.Object({
-					field: t
-						.Transform(t.String())
-						.Decode((decoded) => ({ decoded }))
-						.Encode((v) => v.decoded)
-				})
-			])
-		})
+		const app = new Elysia().post(
+			'/test',
+			{
+				body: t.Intersect([
+					t.Object({ foo: t.String() }),
+					t.Object({
+						field: t
+							.Codec(t.String())
+							.Decode((decoded) => ({ decoded }))
+							.Encode((v) => v.decoded)
+					})
+				])
+			},
+			({ body }) => body
+		)
 
 		const response = await app
 			.handle(
@@ -1131,11 +1320,16 @@ describe('Body Validator', () => {
 			})
 		)
 
-		const app = new Elysia().use(model).post('/', ({ body }) => body, {
-			body: 'user'
-		})
+		const app = new Elysia().use(model).post(
+			'/',
+			{
+				body: 'user'
+			},
+			({ body }) => body
+		)
 		const res = await app.handle(
-			post('/', {
+			'/',
+			json({
 				name: 'sucrose'
 			})
 		)
@@ -1147,21 +1341,23 @@ describe('Body Validator', () => {
 		let err: Error | undefined
 
 		const app = new Elysia()
-			.post('/', ({ body }) => body, {
-				body: t.Object({
-					year: t.Numeric({ minimum: 1900, maximum: 2160 })
-				}),
-				error({ code, error }) {
-					switch (code) {
-						case 'VALIDATION':
-							err = error
+			.post(
+				'/',
+				{
+					body: t.Object({
+						year: t.Numeric({ minimum: 1900, maximum: 2160 })
+					}),
+					error({ error }) {
+						if (error instanceof ValidationError) err = error
 					}
-				}
-			})
+				},
+				({ body }) => body
+			)
 			.listen(0)
 
 		await app.handle(
-			post('/', {
+			'/',
+			json({
 				year: '3000'
 			})
 		)
@@ -1172,10 +1368,6 @@ describe('Body Validator', () => {
 	it('handle nested file upload with dot notation', async () => {
 		const app = new Elysia().post(
 			'/',
-			({ body }) => ({
-				userName: body.user.name,
-				fileSize: body.user.avatar.size
-			}),
 			{
 				body: t.Object({
 					user: t.Object({
@@ -1183,7 +1375,11 @@ describe('Body Validator', () => {
 						avatar: t.File()
 					})
 				})
-			}
+			},
+			({ body }) => ({
+				userName: body.user.name,
+				fileSize: body.user.avatar.size
+			})
 		)
 
 		const formData = new FormData()
@@ -1208,10 +1404,6 @@ describe('Body Validator', () => {
 	it('handle nested files upload with dot notation', async () => {
 		const app = new Elysia().post(
 			'/',
-			({ body }) => ({
-				productName: body.product.name,
-				fileSizes: body.product.images.map((f) => f.size)
-			}),
 			{
 				body: t.Object({
 					product: t.Object({
@@ -1219,7 +1411,11 @@ describe('Body Validator', () => {
 						images: t.Files()
 					})
 				})
-			}
+			},
+			({ body }) => ({
+				productName: body.product.name,
+				fileSizes: body.product.images.map((f) => f.size)
+			})
 		)
 
 		const formData = new FormData()
@@ -1248,11 +1444,6 @@ describe('Body Validator', () => {
 	it('handle deeply nested file upload', async () => {
 		const app = new Elysia().post(
 			'/',
-			({ body }) => ({
-				bio: body.user.profile.bio,
-				country: body.user.profile.country,
-				photoSize: body.user.profile.photo.size
-			}),
 			{
 				body: t.Object({
 					user: t.Object({
@@ -1263,7 +1454,12 @@ describe('Body Validator', () => {
 						})
 					})
 				})
-			}
+			},
+			({ body }) => ({
+				bio: body.user.profile.bio,
+				country: body.user.profile.country,
+				photoSize: body.user.profile.photo.size
+			})
 		)
 
 		const formData = new FormData()
@@ -1293,10 +1489,6 @@ describe('Body Validator', () => {
 	it('handle multiple nested files', async () => {
 		const app = new Elysia().post(
 			'/',
-			({ body }) => ({
-				avatarSize: body.user.avatar.size,
-				coverSize: body.user.cover.size
-			}),
 			{
 				body: t.Object({
 					user: t.Object({
@@ -1304,7 +1496,11 @@ describe('Body Validator', () => {
 						cover: t.File()
 					})
 				})
-			}
+			},
+			({ body }) => ({
+				avatarSize: body.user.avatar.size,
+				coverSize: body.user.cover.size
+			})
 		)
 
 		const formData = new FormData()
@@ -1329,11 +1525,6 @@ describe('Body Validator', () => {
 	it('handle mixed nested and flat fields', async () => {
 		const app = new Elysia().post(
 			'/',
-			({ body }) => ({
-				flatValue: body.flat,
-				nestedName: body.user.name,
-				nestedFileSize: body.user.avatar.size
-			}),
 			{
 				body: t.Object({
 					flat: t.String(),
@@ -1342,7 +1533,12 @@ describe('Body Validator', () => {
 						avatar: t.File()
 					})
 				})
-			}
+			},
+			({ body }) => ({
+				flatValue: body.flat,
+				nestedName: body.user.name,
+				nestedFileSize: body.user.avatar.size
+			})
 		)
 
 		const formData = new FormData()
@@ -1369,19 +1565,6 @@ describe('Body Validator', () => {
 	it('handle complex nested array with files', async () => {
 		const app = new Elysia().post(
 			'/',
-			({ body }) => ({
-				productName: body.name,
-				createFilesCount: body.images.create.length,
-				updateCount: body.images.update.length,
-				images: {
-					create: body.images.create.map((f) => f.size),
-					update: body.images.update.map((f) => ({
-						id: f.id,
-						altText: f.altText,
-						imgSize: f.img.size
-					}))
-				}
-			}),
 			{
 				body: t.Object({
 					name: t.String(),
@@ -1396,7 +1579,20 @@ describe('Body Validator', () => {
 						)
 					})
 				})
-			}
+			},
+			({ body }) => ({
+				productName: body.name,
+				createFilesCount: body.images.create.length,
+				updateCount: body.images.update.length,
+				images: {
+					create: body.images.create.map((f) => f.size),
+					update: body.images.update.map((f) => ({
+						id: f.id,
+						altText: f.altText,
+						imgSize: f.img.size
+					}))
+				}
+			})
 		)
 
 		const formData = new FormData()
@@ -1441,14 +1637,6 @@ describe('Body Validator', () => {
 
 		const app = new Elysia().post(
 			'/',
-			({ body }) => ({
-				updateCount: body.images.update.length,
-				updates: body.images.update.map((item) => ({
-					id: item.id,
-					altText: item.altText,
-					imgSize: item.img.size
-				}))
-			}),
 			{
 				body: z.object({
 					images: z.object({
@@ -1461,7 +1649,15 @@ describe('Body Validator', () => {
 						)
 					})
 				})
-			}
+			},
+			({ body }) => ({
+				updateCount: body.images.update.length,
+				updates: body.images.update.map((item) => ({
+					id: item.id,
+					altText: item.altText,
+					imgSize: item.img.size
+				}))
+			})
 		)
 
 		const formData = new FormData()
@@ -1498,20 +1694,6 @@ describe('Body Validator', () => {
 	it('handle mix of stringify and dot notation', async () => {
 		const app = new Elysia().post(
 			'/',
-			({ body }) => ({
-				productName: body.name,
-				metadata: body.metadata,
-				createFilesCount: body.images.create.length,
-				updateCount: body.images.update.length,
-				images: {
-					create: body.images.create.map((f) => f.size),
-					update: body.images.update.map((f) => ({
-						id: f.id,
-						altText: f.altText,
-						imgSize: f.img.size
-					}))
-				}
-			}),
 			{
 				body: t.Object({
 					name: t.String(),
@@ -1533,7 +1715,21 @@ describe('Body Validator', () => {
 						)
 					})
 				})
-			}
+			},
+			({ body }) => ({
+				productName: body.name,
+				metadata: body.metadata,
+				createFilesCount: body.images.create.length,
+				updateCount: body.images.update.length,
+				images: {
+					create: body.images.create.map((f) => f.size),
+					update: body.images.update.map((f) => ({
+						id: f.id,
+						altText: f.altText,
+						imgSize: f.img.size
+					}))
+				}
+			})
 		)
 
 		const formData = new FormData()
@@ -1593,18 +1789,22 @@ describe('Body Validator', () => {
 	})
 
 	it('should parse sub-array correctly', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({
-				imagesOps: t.Object({
-					options: t.Array(
-						t.Object({
-							id: t.String(),
-							value: t.String()
-						})
-					)
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					imagesOps: t.Object({
+						options: t.Array(
+							t.Object({
+								id: t.String(),
+								value: t.String()
+							})
+						)
+					})
 				})
-			})
-		})
+			},
+			({ body }) => body
+		)
 
 		const formData = new FormData()
 		formData.append(

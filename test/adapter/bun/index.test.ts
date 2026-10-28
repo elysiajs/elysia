@@ -24,11 +24,11 @@ describe('Bun adapter', () => {
 		expect(query2).toEqual('Works without')
 	})
 
-	it('handle standalone query guard', async () => {
+	it('handle merge query guard', async () => {
 		const app = new Elysia()
 			.guard({
 				query: t.Object({ a: t.String() }),
-				schema: 'standalone'
+				schema: 'merge'
 			})
 			.get('/works-with', ({ query }) => 'Works' + query.a)
 			.get('/works-without', () => 'Works without')
@@ -47,19 +47,19 @@ describe('Bun adapter', () => {
 		expect(query2).toEqual('Works without')
 	})
 
-	it('handle static response with onRequest and onError', async () => {
-		let caughtError: Error
-		let onErrorCalled = false
-		let onRequestCalled = false
+	it('runs an always-global request hook through Bun.serve and app.handle', async () => {
+		let caughtError: Error | undefined
 
 		const app = new Elysia()
+			.headers({
+				'x-header': 'test'
+			})
 			.onError(({ error }) => {
 				caughtError = error as Error
 
 				return 'handled'
 			})
 			.onRequest(({ set }) => {
-				set.headers['x-header'] = 'test'
 				set.status = 400
 
 				throw new Error('A')
@@ -74,7 +74,11 @@ describe('Bun adapter', () => {
 		expect(text).toBe('handled')
 		expect(response.status).toBe(400)
 		expect(response.headers.get('x-header')).toBe('test')
-		expect(caughtError!.message).toBe('A')
+		expect(caughtError?.message).toBe('A')
+
+		const handled = await app.handle(new Request('http://localhost/'))
+		await expect(handled.text()).resolves.toBe('handled')
+		expect(handled.status).toBe(400)
 	})
 
 	it('handle non-ASCII path', async () => {
@@ -85,5 +89,41 @@ describe('Bun adapter', () => {
 		)
 		const text = await response.text()
 		expect(text).toBe('สบายดีไหม')
+	})
+
+	it('serves app.server.fetch() during the start-up gate', async () => {
+		// Bun passes no server argument to a programmatic fetch(); the gate
+		// must not mistake that for a cancelled epoch
+		const app = new Elysia().get('/', () => 'hi').listen(0)
+
+		try {
+			const response = await app.server!.fetch(
+				new Request('http://localhost/')
+			)
+
+			expect(response.status).toBe(200)
+			expect(await response.text()).toBe('hi')
+		} finally {
+			await app.stop(true)
+		}
+	})
+
+	it("keeps Bun's own error handler after publish on a plain app", async () => {
+		// reload() keeps an omitted `error`: the gate's 503 responder must not
+		// outlive the gate, or a throwing wrap becomes a silent 503. Bun's
+		// default handler reports the throw as an uncaught test error, so the
+		// app runs in a child process
+		const proc = Bun.spawn(
+			[
+				'bun',
+				'run',
+				new URL('./error-handler.fixture.ts', import.meta.url).pathname
+			],
+			{ stdout: 'pipe', stderr: 'pipe' }
+		)
+		const stdout = await new Response(proc.stdout).text()
+		await proc.exited
+
+		expect(stdout).toContain('STATUS=500')
 	})
 })

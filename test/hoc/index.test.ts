@@ -15,9 +15,97 @@ describe('HOC', () => {
 			})
 			.get('/', () => 'ok')
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(called).toBe(1)
+	})
+
+	it('runs before the handler and can short-circuit', async () => {
+		let handlerRan = false
+
+		const app = new Elysia()
+			.wrap((fn) => (request) => new Response('intercepted'))
+			.get('/', () => {
+				handlerRan = true
+				return 'ok'
+			})
+
+		const response = await app.handle('/')
+
+		await expect(response.text()).resolves.toBe('intercepted')
+		expect(handlerRan).toBe(false)
+	})
+
+	it('can transform the response', async () => {
+		const app = new Elysia()
+			.wrap((fn) => async (request) => {
+				const response = await fn(request)
+				return new Response((await response.text()) + '!')
+			})
+			.get('/', () => 'ok')
+
+		const response = await app.handle('/')
+
+		await expect(response.text()).resolves.toBe('ok!')
+	})
+
+	it('applies the first-registered wrap as the outermost layer', async () => {
+		const order: string[] = []
+
+		const app = new Elysia()
+			.wrap((fn) => async (request) => {
+				order.push('A in')
+				const response = await fn(request)
+				order.push('A out')
+				return response
+			})
+			.wrap((fn) => async (request) => {
+				order.push('B in')
+				const response = await fn(request)
+				order.push('B out')
+				return response
+			})
+			.get('/', () => 'ok')
+
+		await app.handle('/')
+
+		// First-registered = outermost: A wraps B wraps the handler.
+		expect(order).toEqual(['A in', 'B in', 'B out', 'A out'])
+	})
+
+	it('forwards extra fetch args (e.g. server / env) to the wrap', async () => {
+		let seen: unknown
+
+		const app = new Elysia()
+			.wrap((fn) => (request, ...rest) => {
+				seen = rest[0]
+				return fn(request, ...rest)
+			})
+			.get('/', () => 'ok')
+
+		const server = { id: 'server' }
+		// `app.fetch` is the adapter-facing entry; Bun calls it as
+		// `(request, server)`, Cloudflare as `(request, env, ctx)`.
+		await app.fetch(req('/'), server as any)
+
+		expect(seen).toBe(server)
+	})
+
+	it("applies a plugin's wrap to the host", async () => {
+		let wrapped = false
+
+		const plugin = new Elysia({ name: 'plugin' }).wrap(
+			(fn) => (request) => {
+				wrapped = true
+				return fn(request)
+			}
+		)
+
+		const app = new Elysia().use(plugin).get('/', () => 'ok')
+
+		await app.handle('/')
+
+		expect(wrapped).toBe(true)
 	})
 
 	it('deduplicate', async () => {
@@ -32,7 +120,47 @@ describe('HOC', () => {
 			.use(plugin2)
 			.get('/', () => 'ok')
 
-		// @ts-expect-error
-		expect(app.extender.higherOrderFunctions.length).toBe(2)
+		expect(app['~ext']?.hoc?.length).toBe(2)
+	})
+
+	it('applies a reused plugin wrap only once per request', async () => {
+		let calls = 0
+
+		const plugin = new Elysia().wrap((fn) => (request) => {
+			calls++
+			return fn(request)
+		})
+
+		const app = new Elysia()
+			.use(plugin)
+			.use(plugin)
+			.use(plugin)
+			.get('/', () => 'ok')
+
+		await app.handle('/')
+
+		expect(calls).toBe(1)
+	})
+
+	it('runs a named plugin wrap once per request when two sub-plugins reach it', async () => {
+		const calls: string[] = []
+		const tap = (name: string) => (fn: any) => (request: Request) => {
+			calls.push(name)
+			return fn(request)
+		}
+
+		const shared = () =>
+			new Elysia({ name: 'shared-wrap' }).wrap(tap('shared'))
+		const other = new Elysia({ name: 'other-wrap' }).wrap(tap('other'))
+
+		const app = new Elysia()
+			.use(new Elysia({ name: 'sub-a' }).use(shared()))
+			.use(new Elysia({ name: 'sub-b' }).use(shared()).use(other))
+			.use(shared())
+			.get('/', () => 'ok')
+
+		await app.handle('/')
+
+		expect(calls).toEqual(['shared', 'other'])
 	})
 })

@@ -5,13 +5,16 @@ describe('beforeHandle with arrow functions', () => {
 	it('should execute beforeHandle with arrow function expression', async () => {
 		let beforeHandleCalled = false
 
-		const app = new Elysia()
-			.get('/test', () => 'ok', {
+		const app = new Elysia().get(
+			'/test',
+			{
 				// Arrow function expression (no braces) - this was broken with minified code
 				beforeHandle: () => {
 					beforeHandleCalled = true
 				}
-			})
+			},
+			() => 'ok'
+		)
 
 		const response = await app.handle(new Request('http://localhost/test'))
 		expect(response.status).toBe(200)
@@ -19,26 +22,32 @@ describe('beforeHandle with arrow functions', () => {
 	})
 
 	it('should execute beforeHandle with arrow function returning value', async () => {
-		const app = new Elysia()
-			.get('/test', () => 'should not reach', {
+		const app = new Elysia().get(
+			'/test',
+			{
 				// Arrow function expression that returns early
 				beforeHandle: () => 'intercepted'
-			})
+			},
+			() => 'should not reach'
+		)
 
 		const response = await app.handle(new Request('http://localhost/test'))
-		expect(await response.text()).toBe('intercepted')
+		await expect(response.text()).resolves.toBe('intercepted')
 	})
 
 	it('should execute async beforeHandle with arrow function expression', async () => {
 		let beforeHandleCalled = false
 
-		const app = new Elysia()
-			.get('/test', () => 'ok', {
+		const app = new Elysia().get(
+			'/test',
+			{
 				// Async arrow function expression
 				beforeHandle: async () => {
 					beforeHandleCalled = true
 				}
-			})
+			},
+			() => 'ok'
+		)
 
 		const response = await app.handle(new Request('http://localhost/test'))
 		expect(response.status).toBe(200)
@@ -51,12 +60,15 @@ describe('beforeHandle with arrow functions', () => {
 			validatorCalled = true
 		}
 
-		const app = new Elysia()
-			.get('/test', () => 'ok', {
+		const app = new Elysia().get(
+			'/test',
+			{
 				// Complex arrow expression like: async ({status}) => requireSignature()({status})
 				// This pattern was broken when code is minified
 				beforeHandle: () => validator()
-			})
+			},
+			() => 'ok'
+		)
 
 		const response = await app.handle(new Request('http://localhost/test'))
 		expect(response.status).toBe(200)
@@ -66,14 +78,17 @@ describe('beforeHandle with arrow functions', () => {
 	it('should execute beforeHandle with arrow function block', async () => {
 		let beforeHandleCalled = false
 
-		const app = new Elysia()
-			.get('/test', () => 'ok', {
+		const app = new Elysia().get(
+			'/test',
+			{
 				// Arrow function with block (this always worked)
 				beforeHandle: () => {
 					beforeHandleCalled = true
 					return
 				}
-			})
+			},
+			() => 'ok'
+		)
 
 		const response = await app.handle(new Request('http://localhost/test'))
 		expect(response.status).toBe(200)
@@ -83,8 +98,9 @@ describe('beforeHandle with arrow functions', () => {
 	it('should handle multiple beforeHandle hooks with arrow expressions', async () => {
 		const callOrder: number[] = []
 
-		const app = new Elysia()
-			.get('/test', () => 'ok', {
+		const app = new Elysia().get(
+			'/test',
+			{
 				beforeHandle: [
 					() => {
 						callOrder.push(1)
@@ -96,7 +112,9 @@ describe('beforeHandle with arrow functions', () => {
 						callOrder.push(3)
 					}
 				]
-			})
+			},
+			() => 'ok'
+		)
 
 		const response = await app.handle(new Request('http://localhost/test'))
 		expect(response.status).toBe(200)
@@ -110,12 +128,16 @@ describe('beforeHandle with arrow functions', () => {
 		// This is what real minifiers produce
 		const minifiedHandler = Function("return async()=>'intercepted'")()
 
-		const app = new Elysia().get('/test', () => 'should not reach', {
-			beforeHandle: minifiedHandler
-		})
+		const app = new Elysia().get(
+			'/test',
+			{
+				beforeHandle: minifiedHandler
+			},
+			() => 'should not reach'
+		)
 
 		const response = await app.handle(new Request('http://localhost/test'))
-		expect(await response.text()).toBe('intercepted')
+		await expect(response.text()).resolves.toBe('intercepted')
 	})
 
 	// Test with actual HTTP server (not just app.handle)
@@ -123,11 +145,15 @@ describe('beforeHandle with arrow functions', () => {
 		let beforeHandleCalled = false
 
 		const app = new Elysia()
-			.get('/test', () => 'ok', {
-				beforeHandle: () => {
-					beforeHandleCalled = true
-				}
-			})
+			.get(
+				'/test',
+				{
+					beforeHandle: () => {
+						beforeHandleCalled = true
+					}
+				},
+				() => 'ok'
+			)
 			.listen(0)
 
 		try {

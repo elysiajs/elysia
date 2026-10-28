@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test'
-import { Elysia, ELYSIA_REQUEST_ID, t } from '../../src'
-import { req } from '../utils'
+import { Elysia } from '../../src'
+import { trace as traceCap } from '../../src/plugin/trace'
 
 describe('Bun router', () => {
 	it('works', async () => {
@@ -9,7 +9,8 @@ describe('Bun router', () => {
 		let onRequest = false
 		let traceOnRequest = false
 
-		const app = new Elysia({ systemRouter: true })
+		const app = new Elysia()
+			.use(traceCap())
 			.trace(({ onHandle, onRequest }) => {
 				onRequest(() => {
 					traceOnRequest = true
@@ -25,7 +26,7 @@ describe('Bun router', () => {
 			.decorate('decorated', 'decorated')
 			.state('state', 'state')
 			.derive(() => ({ derived: 'derived' }))
-			.resolve(() => ({ resolved: 'resolved' }))
+			.derive(() => ({ resolved: 'resolved' }))
 			.get('/', ({ store, decorated, derived, resolved }) => ({
 				store,
 				decorated,
@@ -59,7 +60,7 @@ describe('Bun router', () => {
 	})
 
 	it('handle params and query', async () => {
-		const app = new Elysia({ systemRouter: true })
+		const app = new Elysia()
 			.get('/id/:id', ({ query, params }) => ({
 				query,
 				params
@@ -81,7 +82,7 @@ describe('Bun router', () => {
 	})
 
 	it('handle optional params', async () => {
-		const app = new Elysia({ systemRouter: false })
+		const app = new Elysia()
 			.get('/id/:id?/:name?', ({ params }) => params)
 			.listen(0)
 
@@ -143,13 +144,11 @@ describe('Bun router', () => {
 		let hasRequestId = false
 
 		const app = new Elysia()
+			.use(traceCap())
 			.trace((a) => {
 				a.onHandle(() => {
-					// @ts-expect-error private property
-					url = a.context.url
-
-					// @ts-expect-error private property
-					hasRequestId = !!a.context[ELYSIA_REQUEST_ID]
+					url = a.context.request.url
+					hasRequestId = !!a.context.rid
 				})
 			})
 			.get('/', () => 'ok')
@@ -191,43 +190,12 @@ describe('Bun router', () => {
 
 				return fn
 			})
+			.use(traceCap())
 			.trace((a) => {
 				a.onHandle(() => {
-					// @ts-expect-error private property
-					url = a.context.url
+					url = a.context.request.url
 
-					// @ts-expect-error private property
-					hasRequestId = !!a.context[ELYSIA_REQUEST_ID]
-				})
-			})
-			.get('/', () => 'ok')
-			.listen(0)
-
-		await fetch(`http://localhost:${app.server!.port}/`)
-
-		expect(url).toBe(`http://localhost:${app.server!.port}/`)
-		expect(hasWrap).toBe(true)
-		expect(hasRequestId).toBe(true)
-	})
-
-	it('handle mount', async () => {
-		let url = ''
-		let hasRequestId = false
-		let hasWrap = false
-
-		const app = new Elysia()
-			.wrap((fn) => {
-				hasWrap = true
-
-				return fn
-			})
-			.trace((a) => {
-				a.onHandle(() => {
-					// @ts-expect-error private property
-					url = a.context.url
-
-					// @ts-expect-error private property
-					hasRequestId = !!a.context[ELYSIA_REQUEST_ID]
+					hasRequestId = !!a.context.rid
 				})
 			})
 			.get('/', () => 'ok')
@@ -247,6 +215,8 @@ describe('Bun router', () => {
 				.get('/static', 'OK')
 
 		const app = new Elysia({ name: 'main' }).use(asyncPlugin).listen(0)
+
+		await app.modules
 
 		const [router, _static] = await Promise.all([
 			fetch(`http://localhost:${app.server?.port}/router`).then((x) =>

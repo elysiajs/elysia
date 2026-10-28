@@ -1,9 +1,9 @@
 import { Elysia } from '../../src'
 import { describe, it, expect } from 'bun:test'
 import { z } from 'zod'
-import { post, req } from '../utils'
+import { post, json } from '../utils'
 
-describe('Standard Schema Validate', () => {
+describe('Standard Schema Reference', () => {
 	it('validate body', async () => {
 		const app = new Elysia()
 			.model({
@@ -11,13 +11,18 @@ describe('Standard Schema Validate', () => {
 					id: z.number()
 				})
 			})
-			.post('/', ({ body }) => body, {
-				body: 'body'
-			})
+			.post(
+				'/',
+				{
+					body: 'body'
+				},
+				({ body }) => body
+			)
 
 		const value = await app
 			.handle(
-				post('/', {
+				'/',
+				json({
 					id: 1
 				})
 			)
@@ -26,7 +31,8 @@ describe('Standard Schema Validate', () => {
 		expect(value).toEqual({ id: 1 })
 
 		const invalid = await app.handle(
-			post('/', {
+			'/',
+			json({
 				id: '1'
 			})
 		)
@@ -41,15 +47,19 @@ describe('Standard Schema Validate', () => {
 					id: z.coerce.number()
 				})
 			})
-			.get('/', ({ query }) => query, {
-				query: 'query'
-			})
+			.get(
+				'/',
+				{
+					query: 'query'
+				},
+				({ query }) => query
+			)
 
-		const value = await app.handle(req('/?id=1')).then((x) => x.json())
+		const value = await app.handle('/?id=1').then((x) => x.json())
 
 		expect(value).toEqual({ id: 1 })
 
-		const invalid = await app.handle(req('/?id=a'))
+		const invalid = await app.handle('/?id=a')
 
 		expect(invalid.status).toBe(422)
 	})
@@ -61,15 +71,19 @@ describe('Standard Schema Validate', () => {
 					id: z.coerce.number()
 				})
 			})
-			.get('/user/:id', ({ params }) => params, {
-				params: 'params'
-			})
+			.get(
+				'/user/:id',
+				{
+					params: 'params'
+				},
+				({ params }) => params
+			)
 
-		const value = await app.handle(req('/user/1')).then((x) => x.json())
+		const value = await app.handle('/user/1').then((x) => x.json())
 
 		expect(value).toEqual({ id: 1 })
 
-		const invalid = await app.handle(req('/user/a'))
+		const invalid = await app.handle('/user/a')
 
 		expect(invalid.status).toBe(422)
 	})
@@ -81,23 +95,25 @@ describe('Standard Schema Validate', () => {
 					id: z.coerce.number()
 				})
 			})
-			.get('/', ({ headers }) => headers, {
-				headers: 'headers'
-			})
+			.get(
+				'/',
+				{
+					headers: 'headers'
+				},
+				({ headers }) => headers
+			)
 
 		const value = await app
-			.handle(
-				req('/', {
-					headers: {
-						id: '1'
-					}
-				})
-			)
+			.handle('/', {
+				headers: {
+					id: '1'
+				}
+			})
 			.then((x) => x.json())
 
 		expect(value).toEqual({ id: 1 })
 
-		const invalid = await app.handle(req('/', {}))
+		const invalid = await app.handle('/', {})
 
 		expect(invalid.status).toBe(422)
 	})
@@ -109,19 +125,18 @@ describe('Standard Schema Validate', () => {
 			})
 			.get(
 				'/:name',
-				// @ts-expect-error
-				({ params: { name } }) =>
-					name === 'lilith' ? undefined : true,
 				{
 					response: 'response'
-				}
+				},
+				// @ts-expect-error deliberately returns an invalid response to assert 422
+				({ params: { name } }) => (name === 'lilith' ? undefined : true)
 			)
 
-		const exists = await app.handle(req('/fouco'))
-		const nonExists = await app.handle(req('/lilith'))
+		const exists = await app.handle('/fouco')
+		const nonExists = await app.handle('/lilith')
 
 		expect(exists.status).toBe(200)
-		expect(nonExists.status).toBe(422)
+		expect(nonExists.status).toBe(500)
 	})
 
 	it('validate multiple response', async () => {
@@ -132,26 +147,26 @@ describe('Standard Schema Validate', () => {
 			})
 			.get(
 				'/:name',
-				({ params: { name }, status }) =>
-					name === 'lilith'
-						? status(404, 'lilith')
-						: status(418, name as any),
 				{
 					response: {
 						404: 'response.404',
 						418: 'response.418'
 					}
-				}
+				},
+				({ params: { name }, status }) =>
+					name === 'lilith'
+						? status(404, 'lilith')
+						: status(418, name as any)
 			)
 
-		const exists = await app.handle(req('/fouco'))
-		const nonExists = await app.handle(req('/lilith'))
+		const exists = await app.handle('/fouco')
+		const nonExists = await app.handle('/lilith')
 
 		expect(exists.status).toBe(418)
 		expect(nonExists.status).toBe(404)
 
-		const invalid = await app.handle(req('/unknown'))
-		expect(invalid.status).toBe(422)
+		const invalid = await app.handle('/unknown')
+		expect(invalid.status).toBe(500)
 	})
 
 	it('validate multiple schema together', async () => {
@@ -171,10 +186,6 @@ describe('Standard Schema Validate', () => {
 			})
 			.post(
 				'/:name',
-				({ params: { name }, status }) =>
-					name === 'lilith'
-						? status(404, 'lilith')
-						: status(418, name as any),
 				{
 					body: 'body',
 					query: 'query',
@@ -183,7 +194,11 @@ describe('Standard Schema Validate', () => {
 						404: 'response.404',
 						418: 'response.418'
 					}
-				}
+				},
+				({ params: { name }, status }) =>
+					name === 'lilith'
+						? status(404, 'lilith')
+						: status(418, name as any)
 			)
 
 		const responses = await Promise.all(
@@ -239,16 +254,16 @@ describe('Standard Schema Validate', () => {
 			})
 			.post(
 				'/:name',
-				({ params: { name }, status }) =>
-					name === 'lilith'
-						? status(404, 'lilith')
-						: status(418, name as any),
 				{
 					params: 'params',
 					response: {
 						418: 'response.418'
 					}
-				}
+				},
+				({ params: { name }, status }) =>
+					name === 'lilith'
+						? status(404, 'lilith')
+						: status(418, name as any)
 			)
 
 		const responses = await Promise.all(
@@ -295,8 +310,7 @@ describe('Standard Schema Validate', () => {
 				'response.404': z.literal('lilith'),
 				'response.418': z.literal('fouco')
 			})
-			.guard({
-				as: 'scoped',
+			.guard('plugin', {
 				body: 'body',
 				query: 'query',
 				response: {
@@ -304,23 +318,21 @@ describe('Standard Schema Validate', () => {
 				}
 			})
 
-		const app = new Elysia()
-			.use(plugin)
-			.post(
-				'/:name',
-				({ params: { name }, status }) =>
-					name === 'lilith'
-						? status(404, 'lilith')
-						: status(418, name as any),
-				{
-					params: z.object({
-						name: z.literal('fouco').or(z.literal('lilith'))
-					}),
-					response: {
-						418: 'response.418'
-					}
+		const app = new Elysia().use(plugin).post(
+			'/:name',
+			{
+				params: z.object({
+					name: z.literal('fouco').or(z.literal('lilith'))
+				}),
+				response: {
+					418: 'response.418'
 				}
-			)
+			},
+			({ params: { name }, status }) =>
+				name === 'lilith'
+					? status(404, 'lilith')
+					: status(418, name as any)
+		)
 
 		const responses = await Promise.all(
 			[

@@ -1,9 +1,10 @@
-import { Elysia } from '../../src'
+import { Elysia, t } from '../../src'
+import { trace } from '../../src/plugin/trace'
+import { post } from '../utils'
 
 import { describe, expect, it } from 'bun:test'
-import { req, delay } from '../utils'
 
-describe('On Request', () => {
+describe('request hooks', () => {
 	it('inject headers to response', async () => {
 		const app = new Elysia()
 			.onRequest(({ set }) => {
@@ -11,20 +12,97 @@ describe('On Request', () => {
 			})
 			.get('/', () => 'hi')
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*')
+	})
+
+	// set.headers from onRequest must reach the response regardless of
+	// validation: a route schema or a later registration must not drop it
+	it('inject headers to validated routes and routes registered before', async () => {
+		const app = new Elysia()
+			.get('/before', () => 'hi')
+			.onRequest(({ set }) => {
+				set.headers['x-req'] = '1'
+			})
+			.get(
+				'/id/:id',
+				{ params: t.Object({ id: t.Number() }) },
+				({ params }) => params.id
+			)
+			.get(
+				'/q',
+				{ query: t.Object({ a: t.String() }) },
+				({ query }) => query.a
+			)
+			.post(
+				'/b',
+				{ body: t.Object({ n: t.String() }) },
+				({ body }) => body.n
+			)
+
+		const responses = await Promise.all([
+			app.handle('/before'),
+			app.handle('/id/7'),
+			app.handle('/q?a=1'),
+			app.handle(post('/b', { n: 'a' }))
+		])
+
+		for (const res of responses) {
+			expect(res.status).toBe(200)
+			expect(res.headers.get('x-req')).toBe('1')
+		}
+	})
+
+	// only the `set` effect of a request hook reaches the route: an opaque
+	// hook must not make a body-independent route parse its body
+	it('opaque hook does not make a route parse its body', async () => {
+		const helper = (_: unknown) => {}
+
+		const app = new Elysia()
+			.post('/', () => 'ok')
+			.onRequest((c) => helper(c))
+
+		const res = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: '{'
+			})
+		)
+
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('ok')
+	})
+
+	it('registered by plugins apply to parent routes', async () => {
+		const plain = new Elysia().onRequest(({ set }) => {
+			set.headers['x-plain'] = 'yes'
+		})
+		const local = new Elysia().onRequest(({ set }) => {
+			set.headers['x-local'] = 'yes'
+		})
+
+		const app = new Elysia()
+			.use(plain)
+			.use(local)
+			.get('/', () => 'hi')
+
+		const res = await app.handle('/')
+
+		expect(res.headers.get('x-plain')).toBe('yes')
+		expect(res.headers.get('x-local')).toBe('yes')
 	})
 
 	it('handle async', async () => {
 		const app = new Elysia()
 			.onRequest(async ({ set }) => {
-				await delay(5)
+				await Bun.sleep(5)
 				set.headers.name = 'llama'
 			})
 			.get('/', () => 'hi')
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(res.headers.get('name')).toBe('llama')
 	})
@@ -40,8 +118,8 @@ describe('On Request', () => {
 				return "You shouldn't see this"
 			})
 
-		const res = await app.handle(req('/'))
-		expect(await res.text()).toBe('Unauthorized')
+		const res = await app.handle('/')
+		await expect(res.text()).resolves.toBe('Unauthorized')
 		expect(res.status).toBe(401)
 	})
 
@@ -59,9 +137,96 @@ describe('On Request', () => {
 			])
 			.get('/', () => 'NOOP')
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle('/')
 
 		expect(total).toEqual(2)
+	})
+
+	it('stops sync request hooks on abort', async () => {
+		const controller = new AbortController()
+		let secondHookCalled = false
+		let handlerCalled = false
+
+		const app = new Elysia()
+			.onRequest([
+				() => {
+					controller.abort()
+				},
+				() => {
+					secondHookCalled = true
+				}
+			])
+			.get('/', () => {
+				handlerCalled = true
+				return 'NOOP'
+			})
+
+		const res = await app.handle('/', { signal: controller.signal })
+
+		expect(secondHookCalled).toBe(false)
+		expect(handlerCalled).toBe(false)
+		expect(res.status).toBe(200)
+		await expect(res.text()).resolves.toBe('')
+	})
+
+	it('stops async request hooks on abort', async () => {
+		const controller = new AbortController()
+		let secondHookCalled = false
+		let handlerCalled = false
+
+		const app = new Elysia()
+			.onRequest([
+				async () => {
+					controller.abort()
+					await Promise.resolve()
+				},
+				() => {
+					secondHookCalled = true
+				}
+			])
+			.get('/', () => {
+				handlerCalled = true
+				return 'NOOP'
+			})
+
+		const res = await app.handle('/', { signal: controller.signal })
+
+		expect(secondHookCalled).toBe(false)
+		expect(handlerCalled).toBe(false)
+		expect(res.status).toBe(200)
+		await expect(res.text()).resolves.toBe('')
+	})
+
+	it('stops traced request hooks on abort', async () => {
+		const controller = new AbortController()
+		let secondHookCalled = false
+		let handlerCalled = false
+
+		const app = new Elysia()
+			.use(trace())
+			.trace(({ onRequest }) => {
+				onRequest(() => {})
+			})
+			.onRequest([
+				async () => {
+					controller.abort()
+					await Promise.resolve()
+				},
+				() => {
+					secondHookCalled = true
+				}
+			])
+			.get('/', () => {
+				handlerCalled = true
+				return 'NOOP'
+			})
+
+		const res = await app.handle('/', { signal: controller.signal })
+
+		expect(secondHookCalled).toBe(false)
+		expect(handlerCalled).toBe(false)
+		expect(res.status).toBe(200)
+		await expect(res.text()).resolves.toBe('')
 	})
 
 	it('request in order', async () => {
@@ -76,7 +241,7 @@ describe('On Request', () => {
 			})
 			.get('/', () => '')
 
-		await app.handle(req('/'))
+		await app.handle('/')
 
 		expect(order).toEqual(['A', 'B'])
 	})

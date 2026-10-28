@@ -1,23 +1,86 @@
 import { describe, expect, it } from 'bun:test'
 
 import { Elysia, t } from '../../src'
-import { post } from '../utils'
+import { TypeBoxValidator } from '../../src/type/validator'
+import { post, json } from '../utils'
 
 describe('Sanitize', () => {
+	it('sanitizes bodies whether additionalProperties is false or true', async () => {
+		const sanitize = (value: unknown) =>
+			typeof value === 'string' ? value.replaceAll('<', '&lt;') : value
+		const app = new Elysia({ sanitize })
+			.post(
+				'/closed',
+				{
+					body: t.Object(
+						{ value: t.String() },
+						{ additionalProperties: false }
+					)
+				},
+				({ body }) => body
+			)
+			.post(
+				'/open',
+				{
+					body: t.Object(
+						{ value: t.String() },
+						{ additionalProperties: true }
+					)
+				},
+				({ body }) => body
+			)
+
+		const responses = await Promise.all(
+			['/closed', '/open'].map((path) =>
+				app
+					.handle(path, json({ value: '<script>' }))
+					.then((x) => x.json())
+			)
+		)
+
+		expect(responses).toEqual([
+			{ value: '&lt;script>' },
+			{ value: '&lt;script>' }
+		])
+	})
+
+	it('FromAsync sanitizes a body with additionalProperties false', async () => {
+		const validator = new TypeBoxValidator(
+			t.Object({ value: t.String() }, { additionalProperties: false }),
+			{
+				sanitize: (value) =>
+					typeof value === 'string'
+						? value.replaceAll('<', '&lt;')
+						: value
+			}
+		)
+
+		await expect(
+			validator.FromAsync({ value: '<script>' })
+		).resolves.toEqual({
+			value: '&lt;script>'
+		})
+	})
+
 	it('handle single sanitize', async () => {
 		const app = new Elysia({
 			sanitize: (v) => (v === 'a' ? 'ok' : v)
-		}).post('/', ({ body }) => body, {
-			body: t.Object({
-				a: t.String(),
-				b: t.String(),
-				c: t.String()
-			})
-		})
+		}).post(
+			'/',
+			{
+				body: t.Object({
+					a: t.String(),
+					b: t.String(),
+					c: t.String()
+				})
+			},
+			({ body }) => body
+		)
 
 		const response = await app
 			.handle(
-				post('/', {
+				'/',
+				json({
 					a: 'a',
 					b: 'b',
 					c: 'c'
@@ -34,17 +97,22 @@ describe('Sanitize', () => {
 				(v) => (v === 'a' ? 'ok' : v),
 				(v) => (v === 'b' ? 'ok' : v)
 			]
-		}).post('/', ({ body }) => body, {
-			body: t.Object({
-				a: t.String(),
-				b: t.String(),
-				c: t.String()
-			})
-		})
+		}).post(
+			'/',
+			{
+				body: t.Object({
+					a: t.String(),
+					b: t.String(),
+					c: t.String()
+				})
+			},
+			({ body }) => body
+		)
 
 		const response = await app
 			.handle(
-				post('/', {
+				'/',
+				json({
 					a: 'a',
 					b: 'b',
 					c: 'c'
@@ -56,13 +124,17 @@ describe('Sanitize', () => {
 	})
 
 	it('handle sanitize in plugin from main', async () => {
-		const plugin = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({
-				a: t.String(),
-				b: t.String(),
-				c: t.String()
-			})
-		})
+		const plugin = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					a: t.String(),
+					b: t.String(),
+					c: t.String()
+				})
+			},
+			({ body }) => body
+		)
 
 		const app = new Elysia({
 			sanitize: (v) => (v === 'a' ? 'ok' : v)
@@ -70,7 +142,8 @@ describe('Sanitize', () => {
 
 		const response = await app
 			.handle(
-				post('/', {
+				'/',
+				json({
 					a: 'a',
 					b: 'b',
 					c: 'c'
@@ -84,9 +157,13 @@ describe('Sanitize', () => {
 	it('handle top-level string', async () => {
 		const app = new Elysia({
 			sanitize: (v) => (v === 'a' ? 'ok' : v)
-		}).post('/', ({ body }) => body, {
-			body: t.String()
-		})
+		}).post(
+			'/',
+			{
+				body: t.String()
+			},
+			({ body }) => body
+		)
 
 		const response = await app
 			.handle(

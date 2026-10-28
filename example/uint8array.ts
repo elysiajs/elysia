@@ -1,9 +1,13 @@
 import { Elysia, t } from '../src'
 
 new Elysia()
-	.post('/', ({ body }) => body, {
-		body: t.Uint8Array()
-	})
+	.post(
+		'/',
+		{
+			body: t.Uint8Array()
+		},
+		({ body }) => body
+	)
 	.listen(3000)
 
 const response = await fetch('http://localhost:3000', {

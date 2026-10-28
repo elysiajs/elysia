@@ -1,66 +1,71 @@
 import { Context, Elysia, t, ValidationError } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
 
 describe('Query Validator', () => {
 	it('validate single', async () => {
-		const app = new Elysia().get('/', ({ query: { name } }) => name, {
-			query: t.Object({
-				name: t.String()
-			})
-		})
-		const res = await app.handle(req('/?name=sucrose'))
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					name: t.String()
+				})
+			},
+			({ query: { name } }) => name
+		)
+		const res = await app.handle('/?name=sucrose')
 
-		expect(await res.text()).toBe('sucrose')
+		await expect(res.text()).resolves.toBe('sucrose')
 		expect(res.status).toBe(200)
 	})
 
 	it('validate with hyphen in key', async () => {
 		const app = new Elysia().get(
 			'/',
-			({ query }) => query['character-name'],
 			{
 				query: t.Object({
 					'character-name': t.String()
 				})
-			}
+			},
+			({ query }) => query['character-name']
 		)
-		const res = await app.handle(req('/?character-name=sucrose'))
+		const res = await app.handle('/?character-name=sucrose')
 
-		expect(await res.text()).toBe('sucrose')
+		await expect(res.text()).resolves.toBe('sucrose')
 		expect(res.status).toBe(200)
 	})
 
 	it('validate with dot in key', async () => {
 		const app = new Elysia().get(
 			'/',
-			({ query }) => query['character.name'],
 			{
 				query: t.Object({
 					'character.name': t.String()
 				})
-			}
+			},
+			({ query }) => query['character.name']
 		)
-		const res = await app.handle(req('/?character.name=sucrose'))
+		const res = await app.handle('/?character.name=sucrose')
 
-		expect(await res.text()).toBe('sucrose')
+		await expect(res.text()).resolves.toBe('sucrose')
 		expect(res.status).toBe(200)
 	})
 
 	it('validate multiple', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				name: t.String(),
-				job: t.String(),
-				trait: t.String()
-			})
-		})
-		const res = await app.handle(
-			req('/?name=sucrose&job=alchemist&trait=dog')
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					name: t.String(),
+					job: t.String(),
+					trait: t.String()
+				})
+			},
+			({ query }) => query
 		)
+		const res = await app.handle('/?name=sucrose&job=alchemist&trait=dog')
 
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			trait: 'dog'
@@ -69,31 +74,37 @@ describe('Query Validator', () => {
 	})
 
 	it('parse without reference', async () => {
-		const app = new Elysia().get('/', () => '', {
-			query: t.Object({
-				name: t.String(),
-				job: t.String(),
-				trait: t.String()
-			})
-		})
-		const res = await app.handle(
-			req('/?name=sucrose&job=alchemist&trait=dog')
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					name: t.String(),
+					job: t.String(),
+					trait: t.String()
+				})
+			},
+			() => ''
 		)
+		const res = await app.handle('/?name=sucrose&job=alchemist&trait=dog')
 
 		expect(res.status).toBe(200)
 	})
 
 	it('validate optional', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				name: t.String(),
-				job: t.String(),
-				trait: t.Optional(t.String())
-			})
-		})
-		const res = await app.handle(req('/?name=sucrose&job=alchemist'))
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					name: t.String(),
+					job: t.String(),
+					trait: t.Optional(t.String())
+				})
+			},
+			({ query }) => query
+		)
+		const res = await app.handle('/?name=sucrose&job=alchemist')
 
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
 			job: 'alchemist'
 		})
@@ -101,17 +112,21 @@ describe('Query Validator', () => {
 	})
 
 	it('parse single numeric', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				name: t.String(),
-				job: t.String(),
-				trait: t.Optional(t.String()),
-				age: t.Numeric()
-			})
-		})
-		const res = await app.handle(req('/?name=sucrose&job=alchemist&age=16'))
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					name: t.String(),
+					job: t.String(),
+					trait: t.Optional(t.String()),
+					age: t.Numeric()
+				})
+			},
+			({ query }) => query
+		)
+		const res = await app.handle('/?name=sucrose&job=alchemist&age=16')
 
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			age: 16
@@ -120,20 +135,24 @@ describe('Query Validator', () => {
 	})
 
 	it('parse multiple numeric', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				name: t.String(),
-				job: t.String(),
-				trait: t.Optional(t.String()),
-				age: t.Numeric(),
-				rank: t.Numeric()
-			})
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					name: t.String(),
+					job: t.String(),
+					trait: t.Optional(t.String()),
+					age: t.Numeric(),
+					rank: t.Numeric()
+				})
+			},
+			({ query }) => query
+		)
 		const res = await app.handle(
-			req('/?name=sucrose&job=alchemist&age=16&rank=4')
+			'/?name=sucrose&job=alchemist&age=16&rank=4'
 		)
 
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			age: 16,
@@ -149,17 +168,19 @@ describe('Query Validator', () => {
 			UNKNOWN = 3
 		}
 
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				name: t.String(),
-				gender: t.NumericEnum(Gender)
-			})
-		})
-		const res = await app.handle(
-			req(`/?name=sucrose&gender=${Gender.MALE}`)
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					name: t.String(),
+					gender: t.NumericEnum(Gender)
+				})
+			},
+			({ query }) => query
 		)
+		const res = await app.handle(`/?name=sucrose&gender=${Gender.MALE}`)
 
-		expect(await res.json()).toEqual({
+		await expect(res.json()).resolves.toEqual({
 			name: 'sucrose',
 			gender: Gender.MALE
 		})
@@ -167,84 +188,108 @@ describe('Query Validator', () => {
 	})
 
 	it('parse single integer', async () => {
-		const app = new Elysia().get('/', ({ query: { limit } }) => limit, {
-			query: t.Object({
-				limit: t.Integer()
-			})
-		})
-		const res = await app.handle(req('/?limit=16'))
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					limit: t.Integer()
+				})
+			},
+			({ query: { limit } }) => limit
+		)
+		const res = await app.handle('/?limit=16')
 		expect(res.status).toBe(200)
-		expect(await res.text()).toBe('16')
+		await expect(res.text()).resolves.toBe('16')
 	})
 
 	it('parse multiple integer', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				limit: t.Integer(),
-				offset: t.Integer()
-			})
-		})
-		const res = await app.handle(req('/?limit=16&offset=0'))
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					limit: t.Integer(),
+					offset: t.Integer()
+				})
+			},
+			({ query }) => query
+		)
+		const res = await app.handle('/?limit=16&offset=0')
 		expect(res.status).toBe(200)
-		expect(await res.json()).toEqual({ limit: 16, offset: 0 })
+		await expect(res.json()).resolves.toEqual({ limit: 16, offset: 0 })
 	})
 
 	it('validate partial', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Partial(
-				t.Object({
-					name: t.String(),
-					job: t.String(),
-					trait: t.Optional(t.String())
-				})
-			)
-		})
-		const res = await app.handle(req('/'))
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Partial(
+					t.Object({
+						name: t.String(),
+						job: t.String(),
+						trait: t.Optional(t.String())
+					})
+				)
+			},
+			({ query }) => query
+		)
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
-		expect(await res.json()).toEqual({})
+		await expect(res.json()).resolves.toEqual({})
 	})
 
 	it('parse numeric with partial', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Partial(
-				t.Object({
-					name: t.String(),
-					job: t.String(),
-					trait: t.Optional(t.String()),
-					age: t.Numeric(),
-					rank: t.Numeric()
-				})
-			)
-		})
-		const res = await app.handle(req('/'))
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Partial(
+					t.Object({
+						name: t.String(),
+						job: t.String(),
+						trait: t.Optional(t.String()),
+						age: t.Numeric(),
+						rank: t.Numeric()
+					})
+				)
+			},
+			({ query }) => query
+		)
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
-		expect(await res.json()).toEqual({})
+		await expect(res.json()).resolves.toEqual({})
 	})
 
 	it('parse boolean string', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				param1: t.BooleanString()
-			})
-		})
-		const res = await app.handle(req('/?param1=true'))
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					param1: t.BooleanString()
+				})
+			},
+			({ query }) => query
+		)
+		const res = await app.handle('/?param1=true')
 
 		expect(res.status).toBe(200)
-		expect(await res.json()).toEqual({ param1: true })
+		await expect(res.json()).resolves.toEqual({ param1: true })
 	})
 
 	it('parse optional boolean string', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				param1: t.Optional(t.BooleanString({ default: true }))
-			})
-		})
-		const res = await app.handle(req('/'))
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					param1: t.Optional(t.BooleanString({ default: true }))
+				})
+			},
+			({ query }) => query
+		)
+		const res = await app.handle('/')
 
 		expect(res.status).toBe(200)
-		expect(await res.json()).toEqual({ param1: true })
+		await expect(res.json()).resolves.toEqual({ param1: true })
 	})
 
 	it('parse optional boolean string with second parameter', async () => {
@@ -252,13 +297,17 @@ describe('Query Validator', () => {
 			registered: t.Optional(t.Boolean()),
 			other: t.String()
 		})
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: schema
-		})
-		const res = await app.handle(req('/?other=sucrose'))
+		const app = new Elysia().get(
+			'/',
+			{
+				query: schema
+			},
+			({ query }) => query
+		)
+		const res = await app.handle('/?other=sucrose')
 
 		expect(res.status).toBe(200)
-		expect(await res.json()).toEqual({ other: 'sucrose' })
+		await expect(res.json()).resolves.toEqual({ other: 'sucrose' })
 	})
 
 	it('parse optional boolean string with default value', async () => {
@@ -266,19 +315,25 @@ describe('Query Validator', () => {
 			registered: t.Optional(t.Boolean({ default: true })),
 			other: t.String()
 		})
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: schema
-		})
-		const res = await app.handle(req('/?other=sucrose'))
+		const app = new Elysia().get(
+			'/',
+			{
+				query: schema
+			},
+			({ query }) => query
+		)
+		const res = await app.handle('/?other=sucrose')
 
 		expect(res.status).toBe(200)
-		expect(await res.json()).toEqual({ other: 'sucrose', registered: true })
+		await expect(res.json()).resolves.toEqual({
+			other: 'sucrose',
+			registered: true
+		})
 	})
 
 	it('validate optional object', async () => {
 		const app = new Elysia().get(
 			'/',
-			({ query }) => query?.name ?? 'sucrose',
 			{
 				query: t.Object(
 					{
@@ -288,32 +343,35 @@ describe('Query Validator', () => {
 						additionalProperties: true
 					}
 				)
-			}
+			},
+			({ query }) => query?.name ?? 'sucrose'
 		)
 
 		const [valid, invalid] = await Promise.all([
-			app.handle(req('/?name=sucrose')),
-			app.handle(req('/'))
+			app.handle('/?name=sucrose'),
+			app.handle('/')
 		])
 
-		expect(await valid.text()).toBe('sucrose')
+		await expect(valid.text()).resolves.toBe('sucrose')
 		expect(valid.status).toBe(200)
 
-		expect(await invalid.text()).toBe('sucrose')
+		await expect(invalid.text()).resolves.toBe('sucrose')
 		expect(invalid.status).toBe(200)
 	})
 
 	it('create default string query', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				name: t.String(),
-				faction: t.String({ default: 'tea_party' })
-			})
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					name: t.String(),
+					faction: t.String({ default: 'tea_party' })
+				})
+			},
+			({ query }) => query
+		)
 
-		const value = await app
-			.handle(req('/?name=nagisa'))
-			.then((x) => x.json())
+		const value = await app.handle('/?name=nagisa').then((x) => x.json())
 
 		expect(value).toEqual({
 			name: 'nagisa',
@@ -321,48 +379,72 @@ describe('Query Validator', () => {
 		})
 	})
 
-	it('escapes single quote in default string value', async () => {
-		const payload = "tea';globalThis.__queryDefaultValueInjection=1;//"
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				name: t.String(),
-				faction: t.String({ default: payload })
-			})
+	// GHSA-gmm9-qwx3-2m3h: a schema default must never reach generated code
+	// unescaped. The `;//` payload is the advisory's original (it breaks a
+	// statement-per-line emitter); the `'+(…)+'` payload is expression-shaped so
+	// it survives a single-line emitter, which is the shape this branch emits.
+	for (const payload of [
+		"tea';globalThis.__queryDefaultValueInjection=1;//",
+		"tea'+(globalThis.__queryDefaultValueInjection=1,'')+'"
+	])
+		it(`escapes single quote in default string value: ${payload}`, async () => {
+			const app = new Elysia().get(
+				'/',
+				{
+					query: t.Object({
+						name: t.String(),
+						faction: t.String({ default: payload })
+					})
+				},
+				({ query }) => query
+			)
+
+			const value = await app
+				.handle('/?name=nagisa')
+				.then((x) => x.json())
+
+			expect(
+				(globalThis as any).__queryDefaultValueInjection
+			).toBeUndefined()
+			expect(value.faction).toBe(payload)
 		})
 
-		const value = await app
-			.handle(req('/?name=nagisa'))
-			.then((x) => x.json())
+	for (const key of [
+		"faction'];globalThis.__queryDefaultKeyInjection=1;//",
+		"faction'+(globalThis.__queryDefaultKeyInjection=1,'')+'"
+	])
+		it(`escapes single quote in default property key: ${key}`, async () => {
+			const app = new Elysia().get(
+				'/',
+				{
+					query: t.Object({
+						[key]: t.String({ default: 'tea_party' })
+					})
+				},
+				() => 'ok'
+			)
 
-		expect((globalThis as any).__queryDefaultValueInjection).toBeUndefined()
-		expect(value.faction).toBe(payload)
-	})
+			const res = await app.handle('/')
 
-	it('escapes single quote in default property key', async () => {
-		const key = "faction'];globalThis.__queryDefaultKeyInjection=1;//"
-		const app = new Elysia().get('/', () => 'ok', {
-			query: t.Object({
-				[key]: t.String({ default: 'tea_party' })
-			})
+			expect(
+				(globalThis as any).__queryDefaultKeyInjection
+			).toBeUndefined()
+			expect(res.status).toBe(200)
 		})
-
-		const res = await app.handle(req('/'))
-
-		expect((globalThis as any).__queryDefaultKeyInjection).toBeUndefined()
-		expect(res.status).toBe(200)
-	})
 
 	it('create default number query', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				name: t.String(),
-				rank: t.Number({ default: 1 })
-			})
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					name: t.String(),
+					rank: t.Number({ default: 1 })
+				})
+			},
+			({ query }) => query
+		)
 
-		const value = await app
-			.handle(req('/?name=nagisa'))
-			.then((x) => x.json())
+		const value = await app.handle('/?name=nagisa').then((x) => x.json())
 
 		expect(value).toEqual({
 			name: 'nagisa',
@@ -396,9 +478,7 @@ describe('Query Validator', () => {
 				return 'yay'
 			})
 
-		const response = await app
-			.handle(req('/a?state=123'))
-			.then((x) => x.text())
+		const response = await app.handle('/a?state=123').then((x) => x.text())
 
 		expect(response).toBe('yay')
 	})
@@ -409,11 +489,15 @@ describe('Query Validator', () => {
 		params.append('keys', '2')
 
 		const response = await new Elysia()
-			.get('/', ({ query }) => query, {
-				query: t.Object({
-					keys: t.Array(t.String())
-				})
-			})
+			.get(
+				'/',
+				{
+					query: t.Object({
+						keys: t.Array(t.String())
+					})
+				},
+				({ query }) => query
+			)
 			.handle(new Request(`http://localhost/?${params.toString()}`))
 			.then((res) => res.json())
 
@@ -421,26 +505,28 @@ describe('Query Validator', () => {
 	})
 
 	it('parse query object', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				role: t.Optional(
-					t.Array(
-						t.Object({
-							name: t.String()
-						})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					role: t.Optional(
+						t.Array(
+							t.Object({
+								name: t.String()
+							})
+						)
 					)
-				)
-			})
-		})
+				})
+			},
+			({ query }) => query
+		)
 
 		const response = await app
 			.handle(
-				req(
-					`/?role=${JSON.stringify([
-						{ name: 'hello' },
-						{ name: 'world' }
-					])}`
-				)
+				`/?role=${JSON.stringify([
+					{ name: 'hello' },
+					{ name: 'world' }
+				])}`
 			)
 			.then((x) => x.json())
 
@@ -450,28 +536,30 @@ describe('Query Validator', () => {
 	})
 
 	it('parse optional query object', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Optional(
-				t.Object({
-					role: t.Optional(
-						t.Array(
-							t.Object({
-								name: t.String()
-							})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Optional(
+					t.Object({
+						role: t.Optional(
+							t.Array(
+								t.Object({
+									name: t.String()
+								})
+							)
 						)
-					)
-				})
-			)
-		})
+					})
+				)
+			},
+			({ query }) => query
+		)
 
 		const response = await app
 			.handle(
-				req(
-					`/?role=${JSON.stringify([
-						{ name: 'hello' },
-						{ name: 'world' }
-					])}`
-				)
+				`/?role=${JSON.stringify([
+					{ name: 'hello' },
+					{ name: 'world' }
+				])}`
 			)
 			.then((x) => x.json())
 
@@ -486,15 +574,19 @@ describe('Query Validator', () => {
 		params.append('keys', JSON.stringify({ a: 'hi' }))
 
 		const response = await new Elysia()
-			.get('/', ({ query }) => query, {
-				query: t.Object({
-					keys: t.Array(
-						t.Object({
-							a: t.String()
-						})
-					)
-				})
-			})
+			.get(
+				'/',
+				{
+					query: t.Object({
+						keys: t.Array(
+							t.Object({
+								a: t.String()
+							})
+						)
+					})
+				},
+				({ query }) => query
+			)
 			.handle(new Request(`http://localhost/?${params.toString()}`))
 			.then((res) => res.json())
 
@@ -509,17 +601,21 @@ describe('Query Validator', () => {
 		params.append('keys', JSON.stringify({ a: 'hi' }))
 
 		const response = await new Elysia()
-			.get('/', ({ query }) => query, {
-				query: t.Optional(
-					t.Object({
-						keys: t.Array(
-							t.Object({
-								a: t.String()
-							})
-						)
-					})
-				)
-			})
+			.get(
+				'/',
+				{
+					query: t.Optional(
+						t.Object({
+							keys: t.Array(
+								t.Object({
+									a: t.String()
+								})
+							)
+						})
+					)
+				},
+				({ query }) => query
+			)
 			.handle(new Request(`http://localhost/?${params.toString()}`))
 			.then((res) => res.json())
 
@@ -534,17 +630,21 @@ describe('Query Validator', () => {
 		params.append('keys', JSON.stringify({ a: 'hi' }))
 
 		const response = await new Elysia()
-			.get('/', ({ query }) => query, {
-				query: t.Optional(
-					t.Object({
-						keys: t.Array(
-							t.Object({
-								a: t.String()
-							})
-						)
-					})
-				)
-			})
+			.get(
+				'/',
+				{
+					query: t.Optional(
+						t.Object({
+							keys: t.Array(
+								t.Object({
+									a: t.String()
+								})
+							)
+						})
+					)
+				},
+				({ query }) => query
+			)
 			.handle(new Request(`http://localhost/?${params.toString()}`))
 			.then((res) => res.json())
 
@@ -553,56 +653,78 @@ describe('Query Validator', () => {
 		})
 	})
 
-	// People don't expect this
-	// @see: https://x.com/saltyAom/status/1813236251321069918
-	// it('parse query array without schema', async () => {
-	// 	let value: string[] | undefined
-
-	// 	const response = await new Elysia()
-	// 		.get('/', ({ query: { keys } }) => value = keys)
-	// 		.handle(new Request(`http://localhost/?id=1&id=2`))
-	// 		.then((res) => res.json())
-
-	// 	expect(value).toEqual(['1', '2'])
-	// })
-
 	it("don't parse query object without schema", async () => {
 		const app = new Elysia().get('/', ({ query: { role } }) => role)
 
 		const response = await app
-			.handle(req(`/?role=${JSON.stringify({ name: 'hello' })}`))
+			.handle(`/?role=${JSON.stringify({ name: 'hello' })}`)
 			.then((x) => x.text())
 
 		expect(response).toBe(JSON.stringify({ name: 'hello' }))
 	})
 
-	it('parse union primitive and object', async () => {
-		const app = new Elysia().get('/', ({ query: { ids } }) => ids, {
-			query: t.Object({
-				ids: t.Union([
-					t.Array(
-						t.Union([t.Object({ a: t.String() }), t.Numeric()])
-					),
-					t.Numeric()
-				])
-			})
+	it('does not array-coerce inherited query channel names', async () => {
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					constructor: t.String(),
+					hasOwnProperty: t.String(),
+					toString: t.String(),
+					tags: t.Array(t.String())
+				})
+			},
+			({ query }) => query
+		)
+
+		const res = await app.handle(
+			'/?constructor=one&hasOwnProperty=two&toString=three&tags=a,b'
+		)
+
+		expect(res.status).toBe(200)
+		await expect(res.json()).resolves.toEqual({
+			constructor: 'one',
+			hasOwnProperty: 'two',
+			toString: 'three',
+			tags: ['a', 'b']
 		})
+	})
+
+	it('parse union primitive and object', async () => {
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					ids: t.Union([
+						t.Array(
+							t.Union([t.Object({ a: t.String() }), t.Numeric()])
+						),
+						t.Numeric()
+					])
+				})
+			},
+			({ query: { ids } }) => ids
+		)
 
 		const response = await app
-			.handle(req(`/?ids=1&ids=${JSON.stringify({ a: 'b' })}`))
+			.handle(`/?ids=1&ids=${JSON.stringify({ a: 'b' })}`)
 			.then((res) => res.json())
 
 		expect(response).toEqual([1, { a: 'b' }])
 	})
 
 	it('coerce number object to numeric', async () => {
-		const app = new Elysia().get('/', ({ query: { id } }) => typeof id, {
-			query: t.Object({
-				id: t.Number()
-			})
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					id: t.Number()
+				})
+			},
+			({ query: { id } }) => typeof id
+		)
 
-		const value = await app.handle(req('/?id=1')).then((x) => x.text())
+		const value = await app.handle('/?id=1').then((x) => x.text())
 
 		expect(value).toBe('number')
 	})
@@ -610,17 +732,15 @@ describe('Query Validator', () => {
 	it('coerce string object to boolean', async () => {
 		const app = new Elysia().get(
 			'/',
-			({ query: { isAdmin } }) => typeof isAdmin,
 			{
 				query: t.Object({
 					isAdmin: t.Boolean()
 				})
-			}
+			},
+			({ query: { isAdmin } }) => typeof isAdmin
 		)
 
-		const value = await app
-			.handle(req('/?isAdmin=true'))
-			.then((x) => x.text())
+		const value = await app.handle('/?isAdmin=true').then((x) => x.text())
 
 		expect(value).toBe('boolean')
 	})
@@ -634,31 +754,31 @@ describe('Query Validator', () => {
 		)
 
 		await app.handle(
-			req(
-				`/?pagination=${JSON.stringify({ pageIndex: 1, pageLimit: 10 })}`
-			)
+			`/?pagination=${JSON.stringify({ pageIndex: 1, pageLimit: 10 })}`
 		)
 
 		expect(value).toEqual(JSON.stringify({ pageIndex: 1, pageLimit: 10 }))
 	})
 
 	it('handle object array in single query', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				pagination: t.Array(
-					t.Object({
-						pageIndex: t.Number(),
-						pageLimit: t.Number()
-					})
-				)
-			})
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					pagination: t.Array(
+						t.Object({
+							pageIndex: t.Number(),
+							pageLimit: t.Number()
+						})
+					)
+				})
+			},
+			({ query }) => query
+		)
 
 		const response = await app
 			.handle(
-				req(
-					`/?pagination=${JSON.stringify([{ pageIndex: 1, pageLimit: 10 }])}`
-				)
+				`/?pagination=${JSON.stringify([{ pageIndex: 1, pageLimit: 10 }])}`
 			)
 			.then((x) => x.json())
 
@@ -668,22 +788,24 @@ describe('Query Validator', () => {
 	})
 
 	it('handle merge object to array in multiple query', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				pagination: t.Array(
-					t.Object({
-						pageIndex: t.Number(),
-						pageLimit: t.Number()
-					})
-				)
-			})
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					pagination: t.Array(
+						t.Object({
+							pageIndex: t.Number(),
+							pageLimit: t.Number()
+						})
+					)
+				})
+			},
+			({ query }) => query
+		)
 
 		const response = await app
 			.handle(
-				req(
-					`/?pagination=${JSON.stringify({ pageIndex: 1, pageLimit: 10 })}&pagination=${JSON.stringify({ pageIndex: 2, pageLimit: 9 })}`
-				)
+				`/?pagination=${JSON.stringify({ pageIndex: 1, pageLimit: 10 })}&pagination=${JSON.stringify({ pageIndex: 2, pageLimit: 9 })}`
 			)
 			.then((x) => x.json())
 
@@ -696,55 +818,65 @@ describe('Query Validator', () => {
 	})
 
 	it('don\t coerce number in nested object', async () => {
-		const app = new Elysia().get('/', ({ query: { user } }) => user, {
-			query: t.Object({
-				user: t.Object({
-					id: t.Number(),
-					name: t.String()
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					user: t.Object({
+						id: t.Number(),
+						name: t.String()
+					})
 				})
-			})
-		})
+			},
+			({ query: { user } }) => user
+		)
 
 		const response = await app.handle(
-			req(
-				`?user=${JSON.stringify({
-					id: '2',
-					name: 'test'
-				})}`
-			)
+			`/?user=${JSON.stringify({
+				id: '2',
+				name: 'test'
+			})}`
 		)
 
 		expect(response.status).toBe(422)
 	})
 
 	it('handle optional at root', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Optional(
-				t.Object({
-					id: t.Numeric()
-				})
-			)
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Optional(
+					t.Object({
+						id: t.Numeric()
+					})
+				)
+			},
+			({ query }) => query
+		)
 
 		const res = await Promise.all([
-			app.handle(req('/')).then((x) => x.json()),
-			app.handle(req('/?id=1')).then((x) => x.json())
+			app.handle('/').then((x) => x.json()),
+			app.handle('/?id=1').then((x) => x.json())
 		])
 
 		expect(res).toEqual([{}, { id: 1 }])
 	})
 
 	it('parse query array in multiple location correctly', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				leading: t.String(),
-				arr: t.Array(t.String()),
-				trailing: t.String()
-			})
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					leading: t.String(),
+					arr: t.Array(t.String()),
+					trailing: t.String()
+				})
+			},
+			({ query }) => query
+		)
 
 		const response = await app
-			.handle(req('/?leading=foo&arr=bar&arr=baz&trailing=qux&arr=xd'))
+			.handle('/?leading=foo&arr=bar&arr=baz&trailing=qux&arr=xd')
 			.then((x) => x.json())
 
 		expect(response).toEqual({
@@ -755,11 +887,15 @@ describe('Query Validator', () => {
 	})
 
 	it('parse + in query', async () => {
-		const api = new Elysia().get('', ({ query }) => query, {
-			query: t.Object({
-				keyword: t.String()
-			})
-		})
+		const api = new Elysia().get(
+			'',
+			{
+				query: t.Object({
+					keyword: t.String()
+				})
+			},
+			({ query }) => query
+		)
 
 		const url = new URL('http://localhost:3000/')
 		url.searchParams.append('keyword', 'hello world')
@@ -776,56 +912,64 @@ describe('Query Validator', () => {
 
 	// https://github.com/elysiajs/elysia/issues/929
 	it('slice non-ASCII querystring offset correctly', async () => {
-		const app = new Elysia().get('/', () => 'ok', {
-			query: t.Object({
-				key1: t.Union([t.Array(t.String()), t.String()])
-			})
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					key1: t.Union([t.Array(t.String()), t.String()])
+				})
+			},
+			() => 'ok'
+		)
 
-		expect(
-			await app
-				.handle(req('/?key1=ab&key1=cd&z=が'))
-				.then((x) => x.status)
-		).toEqual(200)
+		await expect(
+			app.handle('/?key1=ab&key1=cd&z=が').then((x) => x.status)
+		).resolves.toEqual(200)
 
-		expect(
-			await app.handle(req('/?key1=ab&z=が')).then((x) => x.status)
-		).toEqual(200)
+		await expect(
+			app.handle('/?key1=ab&z=が').then((x) => x.status)
+		).resolves.toEqual(200)
 
-		expect(
-			await app.handle(req('/?key1=ab&key1=cd&z=x')).then((x) => x.status)
-		).toEqual(200)
+		await expect(
+			app.handle('/?key1=ab&key1=cd&z=x').then((x) => x.status)
+		).resolves.toEqual(200)
 
-		expect(
-			await app
-				.handle(req('/?z=が&key1=ab&key1=cd'))
-				.then((x) => x.status)
-		).toEqual(200)
+		await expect(
+			app.handle('/?z=が&key1=ab&key1=cd').then((x) => x.status)
+		).resolves.toEqual(200)
 
-		expect(
-			await app.handle(req('/?key1=で&key1=が&z=x')).then((x) => x.status)
-		).toEqual(200)
+		await expect(
+			app.handle('/?key1=で&key1=が&z=x').then((x) => x.status)
+		).resolves.toEqual(200)
 	})
 
 	// https://github.com/elysiajs/elysia/issues/912
 	it('handle JavaScript date numeric offset', () => {
-		const api = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				date: t.Date()
-			})
-		})
+		const api = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					date: t.Date()
+				})
+			},
+			({ query }) => query
+		)
 
-		api.handle(req(`/?date=${Date.now()}`)).then((x) => x.json())
+		api.handle(`/?date=${Date.now()}`).then((x) => x.json())
 	})
 
 	it('handle nuqs format when specified as Array', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				a: t.Array(t.String())
-			})
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					a: t.Array(t.String())
+				})
+			},
+			({ query }) => query
+		)
 
-		const response = await app.handle(req('/?a=a,b')).then((x) => x.json())
+		const response = await app.handle('/?a=a,b').then((x) => x.json())
 
 		expect(response).toEqual({
 			a: ['a', 'b']
@@ -833,13 +977,17 @@ describe('Query Validator', () => {
 	})
 
 	it('handle nuqs format when specified as number', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				a: t.Array(t.Numeric())
-			})
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					a: t.Array(t.Numeric())
+				})
+			},
+			({ query }) => query
+		)
 
-		const response = await app.handle(req('/?a=1,2')).then((x) => x.json())
+		const response = await app.handle('/?a=1,2').then((x) => x.json())
 
 		expect(response).toEqual({
 			a: [1, 2]
@@ -847,19 +995,50 @@ describe('Query Validator', () => {
 	})
 
 	it('handle nuqs format when specified as boolean', async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				a: t.Array(t.BooleanString())
-			})
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					a: t.Array(t.BooleanString())
+				})
+			},
+			({ query }) => query
+		)
 
 		const response = await app
-			.handle(req('/?a=true,false'))
+			.handle('/?a=true,false')
 			.then((x) => x.json())
 
 		expect(response).toEqual({
 			a: [true, false]
 		})
+	})
+
+	const plainArrayApp = new Elysia().get(
+		'/',
+		{
+			query: t.Object({
+				ids: t.Array(t.Number()),
+				flags: t.Array(t.Boolean())
+			})
+		},
+		({ query }) => query
+	)
+
+	it('coerces Number and Boolean array elements from query strings', async () => {
+		const response = await plainArrayApp
+			.handle('/?ids=1,2,3&flags=true,false')
+			.then((x) => x.json())
+
+		expect(response).toEqual({ ids: [1, 2, 3], flags: [true, false] })
+	})
+
+	it('rejects an invalid Number array element from a query string', async () => {
+		const status = await plainArrayApp
+			.handle('/?ids=1,x,3&flags=true')
+			.then((x) => x.status)
+
+		expect(status).toBe(422)
 	})
 
 	// https://github.com/elysiajs/elysia/issues/1015
@@ -870,13 +1049,13 @@ describe('Query Validator', () => {
 			})
 			.get(
 				'/',
+				{
+					query: 'myModel'
+				},
 				({ query: { num } }) => ({
 					num,
 					type: typeof num
-				}),
-				{
-					query: 'myModel'
-				}
+				})
 			)
 
 		const response = await app
@@ -895,15 +1074,15 @@ describe('Query Validator', () => {
 			})
 			.get(
 				'/',
+				{
+					query: 'myModel'
+				},
 				({ query: { num, num2 } }) => ({
 					num,
 					numType: typeof num,
 					num2,
 					num2Type: typeof num2
-				}),
-				{
-					query: 'myModel'
-				}
+				})
 			)
 
 		const response = await app
@@ -921,17 +1100,17 @@ describe('Query Validator', () => {
 	it('handle "&" inside a query value', async () => {
 		const app = new Elysia().get(
 			'*',
+			{
+				query: t.Object({
+					test: t.String()
+				})
+			},
 			({ query, request }) => ({
 				query,
 				url: {
 					test: new URL(request.url).searchParams.get('test')
 				}
-			}),
-			{
-				query: t.Object({
-					test: t.String()
-				})
-			}
+			})
 		)
 
 		const url = "https://localhost/?test=Test1%20%26%20Test2'"
@@ -951,18 +1130,18 @@ describe('Query Validator', () => {
 	it('handle array string correctly', async () => {
 		const app = new Elysia({ precompile: true }).get(
 			'/',
-			({ query }) => query,
 			{
 				query: t.Object({
 					status: t.Optional(t.Array(t.String()))
 				})
-			}
+			},
+			({ query }) => query
 		)
 
 		const response = await Promise.all([
-			app.handle(req('/?')).then((x) => x.json()),
-			app.handle(req('/?status=a')).then((x) => x.json()),
-			app.handle(req('/?status=a&status=b')).then((x) => x.json())
+			app.handle('/?').then((x) => x.json()),
+			app.handle('/?status=a').then((x) => x.json()),
+			app.handle('/?status=a&status=b').then((x) => x.json())
 		])
 
 		expect(response).toEqual([
@@ -975,23 +1154,21 @@ describe('Query Validator', () => {
 	it('handle Transform query', async () => {
 		const app = new Elysia().get(
 			'/test',
-			({ query: { id } }) => ({
-				id,
-				type: typeof id
-			}),
 			{
 				query: t.Object({
 					id: t
-						.Transform(t.UnionEnum(['test', 'foo']))
+						.Codec(t.UnionEnum(['test', 'foo']))
 						.Decode((id) => ({ value: id }))
 						.Encode((id) => id.value)
 				})
-			}
+			},
+			({ query: { id } }) => ({
+				id,
+				type: typeof id
+			})
 		)
 
-		const response = await app
-			.handle(req('/test?id=test'))
-			.then((x) => x.json())
+		const response = await app.handle('/test?id=test').then((x) => x.json())
 
 		expect(response).toEqual({
 			id: {
@@ -1004,16 +1181,16 @@ describe('Query Validator', () => {
 	it('handle Date query', async () => {
 		const app = new Elysia().get(
 			'/',
-			({ query: { date } }) => date.toISOString(),
 			{
 				query: t.Object({
 					date: t.Date()
 				})
-			}
+			},
+			({ query: { date } }) => date.toISOString()
 		)
 
 		const response = await app
-			.handle(req(`/?date=2023-04-05T12:30:00+01:00`))
+			.handle(`/?date=2023-04-05T12:30:00+01:00`)
 			.then((x) => x.text())
 
 		expect(response).toEqual('2023-04-05T11:30:00.000Z')
@@ -1022,19 +1199,20 @@ describe('Query Validator', () => {
 	it('handle coerce TransformDecodeError', async () => {
 		let err: Error | undefined
 
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				year: t.Numeric({ minimum: 1900, maximum: 2160 })
-			}),
-			error({ code, error }) {
-				switch (code) {
-					case 'VALIDATION':
-						err = error
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					year: t.Numeric({ minimum: 1900, maximum: 2160 })
+				}),
+				error({ error }) {
+					if (error instanceof ValidationError) err = error
 				}
-			}
-		})
+			},
+			({ query }) => query
+		)
 
-		await app.handle(req('?year=3000'))
+		await app.handle('/?year=3000')
 
 		expect(err instanceof ValidationError).toBe(true)
 	})
@@ -1043,16 +1221,20 @@ describe('Query Validator', () => {
 		const app = new Elysia()
 			.model({
 				ids: t.Object({
-					ids: t.Array(t.Union([t.String(), t.ArrayString()]))
+					ids: t.Array(
+						t.Union([t.String(), t.ArrayString(t.String())])
+					)
 				})
 			})
-			.get('/', ({ query }) => query, {
-				query: 'ids'
-			})
+			.get(
+				'/',
+				{
+					query: 'ids'
+				},
+				({ query }) => query
+			)
 
-		const response = await app
-			.handle(req('?ids=1,2,3'))
-			.then((x) => x.json())
+		const response = await app.handle('/?ids=1,2,3').then((x) => x.json())
 
 		expect(response).toEqual({
 			ids: ['1', '2', '3']
@@ -1060,12 +1242,16 @@ describe('Query Validator', () => {
 	})
 
 	it('validate url encoded query', () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				test: t.Optional(t.Number()),
-				$test: t.Optional(t.Number())
-			})
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					test: t.Optional(t.Number()),
+					$test: t.Optional(t.Number())
+				})
+			},
+			({ query }) => query
+		)
 
 		const value = app
 			.handle(new Request('http://localhost?test=1&%24test=2'))
@@ -1078,25 +1264,29 @@ describe('Query Validator', () => {
 	})
 
 	it("don't populate object query on failed validation", async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				filter: t.Object({
-					latlng: t.Object({
-						within: t.Object({
-							ne: t.Number(),
-							sw: t.Number()
-						})
-					}),
-					zoom: t.Object({
-						equalTo: t.Number({
-							minimum: 0,
-							maximum: 20,
-							multipleOf: 1
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					filter: t.Object({
+						latlng: t.Object({
+							within: t.Object({
+								ne: t.Number(),
+								sw: t.Number()
+							})
+						}),
+						zoom: t.Object({
+							equalTo: t.Number({
+								minimum: 0,
+								maximum: 20,
+								multipleOf: 1
+							})
 						})
 					})
 				})
-			})
-		})
+			},
+			({ query }) => query
+		)
 
 		const filter = JSON.stringify({
 			latlng: {
@@ -1126,15 +1316,19 @@ describe('Query Validator', () => {
 	})
 
 	it("don't populate array query on failed validation", async () => {
-		const app = new Elysia().get('/', ({ query }) => query, {
-			query: t.Object({
-				party: t.Array(
-					t.Object({
-						name: t.String()
-					})
-				)
-			})
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Object({
+					party: t.Array(
+						t.Object({
+							name: t.String()
+						})
+					)
+				})
+			},
+			({ query }) => query
+		)
 
 		const filter = JSON.stringify([
 			{
@@ -1160,39 +1354,47 @@ describe('Query Validator', () => {
 
 	// Union schema tests
 	it('handle query array in Union schema', async () => {
-		const app = new Elysia({ aot: false }).get('/', ({ query }) => query, {
-			query: t.Union([
-				t.Object({
-					ids: t.Array(t.String())
-				}),
-				t.Object({
-					id: t.String()
-				})
-			])
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Union([
+					t.Object({
+						ids: t.Array(t.String())
+					}),
+					t.Object({
+						id: t.String()
+					})
+				])
+			},
+			({ query }) => query
+		)
 
-		const response = await app
-			.handle(req('/?ids=1&ids=2'))
-			.then((x) => x.json())
+		const response = (await app
+			.handle('/?ids=1&ids=2')
+			.then((x) => x.json())) as { ids: string[] }
 
 		expect(response.ids).toEqual(['1', '2'])
 	})
 
 	it('handle numeric coercion in Union schema', async () => {
-		const app = new Elysia({ aot: false }).get('/', ({ query }) => query, {
-			query: t.Union([
-				t.Object({
-					page: t.Numeric()
-				}),
-				t.Object({
-					cursor: t.String()
-				})
-			])
-		})
+		const app = new Elysia().get(
+			'/',
+			{
+				query: t.Union([
+					t.Object({
+						page: t.Numeric()
+					}),
+					t.Object({
+						cursor: t.String()
+					})
+				])
+			},
+			({ query }) => query
+		)
 
 		const response = await app
-			.handle(req('/?page=5'))
-			.then((x) => x.json())
+			.handle('/?page=5')
+			.then((x) => x.json() as Promise<{ page: number }>)
 
 		expect(response.page).toBe(5)
 	})
