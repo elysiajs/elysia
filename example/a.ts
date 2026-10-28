@@ -1,4 +1,4 @@
-import { Elysia, HTTPError, problem } from '../src'
+import { Elysia, HTTPError, problem, MacroTypeLambda } from '../src'
 
 const app = new Elysia().get('/', () => 'hello world').listen(3000)
 
