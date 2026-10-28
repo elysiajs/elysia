@@ -8,6 +8,7 @@ import {
 	Capture,
 	captureImpl,
 	CompilerState,
+	Compiled,
 	setCaptureImpl,
 	type CaptureImpl,
 	type CapturedHandler,
@@ -41,12 +42,9 @@ import {
 import { isAsyncPredicate } from '../type/elysia/file-type'
 import { nullObject } from '../utils'
 import { env } from '../universal'
-import { collectExternals } from './aot-reconstruct'
-import {
-	captureMirrorCodecs,
-	captureMirrorUnions,
-	installReconstructImpl
-} from './aot-emit'
+import { collectExternals, Reconstruct } from './aot-reconstruct'
+import { routeShape } from './handler/route-shape'
+import { captureMirrorCodecs, captureMirrorUnions } from './aot-emit'
 import { getExactMirror } from '../type/validator/exact-mirror'
 
 // ─── capture-only default-precompute probes ────────────────────────────────
@@ -529,6 +527,11 @@ export const snapshotCompiled = (): CompiledSnapshot => CompilerState.registry
 /** @internal restore registry after in-process AOT analysis */
 export function restoreCompiled(snapshot: CompiledSnapshot) {
 	CompilerState.registry = snapshot
+}
+
+export function installReconstructImpl() {
+	Compiled.reconstruct = Reconstruct
+	Compiled.routeShape = routeShape
 }
 
 setCaptureImpl({
