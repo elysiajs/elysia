@@ -37,6 +37,7 @@ import type { ServerWebSocket } from '../../ws/bun'
 import type { AnyElysia } from '../..'
 
 const optionalParam = /:.+?\?(?=\/|$)/
+const beforeExitListeners = new WeakMap<AnyElysia, () => Promise<void>>()
 
 const getPossibleParams = (path: string) => {
 	const match = optionalParam.exec(path)
@@ -389,22 +390,21 @@ export const BunAdapter: ElysiaAdapter = {
 
 			app.server = Bun.serve(serve as any) as any
 
+			const previousListener = beforeExitListeners.get(app)
+			if (previousListener)
+				process.removeListener('beforeExit', previousListener)
+
+			const onBeforeExit = async () => {
+				if (app.server) await app.stop()
+			}
+			beforeExitListeners.set(app, onBeforeExit)
+			process.on('beforeExit', onBeforeExit)
+
 			if (app.event.start)
 				for (let i = 0; i < app.event.start.length; i++)
 					app.event.start[i].fn(app)
 
 			if (callback) callback(app.server!)
-
-			process.on('beforeExit', async () => {
-				if (app.server) {
-					await app.server.stop?.()
-					app.server = null
-
-					if (app.event.stop)
-						for (let i = 0; i < app.event.stop.length; i++)
-							app.event.stop[i].fn(app)
-				}
-			})
 
 			// @ts-expect-error private
 			app.promisedModules.then(async () => {
@@ -438,6 +438,12 @@ export const BunAdapter: ElysiaAdapter = {
 		if (app.server) {
 			await app.server.stop(closeActiveConnections)
 			app.server = null
+
+			const listener = beforeExitListeners.get(app)
+			if (listener) {
+				process.removeListener('beforeExit', listener)
+				beforeExitListeners.delete(app)
+			}
 
 			if (app.event.stop?.length)
 				for (let i = 0; i < app.event.stop.length; i++)

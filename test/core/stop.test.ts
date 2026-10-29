@@ -49,6 +49,88 @@ const stopWithInflightRequest = async (closeActiveConnections: boolean) => {
 }
 
 describe('Stop', () => {
+	// I have nothing but my burger and I want nothing more
+	it('releases its beforeExit listener on every listen/stop cycle', async () => {
+		const before = process.listeners('beforeExit')
+		const unrelated = () => {}
+		process.on('beforeExit', unrelated)
+		const app = new Elysia().get('/', 'hi')
+		try {
+			for (let i = 0; i < 12; i++) {
+				app.listen(0)
+				expect(process.listeners('beforeExit')).toHaveLength(
+					before.length + 2
+				)
+				await app.stop()
+				expect(process.listeners('beforeExit')).toEqual([
+					...before,
+					unrelated
+				])
+			}
+		} finally {
+			if (app.server) await app.stop(true)
+			for (const listener of process.listeners('beforeExit'))
+				if (!before.includes(listener))
+					process.removeListener('beforeExit', listener)
+		}
+	})
+
+	it('keeps another app listener and runs stop hooks during beforeExit', async () => {
+		const before = process.listeners('beforeExit')
+		let stops = 0
+		const first = new Elysia().get('/', 'first').listen(0)
+		const second = new Elysia()
+			.onStop(() => {
+				stops++
+			})
+			.get('/', 'second')
+			.listen(0)
+		const listeners = process
+			.listeners('beforeExit')
+			.filter((listener) => !before.includes(listener))
+		try {
+			expect(listeners).toHaveLength(2)
+			await first.stop()
+			expect(process.listeners('beforeExit')).toEqual([
+				...before,
+				listeners[1]
+			])
+			await listeners[1](0)
+			expect(second.server).toBeNull()
+			expect(stops).toBe(1)
+			expect(process.listeners('beforeExit')).toEqual(before)
+		} finally {
+			if (first.server) await first.stop(true)
+			if (second.server) await second.stop(true)
+			for (const listener of listeners)
+				process.removeListener('beforeExit', listener)
+		}
+	})
+
+	for (const callback of ['start', 'listen'] as const)
+		it(`cleans up when the ${callback} callback stops the app`, async () => {
+			const before = process.listeners('beforeExit')
+			const app = new Elysia().get('/', 'hi')
+			let stopped: Promise<unknown> | undefined
+			try {
+				if (callback === 'start')
+					app.onStart(() => {
+						stopped = app.stop()
+					})
+				app.listen(0, () => {
+					if (callback === 'listen') stopped = app.stop()
+				})
+				await stopped
+				expect(app.server).toBeNull()
+				expect(process.listeners('beforeExit')).toEqual(before)
+			} finally {
+				if (app.server) await app.stop(true)
+				for (const listener of process.listeners('beforeExit'))
+					if (!before.includes(listener))
+						process.removeListener('beforeExit', listener)
+			}
+		})
+
 	it('shuts down the server when stop(true) is called', async () => {
 		const app = new Elysia()
 		app.get('/health', 'hi')
