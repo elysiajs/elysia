@@ -131,6 +131,72 @@ describe('Stop', () => {
 			}
 		})
 
+	it('keeps a replacement server when the previous server finishes draining', async () => {
+		const before = process.listeners('beforeExit')
+		let reachHandler!: () => void
+		let releaseHandler!: () => void
+		const reachedHandler = new Promise<void>(
+			(resolve) => (reachHandler = resolve)
+		)
+		const handlerReleased = new Promise<void>(
+			(resolve) => (releaseHandler = resolve)
+		)
+		let stops = 0
+		const app = new Elysia()
+			.onStop(() => {
+				stops++
+			})
+			.get('/health', 'hi')
+			.get('/slow', async () => {
+				reachHandler()
+				await handlerReleased
+				return 'drained'
+			})
+			.listen(0)
+		const first = app.server!
+		const inflight = fetch(`http://localhost:${first.port}/slow`).then(
+			(response) => response.text()
+		)
+		await reachedHandler
+		const stopped = app.stop(false)
+		app.listen(0)
+		const replacement = app.server!
+		const health = `http://localhost:${replacement.port}/health`
+		const replacementListeners = process.listeners('beforeExit')
+		try {
+			expect(replacement).not.toBe(first)
+			expect(replacementListeners).toHaveLength(before.length + 1)
+			expect(
+				await fetch(health).then((response) => response.text())
+			).toBe('hi')
+			expect(first.pendingRequests).toBe(1)
+			releaseHandler()
+			expect(await inflight).toBe('drained')
+			await stopped
+			expect(
+				await fetch(health).then((response) => response.text())
+			).toBe('hi')
+			expect(app.server).toBe(replacement)
+			expect(process.listeners('beforeExit')).toEqual(
+				replacementListeners
+			)
+			expect(stops).toBe(1)
+			await app.stop()
+			expect(app.server).toBeNull()
+			expect(stops).toBe(2)
+			expect(process.listeners('beforeExit')).toEqual(before)
+			await expect(fetch(health)).rejects.toThrow()
+		} finally {
+			releaseHandler()
+			await stopped
+			if (app.server) await app.stop(true)
+			await replacement.stop(true)
+			for (const listener of process.listeners('beforeExit'))
+				if (!before.includes(listener))
+					process.removeListener('beforeExit', listener)
+		}
+	})
+
 	it('shuts down the server when stop(true) is called', async () => {
 		const app = new Elysia()
 		app.get('/health', 'hi')

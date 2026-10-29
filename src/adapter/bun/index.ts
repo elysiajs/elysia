@@ -435,14 +435,17 @@ export const BunAdapter: ElysiaAdapter = {
 		}
 	},
 	async stop(app, closeActiveConnections) {
-		if (app.server) {
-			await app.server.stop(closeActiveConnections)
-			app.server = null
+		const server = app.server
+		if (server) {
+			await server.stop(closeActiveConnections)
+			if (app.server === server) {
+				app.server = null
 
-			const listener = beforeExitListeners.get(app)
-			if (listener) {
-				process.removeListener('beforeExit', listener)
-				beforeExitListeners.delete(app)
+				const listener = beforeExitListeners.get(app)
+				if (listener) {
+					process.removeListener('beforeExit', listener)
+					beforeExitListeners.delete(app)
+				}
 			}
 
 			if (app.event.stop?.length)
