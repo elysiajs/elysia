@@ -8,7 +8,8 @@ import {
 	emptyResponse,
 	getNotFoundBody,
 	getNotFound,
-	drainDisposables
+	drainDisposables,
+	forwardError
 } from './utils'
 
 import { createContext, type Context } from '../context'
@@ -626,8 +627,8 @@ export function createFetchHandler(
 					})
 
 			let routed = false
+			const endReports = new Array(traceLength)
 			try {
-				const endReports = new Array(traceLength)
 				for (let i = 0; i < onRequests.length; i++) {
 					for (let j = 0; j < traceLength; j++)
 						endReports[j] = requestReports[j].shift?.()?.({
@@ -647,14 +648,17 @@ export function createFetchHandler(
 					if (watchPath && context.path !== path)
 						warnPathMutation(app)
 
-					for (let j = 0; j < traceLength; j++) endReports[j]?.()
-
 					if (armedAbort(context)) {
-						for (let j = 0; j < traceLength; j++)
+						for (let j = 0; j < traceLength; j++) {
+							endReports[j]?.()
 							trace[j].r(requestReports[j])
+						}
 
 						return emptyResponse.clone() as Response
 					}
+
+					forwardError(result)
+					for (let j = 0; j < traceLength; j++) endReports[j]?.()
 
 					if (result !== undefined) {
 						for (let j = 0; j < traceLength; j++)
@@ -689,8 +693,10 @@ export function createFetchHandler(
 					app
 				)
 			} catch (error) {
-				for (let i = 0; i < traceLength; i++)
+				for (let i = 0; i < traceLength; i++) {
+					if (!routed) endReports[i]?.(error)
 					trace[i].r(requestReports[i], error as Error)
+				}
 
 				return (routed ? failRoute : fail)(context, error as Error)
 			}
@@ -728,6 +734,8 @@ export function createFetchHandler(
 
 						if (armedAbort(context))
 							return emptyResponse.clone() as Response
+
+						forwardError(result)
 
 						if (result !== undefined) {
 							const response = (await mapResponse(
@@ -781,6 +789,8 @@ export function createFetchHandler(
 
 					if (abortSignal && (context as any)['~sig']?.aborted)
 						return emptyResponse.clone() as Response
+
+					forwardError(result)
 
 					if (result !== undefined) {
 						const response = mapResponse(
