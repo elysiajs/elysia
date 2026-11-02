@@ -85,4 +85,27 @@ describe('Response Headers', () => {
 
 		expect(headers.get('x-powered-by')).toBe('Elysia')
 	})
+
+	it('preserve status and headers for Array subclass responses', async () => {
+		class Rows extends Array {}
+		const rows = Rows.from([{ id: 1, name: 'elysia' }])
+
+		const app = new Elysia()
+			.onRequest(({ set }) => {
+				set.headers['x-request-header'] = 'kept'
+			})
+			.get('/subclass', ({ set }) => {
+				set.status = 201
+				set.headers['x-custom'] = 'custom-val'
+				return rows
+			})
+
+		const res = await app.handle(req('/subclass'))
+
+		expect(res.status).toBe(201)
+		expect(res.headers.get('x-custom')).toBe('custom-val')
+		expect(res.headers.get('x-request-header')).toBe('kept')
+		expect(await res.json()).toEqual([{ id: 1, name: 'elysia' }])
+	})
 })
+
