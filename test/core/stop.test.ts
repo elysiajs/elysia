@@ -96,4 +96,18 @@ describe('Stop', () => {
 			body: ''
 		})
 	})
+
+	it('removes process beforeExit listener on stop', async () => {
+		const before = process.listeners('beforeExit').length
+
+		const app = new Elysia().get('/health', () => 'hi')
+		const server = app.listen(0)
+
+		expect(process.listeners('beforeExit').length).toBe(before + 1)
+
+		await server.stop()
+
+		expect(process.listeners('beforeExit').length).toBe(before)
+	})
 })
+
