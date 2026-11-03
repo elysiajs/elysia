@@ -71,6 +71,8 @@ import {
 import {
 	drainDisposables,
 	finalizeRouteErrorOf,
+	forwardError,
+	forwardErrorOf,
 	registerDeriveDisposable,
 	returnedErrorClasses
 } from '../handler/utils'
@@ -565,6 +567,9 @@ export function buildWSRoute(
 	})
 
 	const errorClasses = returnedErrorClasses({ error: errorHandlers })
+	// a returned error answers as a thrown one, as on HTTP: checked before
+	// a thenable is assimilated, and on what it resolves to
+	const forward = errorClasses ? forwardErrorOf(errorClasses) : forwardError
 
 	// analyze without schema
 	const inference = sucrose(hook.message as any, {
@@ -726,6 +731,7 @@ export function buildWSRoute(
 		// classifying may run a Proxy's traps: inside the try, so a throw
 		// reaches the error hooks
 		try {
+			forward(value)
 			if (isGeneratorObject(value) || isHTTPBody(value))
 				return handleWSResponse(ws, value, mapResponses).catch(
 					(error) => handleError(ws, error)
@@ -762,7 +768,7 @@ export function buildWSRoute(
 		try {
 			ws.body = message as any
 
-			const result = (hook.message as AnyFn)(ws, message)
+			const result = forward((hook.message as AnyFn)(ws, message))
 
 			if (result instanceof Promise)
 				return result.then(
@@ -795,8 +801,8 @@ export function buildWSRoute(
 			// runs, as on HTTP
 			let response: unknown
 			for (let i = 0; i < messageBeforeHandles.length; i++) {
-				let r: unknown = messageBeforeHandles[i](ws as any)
-				if (typeof (r as any)?.then === 'function') r = await r
+				let r: unknown = forward(messageBeforeHandles[i](ws as any))
+				if (typeof (r as any)?.then === 'function') r = forward(await r)
 				if (r !== undefined) {
 					response = r
 					break
@@ -804,10 +810,10 @@ export function buildWSRoute(
 			}
 
 			if (response === undefined) {
-				const result = (hook.message as AnyFn)(ws, message)
+				const result = forward((hook.message as AnyFn)(ws, message))
 				response =
 					typeof (result as any)?.then === 'function'
-						? await result
+						? forward(await result)
 						: result
 			}
 
@@ -884,10 +890,10 @@ export function buildWSRoute(
 			const ws: ElysiaWS<any> = Object.create(connection)
 			try {
 				if (withBody) ws.body = bodyArg as any
-				const result = withBody ? fn(ws, bodyArg) : fn(ws)
+				const result = forward(withBody ? fn(ws, bodyArg) : fn(ws))
 				const resolved =
 					typeof (result as any)?.then === 'function'
-						? await result
+						? forward(await result)
 						: result
 				await handleWSResponse(ws, resolved, mapResponses)
 			} catch (error) {
@@ -908,10 +914,10 @@ export function buildWSRoute(
 					;(ws as any).reason = reason
 
 					const fn = hook.close as AnyFn
-					const result = fn(ws, code, reason)
+					const result = forward(fn(ws, code, reason))
 					const resolved =
 						typeof (result as any)?.then === 'function'
-							? await result
+							? forward(await result)
 							: result
 
 					await handleWSResponse(ws, resolved, mapResponses)
@@ -1014,18 +1020,13 @@ export function buildWSRoute(
 
 			for (let i = 0; i < allBeforeHandles.length; i++) {
 				const fn = allBeforeHandles[i]
-				let r: unknown = fn(context as any)
-				if (typeof (r as any)?.then === 'function') r = await r
+				let r: unknown = forward(fn(context as any))
+				if (typeof (r as any)?.then === 'function') r = forward(await r)
 
 				const deriveMode = upgradeDeriveModes?.[i]
 
-				// a derived error answers like a `beforeHandle`'s
-				if (
-					deriveMode !== undefined &&
-					!(r instanceof ElysiaStatus) &&
-					!(r instanceof Error) &&
-					!errorClasses?.some((C) => r instanceof (C as any))
-				) {
+				// a derived error answers like a `beforeHandle`'s: thrown above
+				if (deriveMode !== undefined && !(r instanceof ElysiaStatus)) {
 					if (
 						r &&
 						(typeof r === 'object' || typeof r === 'function')
@@ -1057,13 +1058,6 @@ export function buildWSRoute(
 						}
 					}
 				} else if (r !== undefined) {
-					// a returned error answers as a thrown one, as on HTTP
-					if (
-						r instanceof Error ||
-						errorClasses?.some((C) => r instanceof (C as any))
-					)
-						throw r
-
 					return finalizeUpgradeResponse(
 						r,
 						(context as any).set,

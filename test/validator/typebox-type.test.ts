@@ -118,6 +118,7 @@ describe('typebox-type', () => {
 			if (
 				key === 'injectTypeboxType' ||
 				key === 'loadTypeNamespace' ||
+				key === 'mutableTypes' ||
 				key === 'markTypeUsed' ||
 				key === 'isTypeUsed' ||
 				key === 'isTypeNamespaceLoaded'

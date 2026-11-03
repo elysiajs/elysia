@@ -1,4 +1,4 @@
-import { Decode, Refine } from './typebox-type'
+import { Decode, Refine, mutableTypes } from './typebox-type'
 
 import { ELYSIA_TYPES } from './constants'
 import { nullObject, evictOldestHalf } from '../utils'
@@ -221,12 +221,14 @@ const rebuildObjStrShape: RebuildObjStr = (original, site) => {
 		Union(
 			[
 				inner,
-				Decode(
-					Refine(StringType(), icPlaceholder, () =>
-						isObject ? 'must be an object' : 'must be an array'
-					),
-					// one per node, the build gave each site its own `decode`
-					() => icPlaceholder()
+				mutableTypes(() =>
+					Decode(
+						Refine(StringType(), icPlaceholder, () =>
+							isObject ? 'must be an object' : 'must be an array'
+						),
+						// one per node, the build gave each site its own `decode`
+						() => icPlaceholder()
+					)
 				)
 			],
 			meta

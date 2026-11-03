@@ -2,11 +2,12 @@ import { Create } from './type/bridge'
 
 import type { MaybePromise } from './types'
 import { isProduction } from './universal/is-production'
-import { StatusMap, StatusMapBack } from './constants'
+import { StatusMap, StatusMapBack, PROBLEM_JSON } from './constants'
 import { primitiveElysiaTypes } from './type/constants'
 import { skipClone } from './adapter/skip-clone'
 
 export { isProduction } from './universal/is-production'
+export { PROBLEM_JSON } from './constants'
 
 const expectedCache = new WeakMap<object, unknown>()
 
@@ -288,10 +289,19 @@ function walkComposition(
 	}
 }
 
+// RFC 6901: TypeBox >= 1.3.35 escapes keys in `instancePath` ('~' as '~0',
+// '/' as '~1'). Older versions pass keys raw, so there a key holding '/' or
+// a literal '~0'/'~1' cannot be told apart and decodes wrong
+const decodePointer = (pointer: string) =>
+	pointer.replace(/~1/g, '/').replace(/~0/g, '~')
+
 const walkSubSchema = (schema: any, instancePath: string | undefined) =>
 	!schema || !instancePath
 		? schema
-		: walkComposition(schema, instancePath.split('/').filter(Boolean))
+		: walkComposition(
+				schema,
+				instancePath.split('/').filter(Boolean).map(decodePointer)
+			)
 
 const FOUND_ECHO_LIMIT = 8192
 const FOUND_ECHO_OMITTED = `[value exceeds ${FOUND_ECHO_LIMIT} byte echo limit]`
@@ -382,7 +392,8 @@ const jsonLengthWithin = (value: unknown, budget: number): number => {
 export function subValueAt(value: unknown, path: unknown) {
 	let parts: any[] | undefined
 
-	if (typeof path === 'string') parts = path.split('/').filter(Boolean)
+	if (typeof path === 'string')
+		parts = path.split('/').filter(Boolean).map(decodePointer)
 	else if (Array.isArray(path)) parts = path
 
 	if (!parts) return
@@ -629,7 +640,9 @@ export class ValidationError extends ElysiaError {
 					Array.isArray(raw) && raw.length
 						? raw.map(segmentString).join('.')
 						: typeof raw === 'string' && raw
-							? raw.replace(/^\//, '').replace(/\//g, '.')
+							? decodePointer(
+									raw.replace(/^\//, '').replace(/\//g, '.')
+								)
 							: 'root'
 
 				const issue = {
@@ -912,8 +925,6 @@ export const status = <
 	code: Code,
 	response?: T
 ) => new ElysiaStatus<Code, T>(code, response as T)
-
-export const PROBLEM_JSON = 'application/problem+json'
 
 /**
  * RFC 9457 Problem Details shape.

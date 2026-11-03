@@ -298,7 +298,7 @@ describe('AOT plugin', () => {
 		// the frozen manifest was inlined and self-registers (zero user wiring)
 		expect(out).toContain('.register((() => {')
 		expect(out).toMatch(
-			/return \{ fingerprint,[^}]*\bvalidators\b[^}]*\bhandlers\b/
+			/return \{ fingerprint(?:: \w+)?,[^}]*\bvalidators\b[^}]*\bhandlers\b/
 		)
 		expect(out).toContain('"/body"')
 		// A real validator factory (including a merged check/clean factory), not a stub.
@@ -400,7 +400,7 @@ describe('AOT plugin', () => {
 		// (esbuild auto-annotates the scoping IIFE with /* @__PURE__ */)
 		expect(out).toMatch(/\.register\((?:\/\* @__PURE__ \*\/ )?\(\(\) => \{/)
 		expect(out).toMatch(
-			/return \{ fingerprint,[^}]*\bvalidators\b[^}]*\bhandlers\b/
+			/return \{ fingerprint(?:: \w+)?,[^}]*\bvalidators\b[^}]*\bhandlers\b/
 		)
 		expect(out).toContain('"/body"')
 		// A real validator factory (including a merged check/clean factory), not a stub.

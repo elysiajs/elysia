@@ -9,10 +9,8 @@ import {
 } from '../../compile/aot'
 import { buildFrozenCheck } from './frozen-check'
 import { nullObject } from '../../utils'
+import { escapePointerSegment } from '../shared'
 
-// a property key, a tuple index (number) or array items, so the walk knows
-// the container kind. For array items the walk steps into the first item
-// failing `items`, the item TypeBox reports first
 type Segment = string | number | { items: any }
 
 interface UnionInfo {
@@ -44,9 +42,7 @@ function encodePointer(segments: Segment[]): string {
 	for (const s of segments)
 		out +=
 			'/' +
-			(typeof s === 'object'
-				? '[]'
-				: String(s).replace(/~/g, '~0').replace(/\//g, '~1'))
+			(typeof s === 'object' ? '[]' : escapePointerSegment(String(s)))
 
 	return out
 }

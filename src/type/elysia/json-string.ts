@@ -1,4 +1,4 @@
-import { Decode, Refine } from '../typebox-type'
+import { Decode, Refine, mutableTypes } from '../typebox-type'
 import { Check, Compile, Decode as decodeValue } from '../bridge'
 import { dropCompiledSource } from '../shared'
 import type { TSchema } from 'typebox'
@@ -21,55 +21,53 @@ export function jsonString<T extends TSchema>(
 	let raw: string | undefined
 	let parsed: unknown
 
-	return Decode(
-		Refine(
-			StringType(),
-			(value) => {
-				if (value.charCodeAt(0) !== open) return false
-				// the refine runs more than once per validation; only values
-				// that already passed are memoized, so a hit is still a pass
-				if (value === raw) return true
+	return mutableTypes(() =>
+		Decode(
+			Refine(
+				StringType(),
+				(value) => {
+					if (value.charCodeAt(0) !== open) return false
+					if (value === raw) return true
 
-				try {
-					const next = JSON.parse(value)
+					try {
+						const next = JSON.parse(value)
 
-					if (!check)
-						try {
-							const compiled = Compile(inner) as any
-							dropCompiledSource(compiled)
+						if (!check)
+							try {
+								const compiled = Compile(inner) as any
+								dropCompiledSource(compiled)
 
-							check = (v) => compiled.Check(v)
-						} catch {
-							// schema TypeBox declines to compile, keep the interpreted walk
-							check = (v) => Check(inner, v)
+								check = (v) => compiled.Check(v)
+							} catch {
+								// schema TypeBox declines to compile, keep the interpreted walk
+								check = (v) => Check(inner, v)
+							}
+
+						if (!check(next)) {
+							raw = parsed = undefined
+							return false
 						}
 
-					if (!check(next)) {
+						if (value.length <= MEMO_LIMIT) {
+							raw = value
+							parsed = next
+						}
+
+						return true
+					} catch {
 						raw = parsed = undefined
 						return false
 					}
+				},
+				() => message
+			),
+			(value) => {
+				const decoded = value === raw ? parsed : JSON.parse(value)
+				raw = undefined
+				parsed = undefined
 
-					// a request rejected after this point never reaches decode,
-					// so the memo outlives it; cap what that can pin
-					if (value.length <= MEMO_LIMIT) {
-						raw = value
-						parsed = next
-					}
-
-					return true
-				} catch {
-					raw = parsed = undefined
-					return false
-				}
-			},
-			() => message
-		),
-		(value) => {
-			const decoded = value === raw ? parsed : JSON.parse(value)
-			raw = undefined
-			parsed = undefined
-
-			return decodeValue(inner, decoded)
-		}
+				return decodeValue(inner, decoded)
+			}
+		)
 	)
 }

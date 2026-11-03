@@ -11,8 +11,9 @@ export interface AotFingerprint {
 	abi: string
 }
 
+// the owning app: an instance's `~programId` getter returns itself
 export interface ProgramId {
-	readonly _: unique symbol
+	readonly '~programId': ProgramId
 }
 
 const sharedAotFingerprint: AotFingerprint = Object.freeze({ abi: AOT_ABI })

@@ -7,7 +7,8 @@ import { aot as bunAot } from '../../src/plugin/aot/bun'
 import { aot as viteAot } from '../../src/plugin/aot/vite'
 import {
 	createAotPluginHooks,
-	createTypeboxWiringHooks
+	createTypeboxWiringHooks,
+	setupAotOnLoad
 } from '../../src/plugin/aot/hooks'
 import { resolveElysiaRoot } from '../../src/plugin/aot/core'
 import { Compiled } from '../../src/compile/aot'
@@ -68,6 +69,103 @@ describe('AOT plugin source transforms', () => {
 				expect(hooks.transform('', resolve(packageRoot, file))).toBe(
 					stub
 				)
+	})
+
+	// Only the onLoad loader compiles a `.ts` id as TypeScript itself; a bundler
+	// `transform` may get it already transpiled, where type syntax breaks the build
+	it('types the stub text only on the onLoad path', async () => {
+		const packageRoot = resolve(import.meta.dir, '../..')
+		const typeboxType = resolve(packageRoot, 'src/type/typebox-type.ts')
+		const hooks = createTypeboxWiringHooks()
+		const loads: ((args: { path: string }) => Promise<any>)[] = []
+		await setupAotOnLoad(
+			{
+				onResolve() {},
+				onLoad(options: { namespace?: string }, load: any) {
+					if (!options.namespace) loads.push(load)
+				}
+			},
+			hooks,
+			(path) => Bun.file(path).text()
+		)
+
+		expect(await loads[0]!({ path: typeboxType })).toEqual({
+			contents:
+				`export * from './typebox-type-live'\n` +
+				`export interface TypeboxTypeNamespaces {\n` +
+				`\ttype: typeof import('typebox/type')\n` +
+				`\tsystem: Pick<typeof import('typebox/system'), 'Arguments' | 'Environment' | 'Hashing' | 'Memory' | 'Settings'> &\n` +
+				`\t\tPartial<Pick<typeof import('typebox/system'), 'System'>>\n` +
+				`}\n`,
+			loader: 'ts'
+		})
+		expect(
+			await loads[0]!({
+				path: resolve(packageRoot, 'dist/type/typebox-type.mjs')
+			})
+		).toEqual({
+			contents: `export * from './typebox-type-live.mjs'\n`,
+			loader: 'js'
+		})
+
+		expect(hooks.transform('original', typeboxType)).toBe(
+			`export * from './typebox-type-live'\n`
+		)
+		// Vite hands its transform options object over as the third argument
+		expect(
+			(hooks.transform as any)('original', typeboxType, { ssr: true })
+		).toBe(`export * from './typebox-type-live'\n`)
+	})
+
+	it('types the literal require leaves and the wired bridge for TypeScript', async () => {
+		const packageRoot = resolve(import.meta.dir, '../..')
+		const leaf = (path: string) => resolve(packageRoot, path)
+		const entryHooks = createAotPluginHooks(leaf('src/index.ts'))
+
+		expect(
+			entryHooks.transform(
+				'',
+				leaf('src/type/typebox-value-require.ts'),
+				true
+			)
+		).toBe(
+			`import type { TypeboxNamespaces } from './typebox-value'\n` +
+				`import type { TypeboxTypeNamespaces } from './typebox-type'\n` +
+				`export const requireTypebox = (): TypeboxNamespaces | undefined => undefined\n` +
+				`export const importTypebox = (): Promise<[TypeboxTypeNamespaces, TypeboxNamespaces]> | undefined => undefined\n`
+		)
+		expect(
+			entryHooks.transform(
+				'',
+				leaf('src/type/validator/exact-mirror-require.ts'),
+				true
+			)
+		).toBe(`export const requireExactMirror = (): unknown => undefined\n`)
+
+		const hooks = createAotPluginHooks(
+			resolve(import.meta.dir, 'fixtures/wired-vite-app.ts')
+		)
+		try {
+			await hooks.buildStart()
+			const bridge = leaf('src/type/bridge.ts')
+			const typed = hooks.transform('x', bridge, true)!
+			for (const line of [
+				`export * from './bridge-live'`,
+				'export declare let TypeBoxValidator: typeof TypeBoxValidatorType',
+				'export type TypeBoxValidator<T extends TSchema = TAny> = TypeBoxValidatorType<T>',
+				'export declare let TypeBoxValidatorCache: typeof TypeBoxValidatorCacheType',
+				'export type TypeBoxValidatorCache = TypeBoxValidatorCacheType',
+				'export declare function useTypebox(mod: TypeboxModule): void'
+			])
+				expect(typed.split('\n')).toContain(line)
+
+			expect(hooks.transform('x', bridge)).toBe(
+				`export * from './bridge-live'\n`
+			)
+		} finally {
+			Compiled.clear()
+			Validator.clear()
+		}
 	})
 
 	it('wires only the static TypeBox leaves without an entry', () => {

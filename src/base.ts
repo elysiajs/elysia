@@ -4,8 +4,8 @@ import { applyHoc, createFetchHandler } from './handler/fetch'
 import type { RouteErrorHooks } from './handler/utils'
 import {
 	chainResolver,
-	clearHandlerAnalysisCaches,
 	compileHandler,
+	attachSource,
 	composeRouteHook,
 	localMacroRoot,
 	releaseAnalysisCaches,
@@ -56,6 +56,10 @@ import {
 	getLoosePath,
 	guardNonPlainLeaves,
 	hookToGuard,
+	hookOrigin,
+	topPath,
+	macroSource,
+	pathOf,
 	isHTMLBundle,
 	isNotEmpty,
 	isPlainObject,
@@ -703,7 +707,7 @@ export class Elysia<
 		route?: RouteErrorHooks
 	) => MaybePromise<Response>
 	get ['~programId'](): ProgramId {
-		return this as unknown as ProgramId
+		return this
 	}
 	declare '~aotFingerprint'?: AotFingerprint
 	declare '~compilerSession'?: CompilerSession
@@ -809,16 +813,19 @@ export class Elysia<
 		if (!declared.length) return []
 
 		const routes = declared.map(
-			([
-				method,
-				path,
-				handler,
-				instance,
-				hook,
-				appHook,
-				inheritedChain,
-				macroScope
-			]) => {
+			(
+				[
+					method,
+					path,
+					handler,
+					instance,
+					hook,
+					appHook,
+					inheritedChain,
+					macroScope
+				],
+				index
+			) => {
 				const merged: any = composeRouteHook(
 					instance as any,
 					hook as any,
@@ -828,6 +835,13 @@ export class Elysia<
 					macroScope as any
 				)
 				runIntrospect(merged)
+				if (merged)
+					attachSource(
+						merged,
+						this as any,
+						declared[index]!,
+						this.declaredRoutes?.[index]?.[4]
+					)
 
 				if (merged?.schemas?.length)
 					for (const entry of merged.schemas as any[]) {
@@ -1314,6 +1328,7 @@ export class Elysia<
 
 		const added: Partial<AppHook> = nullObject()
 		;(added as any)[type] = fn
+		hookOrigin.set(added, true)
 
 		if (type === 'trace') this['~hasTrace'] = true
 
@@ -4582,6 +4597,9 @@ export class Elysia<
 			}
 		}
 
+		// what was written, before `derive` folded into `beforeHandle`
+		hookOrigin.set(hook, _hook)
+
 		if (hook.trace) this['~hasTrace'] = true
 
 		this.#pushChainNode(hook, scope)
@@ -4698,16 +4716,38 @@ export class Elysia<
 		input: Partial<AnyLocalHook>,
 		toApply: Partial<AnyLocalHook> = input,
 		iteration = 0,
-		seen = new Set<string | Partial<AnyLocalHook>>(),
-		insertions = new Map<string, number>()
+		// seed: [fn, role, path below the seed, ...] its expansion installed
+		seen = new Map<string | Partial<AnyLocalHook>, unknown[]>(),
+		insertions = new Map<string, number>(),
+		path: readonly string[] = topPath,
+		// the seeds being expanded, with the length of their key path
+		installs: [unknown[], number][] = []
 	): Partial<AnyLocalHook> {
 		if (iteration >= 16) return input
 		const macro = this['~ext']?.macro
 
 		if (!macro) return input
 
+		const record = (
+			fn: unknown,
+			role: string,
+			keys: readonly string[],
+			seeds: [unknown[], number][]
+		) => {
+			if (typeof fn !== 'function') return
+
+			let source = macroSource.get(input)
+			if (!source) macroSource.set(input, (source = []))
+
+			source.push(fn, role, keys)
+			for (const [installed, depth] of seeds)
+				installed.push(fn, role, keys.slice(depth))
+		}
+
 		for (const [key, value] of Object.entries(toApply)) {
 			if (key in macro === false) continue
+
+			const keys = pathOf(path, key)
 
 			const isFunction: boolean = typeof macro[key] === 'function'
 			const hook: Partial<AppHook & Macro> = isFunction
@@ -4721,6 +4761,7 @@ export class Elysia<
 				continue
 			}
 
+			let seed: string | Partial<AnyLocalHook>
 			if (isFunction) {
 				const seedSource = hook.seed ?? value
 				const seedType = typeof seedSource
@@ -4739,15 +4780,35 @@ export class Elysia<
 						)
 					}
 
-				if (seen.has(seedKey)) continue
+				seed = seedKey
+			} else seed = hook
 
-				seen.add(seedKey)
-				hookToGuard(hook)
-			} else {
-				if (seen.has(hook)) continue
+			const installed = seen.get(seed)
+			if (installed) {
+				// a copy: a macro that nests itself is among `installs`
+				const repeated = installed.slice()
+				for (let i = 0; i < repeated.length; i += 3) {
+					let full = keys
+					for (const below of repeated[i + 2] as string[])
+						full = pathOf(full, below)
+					record(
+						repeated[i],
+						repeated[i + 1] as string,
+						full,
+						installs
+					)
+				}
 
-				seen.add(hook)
+				continue
 			}
+
+			if (isFunction) hookToGuard(hook)
+			const own: unknown[] = []
+			seen.set(seed, own)
+			const nested: [unknown[], number][] = [
+				...installs,
+				[own, keys.length]
+			]
 
 			for (const k in hook) {
 				const v = (hook as any)[k]
@@ -4784,7 +4845,9 @@ export class Elysia<
 						{ [k]: v },
 						iteration + 1,
 						seen,
-						insertions
+						insertions,
+						keys,
+						nested
 					)
 
 					delete input[key]
@@ -4834,6 +4897,7 @@ export class Elysia<
 					} else if (input[k] !== v) input[k] = [v, input[k]]
 				} else input[k] = Array.isArray(v) ? v.slice() : v
 
+				for (const fn of [v].flat()) record(fn, k, keys, nested)
 				delete input[key]
 			}
 		}
@@ -7633,6 +7697,63 @@ export class Elysia<
 	ws<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
+			InputSchema<keyof Definitions['typebox'] & string>,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				'',
+				undefined extends Input['params'] ? true : false
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
+		>,
+		const MacroContext extends {} extends Metadata['macroFn']
+			? {}
+			: MacroToContext<
+					Metadata['macroFn'],
+					Input,
+					Definitions['typebox']
+				>,
+		const Handler extends WSMessageHandler<
+			Schema & MacroContext,
+			Singleton & {
+				derive: Ephemeral['derive'] &
+					Volatile['derive'] &
+					// @ts-ignore
+					MacroContext['derive']
+			}
+		>
+	>(
+		path: Path,
+		handler: Handler
+	): AddWSRoute<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		Path,
+		Schema,
+		MacroContext,
+		WSHandlerResponse<Handler>
+	>
+	ws<
+		const Path extends string,
+		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string> &
 			WSHookCapture,
 		const Schema extends IntersectIfObjectSchema<
@@ -7695,63 +7816,6 @@ export class Elysia<
 		void,
 		Input['error'],
 		Input['beforeHandle']
-	>
-	ws<
-		const Path extends string,
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					Input,
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				undefined extends Input['params'] ? true : false
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
-		>,
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Input,
-					Definitions['typebox']
-				>,
-		const Handler extends WSMessageHandler<
-			Schema & MacroContext,
-			Singleton & {
-				derive: Ephemeral['derive'] &
-					Volatile['derive'] &
-					// @ts-ignore
-					MacroContext['derive']
-			}
-		>
-	>(
-		path: Path,
-		handler: Handler
-	): AddWSRoute<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile,
-		Path,
-		Schema,
-		MacroContext,
-		WSHandlerResponse<Handler>
 	>
 	ws<
 		const Path extends string,
@@ -8327,13 +8391,13 @@ export class Elysia<
 		try {
 			this.#buildRouterUnsafe()
 
-			const nextMap = this['~map']
+			const nextMap = this['~map'] as typeof previousMap
 			if (previousMap && nextMap !== previousMap) {
 				Object.assign(previousMap, nextMap)
 				this['~map'] = previousMap
 			}
 
-			const nextRouter = this['~router']
+			const nextRouter = this['~router'] as typeof previousRouter
 			if (previousRouter && nextRouter && nextRouter !== previousRouter) {
 				Object.assign(previousRouter, nextRouter)
 				this['~router'] = previousRouter
@@ -8408,7 +8472,8 @@ export class Elysia<
 				else this.jitColdRemaining = cold
 			}
 
-			clearHandlerAnalysisCaches(this)
+			// the resolved hooks stay: a cold route or `.routes` expanding a
+			// macro again would get another hook than its compiled siblings
 			clearFlattenChainMemo(this)
 		}
 

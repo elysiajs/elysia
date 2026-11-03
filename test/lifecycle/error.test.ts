@@ -12,6 +12,7 @@ import {
 import { describe, expect, it, spyOn } from 'bun:test'
 import { post, json } from '../utils'
 import * as z from 'zod'
+import typeboxPackage from '../../node_modules/typebox/package.json'
 
 import { TypeBoxValidator } from '../../src/type/validator'
 import { claimsProblemType } from '../../src/handler/error'
@@ -97,9 +98,7 @@ describe('Error lifecycle', () => {
 	// TypeBox issues carry `instancePath`, not `path`. Reading only `path`
 	// reported every TypeBox issue as 'root', so a handler building a
 	// per-field error map could not tell which field failed. Only the empty
-	// pointer is the root: '/' is the property named ''. TypeBox does not
-	// escape keys in `instancePath` (the key `a~1b` arrives as '/a~1b'), so a
-	// '~' sequence is part of the key and must pass through undecoded
+	// pointer is the root: '/' is the property named ''
 	it('ValidationError.all reports the path of TypeBox issues', async () => {
 		const app = new Elysia()
 			.onError(({ error }) => {
@@ -118,11 +117,6 @@ describe('Error lifecycle', () => {
 				{ body: t.Object({ '': t.Number() }) },
 				({ body }) => body
 			)
-			.post(
-				'/tilde',
-				{ body: t.Object({ 'a~1b': t.Number() }) },
-				({ body }) => body
-			)
 
 		const nested = await app.handle('/user', json({ user: { name: 1 } }))
 		const root = await app.handle('/user', {
@@ -130,16 +124,57 @@ describe('Error lifecycle', () => {
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify('not an object')
 		})
-		const [empty, tilde] = await Promise.all([
-			app.handle('/empty', json({ '': 'bad' })),
-			app.handle('/tilde', json({ 'a~1b': 'bad' }))
-		])
+		const empty = await app.handle('/empty', json({ '': 'bad' }))
 
 		expect(await nested.json()).toEqual(['user.name'])
 		expect(await root.json()).toEqual(['root'])
 		expect(await empty.json()).toEqual([''])
-		expect(await tilde.json()).toEqual(['a~1b'])
 	})
+
+	// TypeBox >= 1.3.35 escapes keys in `instancePath` (RFC 6901: the key
+	// `a~1b` arrives as '/a~01b', `a/b` as '/a~1b'). The path and the custom
+	// error lookup must use the key itself: undecoded, `a~1b` reads back as
+	// `a~01b` and `a/b` misses its own `error`. Older TypeBox passes keys raw,
+	// where '/a/b' cannot be told apart from a nested `b`, so this only holds
+	// on an escaping version
+	it.skipIf(!Bun.semver.satisfies(typeboxPackage.version, '>=1.3.35'))(
+		'ValidationError decodes escaped TypeBox keys',
+		async () => {
+			const app = new Elysia()
+				.onError(({ error }) => {
+					if (error instanceof ValidationError)
+						return {
+							message: error.message,
+							paths: error.all.map((i) => i.path)
+						}
+				})
+				.post(
+					'/tilde',
+					{ body: t.Object({ 'a~1b': t.Number() }) },
+					({ body }) => body
+				)
+				.post(
+					'/slash',
+					{
+						body: t.Object({
+							'a/b': t.Number({ error: 'slash error' })
+						})
+					},
+					({ body }) => body
+				)
+
+			const [tilde, slash] = await Promise.all([
+				app.handle('/tilde', json({ 'a~1b': 'bad' })),
+				app.handle('/slash', json({ 'a/b': 'bad' }))
+			])
+
+			expect((await tilde.json()).paths).toEqual(['a~1b'])
+			expect(await slash.json()).toEqual({
+				message: 'slash error',
+				paths: ['a/b']
+			})
+		}
+	)
 
 	it('inherits plugin', async () => {
 		const plugin = new Elysia().onError('global', () => 'hi')

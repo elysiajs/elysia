@@ -1163,19 +1163,106 @@ class Deferred extends HTTPError<'DEFERRED'> {
 		afterHandle: () => 'ok'
 	})
 
-	// @ts-expect-error a WebSocket beforeHandle error is a frame
+	// A WebSocket beforeHandle error answers as a thrown one, as on HTTP
 	new Elysia().ws('/', {
 		response: t.String(),
 		message() {},
 		beforeHandle: () => new OutOfCredit()
 	})
 
-	// @ts-expect-error a WebSocket afterHandle error is a frame
+	// So does one the handler or a lifecycle callback returns
+	new Elysia().ws('/', {
+		response: t.String(),
+		message: ({ query }) => (query.x ? 'ok' : new OutOfCredit()),
+		open: () => new OutOfCredit(),
+		close: () => new OutOfCredit()
+	})
+
+	new Elysia().ws('/', { response: t.String() }, ({ query }) =>
+		query.x ? 'ok' : new OutOfCredit()
+	)
+
+	// Its plain value is still checked
+	// @ts-expect-error a WebSocket beforeHandle value must satisfy the schema
+	new Elysia().ws('/', {
+		response: t.String(),
+		message() {},
+		beforeHandle: () => 1
+	})
+
+	// @ts-expect-error a WebSocket afterHandle runs after the send: what it returns, an error too, is dropped
 	new Elysia().ws('/', {
 		response: t.String(),
 		message() {},
 		afterHandle: () => new OutOfCredit()
 	})
+}
+
+// A WebSocket handler's returned error is typed onto the route as on HTTP:
+// served at its own status or answered by its `.onError()` handler, never as
+// a 200 payload
+{
+	class Credit extends HTTPError.id('CREDIT', 402) {}
+
+	const deny = () =>
+		Math.random() > 0.5 ? ('ok' as const) : new OutOfCredit()
+	const own = new Elysia().ws('/', deny)
+	const ownHttp = new Elysia().get('/', deny)
+
+	const plain = new Elysia().ws('/', (): Error | 'ok' =>
+		Math.random() > 0.5 ? new Error() : 'ok'
+	)
+
+	const registered = new Elysia()
+		.onError(Credit, () => status(418, 'caught' as const))
+		.ws('/', () => new Credit())
+
+	expectTypeOf<
+		(typeof own)['~Routes']['subscribe']['response']
+	>().toEqualTypeOf<(typeof ownHttp)['~Routes']['get']['response']>()
+	expectTypeOf<
+		keyof (typeof own)['~Routes']['subscribe']['response']
+	>().toEqualTypeOf<200 | 402>()
+
+	expectTypeOf<
+		(typeof plain)['~Routes']['subscribe']['response']
+	>().toEqualTypeOf<{ 200: 'ok'; 500: Unhandled500 }>()
+
+	expectTypeOf<
+		(typeof registered)['~Routes']['subscribe']['response']
+	>().toEqualTypeOf<{ 418: 'caught' }>()
+
+	// data shaped like an `Error` is still a 200 payload
+	const data = new Elysia().ws('/', () => ({
+		name: 'a',
+		message: 'b',
+		data: 1
+	}))
+
+	expectTypeOf<
+		(typeof data)['~Routes']['subscribe']['response']
+	>().toEqualTypeOf<{
+		200: { name: string; message: string; data: number }
+	}>()
+
+	// a yielded error is sent as data, not answered as a thrown one
+	const yielded = new Elysia().ws('/', { response: t.Any() }, function* () {
+		yield new Credit()
+	})
+	const yieldedAsync = new Elysia().ws(
+		'/',
+		{ response: t.Any() },
+		async function* () {
+			yield new Credit()
+		}
+	)
+
+	expectTypeOf<
+		(typeof yielded)['~Routes']['subscribe']['response']
+	>().toEqualTypeOf<{ 200: any }>()
+	expectTypeOf<
+		(typeof yieldedAsync)['~Routes']['subscribe']['response']
+	>().toEqualTypeOf<{ 200: any }>()
 }
 
 // Returned from any `beforeHandle`, the instance's, a guard's or a macro's,

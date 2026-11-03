@@ -1,12 +1,14 @@
 import { describe, it, expect, afterEach } from 'bun:test'
 import { resolve } from 'node:path'
 import { rm } from 'node:fs/promises'
+import * as esbuild from 'esbuild'
 
 import { Elysia } from '../../src'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
 import { generateCompiledArtifacts } from '../../src/plugin/aot/core'
 import { aot as bunAot } from '../../src/plugin/aot/bun'
+import { aot as esbuildAot } from '../../src/plugin/aot/esbuild'
 import { json } from '../utils'
 
 /**
@@ -119,6 +121,38 @@ describe('forced AOT stripping', () => {
 		expect(text).not.toContain('[Sucrose] warning')
 		expect(text).not.toContain('WebSocket route builder was stripped')
 		expect(text).toContain('class ElysiaWS')
+	})
+
+	// `plugin/websocket` imports every ws/route export at load, a `.use(websocket())`
+	// without a `.ws()` route still gets the stub: a missing export fails the build
+	it('strips the WS route builder when the websocket plugin has no WS route', async () => {
+		const entry = 'test/aot/fixtures/strip-websocket-plugin-app.ts'
+		const text = await build(entry, true)
+		expect(text).toContain('WebSocket route builder was stripped')
+
+		const app = await load(text)
+		await expect(
+			app.handle(new Request('http://localhost/')).then((r) => r.text())
+		).resolves.toBe('hi')
+
+		const result = await esbuild.build({
+			entryPoints: [entry],
+			bundle: true,
+			write: false,
+			format: 'esm',
+			platform: 'node',
+			logLevel: 'silent',
+			plugins: [
+				esbuildAot(entry, {
+					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM,
+					strip: true
+				})
+			]
+		})
+		expect(result.outputFiles[0]!.text).toContain(
+			'WebSocket route builder was stripped'
+		)
 	})
 
 	it('builds and serves a fully precompiled app', async () => {

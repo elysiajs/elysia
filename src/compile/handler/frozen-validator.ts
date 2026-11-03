@@ -5,6 +5,7 @@ import { frozenRootOf } from '../../generation'
 import { ValidationError } from '../../error'
 import { nullObject } from '../../utils'
 import { ELYSIA_TYPES } from '../../type/constants'
+import { escapePointerSegment } from '../../type/shared'
 
 import {
 	Compiled,
@@ -176,8 +177,8 @@ function walkCompactError(
 				const child = walkCompactError(
 					properties[key],
 					(value as any)[key],
-					`${instancePath}/${key}`,
-					`${schemaPath}/properties/${key}`
+					`${instancePath}/${escapePointerSegment(key)}`,
+					`${schemaPath}/properties/${escapePointerSegment(key)}`
 				)
 				if (child) return child
 			}
@@ -338,8 +339,8 @@ class FrozenSlotValidator {
 
 				error = {
 					keyword: 'type',
-					schemaPath: `#/properties/${key}`,
-					instancePath: `/${key}`,
+					schemaPath: `#/properties/${escapePointerSegment(key)}`,
+					instancePath: `/${escapePointerSegment(key)}`,
 					params: {},
 					message: `must match ${schema.properties[key]?.['~kind'] ?? 'schema'}`
 				}

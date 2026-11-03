@@ -1,5 +1,18 @@
-import { Elysia, HTTPError, problem, MacroTypeLambda } from '../src'
+import { Elysia, t } from '../src'
 
-const app = new Elysia().get('/', () => 'hello world').listen(3000)
-
-console.log(app.routes[0].compile().toString())
+const app = new Elysia()
+	.get(
+		'/',
+		{
+			cookie: t.Optional(
+				t.Object({
+					a: t
+						.Codec(t.String())
+						.Decode((v) => v)
+						.Encode((v) => v + '!')
+				})
+			)
+		},
+		({ cookie: { a } }) => a.value = 'yes'
+	)
+	.listen(3000)

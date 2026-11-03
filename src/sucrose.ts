@@ -108,6 +108,13 @@ function computedDestructuringChannel<K extends string>(
 	)
 }
 
+// built-in context and WebSocket methods: none reads the context via `this`
+const thisFreeMembers = new Set(
+	'status problem redirect send publish subscribe unsubscribe close'.split(
+		' '
+	)
+)
+
 /**
  * @internal Which `channelOf`-mapped members of a function's first parameter
  * the function may read, or `null` when any member may be read
@@ -304,7 +311,7 @@ export function inferParameterReads<K extends string>(
 				tokens[member]?.value !== '.' &&
 				tokens[member]?.value !== '[' &&
 				// without a semicolon, the next statement may start right here
-				(tokens[member]?.k !== 'i' || (strict && !optional))
+				(tokens[member]?.k !== 'i' || !optional)
 			) {
 				const left = tokens[i - 1]
 				if (left?.k === 'i') {
@@ -338,7 +345,15 @@ export function inferParameterReads<K extends string>(
 
 		if (tokens[next]?.k === 'i' && next > i + 1) {
 			const key = channelOf(tokens[next].value)
+			const call = tokens[next + 1]?.value
+
 			if (key) keys.add(key)
+			else if (
+				!thisFreeMembers.has(tokens[next].value) &&
+				(call === '(' ||
+					(call === '?.' && tokens[next + 2]?.value === '('))
+			)
+				return null
 			continue
 		}
 

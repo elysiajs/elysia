@@ -141,19 +141,15 @@ describe('production error masking across HTTP and WebSocket', () => {
 		expect(wsElysiaError[0]).toBe(httpElysiaError)
 	})
 
-	// The mask lives in `response` rather than in the problem serializer
-	// because a WS handler may *return* the error, which is framed as plain
-	// data and never reaches the error lane at all
-	it('masks the advice on a returned, never-thrown ElysiaError in production', async () => {
-		const { wsReturnedElysiaError } = await runProbe()
+	// A WS handler's returned error answers as a thrown one, as on HTTP: the
+	// same masked problem document, never the instance framed as data
+	it('masks the advice on a returned ElysiaError as on a thrown one in production', async () => {
+		const { wsElysiaError, wsReturnedElysiaError } = await runProbe()
 
 		expect(wsReturnedElysiaError).toHaveLength(1)
 		expect(wsReturnedElysiaError[0]).not.toContain('cookie.secrets')
 		expect(wsReturnedElysiaError[0]).not.toContain('anyone can forge')
-		expect(JSON.parse(wsReturnedElysiaError[0])).toMatchObject({
-			status: 500,
-			response: 'Internal Server Error'
-		})
+		expect(wsReturnedElysiaError[0]).toBe(wsElysiaError[0])
 	})
 
 	// Scoped to the advice, not to 5xx detail at large: an explicitly authored

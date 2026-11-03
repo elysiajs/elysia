@@ -71,6 +71,18 @@ function resolveNamespaces(): TypeboxTypeNamespaces {
 
 export const loadTypeNamespace = () => namespaces ?? load()
 
+export function mutableTypes<T>(build: () => T): T {
+	const settings = load().system.Settings
+	if (!settings.Get().immutableTypes) return build()
+
+	settings.Set({ immutableTypes: false })
+	try {
+		return build()
+	} finally {
+		settings.Set({ immutableTypes: true })
+	}
+}
+
 let typeUsed = false
 
 // A `t.*` member was read: this app builds TypeBox validators

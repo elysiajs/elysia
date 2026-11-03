@@ -41,15 +41,23 @@ const defer = {
 	}
 }
 
-function buildDecorator(members: object) {
-	class Decorator {}
-	Object.assign(Decorator.prototype, members)
+// top-level base: Bun's AOT compiler guards a constructor against its direct
+// base class, and a base built at runtime fails that guard on every request
+class Decorator {}
+Object.defineProperty(Decorator.prototype, 'defer', defer)
+
+function decoratorMembers(members: object) {
 	// a context inherits every member, so each is shared: the derive identity
 	// scan (`for..in`) never sees one under a symbol key
 	for (const key of Reflect.ownKeys(members))
 		markSingletons((members as Record<PropertyKey, unknown>)[key], 0)
-	Object.defineProperty(Decorator.prototype, 'defer', defer)
-	return Decorator
+	return members
+}
+
+function buildDecorator(members: object) {
+	class AppDecorator extends Decorator {}
+	Object.assign(AppDecorator.prototype, decoratorMembers(members))
+	return AppDecorator
 }
 
 const buildEmptyDecorator = () => buildDecorator({ status, problem, redirect })
@@ -82,10 +90,10 @@ export function clearContextCache(app?: AnyElysia) {
 	sharedEmptyContext = null
 }
 
-function buildEmptyContext(Base: any, headers: object | null = null) {
+function buildEmptyContext(members: object, headers: object | null = null) {
 	const immutableHeaders = headers !== null && Object.isFrozen(headers)
 
-	class Context extends Base {
+	class Context extends Decorator {
 		declare params?: Record<string, string>
 		declare headers?: Record<string, string>
 		declare qi: number
@@ -124,7 +132,15 @@ function buildEmptyContext(Base: any, headers: object | null = null) {
 		}
 	}
 
+	Object.assign(Context.prototype, decoratorMembers(members))
 	return Context
+}
+
+const emptyMembers = { status, problem, redirect }
+function contextMembers(app: AnyElysia) {
+	const ext = app['~ext']
+	if (!ext?.decorator && !ext?.store) return emptyMembers
+	return { ...ext.decorator, store: ext.store, status, problem, redirect }
 }
 
 export function createContext(
@@ -147,8 +163,8 @@ export function createContext(
 
 	const context =
 		headers === null && !ext?.decorator && !ext?.store
-			? (sharedEmptyContext ??= buildEmptyContext(createBaseContext(app)))
-			: buildEmptyContext(createBaseContext(app), headers)
+			? (sharedEmptyContext ??= buildEmptyContext(emptyMembers))
+			: buildEmptyContext(contextMembers(app), headers)
 
 	contextCache.set(app, context)
 	return context

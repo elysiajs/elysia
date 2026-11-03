@@ -137,14 +137,35 @@ export function refTargets(
 	const targets: Record<string, Set<unknown>> = nullObject()
 	const add = (name: string, schema: unknown) =>
 		(targets[name] ??= new Set()).add(schema)
+	// `$id: ''` matches every name
+	const wild: unknown[] = []
+	const base = 'https://x/'
+	// TypeBox matches by URL path: `Target` reaches `http://x/Target?y`,
+	// and `urn:typebox:root:Target` from 1.3.29
+	const tail = (id: string, raw?: boolean) =>
+		(raw || !URL.canParse(id, base)
+			? id.split(/[?#]/)[0]!
+			: new URL(id, base).pathname
+		)
+			.split(/[/:]/)
+			.pop()!
+	// only a tail that resolves to itself, else its name lands elsewhere
+	const plain = (key: string) =>
+		key && new URL(key, base).pathname === '/' + key
 
 	const seen = new Set()
 	const index = (node: any) => {
 		if (!node || typeof node !== 'object' || seen.has(node)) return
 		seen.add(node)
 
-		if (typeof node.$id === 'string')
-			add(node.$id.slice(node.$id.lastIndexOf('/') + 1), node)
+		const id = node.$id
+		if (typeof id === 'string') {
+			const key = tail(id)
+			if (!id) wild.push(node)
+			else if (plain(key)) add(key, node)
+			// else by its text, how TypeBox >= 1.3.29 reaches a non-URL `$id`
+			else add(id, node)
+		}
 		for (const key in node) index(node[key])
 		index(node['~cookieFrom'])
 	}
@@ -152,7 +173,18 @@ export function refTargets(
 	for (const name in models) add(name, models[name])
 	roots.concat(Object.values(models)).forEach(index)
 
-	return (name) => targets[name] ?? []
+	return (name) => {
+		const key = tail(name)
+		// `#` is a pointer or anchor, a tail that isn't the name's own is
+		// resolved elsewhere: neither reaches by path
+		const byPath =
+			!name.includes('#') && plain(key) && key === tail(name, true)
+
+		return new Set([
+			...(targets[name] ?? []),
+			...(byPath ? [...(targets[key] ?? []), ...wild] : [])
+		])
+	}
 }
 
 // Macro-definition provenance: def → hash of the named plugin that registered
@@ -1197,6 +1229,27 @@ export function coalesceSchemas(existing: any[], incoming: any[]) {
 	}
 }
 
+// Read only by `.routes`, never on the request path
+// expanded hook: [fn, role, path, ...] of what its macros installed
+export const macroSource = new WeakMap<object, unknown[]>()
+// stored chain hook: a copy of what a `.guard()` wrote, `true` for a call
+export const hookOrigin = new WeakMap<object, object | true>()
+
+export const topPath: readonly string[] = Object.freeze([])
+const paths = new WeakMap<readonly string[], Map<string, readonly string[]>>()
+// One array per option key path, shared by every route that expands it
+export function pathOf(parent: readonly string[], key: string) {
+	if (!parent.length) parent = topPath
+
+	let children = paths.get(parent)
+	if (!children) paths.set(parent, (children = new Map()))
+
+	let path = children.get(key)
+	if (!path) children.set(key, (path = Object.freeze([...parent, key])))
+
+	return path
+}
+
 export function mergeHook(
 	a: Partial<AppHook>,
 	b: Partial<AppHook> | undefined
@@ -1374,10 +1427,13 @@ export function clonePlainDeep<T>(value: T, seen?: WeakMap<object, any>): T {
 
 	if (isPlainObject(value)) {
 		seen ??= new WeakMap()
+
 		const hit = seen.get(value)
 		if (hit) return hit
+
 		const out = nullObject() as Record<string, unknown>
 		seen.set(value, out)
+
 		for (const key in value)
 			out[key] = clonePlainDeep(
 				(value as Record<string, unknown>)[key],
@@ -1675,7 +1731,9 @@ export const isSocketQuiet = (socket: {
 
 export const isHTMLBundle = (value: unknown): value is BunHTMLBundlelike =>
 	Object.prototype.toString.call(value) === '[object HTMLBundle]' ||
-	(typeof (value as BunHTMLBundlelike)?.index === 'string' &&
+	(typeof value === 'object' &&
+		value !== null &&
+		typeof (value as { index?: unknown }).index === 'string' &&
 		Array.isArray((value as { files?: unknown }).files))
 
 export { prefix }
