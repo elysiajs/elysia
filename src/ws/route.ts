@@ -239,7 +239,9 @@ const frameOf =
 			: value instanceof ElysiaStatus
 				? frameOf(error)(value.response)
 				: typeof value === 'object' && value !== null
-					? JSON.stringify(value)
+					? // a `toJSON` answering `undefined` serializes to nothing
+						(JSON.stringify(value) ??
+						internalServerErrorBodyString(error))
 					: String(value)
 
 function wsErrorFrameFallback(error: any): string | Promise<string> {
@@ -251,16 +253,12 @@ function wsErrorFrameFallback(error: any): string | Promise<string> {
 
 	const frame = frameOf(error)
 	const masked = () => internalServerErrorBodyString(error)
-	const status = resolveStatus(error?.status)
-	// below 100 HTTP can't build its Response and serves the masked 500
-	if (typeof status === 'number' && status < 100) return masked()
 
-	// an answer that can't serialize (a cycle, a BigInt) still sends a
-	// frame: here when sync, through `sendErrorFrame`'s rejection when async
 	try {
+		const status = resolveStatus(error?.status)
+		if (typeof status === 'number' && status < 100) return masked()
+
 		const served = fallbackErrorResponse(
-			// a status-less or invalid one serves 500, as HTTP's does, so
-			// production masks its message
 			{
 				set: {
 					headers: new EmptyObject(),
