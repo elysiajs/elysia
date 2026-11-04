@@ -4,7 +4,13 @@ import {
 	type SelectiveProblem,
 	type SelectiveStatus
 } from './error'
-import { isNotEmpty, markSingletons, nullObject, redirect } from './utils'
+import {
+	EmptyObject,
+	isNotEmpty,
+	markSingletons,
+	nullObject,
+	redirect
+} from './utils'
 
 import { defaultHeaders } from './adapter/default-headers'
 import type { AnyElysia } from './base'
@@ -124,8 +130,8 @@ function buildEmptyContext(members: object, headers: object | null = null) {
 				this.set = {
 					headers:
 						headers === null
-							? Object.create(null)
-							: Object.assign(Object.create(null), headers),
+							? new EmptyObject()
+							: Object.assign(new EmptyObject(), headers),
 					status: undefined,
 					cookie: undefined
 				}

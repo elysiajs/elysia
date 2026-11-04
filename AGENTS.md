@@ -4,6 +4,8 @@ You think, design and plan architectural decision only. Write only essential tec
 
 Use claude-peer-review skill to spawn Claude agent to help you as a second opinion on your work, especially when you are unsure about a decision or approach. This can help catch potential issues early and ensure that your work aligns with the project's goals and standards.
 
+For security-sensitive decision/investigation, use gpt-daybreak-blue-latest (`codex exec -m gpt-daybreak-blue-latest --cyber-access-program daybreak_blue`).
+
 Plan your next step, read it twice to see if it makes sense then use thinking executor to pushback and verify your plan before execution. Prefers correctness over speed. Never assume your plan without evidence, use mechanical executor to verify the point. Note the changes using file:line citation.
 
 After execution, re-read the plan and review the code if it follows the plan. Use thinkers and Codex to verify your work. If unsure, ask for me to help you review your work.

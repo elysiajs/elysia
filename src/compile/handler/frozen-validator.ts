@@ -1,15 +1,14 @@
 // ! This module must be typebox free
 import { isFullyClosedObject } from '../../type/validator/clean-safe'
-import { StandardValidator } from '../../validator'
+import { StandardValidator, type ValidatorOptions } from '../../validator'
 import { frozenRootOf } from '../../generation'
 import { ValidationError } from '../../error'
-import { nullObject } from '../../utils'
+import { EmptyObject } from '../../utils'
 import { ELYSIA_TYPES } from '../../type/constants'
 import { escapePointerSegment } from '../../type/shared'
 
 import {
 	Compiled,
-	EMPTY_EXTERNALS,
 	reconstruct,
 	type CapturedValidator,
 	type FrozenValidator,
@@ -257,7 +256,7 @@ class FrozenSlotValidator {
 	hasCodec = false
 
 	#check: (value: unknown) => boolean
-	#clean?: (value: unknown) => unknown
+	Clean?: (value: unknown) => unknown
 	#decode?: (value: unknown) => unknown
 	schema: unknown
 
@@ -271,32 +270,31 @@ class FrozenSlotValidator {
 		// coerced slot schema from `buildFrozenRouteValidator`
 		schema: unknown,
 		raw: unknown,
-		normalize: boolean | 'exactMirror' | 'typebox' | undefined
+		normalize: boolean | 'exactMirror' | 'typebox' | undefined,
+		sanitize: ValidatorOptions['sanitize']
 	) {
 		this.schema = schema
 		this.hasCodec = frozen.k === 1
 
 		if (frozen.ic) reconstruct().reconstructInnerCodecs(frozen.ic, schema)
 
-		if (frozen.k === 1 && frozen.dm) {
-			const both = reconstruct().instantiateFrozenBoth(
-				frozen,
-				schema,
-				raw
-			)
-			this.#check = both.check!
-			if (normalize !== false) {
-				this.#clean = both.clean
+		const both = reconstruct().instantiateFrozenBoth(
+			frozen,
+			schema,
+			raw,
+			sanitize
+		)
+		this.#check = both.check!
+
+		if (normalize !== false) {
+			this.Clean = both.clean
+
+			if (frozen.k === 1 && frozen.dm)
 				this.#decode = reconstruct().instantiateFrozenDecodeMirror(
 					frozen.dm,
-					schema
+					schema,
+					sanitize
 				)
-			}
-		} else {
-			// non-codec covered slot: `e`/`u` are refused, so no externals/unions
-			const both = frozen.cm!(EMPTY_EXTERNALS, undefined)
-			this.#check = both.check!
-			if (normalize !== false) this.#clean = both.clean
 		}
 
 		// as TypeBoxValidator: t.MaybeEmpty is optional as a property only
@@ -396,7 +394,7 @@ class FrozenSlotValidator {
 			const schema = this.schema as any
 
 			if (value === undefined || value === null)
-				return schema['~kind'] === 'Object' ? nullObject() : value
+				return schema['~kind'] === 'Object' ? new EmptyObject() : value
 
 			if (
 				schema['~kind'] === 'Object' &&
@@ -404,7 +402,7 @@ class FrozenSlotValidator {
 				!Array.isArray(value) &&
 				Object.keys(value as object).length === 0
 			)
-				return nullObject()
+				return new EmptyObject()
 		}
 
 		if (!this.#noValidate && !this.#check(value))
@@ -412,13 +410,13 @@ class FrozenSlotValidator {
 
 		if (this.#decode) return this.#decode(value)
 
-		return this.#clean ? this.#clean(value) : value
+		return this.Clean ? this.Clean(value) : value
 	}
 
 	EncodeFrom(value: unknown, type?: string): unknown {
 		if (!this.#noValidate && !this.#check(value))
 			throw this.#error(value, type)
-		return this.#clean ? this.#clean(value) : value
+		return this.Clean ? this.Clean(value) : value
 	}
 }
 
@@ -478,6 +476,7 @@ export function buildFrozenRouteValidator(
 	if (hook?.schemas) return undefined
 
 	const normalize = frozenRoot['~config']?.normalize
+	const sanitize = frozenRoot['~config']?.sanitize
 	const out: FrozenRouteValidatorShape = {}
 
 	for (const slot of REQUEST_SLOTS) {
@@ -510,7 +509,13 @@ export function buildFrozenRouteValidator(
 
 		if (!isBridgeFreeComplete(frozen, coerced, schema)) return undefined
 
-		out[slot] = new FrozenSlotValidator(frozen, coerced, schema, normalize)
+		out[slot] = new FrozenSlotValidator(
+			frozen,
+			coerced,
+			schema,
+			normalize,
+			sanitize
+		)
 	}
 
 	const response = hook?.response
@@ -550,7 +555,13 @@ export function buildFrozenRouteValidator(
 
 			responseOut.set(
 				+status,
-				new FrozenSlotValidator(frozen, schema, schema, normalize)
+				new FrozenSlotValidator(
+					frozen,
+					schema,
+					schema,
+					normalize,
+					sanitize
+				)
 			)
 		}
 

@@ -1,7 +1,7 @@
 import { Default } from '../typebox-value'
 import type { TSchema } from 'typebox/type'
 
-import { nullObject } from '../../utils'
+import { EmptyObject, nullObject } from '../../utils'
 import { dangerousKeys } from '../../constants'
 import { schemaSome } from './clean-safe'
 import { isProduction } from '../../universal/is-production'
@@ -105,7 +105,7 @@ export function applyPrecomputed(
 	defaults: Record<string, unknown>,
 	value: Record<string, unknown>
 ): Record<string, unknown> {
-	const out: Record<string, unknown> = nullObject()
+	const out: Record<string, unknown> = new EmptyObject()
 
 	// clone in case of a shared reference default value
 	for (const k in defaults) {

@@ -776,7 +776,8 @@ export const STUB_SOURCES: Record<
 				`export function buildGlobalWSHandler(){return e()}\n` +
 				// `plugin/websocket` reads these at load, only a `.ws()` route calls them
 				`export function resolveWSOptions(){return e()}\n` +
-				`export function accumulateWSOptions(){return e()}\n`
+				`export function accumulateWSOptions(){return e()}\n` +
+				`export function declaredWSOptions(){return e()}\n`
 		}
 	],
 	reconstruct: [

@@ -541,12 +541,9 @@ export class Elysia<
 	private _error?: { error: unknown }
 
 	private hash?: number
-	// named plugins installed here: true once `.use()`d on this instance
-	// itself, false while only a child brought it
 	private childrenHash?: Map<number, boolean>
 
 	private scopeParent?: AnyElysia
-	// Macro defs a scope-child absorbed via a nested plugin `.use()` (name → def)
 	private pluginMacros?: Map<string, unknown>
 	private macroBaseline?: Set<string>
 	private macroSnapshots?: Set<Map<string, unknown>>

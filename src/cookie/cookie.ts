@@ -1,6 +1,6 @@
 import type { BaseCookie } from './types'
 import { resolvePendingCookie } from './crypto'
-import { nullObject } from '../utils'
+import { EmptyObject } from '../utils'
 
 const FORWARDED_KEYS = [
 	'expires',
@@ -20,6 +20,10 @@ type Updater<T> = T | ((value: T) => T)
 
 // signing comes only from the app or route cookie config
 type CookieMutation = Omit<BaseCookie, 'secrets'> & { secrets?: never }
+
+function clearRaw(cookie: any) {
+	if (cookie['~raw'] !== undefined) cookie['~raw'] = undefined
+}
 
 const rejectSecrets = <T>(name: string, config: T): T => {
 	if (config && typeof config === 'object' && 'secrets' in config)
@@ -57,7 +61,7 @@ export class Cookie<T = any> implements BaseCookie {
 	}
 
 	get #jar(): Record<string, BaseCookie> {
-		const jar = (this.#setRef.cookie ??= Object.create(null))
+		const jar = (this.#setRef.cookie ??= new EmptyObject())
 
 		if (this.#encode && this.#encodedJar !== jar) {
 			this.#encodedJar = jar
@@ -65,7 +69,7 @@ export class Cookie<T = any> implements BaseCookie {
 			let encoders = (jar as any)['~encode']
 			if (!encoders)
 				Object.defineProperty(jar, '~encode', {
-					value: (encoders = nullObject())
+					value: (encoders = new EmptyObject())
 				})
 
 			encoders[this.#name] = this.#encode
@@ -76,7 +80,7 @@ export class Cookie<T = any> implements BaseCookie {
 
 	get cookie(): BaseCookie {
 		const c = this.#setRef.cookie?.[this.#name] ?? this.#initial
-		if (c && '~unsign' in c)
+		if (c && (c as any)['~unsign'] !== undefined)
 			resolvePendingCookie(c as Record<string, any>, this.#name)
 
 		return c
@@ -91,7 +95,7 @@ export class Cookie<T = any> implements BaseCookie {
 		if (!(this.#name in j)) j[this.#name] = this.#initial
 
 		const entry = j[this.#name]
-		if (entry && '~unsign' in entry)
+		if (entry && (entry as any)['~unsign'] !== undefined)
 			resolvePendingCookie(entry as Record<string, any>, this.#name)
 
 		return entry
@@ -101,7 +105,11 @@ export class Cookie<T = any> implements BaseCookie {
 		const cookie = this.cookie
 		const value = cookie.value as T
 
-		if (value !== null && typeof value === 'object' && '~raw' in cookie) {
+		if (
+			value !== null &&
+			typeof value === 'object' &&
+			(cookie as any)['~raw'] !== undefined
+		) {
 			const j = this.#jar
 			if (!(this.#name in j)) j[this.#name] = cookie
 		}
@@ -118,7 +126,7 @@ export class Cookie<T = any> implements BaseCookie {
 
 		const j = this.#jar
 		if (!(this.#name in j))
-			j[this.#name] = Object.assign(nullObject(), this.#initial)
+			j[this.#name] = Object.assign(new EmptyObject(), this.#initial)
 
 		j[this.#name].value = value
 	}
@@ -128,12 +136,12 @@ export class Cookie<T = any> implements BaseCookie {
 		const next = rejectSecrets(
 			this.#name,
 			typeof config === 'function'
-				? config(Object.assign(nullObject(), this.cookie))
+				? config(Object.assign(new EmptyObject(), this.cookie))
 				: config
 		)
 		const cookie = Object.assign(this.cookie, next)
 
-		delete (cookie as any)['~raw']
+		clearRaw(cookie)
 
 		this.cookie = cookie
 
@@ -144,17 +152,17 @@ export class Cookie<T = any> implements BaseCookie {
 		const next = rejectSecrets(
 			this.#name,
 			typeof config === 'function'
-				? config(Object.assign(nullObject(), this.cookie))
+				? config(Object.assign(new EmptyObject(), this.cookie))
 				: config
 		)
 		const cookie = Object.assign(
-			nullObject(),
+			new EmptyObject(),
 			this.#initial,
 			{ value: this.value },
 			next
 		)
 
-		delete (cookie as any)['~raw']
+		clearRaw(cookie)
 
 		this.cookie = cookie
 
@@ -197,6 +205,6 @@ for (const key of FORWARDED_KEYS)
 			const cookie = this.setCookie
 			cookie[key] = v
 
-			delete (cookie as any)['~raw']
+			clearRaw(cookie)
 		}
 	})

@@ -341,4 +341,9 @@ export interface WSCapability {
 	 * warning on conflicting keys (Bun uses one global config per server).
 	 */
 	accumulateOptions(target: WSOptions, routeOptions: WSOptions): void
+	/**
+	 * The server-tuning config a build would produce, read from the declared
+	 * routes without compiling them.
+	 */
+	declaredOptions(app: AnyElysia): WSOptions
 }

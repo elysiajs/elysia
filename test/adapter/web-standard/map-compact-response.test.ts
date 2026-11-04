@@ -236,3 +236,22 @@ describe('Web Standard - Map Compact Response', () => {
 		expect(response.status).toBe(200)
 	})
 })
+
+describe('status() in the compact lane', () => {
+	// the Bun string fast path must not read the body twice: a getter body
+	// would otherwise be typed by one read and served from another
+	it('reads the response body once', async () => {
+		const { status } = await import('../../../src/error')
+		const value = status(201, 'hello')
+		let reads = 0
+		Object.defineProperty(value, 'response', {
+			get: () => (++reads === 1 ? 'hello' : { wrong: true })
+		})
+
+		const response = mapCompactResponse(value)
+
+		expect(response.status).toBe(201)
+		expect(await response.text()).toBe('hello')
+		expect(reads).toBe(1)
+	})
+})

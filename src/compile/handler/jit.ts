@@ -1242,13 +1242,23 @@ export function compileHandlerJit(
 					? `(_vr.mayReturnPromise?_vr.From(_r,'response',true):_vr.EncodeFrom(_r,'response'))`
 					: `_vr.EncodeFrom(_r,'response')`
 
+				// a generator's chunks are cleaned by the stream handler, once
+				// the status it sends them with is known
+				link(vali, 'va')
+				const streamClean = `c.set['~chunk']=va.response\n`
+
 				code += plain(
 					`if(_r instanceof es){\n` +
 						`const _st=_r.status,_vr=${pick}\n` +
-						`if(_vr)_r.response=${responseValiAsync ? awaitValue(encodeStatus, arm) : encodeStatus}\n` +
-						`}else if(!(_r instanceof Response)` +
-						`&&!(_r instanceof ReadableStream)` +
-						`&&typeof _r?.next!=='function'){\n` +
+						// form() with a file is a promise off Bun
+						(isAsync && !tail
+							? `if(_vr&&_r.response instanceof Promise)_r.response=${awaitValue('_r.response', arm)}\n`
+							: '') +
+						`if(typeof _r.response?.next==='function')${streamClean}` +
+						`else if(_vr)_r.response=${responseValiAsync ? awaitValue(encodeStatus, arm) : encodeStatus}\n` +
+						`}else if(typeof _r?.next==='function')${streamClean}` +
+						`else if(!(_r instanceof Response)` +
+						`&&!(_r instanceof ReadableStream)){\n` +
 						// a named status ('Created') validates as the code it is sent with
 						`const _sr=c.set.status??200,_st=typeof _sr==='string'?(sm[_sr]??_sr):_sr,_vr=${pick}\n` +
 						`if(_vr)_r=${responseValiAsync ? awaitValue(encodeBody, arm) : encodeBody}\n` +

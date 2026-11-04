@@ -341,5 +341,5 @@ export function resolvePendingCookie(entry: Record<string, any>, name: string) {
 		entry['~raw'] = raw !== undefined ? raw : JSON.stringify(resolvedValue)
 	}
 
-	delete entry['~unsign']
+	entry['~unsign'] = undefined
 }

@@ -214,7 +214,6 @@ function maybeCapture(args: {
 	hasDefault: boolean
 	coerces: unknown
 	normalize: boolean | 'exactMirror' | 'typebox' | undefined
-	sanitize: unknown
 	buildResult: CheckBuildResult
 }) {
 	const {
@@ -281,10 +280,7 @@ function maybeCapture(args: {
 	const customErrors = captureCustomErrors(schema)
 	if (customErrors) Capture.set(loc, { customErrors })
 
-	const innerCodecs = captureStringCodecEntries(
-		schema as TSchema,
-		args.sanitize as any
-	)
+	const innerCodecs = captureStringCodecEntries(schema as TSchema)
 	if (innerCodecs) Capture.set(loc, { innerCodecs })
 
 	const cf = buildFrozenCheck(buildResult, schema)
@@ -320,22 +316,15 @@ function captureMirror(
 
 			const loc = { method: aot.method, path: aot.path, slot }
 
-			if (!ext)
-				Capture.set(loc, {
-					mirror: { source: emitted.source, hasExternals: false }
-				})
-			else if (ext.unions && !ext.hof) {
-				const u = captureMirrorUnions(schema, ext.unions)
+			// `ext.hof` comes back from the live config, not the manifest
+			const u = ext?.unions.length
+				? captureMirrorUnions(schema, ext.unions)
+				: undefined
 
-				if (u)
-					Capture.set(loc, {
-						mirror: {
-							source: emitted.source,
-							hasExternals: true,
-							u
-						}
-					})
-			}
+			if (u || !ext?.unions.length)
+				Capture.set(loc, {
+					mirror: { source: emitted.source, hasExternals: !!ext, u }
+				})
 		}
 	} catch {}
 }
@@ -363,11 +352,7 @@ function captureCodecMirror(
 		if (typeof emitted?.source === 'string') {
 			const ext = emitted.externals
 
-			if (
-				ext?.codecs &&
-				!ext.hof &&
-				captureMirrorCodecs(schema, ext.codecs, dir)
-			) {
+			if (ext?.codecs && captureMirrorCodecs(schema, ext.codecs, dir)) {
 				let u: { identifier: string; code: string }[][] | undefined
 
 				if (ext.unions?.length) {

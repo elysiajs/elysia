@@ -725,6 +725,34 @@ export function buildWSRoute(
 		afterResponses.length === 0 &&
 		mapResponses.length === 0
 
+	// this per-message function never create a closure themselves
+	function sendWSResponse(ws: ElysiaWS<any>, value: unknown) {
+		return handleWSResponse(ws, value, mapResponses).catch((error) =>
+			handleError(ws, error)
+		)
+	}
+
+	function finishMessageAsync(ws: ElysiaWS<any>, result: Promise<unknown>) {
+		return result.then(
+			(resolved) => finishMessageResult(ws, resolved),
+			(error) => handleError(ws, error)
+		)
+	}
+
+	function runMessageAsync(ws: ElysiaWS<any>, decoded: Promise<unknown>) {
+		return decoded.then(
+			(m) => runMessage(ws, m),
+			(error) => onMessageValidationError(ws, error)
+		)
+	}
+
+	function dispatchParsedAsync(ws: ElysiaWS<any>, parsed: Promise<unknown>) {
+		return parsed.then(
+			(message) => dispatchParsedSync(ws, message),
+			(error) => handleError(ws, error)
+		)
+	}
+
 	function finishMessageResult(ws: ElysiaWS<any>, value: unknown) {
 		if (value === undefined) return
 
@@ -733,9 +761,7 @@ export function buildWSRoute(
 		try {
 			forward(value)
 			if (isGeneratorObject(value) || isHTTPBody(value))
-				return handleWSResponse(ws, value, mapResponses).catch(
-					(error) => handleError(ws, error)
-				)
+				return sendWSResponse(ws, value)
 			;(ws as any).send(value)
 		} catch (error) {
 			return handleError(ws, error)
@@ -752,11 +778,7 @@ export function buildWSRoute(
 				return onMessageValidationError(ws, error)
 			}
 
-			if (decoded instanceof Promise)
-				return decoded.then(
-					(m) => runMessage(ws, m),
-					(error) => onMessageValidationError(ws, error)
-				)
+			if (decoded instanceof Promise) return runMessageAsync(ws, decoded)
 
 			message = decoded
 		}
@@ -770,18 +792,11 @@ export function buildWSRoute(
 
 			const result = forward((hook.message as AnyFn)(ws, message))
 
-			if (result instanceof Promise)
-				return result.then(
-					(resolved) => finishMessageResult(ws, resolved),
-					(error) => handleError(ws, error)
-				)
+			if (result instanceof Promise) return finishMessageAsync(ws, result)
 
 			// a foreign thenable is assimilated as on HTTP, never called raw
 			if (typeof (result as any)?.then === 'function')
-				return Promise.resolve(result).then(
-					(resolved) => finishMessageResult(ws, resolved),
-					(error) => handleError(ws, error)
-				)
+				return finishMessageAsync(ws, Promise.resolve(result))
 
 			return finishMessageResult(ws, result)
 		} catch (error) {
@@ -839,11 +854,7 @@ export function buildWSRoute(
 
 		try {
 			const p = parseMessage(ws as any, rawMessage)
-			if (p instanceof Promise)
-				return p.then(
-					(message) => dispatchParsedSync(ws, message),
-					(error) => handleError(ws, error)
-				)
+			if (p instanceof Promise) return dispatchParsedAsync(ws, p)
 
 			return dispatchParsedSync(ws, p)
 		} catch (error) {
@@ -1138,16 +1149,21 @@ export function buildWSRoute(
 		}
 	}
 
+	return [fetchHandler, pickWSOptions(hook)] as const
+}
+
+function pickWSOptions(hook: AnyWSLocalHook) {
 	const options: Partial<WebSocketHandler<any>> = nullObject()
 	for (const k of wsOptions)
 		if ((hook as any)[k] !== undefined)
 			(options as any)[k] = (hook as any)[k]
 
-	return [fetchHandler, options] as const
+	return options
 }
 
 export function resolveWSOptions(
-	entries: WSOptionsEntry[]
+	entries: WSOptionsEntry[],
+	quiet?: boolean
 ): WSOptions | undefined {
 	if (!entries || entries.length === 0) return undefined
 	if (entries.length === 1) return { ...entries[0].value }
@@ -1163,6 +1179,7 @@ export function resolveWSOptions(
 			if (
 				key in result &&
 				(result as any)[key] !== incoming &&
+				!quiet &&
 				!warned?.has(key)
 			) {
 				;(warned ??= new Set()).add(key)
@@ -1182,7 +1199,8 @@ const routeOwnedKeys = new WeakMap<WSOptions, Set<string>>()
 
 export function accumulateWSOptions(
 	target: WSOptions,
-	routeOptions: WSOptions
+	routeOptions: WSOptions,
+	quiet?: boolean
 ) {
 	let owned = routeOwnedKeys.get(target)
 	if (!owned) routeOwnedKeys.set(target, (owned = new Set()))
@@ -1192,7 +1210,7 @@ export function accumulateWSOptions(
 		const current = (target as any)[key]
 
 		if (key in target && current !== incoming) {
-			if (isBun) {
+			if (isBun && !quiet) {
 				console.warn(
 					`[Elysia] Conflicting per-route WebSocket option '${key}'\nBun uses one global WebSocket config per server, per-route values are not enforced (for limits the strictest route wins, otherwise the last-registered route).`
 				)
@@ -1216,6 +1234,22 @@ export function accumulateWSOptions(
 }
 
 const MAX_INFLIGHT_MESSAGES = 256
+
+export function declaredWSOptions(app: AnyElysia) {
+	const config =
+		resolveWSOptions(app['~ext']!.capability!.ws!.options!, true) ??
+		(nullObject() as WSOptions)
+
+	for (const route of app['~routes'])
+		if (route[0] === 'WS' && route[4])
+			accumulateWSOptions(
+				config,
+				pickWSOptions(route[4] as AnyWSLocalHook) as WSOptions,
+				true
+			)
+
+	return config
+}
 
 export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 	let lifecycle:

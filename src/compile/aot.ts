@@ -3,6 +3,7 @@ import { nullObject } from '../utils'
 import packageJson from '../../package.json'
 import type { CoerceNode } from '../type/coerce'
 import type { routeShape } from './handler/route-shape'
+import type { ValidatorOptions } from '../validator'
 
 export const AOT_MANIFEST_FORMAT = 8
 const AOT_ABI = `${packageJson.version}:${AOT_MANIFEST_FORMAT}`
@@ -90,8 +91,8 @@ export type FrozenMirrorFactory = (
 
 export interface FrozenMirror {
 	/**
-	 * Without `u`: `(v) => cleaned` directly
-	 * With `u`: `({ unions }) => (v) => cleaned`
+	 * Without `u` or sanitize: `(v) => cleaned` directly
+	 * With either: `({ unions, h0..hN }) => (v) => cleaned`
 	 */
 	s: FrozenMirrorFactory | ((value: unknown) => unknown)
 	// unions (`u[ui][i]`)
@@ -100,7 +101,7 @@ export interface FrozenMirror {
 
 export type FrozenBothFactory = (
 	External: unknown,
-	// `d` (`{ unions }` built from the entry's `u`) feeds the mirror
+	// `d` (`{ unions }` from the entry's `u`, `h0..hN` from sanitize) feeds the mirror
 	d: unknown
 ) => {
 	check?: (value: unknown) => boolean
@@ -220,17 +221,20 @@ export interface ReconstructImpl {
 	): StringCodecNode[]
 	instantiateFrozenMirror(
 		frozen: FrozenMirror,
-		schema: unknown
+		schema: unknown,
+		sanitize?: ValidatorOptions['sanitize']
 	): (value: unknown) => unknown
 	instantiateFrozenDecodeMirror(
 		frozen: FrozenMirror,
 		schema: unknown,
+		sanitize?: ValidatorOptions['sanitize'],
 		dir?: 'decode' | 'encode'
 	): (value: unknown) => unknown
 	instantiateFrozenBoth(
 		frozen: FrozenValidator,
 		checkSchema: unknown,
-		mirrorSchema: unknown
+		mirrorSchema: unknown,
+		sanitize?: ValidatorOptions['sanitize']
 	): {
 		check?: (value: unknown) => boolean
 		clean?: (value: unknown) => unknown
@@ -578,7 +582,6 @@ export interface CaptureImpl {
 		hasDefault: boolean
 		coerces: unknown
 		normalize: boolean | 'exactMirror' | 'typebox' | undefined
-		sanitize: unknown
 		buildResult: CheckBuildResult
 	}): void
 

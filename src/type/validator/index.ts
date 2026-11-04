@@ -55,7 +55,7 @@ import {
 	takeFileTypeChecks,
 	type PendingFileTypeCheck
 } from '../elysia/file-type'
-import { ELYSIA_FORM_PROTOTYPE, nullObject } from '../../utils'
+import { ELYSIA_FORM_PROTOTYPE, EmptyObject, nullObject } from '../../utils'
 import { ValidationError } from '../../error'
 import {
 	applyPrecomputed,
@@ -737,7 +737,6 @@ export class TypeBoxValidator<
 						hasDefault: this.hasDefault,
 						coerces: options.coerces,
 						normalize: options.normalize,
-						sanitize: options.sanitize,
 						buildResult: build
 					})
 				else if (!capturing) dropCompiledSource(this.tb)
@@ -834,7 +833,8 @@ export class TypeBoxValidator<
 			const both = reconstruct().instantiateFrozenBoth(
 				frozen!,
 				this.schema,
-				schema
+				schema,
+				options?.sanitize
 			)
 			this.reconstructedCheck = both.check
 			this.Clean =
@@ -893,9 +893,12 @@ export class TypeBoxValidator<
 									clean =
 										reconstruct().instantiateFrozenMirror(
 											m,
-											schema
+											schema,
+											options?.sanitize
 										)
 								} catch (error) {
+									if (options?.sanitize) throw error
+
 									warnMirrorFailure(schema, error)
 									clean = (v) => v
 								}
@@ -921,6 +924,9 @@ export class TypeBoxValidator<
 					}
 				}
 			} catch (error) {
+				// TypeBox Clean can't sanitize, like `exactMirrorRequired` above
+				if (options?.sanitize) throw error
+
 				warnMirrorFailure(schema, error)
 
 				if (options?.normalize !== false) this.Clean = typeboxClean
@@ -1045,6 +1051,7 @@ export class TypeBoxValidator<
 						run = reconstruct().instantiateFrozenDecodeMirror(
 							m,
 							schema,
+							options?.sanitize,
 							dir
 						)
 					} catch {
@@ -1310,7 +1317,7 @@ export class TypeBoxValidator<
 		if (value === undefined || value === null)
 			return {
 				value: (schema['~kind'] === 'Object'
-					? nullObject()
+					? new EmptyObject()
 					: value) as Static<T>
 			}
 
@@ -1320,7 +1327,7 @@ export class TypeBoxValidator<
 			!Array.isArray(value) &&
 			Object.keys(value as object).length === 0
 		)
-			return { value: nullObject() as Static<T> }
+			return { value: new EmptyObject() as Static<T> }
 	}
 
 	async FromAsync(value: Static<T>, type?: string): Promise<Static<T>> {

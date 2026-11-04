@@ -1,5 +1,5 @@
 import { type createReadStream as CreateReadStream } from 'fs'
-import { type stat as Stat } from 'fs/promises'
+import { type readFile as ReadFile, type stat as Stat } from 'fs/promises'
 import type { BunFile } from 'bun'
 
 import { isBun } from './constants'
@@ -67,6 +67,7 @@ export const file = (path: string) => new ElysiaFile(path)
 
 let createReadStream: typeof CreateReadStream
 let stat: typeof Stat
+let readFile: typeof ReadFile
 
 function warnMissing() {
 	console.warn(
@@ -110,6 +111,7 @@ export class ElysiaFile {
 
 				createReadStream = fs.createReadStream
 				stat = fs.promises.stat
+				readFile = fs.promises.readFile
 			}
 		}
 	}
@@ -138,6 +140,14 @@ export class ElysiaFile {
 		stream?.on?.('error', () => {})
 
 		return stream
+	}
+
+	async read() {
+		return new File(
+			[await readFile(this.path)],
+			this.path.split(/[\\/]/).pop()!,
+			{ type: this.type }
+		)
 	}
 
 	slice(start: number, end: number) {

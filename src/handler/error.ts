@@ -12,7 +12,7 @@ import {
 	PROBLEM_JSON
 } from '../error'
 import { StatusMap } from '../constants'
-import { isNotEmpty, isPlainObject, nullObject } from '../utils'
+import { EmptyObject, isNotEmpty, isPlainObject } from '../utils'
 import { materializeSetHeaders } from '../adapter/utils'
 
 import type { Context } from '../context'
@@ -26,23 +26,28 @@ const defineQuery = (context: Context, value: unknown) =>
 		configurable: true
 	})
 
+// one descriptor for every error: per-error closures cost ~150 B a response
+// and drop the context to dictionary mode on V8
+const lazyQuery = {
+	configurable: true,
+	enumerable: true,
+	get(this: any) {
+		const value = parseQueryFromURL(this.request.url, this.qi)
+		defineQuery(this, value)
+
+		return value
+	},
+	set(this: any, value: unknown) {
+		defineQuery(this, value)
+	}
+}
+
 function parseQuery(context: Context) {
 	const c = context as any
 
 	if (c.query !== undefined || c.qi === undefined) return
 
-	Object.defineProperty(context, 'query', {
-		configurable: true,
-		enumerable: true,
-		get() {
-			const value = parseQueryFromURL(c.request.url, c.qi)
-			defineQuery(context, value)
-			return value
-		},
-		set(value) {
-			defineQuery(context, value)
-		}
-	})
+	Object.defineProperty(context, 'query', lazyQuery)
 }
 
 const isPristineNotFound = (context: Context, error: any) =>
@@ -192,10 +197,15 @@ export function extensionOf(self: any) {
 	const extension = self.extension
 	const members = typeof extension === 'function' && extension.call(self)
 
-	if (!isPlainObject(members)) return
+	// a parsed query or body is an EmptyObject, built by this same copy
+	if (
+		!isPlainObject(members) &&
+		!(members && Object.getPrototypeOf(members) === EmptyObject.prototype)
+	)
+		return
 
-	// null prototype: an own `__proto__` key stays a member
-	const served = nullObject()
+	// no Object.prototype on the chain: an own `__proto__` key stays a member
+	const served = new EmptyObject()
 
 	for (const [key, value] of Object.entries(members))
 		// a function is behavior, not data: `toJSON`, `next` or `then` would

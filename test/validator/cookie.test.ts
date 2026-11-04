@@ -594,12 +594,16 @@ describe('Cookie Validation', () => {
 
 	it('handle prototype pollution', () => {
 		const app = new Elysia().get('/profile', ({ cookie }) => {
-			const proto = Object.getPrototypeOf(cookie)
-			const protoIsClean = proto === Object.prototype || proto === null
+			// the chain reaches neither Object.prototype nor the payload of
+			// the `__proto__` cookie
+			const protoIsClean =
+				!Object.prototype.isPrototypeOf(cookie) &&
+				!('toString' in cookie) &&
+				!('constructor' in cookie) &&
+				!('injected' in cookie)
 			return {
 				hasPhantomValue: 'value' in cookie,
 				prototypeIsClean: protoIsClean,
-				prototype: proto,
 				enumeratedKeys: (() => {
 					const keys: string[] = []
 					for (const k in cookie) keys.push(k)
@@ -621,7 +625,6 @@ describe('Cookie Validation', () => {
 		).resolves.toEqual({
 			hasPhantomValue: false,
 			prototypeIsClean: true,
-			prototype: null,
 			enumeratedKeys: ['a']
 		})
 	})

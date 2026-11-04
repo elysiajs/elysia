@@ -120,7 +120,6 @@ if (!hasSyncHmac) {
 		})
 
 		it('resolves pending cookies before reflection exposes descriptors', async () => {
-			let pending: boolean | undefined
 			let exposedSecret: unknown
 
 			const app = new Elysia({
@@ -132,7 +131,6 @@ if (!hasSyncHmac) {
 					'sid'
 				)?.value
 
-				pending = Object.prototype.hasOwnProperty.call(entry, '~unsign')
 				exposedSecret = entry?.['~unsign']
 
 				return entry?.value
@@ -142,7 +140,6 @@ if (!hasSyncHmac) {
 			const valid = await app.handle(req('/', `sid=${value}`))
 			expect(valid.status).toBe(200)
 			await expect(valid.text()).resolves.toBe('hello')
-			expect(pending).toBe(false)
 			expect(exposedSecret).toBeUndefined()
 
 			const invalid = await app.handle(req('/', 'sid=garbage.nothmac'))

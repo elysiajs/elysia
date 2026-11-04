@@ -100,6 +100,27 @@ describe('shared AOT branch checks', () => {
 		expect(src).not.toMatch(/u: \[\[/)
 	})
 
+	// a check is named check_<n>, and the manifest must not mistake a schema
+	// key or a literal for it: a renamed key rejects every valid request
+	it('keeps schema keys and literals shaped like a check name', async () => {
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					check_0: t.String(),
+					check_ab: t.Literal('call check_0(value)')
+				})
+			},
+			({ body }) => body
+		)
+
+		const src = await compileToSource(app)
+
+		expect(src).toContain('"check_0" in value')
+		expect(src).toContain('"check_ab" in value')
+		expect(src).toContain('call check_0(value)')
+	})
+
 	it('dedups entries for one coerced schema shared across routes', async () => {
 		const schema = t.Object({ page: t.Numeric() })
 		const app = new Elysia()
@@ -109,15 +130,10 @@ describe('shared AOT branch checks', () => {
 
 		const src = await compileToSource(app)
 
-		// TypeBox names its compiled check by content hash, and the hash is
-		// not stable across captures of the same logical schema — if it ever
-		// leaks back into dedup keys, the shared schema splits into
-		// duplicate entries again
+		// TypeBox restarts its check numbering on every Build, so the same
+		// logical schema captures to the same text without any renaming
 		expect((src.match(/^const _c\d+ =/gm) ?? []).length).toBe(1)
-		expect(src).not.toMatch(/\bcheck_[0-9a-f]+\b/)
 
-		// renamed identifiers must still execute: declaration and every
-		// reference stay aligned within each source unit
 		const v = evalManifest(src)
 		const check = v.GET['/a'].query.u[0][0]([])
 		expect(check(1)).toBe(true)

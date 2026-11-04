@@ -1,10 +1,11 @@
-import { Elysia, ElysiaFile, file, status, t } from 'elysia'
+import { Elysia, ElysiaFile, file, form, status, t } from 'elysia'
 import * as adapterUtils from 'elysia/adapter/utils'
 import * as compiled from 'elysia/compiled'
 import { trace } from 'elysia/trace'
 import assertListenError from '../assert-listen-error.cjs'
 import assertTrace from '../assert-trace.cjs'
 import assertNullBodyStatus from '../assert-null-body-status.cjs'
+import assertFormFile from '../assert-form-file.cjs'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -244,6 +245,7 @@ if (openedFiles !== 2)
 	)
 
 const temp = await mkdtemp(join(tmpdir(), 'elysia-file-'))
+await assertFormFile(Elysia, file, form, status, t, temp, 'ESM')
 let unhandled
 const onUnhandled = (error) => (unhandled = error)
 try {

@@ -14,7 +14,8 @@ it('rejects unsafe names without changing duplicate, empty, or quoted values', (
 	const parsed = parse(
 		'__proto__=bad; first=one; first=two; constructor=bad; bare; spaced = two\t; empty=; quoted="a"; prototype=bad'
 	)
-	expect(Object.getPrototypeOf(parsed)).toBeNull()
+	expect(Object.prototype.isPrototypeOf(parsed)).toBe(false)
+	expect('constructor' in parsed).toBe(false)
 	expect({ ...parsed }).toEqual({
 		first: 'one',
 		spaced: 'two',
@@ -36,7 +37,8 @@ it('keeps decoding and request isolation across raw cookie paths', async () => {
 		const first = await read(header, config)
 		const second = await read(header, config)
 		expect(first).not.toBe(second)
-		expect(Object.getPrototypeOf(first)).toBeNull()
+		expect(Object.prototype.isPrototypeOf(first)).toBe(false)
+		expect('constructor' in first).toBe(false)
 		expect(Object.keys(first)).toEqual(['data', 'bad'])
 		expect(first.bad).toBe('%E0%A4%A')
 		expect(first.data).toEqual(

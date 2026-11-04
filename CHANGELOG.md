@@ -73,6 +73,7 @@ Breaking Change:
 
 Behavior Change:
 
+- a generator's chunks are cleaned by the route's `response` schema for the status they are sent with: fields the schema leaves out no longer reach the client, `status()` around a generator no longer fails with a 500, and `sse()` keeps its framing. A chunk is not validated: a string, bytes, a Blob, a Date or a Map goes out as it came, and Clean throwing errors the stream instead of sending the chunk. A `ReadableStream` and a generator inside a `Response` are unchanged
 - AOT: a route whose runtime hooks, schemas, cookie signing or app config differ from the build now compiles at runtime and warns once (`[elysia-aot] GET /x differs from the AOT build, compiled at runtime`); with the handler JIT stripped it fails instead (a `500` on first request, or at boot under `precompile` / `.compile()`). A route whose schema cannot be compared (a custom prototype, a symbol key, a cycle) is never replayed. A conditional hook must change the hook list (`isProd ? [auth] : []`), never swap one function for another at the same position, and the runtime bundle must keep native `async` functions
 - a cookie schema whose signing config can't be resolved unambiguously now throws at compile: a `$ref` signing can't follow (JSON pointer, anchor, URL, unknown name, `$dynamicRef`, `$recursiveRef`), or same-named definitions that disagree on anything but `sign`
 - the 1.x `(path, handler, hook)` argument order now throws at registration instead of serving the hook object as the response, including a hook that only enables macros (`{ auth: true }`)
@@ -153,6 +154,9 @@ Behavior Change:
 - a WebSocket upgrade throws when a `derive` / `decorate` key collides with a WebSocket member (`send`, `raw`, `subscribe`, …) instead of breaking the connection
 - [Type] WebSocket: `body` is possibly `undefined` in the hooks that run at the upgrade (`transform`, `beforeHandle`, `error`), and `ws.defer` is no longer typed (a socket has none)
 - [Type] WebSocket `send` / `publish` / a returned value take the `200` schema's shape (other statuses go through `status()`), `afterHandle` returns `void` (its value is dropped) and `afterResponse`'s `responseValue` is `unknown`
+- the raw `query`, urlencoded and multipart `body`, cookie records and per-request `set.headers` are `EmptyObject` instances (exported from `elysia/utils`) instead of `Object.create(null)`, so V8 keeps them in fast mode. There is still no `Object.prototype` on the chain and request keys like `__proto__` stay plain data, but `Object.getPrototypeOf(x)` is now a frozen key-less object instead of `null`: `isPlainObject(x)` is `false`, and code that accepts only a `null` or `Object.prototype` prototype must also accept a key-less null-prototype one
+- `ValidationError#errors` and the lazy `query` an error hook sees are shared accessors that read from their receiver, so every error stays in V8's fast mode (about 2.8 KB less per 422 on Node). Reading `errors` through a `Proxy`, an `Object.create(error)` child or a detached getter now throws; read it from the error itself
+- a cookie entry clears its internal `~unsign` and `~raw` markers by setting them to `undefined` instead of deleting them, so the entry stays in V8's fast mode (about 300–450 B less per request on Node for a signed cookie read or a JSON cookie write). `Object.keys(cookie.x.cookie)` and the copy an updater receives can now list those keys with an `undefined` value
 
 Improvement:
 
@@ -174,6 +178,8 @@ Improvement:
 - [Type] `.macro()` definitions infer each macro's schema from the definition record instead of five reverse-mapped channels: ~8.7k fewer instantiations per macro (repo type benchmark −13%)
 - an `.onError()` hook no longer disqualifies static-literal `GET` routes from Bun native static promotion: those routes are now promoted even when a global or route-local `.onError()` hook exists, because no user code runs on a promoted route and the hook can therefore never fire for it. `afterResponse`, `mapResponse`, `parse`, `transform`, schemas, `trace` and every other hook still keep the route on the JS lane. Since Bun's native static table now serves more routes, be aware that a promoted route answers `HEAD` (200) and conditional `GET` (`If-None-Match` matching Bun's `etag` -> 304) natively, without reaching the JS lane or your `.onError()` hook (see Known issue)
 - a route's `response` status map is kept frozen, and routes declaring equal maps (same statuses and schemas) share one container while it stays in the bounded snapshot cache, instead of a writable copy per route that JSC sized to the largest status: a route with `{ 200: t.String(), 404: t.String() }` retains 447 B instead of 5.8 KB, and about 5 KB less when every route's map differs
+- a generator / ReadableStream response makes its pull callbacks once per stream instead of per chunk, and a tee'd stream (afterResponse, trace) trims its buffer in place: about 120–180 B less per chunk, 500 B with afterResponse (Bun and Node)
+- a WebSocket message no longer allocates a closure scope for promise branches it doesn't take (about 48 B less per message)
 
 Bug fix:
 
@@ -230,6 +236,9 @@ Bug fix:
 - many `.group()` / `.guard()` callbacks that each `.use()` a plugin with many `global` hooks overflowed the stack at compile (`Maximum call stack size exceeded`); those hooks now stay inside each callback
 - AOT: the stripped `flushMemory()` now makes the same `Bun.gc()` / optional `globalThis.gc?.()` call as the unstripped helper
 - [#2024](https://github.com/elysiajs/elysia/issues/2024) an AOT wired build crashed at startup with `The superclass is not a constructor` (e.g. a response schema with a `t.Union` of literals)
+- `sanitize` was silently dropped from a binary compiled with `--disallow-code-generation-from-strings=strict`: the AOT build refused to freeze a sanitized mirror, and the live one fell back to TypeBox Clean, which can't sanitize. Sanitized mirrors are now frozen and take the functions from the app's config, and a slot that still can't get a mirror fails the route instead of serving unsanitized input
+- the AOT build renamed a schema key or string that looked like a check name (`check_0`, `check_ab`), so a valid request got a 422 or lost the key
+- update `exact-mirror` to `1.2.7`: `sanitize` reaches the items of an array of strings, and an object with absent optional keys stays out of V8 dictionary mode
 - [#2031](https://github.com/elysiajs/elysia/issues/2031) [Type] a generic macro's returned schema was typed at its constraint; a `$type` lambda's `body` / `query` / `params` / `headers` / `cookie` / `response` members now type it per call site
 - error hooks get `cookie` after a parse, transform, validation or cookie-signature failure (reading it crashed into a `500`); those cookies are not validated, signed ones are verified on read
 - setting a cookie whose schema field is a codec (e.g. `t.Date`) sends, and signs, the encoded value, so the next request reads it back instead of failing with `422`
@@ -262,6 +271,7 @@ Chore:
 - declare the minimum supported Node.js version (`engines.node`) and test it in CI
 - `build()` loads the TypeBox graph once when any route carries a TypeBox schema (~100 ms at boot, flat in route count), so the first schema-bearing request no longer stalls the event loop; schema-less, Standard-Schema-only and AOT apps are unaffected
 - a `listen()` boot that fails after the server bound (rejected async plugin, `onStart()` or `build()` throw) is rolled back, logged once as `[Elysia] listen() failed:` and sets `process.exitCode = 1`
+- a WebSocket upgrade that arrived before `listen()` finished starting (TypeBox still importing, an async `onStart()`) answered `400`: Bun only upgrades a request on a listener that had a `websocket` config when it arrived, and `listen()` added that config at `server.reload()`. The declared options now go to the initial `Bun.serve()` call, so the socket opens with its limits, and an invalid WebSocket option throws from `listen()`. If the built options end up different (an async plugin, a macro `introspect` or a route added after `listen()` changed them), an upgrade that arrived before then gets `503`, since its socket couldn't take the new limits
 
 Known issue:
 

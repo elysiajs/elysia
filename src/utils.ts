@@ -24,6 +24,14 @@ export type DeriveEntry =
 	| readonly [Function, 'mapDerive' | 'beforeHandle']
 
 export const nullObject = () => Object.create(null)
+
+export const EmptyObject = /* @__PURE__ */ (() => {
+	function EmptyObject() {}
+	EmptyObject.prototype = Object.freeze(Object.create(null))
+
+	return Object.freeze(EmptyObject)
+})() as unknown as { new (): any }
+
 export const mapDeriveEntry = (fn: Function): DeriveEntry => [fn, 'mapDerive']
 
 export const deriveEntryFn = (entry: DeriveEntry) =>
@@ -843,6 +851,32 @@ export function formToFormData(value: Record<keyof any, unknown>) {
 	return formData
 }
 
+function readFormFiles(form: Record<string, unknown>) {
+	if (isBun) return form
+
+	const pending: Promise<unknown>[] = []
+
+	for (const key in form) {
+		const field = form[key]
+
+		if (field instanceof ElysiaFile)
+			pending.push(field.read().then((file) => (form[key] = file)))
+		else if (
+			Array.isArray(field) &&
+			field.some((value) => value instanceof ElysiaFile)
+		)
+			pending.push(
+				Promise.all(
+					field.map((value) =>
+						value instanceof ElysiaFile ? value.read() : value
+					)
+				).then((files) => (form[key] = files))
+			)
+	}
+
+	return pending.length ? Promise.all(pending).then(() => form) : form
+}
+
 /**
  * Return a `multipart/form-data` response.
  *
@@ -867,9 +901,8 @@ export const form = <const T extends Record<keyof any, unknown>>(
 	// key, so assigning it would hand the caller's input control of this
 	// object's prototype — and therefore of response dispatch — the moment
 	// anyone writes `form(body)`. `setPrototypeOf` after the copy is the brand.
-	Object.setPrototypeOf(
-		{ ...value },
-		ELYSIA_FORM_PROTOTYPE
+	readFormFiles(
+		Object.setPrototypeOf({ ...value }, ELYSIA_FORM_PROTOTYPE)
 	) as unknown as ElysiaFormData<T>
 
 export const macroType = <L extends MacroTypeLambda>() =>
@@ -927,6 +960,28 @@ export const sseData = (value: string) => {
 		.join('')
 }
 
+// reads `this`: a cleaned copy of the payload serializes itself
+function toSSE(this: SSEPayload) {
+	let s = ''
+	if (this.id !== undefined && this.id !== null) s += sseField('id', this.id)
+	if (this.event) s += sseField('event', this.event)
+	if (
+		typeof this.retry === 'number' &&
+		Number.isFinite(this.retry) &&
+		this.retry >= 0
+	)
+		s += `retry: ${Math.trunc(this.retry)}\n`
+	if (this.data === null) s += 'data: null\n'
+	else if (typeof this.data === 'string') s += sseData(this.data)
+	else if (typeof this.data === 'object')
+		s += `data: ${JSON.stringify(this.data)}\n`
+	// number / boolean / bigint: `data: 0` is a valid event, not an empty one
+	else if (this.data !== undefined) s += sseData(String(this.data))
+
+	if (s) s += '\n'
+	return s
+}
+
 export const sse = <
 	const T extends
 		| string
@@ -962,27 +1017,7 @@ export const sse = <
 	payload.sse = true
 
 	// @ts-ignore
-	payload.toSSE = () => {
-		let s = ''
-		if (payload.id !== undefined && payload.id !== null)
-			s += sseField('id', payload.id)
-		if (payload.event) s += sseField('event', payload.event)
-		if (
-			typeof payload.retry === 'number' &&
-			Number.isFinite(payload.retry) &&
-			payload.retry >= 0
-		)
-			s += `retry: ${Math.trunc(payload.retry)}\n`
-		if (payload.data === null) s += 'data: null\n'
-		else if (typeof payload.data === 'string') s += sseData(payload.data)
-		else if (typeof payload.data === 'object')
-			s += `data: ${JSON.stringify(payload.data)}\n`
-		// number / boolean / bigint: `data: 0` is a valid event, not an empty one
-		else if (payload.data !== undefined) s += sseData(String(payload.data))
-
-		if (s) s += '\n'
-		return s
-	}
+	payload.toSSE = toSSE
 
 	return payload as any
 }

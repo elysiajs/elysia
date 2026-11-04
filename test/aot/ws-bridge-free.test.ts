@@ -171,7 +171,7 @@ describe('frozen WebSocket validator reconstruction', () => {
 			).toBe(wiredRes.Check(r))
 	})
 
-	it('strips undeclared body properties without a public Clean method', () => {
+	it('strips undeclared body properties', () => {
 		const hook = { body: t.Object({ a: t.String() }) }
 		freezeWS(hook)
 
@@ -191,7 +191,6 @@ describe('frozen WebSocket validator reconstruction', () => {
 		expect(frozen).toBeDefined()
 
 		expect((frozen!.body as any).hasCodec).toBe(false)
-		expect((frozen!.body as any).Clean).toBeUndefined()
 
 		const attacker = { a: 'hi', evil: 'INJECTED', nested: { x: 1 } }
 		const wiredOut = (wired.body as any).EncodeFrom(

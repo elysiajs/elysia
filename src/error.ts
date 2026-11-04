@@ -475,6 +475,19 @@ function scopeIssues(errors: any[]) {
 	return out ?? errors
 }
 
+// one accessor pair for every instance: fresh closures per error drop V8
+// objects to dictionary mode
+const lazyErrors = {
+	get(this: ValidationError) {
+		return this['~resolve']().errors
+	},
+	set(this: ValidationError, v: unknown) {
+		defineData(this, 'errors', v)
+	},
+	enumerable: true,
+	configurable: true
+}
+
 export class ValidationError extends ElysiaError {
 	/** Response validation is a server error; other validation is a client error. */
 	status: 422 | 500 = 422
@@ -511,14 +524,7 @@ export class ValidationError extends ElysiaError {
 
 		this.#findCustomError = findCustomError
 
-		Object.defineProperty(this, 'errors', {
-			get: () => this['~resolve']().errors,
-			set(v) {
-				defineData(this, 'errors', v)
-			},
-			enumerable: true,
-			configurable: true
-		})
+		Object.defineProperty(this, 'errors', lazyErrors)
 	}
 
 	/** @internal lazily resolve and memoize errors/customError/message */
