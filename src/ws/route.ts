@@ -59,7 +59,8 @@ import {
 import {
 	adoptErrorType,
 	fallbackErrorResponse,
-	createErrorHandler
+	createErrorHandler,
+	resolveStatus
 } from '../handler/error'
 import {
 	drainDisposables,
@@ -250,17 +251,23 @@ function wsErrorFrameFallback(error: any): string | Promise<string> {
 
 	const frame = frameOf(error)
 	const masked = () => internalServerErrorBodyString(error)
+	const status = resolveStatus(error?.status)
+	// below 100 HTTP can't build its Response and serves the masked 500
+	if (typeof status === 'number' && status < 100) return masked()
 
 	// an answer that can't serialize (a cycle, a BigInt) still sends a
 	// frame: here when sync, through `sendErrorFrame`'s rejection when async
 	try {
 		const served = fallbackErrorResponse(
-			// the status HTTP's `applyErrorStatus` sets first: a status-less
-			// error serves 500, so production masks its message
+			// a status-less or invalid one serves 500, as HTTP's does, so
+			// production masks its message
 			{
 				set: {
 					headers: new EmptyObject(),
-					status: error?.status || 500
+					status:
+						typeof status === 'number' && status >= 100
+							? status
+							: 500
 				}
 			} as any,
 			error,
