@@ -1414,29 +1414,28 @@ describe('WebSocket error frame fallback without error hooks', () => {
 		}
 	})
 
-	// A `value` that can't serialize still gets an answer: the client must
-	// learn the message failed, not see silence on an open socket. Sync and
-	// async values fail on different paths, so both are pinned
-	for (const async of [false, true])
-		it(`sends the masked 500 when a ${async ? 'promised' : 'sync'} value cannot serialize`, async () => {
-			const circular = () => {
-				const self: Record<string, unknown> = {}
-				self.self = self
+	// HEAD's WS ladder served an invalid status as 500, and HTTP can't build
+	// a Response for one, so both mask it: WS must not leak the message
+	it('masks a message under an invalid status in production', async () => {
+		process.env.NODE_ENV = 'production'
 
-				return self
+		class Below extends HTTPError.id('BELOW', 99 as any) {
+			constructor() {
+				super('secret message')
 			}
-
-			class Circular extends HTTPError.id('CIRCULAR', 400) {
-				value() {
-					return async ? Promise.resolve(circular()) : circular()
-				}
+		}
+		class NotANumber extends HTTPError.id('NAN', 'abc' as any) {
+			constructor() {
+				super('secret message')
 			}
+		}
 
+		for (const Invalid of [Below, NotANumber]) {
 			const app = new Elysia()
 				.use(websocket())
 				.ws('/ws', {
 					message() {
-						throw new Circular()
+						throw new Invalid()
 					}
 				})
 				.listen(0)
@@ -1450,16 +1449,69 @@ describe('WebSocket error frame fallback without error hooks', () => {
 				const msg = wsMessage(ws)
 				ws.send('trigger')
 
-				await within(msg, 1000, 'error frame')
 				const { data } = await msg
 
-				expect(JSON.parse(String(data))).toMatchObject({
-					type: 'internal-server-error',
-					status: 500
-				})
+				expect(String(data)).not.toContain('secret message')
+				expect(JSON.parse(String(data))).toMatchObject({ status: 500 })
 			} finally {
 				if (ws && ws.readyState !== WebSocket.CLOSED) await wsClosed(ws)
 				app.stop()
 			}
-		})
+		}
+	})
+
+	// A `value` that can't serialize still gets an answer: the client must
+	// learn the message failed, not see silence on an open socket. Sync and
+	// async values fail on different paths, a throwing serializer and one
+	// answering `undefined` differently again, so each pair is pinned
+	const unserializable = {
+		circular: () => {
+			const self: Record<string, unknown> = {}
+			self.self = self
+
+			return self
+		},
+		'undefined toJSON': () => ({ toJSON: () => undefined })
+	}
+
+	for (const [kind, make] of Object.entries(unserializable))
+		for (const async of [false, true])
+			it(`sends the masked 500 when a ${async ? 'promised' : 'sync'} ${kind} value cannot serialize`, async () => {
+				class Circular extends HTTPError.id('CIRCULAR', 400) {
+					value() {
+						return async ? Promise.resolve(make()) : make()
+					}
+				}
+
+				const app = new Elysia()
+					.use(websocket())
+					.ws('/ws', {
+						message() {
+							throw new Circular()
+						}
+					})
+					.listen(0)
+
+				let ws: WebSocket | undefined
+
+				try {
+					ws = newWebsocket(app.server!)
+					await wsOpen(ws)
+
+					const msg = wsMessage(ws)
+					ws.send('trigger')
+
+					await within(msg, 1000, 'error frame')
+					const { data } = await msg
+
+					expect(JSON.parse(String(data))).toMatchObject({
+						type: 'internal-server-error',
+						status: 500
+					})
+				} finally {
+					if (ws && ws.readyState !== WebSocket.CLOSED)
+						await wsClosed(ws)
+					app.stop()
+				}
+			})
 })
