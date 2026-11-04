@@ -236,7 +236,7 @@ export function readAnnotation(
 		: annotation
 }
 
-function fallbackErrorResponse(
+export function fallbackErrorResponse(
 	context: Context,
 	error: any,
 	mapResponse: (

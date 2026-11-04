@@ -142,4 +142,35 @@ describe('WebSocket event dispatch', () => {
 		await wsClosed(ws)
 		app.stop()
 	})
+
+	// ping/pong handlers receive (ws, data), close receives (ws, code,
+	// reason): one shared wrapper must not hand a handler a stray argument
+	it('passes ping/pong handlers exactly (ws, data)', async () => {
+		const arity: Record<string, number> = {}
+
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws', {
+				ping() {
+					arity.ping = arguments.length
+				},
+				pong() {
+					arity.pong = arguments.length
+				},
+				message() {}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+		;(ws as any).ping('a')
+		;(ws as any).pong('b')
+
+		await Bun.sleep(50)
+
+		expect(arity).toEqual({ ping: 2, pong: 2 })
+
+		await wsClosed(ws)
+		app.stop()
+	})
 })
