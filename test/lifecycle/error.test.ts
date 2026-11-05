@@ -2,6 +2,7 @@
 import {
 	Elysia,
 	InternalServerError,
+	NotFoundError,
 	ParseError,
 	ValidationError,
 	t,
@@ -527,5 +528,32 @@ describe('error', () => {
 		}
 
 		expect(res.status).toBe(422)
+	})
+
+	it('onError returning status() must not corrupt the shared NotFoundError singleton', async () => {
+		const errors: Array<{ status: unknown; message: unknown }> = []
+
+		const app = new Elysia().onError(({ error, status }) => {
+			if (error instanceof NotFoundError)
+				errors.push({ status: error.status, message: error.message })
+
+			return status(404, 'custom not found body')
+		})
+
+		const res1 = await app.handle(req('/missing'))
+		expect(res1.status).toBe(404)
+		expect(await res1.text()).toBe('custom not found body')
+
+		const res2 = await app.handle(req('/missing'))
+		expect(res2.status).toBe(404)
+		expect(await res2.text()).toBe('custom not found body')
+
+		expect(errors[0].status).toBe(404)
+		expect(errors[0].message).toBe('NOT_FOUND')
+
+		// the thrown NotFoundError is a shared instance created once per compiled
+		// handler — it must not be mutated by the onError return value
+		expect(errors[1].status).toBe(404)
+		expect(errors[1].message).toBe('NOT_FOUND')
 	})
 })
