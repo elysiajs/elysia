@@ -49,6 +49,42 @@ afterEach(() => {
 
 /** Handler JIT may be stubbed only when every frozen route can serve without it. */
 describe('AOT strip detection (analyzeStubbability)', () => {
+	it('replays a plugin cookie route like the same route on the root', async () => {
+		const cookie = { secrets: 'secret', sign: ['session'] }
+		const route = (app: AnyElysia) =>
+			(app as any).get(
+				'/',
+				({ cookie: { session } }: any) => session.value
+			)
+
+		const onRoot = await analyzeStubbability(
+			route(new Elysia({ cookie })) as any
+		)
+		const onPlugin = await analyzeStubbability(
+			new Elysia().use(route(new Elysia({ cookie }))) as any
+		)
+
+		expect(onRoot).toEqual({ jit: true, reasons: [] })
+		expect(onPlugin).toEqual(onRoot)
+	})
+
+	it('replays by route position past a WS row', async () => {
+		const cookie = { secrets: 'secret', sign: ['session'] }
+		const plugin = new Elysia({ cookie }).get(
+			'/',
+			({ cookie: { session } }) => session.value
+		)
+
+		const r = await analyzeStubbability(
+			new Elysia()
+				.use(websocket())
+				.ws('/ws', { message() {} })
+				.use(plugin) as any
+		)
+
+		expect(r).toEqual({ jit: true, reasons: [] })
+	})
+
 	it('handler-stubbable: body schema + non-inline handler', async () => {
 		const app = new Elysia().post(
 			'/',

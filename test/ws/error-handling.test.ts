@@ -1424,9 +1424,11 @@ describe('WebSocket error frame fallback without error hooks', () => {
 				super('secret message')
 			}
 		}
-		class NotANumber extends HTTPError.id('NAN', 'abc' as any) {
+		// `HTTPError.id` drops a non-numeric status, so set one on the instance
+		class NotANumber extends HTTPError.id('NAN') {
 			constructor() {
 				super('secret message')
+				;(this as any).status = 'abc'
 			}
 		}
 

@@ -101,6 +101,36 @@ describe('WebSocket response schema redaction', () => {
 		expect(body).not.toBe('{"v":"n:42"}')
 		expect(body).toContain('must be string')
 	})
+
+	// A codec route skips EncodeFrom, so Check alone would pass an object with
+	// undeclared fields straight to the wire, unlike the same schema on HTTP
+	it('strips undeclared fields from a codec response without encoding it', async () => {
+		const Coded = t
+			.Codec(t.String())
+			.Decode((s: string) => Number(s.replace(/^n:/, '')))
+			.Encode((n: number) => `n:${n}`)
+
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/c', {
+				response: t.Object({ v: Coded }),
+				message() {
+					return { v: 'raw', passwordHash: 'SECRET-HASH' } as any
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!, '/c')
+		await wsOpen(ws)
+		const frame = wsMessage(ws)
+		ws.send('go')
+		const body = String((await frame).data)
+
+		await wsClosed(ws)
+		app.stop()
+
+		expect(body).toBe('{"v":"raw"}')
+	})
 })
 
 describe('WebSocket upgrade cookie validation', () => {

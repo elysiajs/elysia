@@ -22,7 +22,7 @@ describe('1.x argument order', () => {
 					query: t.Object({ name: t.String() })
 				})
 			).toThrow(
-				`[Elysia] .${verb}('/swapped', handler, hook) is the 1.x order; Elysia 2 takes (path, hook, handler) — see the 2.0 migration guide`
+				`[Elysia] .${verb}('/swapped', handler, hook) is a legacy order, use (path, hook, handler) instead`
 			)
 		})
 
@@ -44,7 +44,7 @@ describe('1.x argument order', () => {
 				query: t.Object({ name: t.String() })
 			})
 		).toThrow(
-			`[Elysia] .search('/swapped', handler, hook) is the 1.x order`
+			`[Elysia] .search('/swapped', handler, hook) is a legacy order`
 		)
 	})
 
@@ -58,7 +58,7 @@ describe('1.x argument order', () => {
 
 		expect(() =>
 			(app as any).get('/secret', () => 'secret', { auth: true })
-		).toThrow(`[Elysia] .get('/secret', handler, hook) is the 1.x order`)
+		).toThrow(`[Elysia] .get('/secret', handler, hook) is a legacy order`)
 	})
 
 	it('still serves a static object whose keys are not macros', async () => {
@@ -80,7 +80,7 @@ describe('1.x argument order', () => {
 			(app as any).post('/user', () => 'created', {
 				body: t.Object({ name: t.String() })
 			})
-		).toThrow('is the 1.x order')
+		).toThrow('is a legacy order')
 
 		expect(app.routes.length).toBe(0)
 	})
@@ -180,7 +180,7 @@ describe('1.x argument order', () => {
 				(new Elysia() as any).get('/x', () => 'hi', {
 					detail: { summary: 'x' }
 				})
-			).toThrow('is the 1.x order')
+			).toThrow('is a legacy order')
 		})
 
 		it('a static (non-function) handler after a hook passes', async () => {

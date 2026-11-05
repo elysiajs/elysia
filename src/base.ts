@@ -274,6 +274,15 @@ type HocOrigin = number | { origin?: number } | undefined
 const hocOriginOf = (o: HocOrigin) => (typeof o === 'object' ? o.origin : o)
 const emptyHistory = Object.freeze([]) as readonly HistoryEntry[]
 
+type CookieConfig = NonNullable<ElysiaConfig<any, any>['cookie']>
+
+const mergeCookieConfig = (
+	outer: CookieConfig | undefined,
+	inner: CookieConfig | undefined
+) => (outer || inner ? { ...outer, ...inner } : undefined)
+
+const routeCookieConfigs = new WeakMap<object, (CookieConfig | undefined)[]>()
+
 let mutationEpoch = 0
 const extCallbackIndexes = new WeakMap<
 	unknown[],
@@ -665,8 +674,14 @@ export class Elysia<
 		})
 	}
 
-	['~addRoute'](route: InternalRoute) {
-		this.#registerRoute(route)
+	['~addRoute'](route: InternalRoute, sourceIndex?: number) {
+		this.#registerRoute(
+			route,
+			undefined,
+			sourceIndex === undefined
+				? undefined
+				: routeCookieConfigs.get(this)?.[sourceIndex]
+		)
 
 		return this
 	}
@@ -5803,6 +5818,10 @@ export class Elysia<
 		for (let i = 0; i < limit; i++) {
 			const route = declared[i]
 			const childChain = route[6]
+			const cookieConfig = mergeCookieConfig(
+				app['~config']?.cookie,
+				routeCookieConfigs.get(app)?.[i]
+			)
 			let inheritedChain: ChainNode | undefined
 
 			if (childChain === undefined) inheritedChain = preChain
@@ -5838,7 +5857,8 @@ export class Elysia<
 				this['~scopeChild'] ? this : undefined,
 				this['~Prefix'],
 				inheritedChain,
-				name
+				name,
+				cookieConfig
 			)
 		}
 	}
@@ -5848,7 +5868,8 @@ export class Elysia<
 		macroScope: AnyElysia | undefined,
 		prefix: string | undefined,
 		inheritedChain: ChainNode | undefined,
-		source: string | undefined
+		source: string | undefined,
+		cookieConfig: CookieConfig | undefined
 	) {
 		const path = prefix ? joinPath(prefix, route[1]) : route[1]
 		macroScope =
@@ -5871,7 +5892,8 @@ export class Elysia<
 						inheritedChain,
 						macroScope
 					] as unknown as InternalRoute),
-			source
+			source,
+			cookieConfig
 		)
 	}
 
@@ -5999,7 +6021,7 @@ export class Elysia<
 
 			if (isHook)
 				throw new Error(
-					`[Elysia] .${method === '*' ? 'all' : method.toLowerCase()}('${path}', handler, hook) is the 1.x order; Elysia 2 takes (path, hook, handler) — see the 2.0 migration guide`
+					`[Elysia] .${method === '*' ? 'all' : method.toLowerCase()}('${path}', handler, hook) is a legacy order, use (path, hook, handler) instead`
 				)
 		}
 
@@ -6016,14 +6038,13 @@ export class Elysia<
 
 		const appHook = this['~hookChain']
 
-		// The name is only read by the sealed error; toLowerCase + `in` on every
-		// route doubles registration time
 		const verb =
 			this['~generation'] === undefined
 				? 'route'
 				: method === '*'
 					? 'all'
 					: method.toLowerCase()
+
 		this.#assertMutable(verb in this ? verb : 'route')
 		;(this.declaredRoutes ?? this.#materializeDeclaredRoutes()).push(
 			(appHook
@@ -6098,7 +6119,11 @@ export class Elysia<
 		return (this.declaredRoutes = routes)
 	}
 
-	#registerRoute(route: InternalRoute, source?: string) {
+	#registerRoute(
+		route: InternalRoute,
+		source?: string,
+		cookieConfig?: CookieConfig
+	) {
 		this.#assertMutable('route')
 
 		const routes = this.declaredRoutes ?? this.#materializeDeclaredRoutes()
@@ -6106,6 +6131,11 @@ export class Elysia<
 		routes.push(route)
 
 		if (source) (this.routeSources ??= [])[sequence] = source
+		if (cookieConfig) {
+			let configs = routeCookieConfigs.get(this)
+			if (!configs) routeCookieConfigs.set(this, (configs = []))
+			configs[sequence] = cookieConfig
+		}
 
 		if (this.#routerBuilt || this.compiled !== undefined)
 			this.#invalidateRouter()
@@ -8008,6 +8038,34 @@ export class Elysia<
 		return this
 	}
 
+	/** @internal Run a route build under the cookie config of route `index` */
+	['~withRouteCookie']<Args extends unknown[], Result>(
+		index: number,
+		build: (...args: Args) => Result,
+		...args: Args
+	): Result {
+		const routeCookieConfig = routeCookieConfigs.get(this)?.[index]
+		if (!routeCookieConfig) return build(...args)
+
+		const config = this['~config']
+		const generation = this['~generation']
+		const generationConfig = generation?.['~config']
+		const effectiveConfig = {
+			...config,
+			cookie: mergeCookieConfig(config?.cookie, routeCookieConfig)
+		} as ElysiaConfig<BasePath, Scope>
+
+		this['~config'] = effectiveConfig
+		if (generation) (generation as any)['~config'] = effectiveConfig
+
+		try {
+			return build(...args)
+		} finally {
+			this['~config'] = config
+			if (generation) (generation as any)['~config'] = generationConfig
+		}
+	}
+
 	/** @internal */
 	handler(
 		index: number,
@@ -8035,7 +8093,9 @@ export class Elysia<
 
 			let handler: CompiledHandler
 			try {
-				handler = compileHandler(
+				handler = this['~withRouteCookie'](
+					index,
+					compileHandler,
 					row,
 					this,
 					exactDuplicate && Compiled.hasProgram(this['~programId'])
@@ -8141,7 +8201,9 @@ export class Elysia<
 
 		let handler: CompiledHandler
 		try {
-			handler = compileHandler(
+			handler = this['~withRouteCookie'](
+				index,
+				compileHandler,
 				materialized,
 				this,
 				exactDuplicate && Compiled.hasProgram(this['~programId'])
@@ -8656,9 +8718,8 @@ export class Elysia<
 			const routeFlags = flags[i]
 
 			if ((routeFlags & RouteFlag.WS) !== 0) {
-				const ws = wsCap!.provider.buildWSRoute(
-					routeRow(table, i),
-					this
+				const ws = this['~withRouteCookie'](i, () =>
+					wsCap!.provider.buildWSRoute(routeRow(table, i), this)
 				)
 				const handler = ws[0] as unknown as CompiledHandler
 				const options = ws[1]

@@ -281,6 +281,7 @@ export type WSMessageHandler<
 export interface WSValidatorLike {
 	Check(data: unknown): boolean
 	Errors(data: unknown): any[]
+	Clean?(data: unknown): unknown
 }
 
 /** keyed by numeric status */

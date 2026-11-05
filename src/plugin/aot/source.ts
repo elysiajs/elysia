@@ -170,10 +170,11 @@ export function replayStubbability(
 			else seen.add(key)
 		}
 
-		for (const route of history) {
+		for (let i = 0; i < history.length; i++) {
+			const route = history[i]
 			try {
 				if ((route[0] as unknown) === 'WS') continue
-				compileHandler(route, app)
+				app['~withRouteCookie'](i, compileHandler, route, app)
 			} catch {
 				JITProbe.record('handler:new-function')
 

@@ -39,6 +39,7 @@ import {
 
 import {
 	ElysiaWS,
+	isBufferSource,
 	isGeneratorObject,
 	isHTTPBody,
 	trackWSSettling,
@@ -128,7 +129,7 @@ async function applyMapResponse(
 const isEmptyPayload = (payload: unknown) => {
 	if (payload === '' || payload == null) return true
 	if (typeof payload === 'string') return false
-	if (payload instanceof ArrayBuffer || ArrayBuffer.isView(payload))
+	if (isBufferSource(payload))
 		return (payload as ArrayBufferView).byteLength === 0
 
 	return false
@@ -195,8 +196,11 @@ export async function handleWSResponse(
 					: yielded
 				if (isHTTPBody(mapped)) mapped = await frameOfHTTPBody(mapped)
 
-				let status = (ws as any).send(mapped)
-				const canBackpressure = !isEmptyPayload(mapped)
+				const frame = await ws['~frame'](mapped)
+				if (frame === null) continue
+
+				let status = ws.raw.send(frame)
+				const canBackpressure = !isEmptyPayload(frame)
 
 				while (
 					canBackpressure &&
@@ -211,7 +215,7 @@ export async function handleWSResponse(
 					if (ws.readyState >= 2) return
 
 					if (status === -1) break
-					status = (ws as any).send(mapped)
+					status = ws.raw.send(frame)
 				}
 			}
 		} finally {
@@ -228,7 +232,9 @@ export async function handleWSResponse(
 		? await applyMapResponse(ws, value, mapResponses)
 		: value
 	if (isHTTPBody(mapped)) mapped = await frameOfHTTPBody(mapped)
-	;(ws as any).send(mapped)
+
+	const frame = await ws['~frame'](mapped)
+	if (frame !== null) ws.raw.send(frame)
 }
 
 const frameOf =
@@ -256,16 +262,13 @@ function wsErrorFrameFallback(error: any): string | Promise<string> {
 
 	try {
 		const status = resolveStatus(error?.status)
-		if (typeof status === 'number' && status < 100) return masked()
+		if (typeof status === 'number' && !(status >= 100)) return masked()
 
 		const served = fallbackErrorResponse(
 			{
 				set: {
 					headers: new EmptyObject(),
-					status:
-						typeof status === 'number' && status >= 100
-							? status
-							: 500
+					status: typeof status === 'number' ? status : 500
 				}
 			} as any,
 			error,
@@ -447,6 +450,11 @@ export function buildWSRoute(
 
 	const defaultResponseValidator =
 		responseValidator?.get(200) ?? responseValidator?.values().next().value
+	const responseMayReturnPromise = responseValidator
+		? Array.from(responseValidator.values()).some(
+				(validator: any) => validator.mayReturnPromise
+			)
+		: false
 
 	const cookieRoot = composed.cookie as any
 	// t.MaybeEmpty is optional as a property only: an empty root jar is still validated
@@ -719,7 +727,12 @@ export function buildWSRoute(
 		// reaches the error hooks
 		try {
 			forward(value)
-			if (isGeneratorObject(value) || isHTTPBody(value))
+			if (
+				responseMayReturnPromise ||
+				(responseValidator && isBufferSource(value)) ||
+				isGeneratorObject(value) ||
+				isHTTPBody(value)
+			)
 				return sendWSResponse(ws, value)
 			;(ws as any).send(value)
 		} catch (error) {

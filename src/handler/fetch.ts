@@ -62,7 +62,8 @@ function decodeParams(params: Record<string, string>) {
 	for (const key in params) {
 		const value = params[key]
 		if (value.indexOf('%') !== -1)
-			params[key] = decodeComponent(value) ?? value
+			params[key] =
+				decodeComponent(value.replace(/%(?=2f|5c)/gi, '%25')) ?? value
 	}
 
 	return params

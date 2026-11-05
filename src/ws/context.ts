@@ -12,6 +12,31 @@ import { ValidationError, ElysiaStatus } from '../error'
 import type { RouteSchema } from '../types'
 import { requestId } from '../utils'
 
+export const isBufferSource = (value: unknown): value is BufferSource =>
+	ArrayBuffer.isView(value) ||
+	value instanceof ArrayBuffer ||
+	(typeof SharedArrayBuffer !== 'undefined' &&
+		value instanceof SharedArrayBuffer)
+
+type WSFrame = string | BufferSource | null
+
+const serialize = (
+	value: unknown,
+	status: ElysiaStatus<any, any> | undefined
+): WSFrame => {
+	if (status)
+		return JSON.stringify({
+			status: status.status,
+			error: value
+		})
+
+	if (value === undefined) return null
+	if (isBufferSource(value)) return value
+	if (typeof value === 'object') return JSON.stringify(value)
+
+	return value as string
+}
+
 export interface WSConnectionData {
 	id: string | undefined
 	open?: (elysia: ElysiaWS<any>) => void | Promise<void>
@@ -206,7 +231,12 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 	 * Validate, redact and serialize an outbound value, or return the
 	 * `ValidationError` the payload was refused with.
 	 */
-	#frame(data: unknown) {
+	#frame(data: unknown): WSFrame | ValidationError
+	#frame(
+		data: unknown,
+		allowAsync: true
+	): WSFrame | ValidationError | Promise<WSFrame | ValidationError>
+	#frame(data: unknown, allowAsync?: true) {
 		const connectionData = this.raw.data
 		const validators = connectionData?.validator as any
 		const defaultValidator = connectionData?.defaultValidator
@@ -218,33 +248,65 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		let value = status ? status.response : data
 
 		if (v) {
-			const encode = (v as any).EncodeFrom
-			let redacted: unknown
-
-			if (
-				typeof encode === 'function' &&
-				!(v as any).hasCodec &&
-				!(v as any).mayReturnPromise
-			)
+			if ((v as any).mayReturnPromise) {
+				let transformed: unknown
 				try {
-					redacted = encode.call(v, value, 'message')
-				} catch {}
+					transformed = (v as any).From(value, 'message', true)
+				} catch (error) {
+					if (error instanceof ValidationError) return error
+					throw error
+				}
 
-			if (redacted !== undefined) value = redacted
+				if (typeof (transformed as any)?.then === 'function') {
+					const pending = Promise.resolve(transformed)
+					if (!allowAsync) {
+						void pending.catch(() => {})
+
+						return new ValidationError('message', value, [
+							{
+								message:
+									'Asynchronous Standard Schema validation is not supported by synchronous WebSocket responses'
+							}
+						])
+					}
+
+					return pending.then(
+						(resolved) => serialize(resolved, status),
+						(error) => {
+							if (error instanceof ValidationError) return error
+							throw error
+						}
+					)
+				}
+
+				return serialize(transformed, status)
+			}
+
+			const encode = (v as any).EncodeFrom
+
+			if (typeof encode === 'function' && !(v as any).hasCodec)
+				try {
+					value = encode.call(v, value, 'message')
+				} catch (error) {
+					if (error instanceof ValidationError) return error
+					throw error
+				}
 			else if (!v.Check(value))
 				return new ValidationError('message', value, v.Errors(value))
+			else if (v.Clean) value = v.Clean(value)
 		}
 
-		if (status)
-			return JSON.stringify({
-				status: status.status,
-				error: value
-			})
+		return serialize(value, status)
+	}
 
-		if (value === undefined) return null
-		if (typeof value === 'object') return JSON.stringify(value)
+	/** @internal Prepare one handler response without sending it. */
+	async ['~frame'](data: unknown) {
+		if (data === undefined) return null
 
-		return value as string
+		const self = (this.raw.data.elysia as ElysiaWS<Route>) ?? this
+		const frame = await self.#frame(data, true)
+
+		return frame instanceof ValidationError ? frame.message : frame
 	}
 
 	#send(
@@ -252,14 +314,14 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		compress?: boolean
 	): ServerWebSocketSendStatus {
 		if (data === undefined) return 0
-		if (data instanceof ArrayBuffer || ArrayBuffer.isView(data))
-			return this.raw.send(data as unknown as BufferSource, compress)
+		if (isBufferSource(data)) return this.raw.send(data, compress)
 
 		const frame = this.#frame(data)
 		if (frame instanceof ValidationError)
 			return this.raw.send(frame.message)
+		if (frame === null) return 0
 
-		return this.raw.send(frame!, compress)
+		return this.raw.send(frame, compress)
 	}
 
 	#control(
@@ -267,14 +329,14 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		data?: WSResponsePayload<Route['response']> | BufferSource
 	): ServerWebSocketSendStatus {
 		if (data === undefined) return this.raw[kind]()
-		if (data instanceof ArrayBuffer || ArrayBuffer.isView(data))
-			return this.raw[kind](data as unknown as BufferSource)
+		if (isBufferSource(data)) return this.raw[kind](data)
 
 		const frame = this.#frame(data)
 		if (frame instanceof ValidationError)
 			return this.raw.send(frame.message)
+		if (frame === null) return this.raw[kind]()
 
-		return this.raw[kind](frame!)
+		return this.raw[kind](frame)
 	}
 
 	#publish(
@@ -283,19 +345,15 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 		compress?: boolean
 	): ServerWebSocketSendStatus {
 		if (data === undefined) return 0
-		if (data instanceof ArrayBuffer || ArrayBuffer.isView(data))
-			return this.raw.publish(
-				topic,
-				data as unknown as BufferSource,
-				compress
-			)
+		if (isBufferSource(data)) return this.raw.publish(topic, data, compress)
 
 		// validate before stringifying (matches #control)
 		const frame = this.#frame(data)
 		if (frame instanceof ValidationError)
 			return this.raw.send(frame.message)
+		if (frame === null) return 0
 
-		return this.raw.publish(topic, frame!, compress)
+		return this.raw.publish(topic, frame, compress)
 	}
 
 	#close(code?: number, reason?: string): void {

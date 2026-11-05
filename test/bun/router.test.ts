@@ -81,6 +81,51 @@ describe('Bun router', () => {
 		})
 	})
 
+	it('preserves encoded path separators in native params', async () => {
+		const app = new Elysia()
+			.get('/file/:name/end', ({ params }) => params.name)
+			.get('/wild/*', ({ params }) => params['*'])
+			.listen(0)
+
+		try {
+			const values = await Promise.all(
+				[
+					'/file/a%20b%2Fc/end',
+					'/file/a%2fb/end',
+					'/file/%2e%2e%2fsecret/end',
+					'/file/a%252Fb/end',
+					'/file/a%20b%5Cc/end',
+					'/file/a%5cb/end',
+					'/file/%2e%2e%5csecret/end',
+					'/file/a%255Cb/end',
+					'/file/a%20b/end',
+					'/wild/a%2Fb',
+					'/wild/a%5Cb'
+				].map((path) =>
+					fetch(`http://localhost:${app.server!.port}${path}`).then(
+						(response) => response.text()
+					)
+				)
+			)
+
+			expect(values).toEqual([
+				'a b%2Fc',
+				'a%2fb',
+				'..%2fsecret',
+				'a%2Fb',
+				'a b%5Cc',
+				'a%5cb',
+				'..%5csecret',
+				'a%5Cb',
+				'a b',
+				'a%2Fb',
+				'a%5Cb'
+			])
+		} finally {
+			await app.stop()
+		}
+	})
+
 	it('handle optional params', async () => {
 		const app = new Elysia()
 			.get('/id/:id?/:name?', ({ params }) => params)

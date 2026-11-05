@@ -477,14 +477,14 @@ describe('AOT default preallocation', () => {
 		expect(frozen.FromSync(undefined)).toEqual(jit.FromSync(undefined))
 	})
 
-	it('fallback precompute does not leak shared defaults through prototype-shadowing keys', async () => {
+	it('prototype-shadowing defaults are present and not shared', async () => {
 		const build = () =>
 			new Elysia().post(
 				'/x',
 				{
 					body: t.Object({
 						constructor: (t as any).Any({
-							default: { list: [] as string[], bad: NaN }
+							default: { list: [] as string[] }
 						})
 					})
 				},
@@ -521,6 +521,7 @@ describe('AOT default preallocation', () => {
 
 		const frozenFirst = await once(frozen)
 		const frozenSecond = await once(frozen)
+		expect(frozenFirst).toBe('["mut"]')
 		expect(frozenSecond).toEqual(frozenFirst)
 		expect(frozenSecond).not.toContain('mut,mut')
 
@@ -531,8 +532,63 @@ describe('AOT default preallocation', () => {
 
 		const plainFirst = await once(plain)
 		const plainSecond = await once(plain)
+		expect(plainFirst).toBe('["mut"]')
 		expect(plainSecond).toEqual(plainFirst)
 		expect(plainSecond).not.toContain('mut,mut')
+	})
+
+	it('frozen and live validators use own-property semantics for defaults', () => {
+		const make = () =>
+			t.Object({
+				valueOf: t.Any({ default: false }),
+				constructor: t.Any({ default: '' }),
+				nested: t.Object({
+					toString: t.Any({ default: 0 })
+				})
+			})
+		const manifest = capture(make())
+		const frozen = makeFrozen(make(), manifest)
+		const jit = makeJit(make())
+
+		expect(entry(manifest)?.ps).toBe(1)
+		expect(entry(manifest)?.pm).toBeDefined()
+
+		for (const validator of [frozen, jit]) {
+			const missing = validator.FromSync({ nested: {} }) as any
+			expect(missing.valueOf).toBe(false)
+			expect(missing.constructor).toBe('')
+			expect(missing.nested.toString).toBe(0)
+
+			const explicit = validator.FromSync({
+				valueOf: Object.prototype.valueOf,
+				constructor: Object.prototype.constructor,
+				nested: { toString: Object.prototype.toString }
+			}) as any
+			expect(explicit.valueOf).toBe(Object.prototype.valueOf)
+			expect(explicit.constructor).toBe(Object.prototype.constructor)
+			expect(explicit.nested.toString).toBe(Object.prototype.toString)
+		}
+	})
+
+	it('repairs prototype-named fields inside a root object default', () => {
+		const make = () =>
+			t.Object(
+				{
+					valueOf: t.Any({ default: false }),
+					constructor: t.Any({ default: '' })
+				},
+				{ default: {} }
+			)
+		const manifest = capture(make())
+
+		for (const validator of [
+			makeFrozen(make(), manifest),
+			makeJit(make())
+		]) {
+			const output = validator.FromSync(undefined) as any
+			expect(output.valueOf).toBe(false)
+			expect(output.constructor).toBe('')
+		}
 	})
 })
 
