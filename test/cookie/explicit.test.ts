@@ -118,4 +118,48 @@ describe('Explicit Cookie', () => {
 			Date.now()
 		)
 	})
+
+	it('remove cookie with a path shorthand', () => {
+		const { cookie, set } = create()
+		cookie.name.value = 'himari'
+		cookie.name.remove('/api')
+
+		expect(set.cookie?.name.path).toBe('/api')
+		expect(set.cookie?.name.expires?.getTime()).toBeLessThanOrEqual(
+			Date.now()
+    )
+    expect(set.cookie?.name.maxAge).toBe(0)
+		expect(set.cookie?.name.value).toBe('')
+	})
+
+	it('remove cookie with explicit path and domain', () => {
+		const { cookie, set } = create()
+		cookie.name.value = 'himari'
+		cookie.name.remove({ path: '/api', domain: 'millennium.sh' })
+
+		expect(set.cookie?.name.path).toBe('/api')
+    expect(set.cookie?.name.domain).toBe('millennium.sh')
+    expect(set.cookie?.name.expires?.getTime()).toBeLessThanOrEqual(
+			Date.now()
+    )
+    expect(set.cookie?.name.maxAge).toBe(0)
+    expect(set.cookie?.name.value).toBe('')
+	})
+
+	it('remove does not add a path when called without arguments', () => {
+		const { cookie, set } = create()
+		cookie.name.value = 'himari'
+		cookie.name.remove()
+
+		expect(set.cookie?.name.path).toBeUndefined()
+	})
+
+	it('remove one cookie without affecting another', () => {
+		const { cookie, set } = create()
+		cookie.name.value = 'himari'
+		cookie.other.value = 'aru'
+		cookie.name.remove('/api')
+
+		expect(set.cookie?.other).toEqual({ value: 'aru' })
+	})
 })
