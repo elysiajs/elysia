@@ -39,6 +39,10 @@ tsconfig.test.tsbuildinfo
 
 CONTRIBUTING.md
 CODE_OF_CONDUCT.md
+AGENTS.md
+AI_POLICY.md
+CLAUDE.md
+knip.json
 trace
 
 build.ts
