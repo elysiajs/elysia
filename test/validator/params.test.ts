@@ -44,6 +44,38 @@ describe('Params Validator', () => {
 		expect(res.status).toBe(200)
 	})
 
+	it('handles wildcard params without exactMirror warning', async () => {
+		const warn = console.warn
+		let warnings = 0
+		console.warn = () => warnings++
+
+		try {
+			const app = new Elysia().get(
+				'/uploads/:type/*',
+				({ params }) => params,
+				{
+					params: t.Object({
+						type: t.String(),
+						'*': t.String()
+					})
+				}
+			)
+			const response = await app.handle(
+				req('/uploads/images/2024-11-08/a.jpg')
+			)
+
+			expect(await response.json()).toEqual({
+				type: 'images',
+				'*': '2024-11-08/a.jpg'
+			})
+			expect(response.status).toBe(200)
+		} finally {
+			console.warn = warn
+		}
+
+		expect(warnings).toBe(0)
+	})
+
 	it('parse without reference', async () => {
 		const app = new Elysia().get('/id/:id', () => '', {
 			params: t.Object({

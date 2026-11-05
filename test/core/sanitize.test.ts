@@ -28,6 +28,26 @@ describe('Sanitize', () => {
 		expect(response).toEqual({ a: 'ok', b: 'b', c: 'c' })
 	})
 
+	it('sanitize unicode property key', async () => {
+		const app = new Elysia({
+			sanitize: (v) => (v === 'a' ? 'ok' : v)
+		}).post('/', ({ body }) => body, {
+			body: t.Object({
+				tên: t.String()
+			})
+		})
+
+		const response = await app
+			.handle(
+				post('/', {
+					tên: 'a'
+				})
+			)
+			.then((x) => x.json())
+
+		expect(response).toEqual({ tên: 'ok' })
+	})
+
 	it('multiple sanitize', async () => {
 		const app = new Elysia({
 			sanitize: [
