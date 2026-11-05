@@ -160,4 +160,59 @@ describe('mergeDeep', () => {
 		expect(resC).toBe('2')
 		expect(resD).toBe('2')
 	})
+
+	it('skip walking a value that is already present by reference', () => {
+		let reads = 0
+		const shared = {}
+		Object.defineProperty(shared, 'heavy', {
+			enumerable: true,
+			get() {
+				reads++
+				return { nested: true }
+			}
+		})
+
+		const result = mergeDeep({ dep: shared }, { dep: shared })
+
+		expect(result.dep).toBe(shared)
+		expect(reads).toBe(0)
+	})
+
+	it('do not walk a decorated instance on every use', async () => {
+		let reads = 0
+
+		class Service {
+			find() {
+				return 'found'
+			}
+		}
+
+		const service = new Service()
+		Object.defineProperty(service, 'client', {
+			enumerable: true,
+			get() {
+				reads++
+				return { schema: { table: { column: 1 } } }
+			}
+		})
+
+		const services = new Elysia({ name: 'services' }).decorate(
+			'service',
+			service
+		)
+
+		let app = new Elysia()
+		for (let i = 0; i < 10; i++)
+			app = app.use(
+				new Elysia({ prefix: `/g${i}` })
+					.use(services)
+					.get('/', ({ service }) => service.find())
+			) as any
+
+		expect(reads).toBe(0)
+		expect(await app.handle(req('/g9/')).then((x) => x.text())).toBe(
+			'found'
+		)
+	})
 })
+
