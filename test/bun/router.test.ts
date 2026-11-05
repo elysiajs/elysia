@@ -133,6 +133,22 @@ describe('Bun router', () => {
 		}
 	})
 
+	it('handles numeric path param validation with Bun router (#2045)', async () => {
+		const app = new Elysia({ systemRouter: true })
+			.get('/:id', ({ params }) => params, {
+				params: t.Object({ id: t.Numeric() })
+			})
+			.listen(0)
+
+		try {
+			const res = await fetch(`http://localhost:${app.server!.port}/1`)
+			expect(res.status).toBe(200)
+			expect(await res.json()).toEqual({ id: 1 })
+		} finally {
+			await app.stop()
+		}
+	})
+
 	it('handle optional params', async () => {
 		const app = new Elysia({ systemRouter: false })
 			.get('/id/:id?/:name?', ({ params }) => params)
