@@ -124,9 +124,14 @@ const replaceSchemaTypeFromOption = (
 		if (s.properties) {
 			withTransformedChildren.properties = {};
 			for (const [k, v] of Object.entries(s.properties)) {
-				withTransformedChildren.properties[k] = walk({
-					...newWalkInput,
-					s: v as TSchema,
+				Object.defineProperty(withTransformedChildren.properties, k, {
+					value: walk({
+						...newWalkInput,
+						s: v as TSchema,
+					}),
+					enumerable: true,
+					configurable: true,
+					writable: true,
 				});
 			}
 		}

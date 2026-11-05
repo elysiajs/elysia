@@ -464,8 +464,10 @@ export const BunAdapter: ElysiaAdapter = {
 			? messageValidator.provider === 'standard'
 				? (data: unknown) =>
 						messageValidator.schema['~standard'].validate(data)
-							.issues
-				: (data: unknown) => messageValidator.Check(data) === false
+				: (data: unknown) => ({
+						issues: messageValidator.Check(data) === false || undefined,
+						value: data
+					})
 			: undefined
 
 		const responseValidator = getSchemaValidator(response as any, {
@@ -590,27 +592,35 @@ export const BunAdapter: ElysiaAdapter = {
 								ws: ServerWebSocket<any>,
 								_message: any
 							) => {
-								const message = await parseMessage(ws, _message)
+								try {
+									let message = await parseMessage(ws, _message)
 
-								if (
-									validateMessage &&
-									validateMessage(message)
-								) {
-									const validationError = new ValidationError(
-										'message',
-										messageValidator!,
-										message
-									)
+									const validation = validateMessage
+										? await validateMessage(message)
+										: undefined
 
-									if (!hasCustomErrorHandlers)
-										return void ws.send(
-											validationError.message as string
+									if (validation?.issues) {
+										const validationError = new ValidationError(
+											'message',
+											messageValidator!,
+											message,
+											false,
+											messageValidator?.provider ===
+											'standard'
+												? (validation.issues as any)
+												: undefined
 										)
 
-									return handleErrors(ws, validationError)
-								}
+										if (!hasCustomErrorHandlers)
+											return void ws.send(
+												validationError.message as string
+											)
 
-								try {
+										return handleErrors(ws, validationError)
+									}
+
+									if (validation) message = validation.value
+
 									await handleResponse(
 										ws,
 										options.message?.(

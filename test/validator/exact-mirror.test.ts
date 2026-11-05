@@ -4,6 +4,50 @@ import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
 
 describe('Exact Mirror', () => {
+	it('treat schema property names as data', async () => {
+		const marker = '__elysiaExactMirrorCodegen'
+		const field = `v,b:(${marker}=true),v`
+
+		delete (globalThis as Record<string, unknown>)[marker]
+
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.Object({ [field]: t.String() })
+		})
+		const response = await app.handle(post('/', { [field]: 'safe' }))
+
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual({ [field]: 'safe' })
+		expect((globalThis as Record<string, unknown>)[marker]).toBeUndefined()
+	})
+
+	it('clean nested schemas with special property names', async () => {
+		const field = "quote'field"
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.Object({
+				nested: t.Object({ [field]: t.String() })
+			})
+		})
+		const response = await app.handle(
+			post('/', { nested: { [field]: 'safe', extra: true } })
+		)
+
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual({ nested: { [field]: 'safe' } })
+	})
+
+	it('sanitize special property names', async () => {
+		const field = "quote'field"
+		const app = new Elysia({
+			sanitize: (value) => (value === 'unsafe' ? 'safe' : value)
+		}).post('/', ({ body }) => body, {
+			body: t.Object({ [field]: t.String() })
+		})
+		const response = await app.handle(post('/', { [field]: 'unsafe' }))
+
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual({ [field]: 'safe' })
+	})
+
 	it('normalize when t.Transform is provided', async () => {
 		const app = new Elysia({
 			normalize: 'exactMirror'

@@ -39,7 +39,8 @@ import {
 	supportPerMethodInlineHandler,
 	redirect,
 	emptySchema,
-	insertStandaloneValidator
+	insertStandaloneValidator,
+	mergeCookie
 } from './utils'
 
 import {
@@ -171,6 +172,11 @@ import {
 	stringToStructureCoercions
 } from './replace-schema'
 
+const decodePathParameter = (value: string) =>
+	fastDecodeURIComponent(
+		value.replace(/%2f/gi, (separator) => `%25${separator.slice(1)}`)
+	)
+
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
 
 /**
@@ -237,6 +243,7 @@ export default class Elysia<
 	'~Ephemeral' = null as unknown as Ephemeral
 	'~Volatile' = null as unknown as Volatile
 	'~Routes' = null as unknown as Routes
+	'~cookieConfig': ElysiaConfig<any>['cookie'] | undefined
 
 	protected singleton = {
 		decorator: {},
@@ -306,7 +313,7 @@ export default class Elysia<
 			if (!this['~http'])
 				this['~http'] = new Memoirist({
 					lazy: true,
-					onParam: fastDecodeURIComponent
+					onParam: decodePathParameter
 				})
 
 			return this['~http']
@@ -316,7 +323,7 @@ export default class Elysia<
 		get dynamic() {
 			if (!this['~dynamic'])
 				this['~dynamic'] = new Memoirist({
-					onParam: fastDecodeURIComponent
+					onParam: decodePathParameter
 				})
 
 			return this['~dynamic']
@@ -401,6 +408,7 @@ export default class Elysia<
 			experimental: config?.experimental ?? {},
 			seed: config?.seed === undefined ? '' : config?.seed
 		}
+		this['~cookieConfig'] = config.cookie
 
 		this['~adapter'] =
 			config.adapter ??
@@ -493,6 +501,9 @@ export default class Elysia<
 		const allowMeta = options?.allowMeta ?? false
 
 		localHook ??= {}
+		const cookieConfig = localHook.config?.cookie
+			? mergeCookie(this.config.cookie ?? {}, localHook.config.cookie)
+			: this.config.cookie
 
 		this.applyMacro(localHook)
 
@@ -578,7 +589,7 @@ export default class Elysia<
 					return getCookieValidator({
 						modules,
 						validator: cloned.cookie,
-						defaultConfig: this.config.cookie,
+						defaultConfig: cookieConfig,
 						normalize,
 						config: cloned.cookie?.config ?? {},
 						dynamic,
@@ -5070,7 +5081,18 @@ export default class Elysia<
 										method,
 										path,
 										handler,
-										hooks,
+										plugin['~cookieConfig']
+											? {
+													...hooks,
+													config: {
+														...hooks.config,
+														cookie: mergeCookie(
+															plugin['~cookieConfig'],
+															hooks.config?.cookie ?? {}
+														)
+													}
+												}
+											: hooks,
 										undefined
 									)
 
@@ -5234,7 +5256,23 @@ export default class Elysia<
 		for (const { method, path, handler, hooks } of Object.values(
 			plugin.router.history
 		))
-			this.add(method, path, handler, hooks)
+			this.add(
+				method,
+				path,
+				handler,
+				plugin['~cookieConfig']
+					? {
+							...hooks,
+							config: {
+								...hooks.config,
+								cookie: mergeCookie(
+									plugin['~cookieConfig'],
+									hooks.config?.cookie ?? {}
+								)
+							}
+						}
+					: hooks
+			)
 
 		if (name) {
 			if (!(name in this.dependencies)) this.dependencies[name] = []
@@ -6734,6 +6772,7 @@ export default class Elysia<
 			config?: {
 				allowMeta?: boolean
 				mount?: Function
+				cookie?: ElysiaConfig<any>['cookie']
 			}
 		}
 	): Elysia<

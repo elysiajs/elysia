@@ -4,6 +4,61 @@ import { describe, expect, it } from 'bun:test'
 import { post, upload } from '../utils'
 
 describe('Files', () => {
+	it('treat file field names as data', async () => {
+		const marker = '__elysiaFileFieldCodegen'
+		const field =
+			'a,Object[`defineProperty`](globalThis,`' +
+			marker +
+			'`,{value:true}),c[`body`][`a`]'
+
+		delete (globalThis as Record<string, unknown>)[marker]
+
+		const app = new Elysia({ normalize: false }).post('/', () => 'ok', {
+			body: t.Object({
+				[field]: t.File({ type: 'image/jpeg' })
+			})
+		})
+
+		const body = new FormData()
+		body.append(field, Bun.file('test/images/millenium.jpg'))
+
+		const response = await app.handle(
+			new Request('http://localhost/', { method: 'POST', body })
+		)
+
+		expect(response.status).toBe(200)
+		expect((globalThis as Record<string, unknown>)[marker]).toBeUndefined()
+	})
+
+	it('treat union file field names as data', async () => {
+		const marker = '__elysiaUnionFileFieldCodegen'
+		const field =
+			'a,Object[`defineProperty`](globalThis,`' +
+			marker +
+			'`,{value:true}),c[`body`][`a`]'
+
+		delete (globalThis as Record<string, unknown>)[marker]
+
+		const app = new Elysia({ normalize: false }).post('/', () => 'ok', {
+			body: t.Union([
+				t.Object({
+					[field]: t.File({ type: 'image/jpeg' })
+				}),
+				t.Object({ reference: t.String() })
+			])
+		})
+
+		const body = new FormData()
+		body.append(field, Bun.file('test/images/millenium.jpg'))
+
+		const response = await app.handle(
+			new Request('http://localhost/', { method: 'POST', body })
+		)
+
+		expect(response.status).toBe(200)
+		expect((globalThis as Record<string, unknown>)[marker]).toBeUndefined()
+	})
+
 	it('validate minItems, maxItems', async () => {
 		const app = new Elysia().post('/', () => 'ok', {
 			body: t.Object({

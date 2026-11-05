@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test'
-import { Elysia, t } from '../../src'
+import { Elysia, t, getSchemaValidator } from '../../src'
+import { createHandleWSResponse, ElysiaWS } from '../../src/ws'
 import { newWebsocket, wsOpen, wsMessage, wsClosed } from './utils'
 import z from 'zod'
 
@@ -32,11 +33,104 @@ const listen = async (app: Elysia<any, any, any, any, any, any, any, any>) => {
 
 const typebox = t.Object({ message: t.String() })
 const standard = z.object({ message: z.string() })
+const asyncStandard = standard.refine(async () => true)
 
 const valid = { message: 'ok' }
 const invalid = { wrong: 1 } as any
 
+const createDirectWS = (validator: unknown, calls: unknown[][]) =>
+	new ElysiaWS(
+		{
+			data: { validator },
+			send(...args: unknown[]) {
+				calls.push(['send', ...args])
+				return 1
+			},
+			ping(...args: unknown[]) {
+				calls.push(['ping', ...args])
+				return 1
+			},
+			pong(...args: unknown[]) {
+				calls.push(['pong', ...args])
+				return 1
+			},
+			publish(...args: unknown[]) {
+				calls.push(['publish', ...args])
+				return 1
+			},
+			sendText() {},
+			sendBinary() {},
+			close() {},
+			terminate() {},
+			publishText() {},
+			publishBinary() {},
+			subscribe() {},
+			unsubscribe() {},
+			isSubscribed() {},
+			cork() {},
+			remoteAddress: '',
+			binaryType: 'nodebuffer',
+			subscriptions: []
+		} as any,
+		{} as any
+	)
+
 describe('WebSocket response validation', () => {
+	it('awaits delayed validation before completing a non-generator response', async () => {
+		const validation = Promise.withResolvers<boolean>()
+		const handleResponse = createHandleWSResponse(
+			getSchemaValidator(standard.refine(() => validation.promise))
+		)
+		const messages: string[] = []
+		const ws = {
+			send(data: string) {
+				messages.push(data)
+				return 1
+			}
+		} as Parameters<typeof handleResponse>[0]
+		let completed = false
+		const response = handleResponse(ws, valid).then(() => {
+			completed = true
+		})
+
+		await Bun.sleep(0)
+		const completedBeforeValidation = completed
+		const messagesBeforeValidation = [...messages]
+		validation.resolve(true)
+		await response
+
+		expect(completedBeforeValidation).toBe(false)
+		expect(messagesBeforeValidation).toEqual([])
+		expect(messages).toEqual([JSON.stringify(valid)])
+	})
+
+	it('propagates validator rejection from a non-generator response', async () => {
+		const error = new Error('response validation failed')
+		const handleResponse = createHandleWSResponse(
+			getSchemaValidator({
+				'~standard': {
+					version: 1,
+					vendor: 'test',
+					types: undefined,
+					async validate() {
+						await Bun.sleep(0)
+						throw error
+					}
+				}
+			})
+		)
+		const messages: string[] = []
+		const ws = {
+			send(data: string) {
+				messages.push(data)
+				return 1
+			}
+		} as Parameters<typeof handleResponse>[0]
+
+		await expect(handleResponse(ws, valid)).rejects.toBe(error)
+		expect(messages).toEqual([])
+	})
+
 	it('sends a valid TypeBox message', async () => {
 		const { received, rejected } = await listen(
 			new Elysia().ws('/ws', {
@@ -73,6 +167,116 @@ describe('WebSocket response validation', () => {
 
 		expect(rejected).toBe(false)
 		expect(received).toBe(JSON.stringify(valid))
+	})
+
+	it('sends the transformed standard schema value from ws.send', async () => {
+		const transformed = standard.transform(({ message }) => ({
+			message: message.toUpperCase()
+		}))
+		const { received, rejected } = await listen(
+			new Elysia().ws('/ws', {
+				response: transformed,
+				message: (ws) => {
+					ws.send({ message: 'ok', secret: 'hidden' } as any)
+				}
+			})
+		)
+
+		expect(rejected).toBe(false)
+		expect(received).toBe(JSON.stringify({ message: 'OK' }))
+	})
+
+	it('sends the transformed async standard schema value', async () => {
+		const transformed = standard.transform(async ({ message }) => ({
+			message: message.toUpperCase()
+		}))
+		const handleResponse = createHandleWSResponse(
+			getSchemaValidator(transformed)
+		)
+		const messages: string[] = []
+		const ws = {
+			send(data: string) {
+				messages.push(data)
+				return 1
+			}
+		} as Parameters<typeof handleResponse>[0]
+
+		await handleResponse(ws, { message: 'ok', secret: 'hidden' })
+
+		expect(messages).toEqual([JSON.stringify({ message: 'OK' })])
+	})
+
+	it('preserves direct method semantics after transforming to undefined', () => {
+		const calls: unknown[][] = []
+		const ws = createDirectWS(
+			getSchemaValidator(z.string().transform(() => undefined)),
+			calls
+		)
+
+		expect(ws.send('message')).toBe(0)
+		expect(ws.ping('message')).toBe(1)
+		expect(ws.pong('message')).toBe(1)
+		expect(ws.publish('topic', 'message')).toBe(0)
+		expect(calls).toEqual([
+			['ping', undefined],
+			['pong', undefined]
+		])
+	})
+
+	it('sends transformed Buffer values as binary from direct methods', () => {
+		const calls: unknown[][] = []
+		const transformed = Buffer.from([1, 2, 3])
+		const ws = createDirectWS(
+			getSchemaValidator(z.string().transform(() => transformed)),
+			calls
+		)
+
+		ws.send('message')
+		ws.ping('message')
+		ws.pong('message')
+		ws.publish('topic', 'message')
+
+		expect(calls).toEqual([
+			['send', transformed, undefined],
+			['ping', transformed],
+			['pong', transformed],
+			['publish', 'topic', transformed, undefined]
+		])
+	})
+
+	it('omits async responses transformed to undefined', async () => {
+		const handleResponse = createHandleWSResponse(
+			getSchemaValidator(z.string().transform(async () => undefined))
+		)
+		const messages: unknown[] = []
+		const ws = {
+			send(data: unknown) {
+				messages.push(data)
+				return 1
+			}
+		} as Parameters<typeof handleResponse>[0]
+
+		await handleResponse(ws, 'message')
+
+		expect(messages).toHaveLength(0)
+	})
+
+	it('sends async responses transformed to Buffer as binary', async () => {
+		const transformed = Buffer.from([1, 2, 3])
+		const handleResponse = createHandleWSResponse(
+			getSchemaValidator(z.string().transform(async () => transformed))
+		)
+		const messages: unknown[] = []
+		const ws = {
+			send(data: unknown) {
+				messages.push(data)
+				return 1
+			}
+		} as Parameters<typeof handleResponse>[0]
+
+		await handleResponse(ws, 'message')
+
+		expect(messages).toEqual([transformed])
 	})
 
 	it('refuses an invalid standard schema message', async () => {
@@ -159,6 +363,58 @@ describe('WebSocket response validation', () => {
 
 		expect(rejected).toBe(true)
 		expect(received).not.toBe(JSON.stringify(invalid))
+	})
+
+	it('awaits an async response schema returned by a handler', async () => {
+		const { received, rejected } = await listen(
+			new Elysia().ws('/ws', {
+				response: asyncStandard,
+				message: () => valid
+			})
+		)
+
+		expect(rejected).toBe(false)
+		expect(received).toBe(JSON.stringify(valid))
+	})
+
+	it('refuses an invalid async response returned by a handler', async () => {
+		const { received, rejected } = await listen(
+			new Elysia().ws('/ws', {
+				response: standard.refine(async () => false),
+				message: () => valid
+			})
+		)
+
+		expect(rejected).toBe(true)
+		expect(received).not.toBe(JSON.stringify(valid))
+	})
+
+	it('fails closed for an async response schema used by ws.send', async () => {
+		const { received, rejected } = await listen(
+			new Elysia().ws('/ws', {
+				response: asyncStandard,
+				message: (ws) => {
+					ws.send(valid)
+				}
+			})
+		)
+
+		expect(rejected).toBe(true)
+		expect(received).not.toBe(JSON.stringify(valid))
+	})
+
+	it('fails closed for an async response schema used by ws.publish', async () => {
+		const { received, rejected } = await listen(
+			new Elysia().ws('/ws', {
+				response: asyncStandard,
+				message: (ws) => {
+					ws.publish('topic', valid)
+				}
+			})
+		)
+
+		expect(rejected).toBe(true)
+		expect(received).not.toBe(JSON.stringify(valid))
 	})
 
 	it('refuses an invalid standard schema message sent by ws.publish', async () => {

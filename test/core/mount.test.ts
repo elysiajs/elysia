@@ -1,8 +1,21 @@
 import { describe, expect, it } from 'bun:test'
 
-import { Elysia } from '../../src'
+import { Elysia, status } from '../../src'
 
 describe('Mount', () => {
+	it('run authorization hooks in dynamic mode', async () => {
+		const app = new Elysia({ aot: false })
+			.onBeforeHandle(() => status(401, 'unauthorized'))
+			.mount('/admin', () => new Response('secret'))
+
+		const response = await app.handle(
+			new Request('http://localhost/admin/data')
+		)
+
+		expect(response.status).toBe(401)
+		expect(await response.text()).toBe('unauthorized')
+	})
+
 	it('preserve request URL', async () => {
 		const plugin = new Elysia().get('/', ({ request }) => request.url)
 

@@ -12,6 +12,14 @@ import type { InternalRoute, InputSchema } from '../../types'
 const allocateIf = (value: string, condition: unknown) =>
 	condition ? value : ''
 
+const preserveEncodedSlashes = (params: Record<string, string>) => {
+	for (const key of Object.keys(params))
+		if (params[key].includes('/'))
+			params[key] = params[key].replaceAll('/', '%2F')
+
+	return params
+}
+
 const createContext = (
 	app: AnyElysia,
 	route: InternalRoute,
@@ -48,7 +56,7 @@ const createContext = (
 	const getPath = !inference.path
 		? ''
 		: !isDynamic
-			? `path:'${route.path}',`
+			? `path:route,`
 			: `get path(){` +
 				(needsQuery ? '' : getQi) +
 				`if(qi===-1)return u.substring(s)\n` +
@@ -60,7 +68,7 @@ const createContext = (
 		`{request,` +
 		`store,` +
 		allocateIf(`qi,`, needsQuery) +
-		allocateIf(`params:request.params,`, isDynamic) +
+		allocateIf(`params:preserveEncodedSlashes(request.params),`, isDynamic) +
 		getPath +
 		allocateIf(
 			`url:request.url,`,
@@ -114,6 +122,7 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 		`app=data.app,` +
 		'store=data.store,' +
 		`decorator=data.decorator,` +
+		'preserveEncodedSlashes=data.preserveEncodedSlashes,' +
 		'redirect=data.redirect,' +
 		'route=data.route,' +
 		'mapEarlyResponse=data.mapEarlyResponse,' +
@@ -159,6 +168,7 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 		hoc: app.extender.higherOrderFunctions.map((x) => x.fn),
 		store: app.store,
 		decorator: app.decorator,
+		preserveEncodedSlashes,
 		route: route.path,
 		randomId: hasTrace ? randomId : undefined,
 		ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,

@@ -1,4 +1,5 @@
 import Elysia, { t } from '../../src'
+import { applySchemaDefaults } from '../../src/schema'
 import { describe, expect, it } from 'bun:test'
 import { Value } from '@sinclair/typebox/value'
 import { TypeBoxError } from '@sinclair/typebox'
@@ -65,5 +66,45 @@ describe('TypeSystem - ArrayBuffer', () => {
 		)
 
 		expect(await response.text()).toBe('可愛くてごめん')
+	})
+
+	describe.each([true, false])('preserve input (aot: %s)', (aot) => {
+		it('at the request body root', async () => {
+			const buffer = new ArrayBuffer(4)
+			new Uint8Array(buffer).set([1, 2, 3, 4])
+			const read = (value: ArrayBuffer) =>
+				Array.from(new Uint8Array(value)).join(',')
+			const app = new Elysia({ aot }).post('/', ({ body }) => read(body), {
+				parse: () => buffer,
+				body: t.ArrayBuffer()
+			})
+
+			const response = await app.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					headers: { 'content-type': 'custom' },
+					body: 'body'
+				})
+			)
+
+			expect(await response.text()).toBe('1,2,3,4')
+		})
+	})
+
+	it('preserves nested object and array values while applying defaults', () => {
+		const buffer = new ArrayBuffer(4)
+		new Uint8Array(buffer).set([1, 2, 3, 4])
+
+		const object = applySchemaDefaults(
+			{ schema: t.Object({ value: t.ArrayBuffer() }) } as any,
+			{ value: buffer }
+		) as { value: ArrayBuffer }
+		const array = applySchemaDefaults(
+			{ schema: t.Array(t.ArrayBuffer()) } as any,
+			[buffer]
+		) as ArrayBuffer[]
+
+		expect(Array.from(new Uint8Array(object.value))).toEqual([1, 2, 3, 4])
+		expect(Array.from(new Uint8Array(array[0]))).toEqual([1, 2, 3, 4])
 	})
 })

@@ -17,3 +17,6 @@ bench
 design
 test/cloudflare
 .claude
+.audit
+.unsound
+ARCHITECTURE.md

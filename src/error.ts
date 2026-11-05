@@ -210,13 +210,15 @@ export const mapValueError = (
 			}
 
 		case 54:
+			const found = formatValidationSummaryValue(value)
+
 			return {
 				...error,
 				summary: `${message
 					.slice(0, 9)
 					.trim()} property '${property}' to be ${message
 					.slice(8)
-					.trim()} but found: ${value}`
+					.trim()} but found: ${found}`
 			}
 
 		case 62:
@@ -241,6 +243,386 @@ export const mapValueError = (
  */
 export const MAX_ERRORS = 64
 
+export const MAX_VALIDATION_ERROR_DEPTH = 16
+export const MAX_VALIDATION_ERROR_NODES = 8192
+export const MAX_VALIDATION_ERROR_ENTRIES = 4096
+export const MAX_VALIDATION_ERROR_CONTAINER_ENTRIES = 512
+export const MAX_VALIDATION_ERROR_STRING_LENGTH = 4096
+export const MAX_VALIDATION_ERROR_OUTPUT_LENGTH = 65536
+
+const VALIDATION_TRUNCATED = '[Truncated]'
+const VALIDATION_UNSERIALIZABLE = '[Unserializable]'
+const OMIT_VALIDATION_VALUE = Symbol('omitValidationValue')
+
+type ValidationProjectionState = {
+	depth: WeakSet<object>
+	nodes: number
+	entries: number
+	strings: number
+	preservePrototype: boolean
+}
+
+const boundValidationString = (
+	value: string,
+	state?: ValidationProjectionState
+) => {
+	const remaining = state
+		? MAX_VALIDATION_ERROR_OUTPUT_LENGTH - state.strings
+		: MAX_VALIDATION_ERROR_STRING_LENGTH
+	const limit = Math.min(MAX_VALIDATION_ERROR_STRING_LENGTH, remaining)
+
+	if (value.length <= limit) {
+		if (state) state.strings += value.length
+		return value
+	}
+
+	if (state) state.strings += Math.max(limit, 0)
+	if (limit <= 0) return ''
+	if (limit <= VALIDATION_TRUNCATED.length)
+		return VALIDATION_TRUNCATED.slice(0, limit)
+
+	return (
+		value.slice(0, limit - VALIDATION_TRUNCATED.length) +
+		VALIDATION_TRUNCATED
+	)
+}
+
+const formatValidationSummaryValue = (value: unknown) => {
+	if (typeof value === 'string') return boundValidationString(value)
+	if (
+		value === null ||
+		typeof value === 'number' ||
+		typeof value === 'boolean' ||
+		typeof value === 'bigint' ||
+		typeof value === 'undefined'
+	)
+		return String(value)
+
+	try {
+		if (Array.isArray(value)) {
+			const length = Object.getOwnPropertyDescriptor(
+				value,
+				'length'
+			)?.value
+			if (
+				typeof length !== 'number' ||
+				length > MAX_VALIDATION_ERROR_CONTAINER_ENTRIES
+			)
+				return '[object Object]'
+
+			const output: string[] = []
+			let size = 0
+			for (let index = 0; index < length; index++) {
+				const descriptor = Object.getOwnPropertyDescriptor(
+					value,
+					`${index}`
+				)
+				if (!descriptor || !('value' in descriptor)) {
+					output.push('')
+					continue
+				}
+
+				const item = descriptor.value
+				if (item === null || item === undefined) output.push('')
+				else if (
+					typeof item === 'string' ||
+					typeof item === 'number' ||
+					typeof item === 'boolean' ||
+					typeof item === 'bigint'
+				) {
+					const part = String(item)
+					size += part.length + 1
+					if (size > MAX_VALIDATION_ERROR_STRING_LENGTH)
+						return boundValidationString(output.join(','))
+					output.push(part)
+				} else return '[object Object]'
+			}
+
+			return boundValidationString(output.join(','))
+		}
+	} catch {}
+
+	return '[object Object]'
+}
+
+const validationOutputFits = (value: string) => {
+	let bytes = 0
+
+	for (let index = 0; index < value.length; index++) {
+		const code = value.charCodeAt(index)
+		if (code < 0x80) bytes++
+		else if (code < 0x800) bytes += 2
+		else if (
+			code >= 0xd800 &&
+			code <= 0xdbff &&
+			value.charCodeAt(index + 1) >= 0xdc00 &&
+			value.charCodeAt(index + 1) <= 0xdfff
+		) {
+			bytes += 4
+			index++
+		} else bytes += 3
+
+		if (bytes > MAX_VALIDATION_ERROR_OUTPUT_LENGTH) return false
+	}
+
+	return true
+}
+
+const projectValidationValue = (
+	value: unknown,
+	state: ValidationProjectionState,
+	depth = 0
+): unknown | typeof OMIT_VALIDATION_VALUE => {
+	if (state.nodes++ >= MAX_VALIDATION_ERROR_NODES) return VALIDATION_TRUNCATED
+
+	switch (typeof value) {
+		case 'string':
+			return boundValidationString(value, state)
+
+		case 'number':
+			return Number.isFinite(value) ? value : null
+
+		case 'boolean':
+			return value
+
+		case 'bigint':
+			return '[BigInt]'
+
+		case 'undefined':
+		case 'function':
+		case 'symbol':
+			return OMIT_VALIDATION_VALUE
+	}
+
+	if (typeof value !== 'object' || value === null) return null
+	if (depth >= MAX_VALIDATION_ERROR_DEPTH) return VALIDATION_TRUNCATED
+	if (state.depth.has(value)) return '[Circular]'
+
+	try {
+		if (value instanceof Date) {
+			const timestamp = Date.prototype.getTime.call(value)
+			return Number.isFinite(timestamp)
+				? boundValidationString(
+						Date.prototype.toISOString.call(value),
+						state
+					)
+				: null
+		}
+	} catch {}
+
+	state.depth.add(value)
+
+	try {
+		if (Array.isArray(value)) {
+			const output: unknown[] = []
+			const lengthDescriptor = Object.getOwnPropertyDescriptor(
+				value,
+				'length'
+			)
+			const length =
+				typeof lengthDescriptor?.value === 'number'
+					? lengthDescriptor.value
+					: 0
+
+			let index = 0
+			for (
+				;
+				index < length &&
+				index < MAX_VALIDATION_ERROR_CONTAINER_ENTRIES &&
+				state.entries < MAX_VALIDATION_ERROR_ENTRIES &&
+				state.nodes < MAX_VALIDATION_ERROR_NODES;
+				index++
+			) {
+				state.entries++
+				const descriptor = Object.getOwnPropertyDescriptor(
+					value,
+					`${index}`
+				)
+				const projected = descriptor
+					? 'value' in descriptor
+						? projectValidationValue(
+								descriptor.value,
+								state,
+								depth + 1
+							)
+						: VALIDATION_UNSERIALIZABLE
+					: OMIT_VALIDATION_VALUE
+
+				output.push(
+					projected === OMIT_VALIDATION_VALUE ? null : projected
+				)
+			}
+
+			if (index < length) output.push(VALIDATION_TRUNCATED)
+			if (!state.preservePrototype) Object.setPrototypeOf(output, null)
+			return output
+		}
+
+		const output = (
+			state.preservePrototype ? {} : Object.create(null)
+		) as Record<string, unknown>
+		let truncated = false
+		let entries = 0
+		let inspected = 0
+
+		for (const key in value) {
+			if (inspected++ >= MAX_VALIDATION_ERROR_CONTAINER_ENTRIES) {
+				truncated = true
+				break
+			}
+
+			const descriptor = Object.getOwnPropertyDescriptor(value, key)
+			if (!descriptor?.enumerable) continue
+			if (
+				entries >= MAX_VALIDATION_ERROR_CONTAINER_ENTRIES ||
+				state.entries >= MAX_VALIDATION_ERROR_ENTRIES ||
+				state.nodes >= MAX_VALIDATION_ERROR_NODES
+			) {
+				truncated = true
+				break
+			}
+
+			entries++
+			state.entries++
+			const projected =
+				'value' in descriptor
+					? projectValidationValue(descriptor.value, state, depth + 1)
+					: VALIDATION_UNSERIALIZABLE
+			if (projected === OMIT_VALIDATION_VALUE) continue
+
+			Object.defineProperty(output, boundValidationString(key, state), {
+				value: projected,
+				enumerable: true,
+				configurable: true,
+				writable: true
+			})
+		}
+
+		if (truncated)
+			Object.defineProperty(output, VALIDATION_TRUNCATED, {
+				value: true,
+				enumerable: true
+			})
+
+		return output
+	} catch {
+		return VALIDATION_UNSERIALIZABLE
+	} finally {
+		state.depth.delete(value)
+	}
+}
+
+const validationSerializationFallback = () => {
+	const fallback = Object.create(null) as Record<string, unknown>
+	fallback.type = 'validation'
+	fallback.message = 'Validation details exceeded serialization limit'
+
+	return fallback
+}
+
+const projectValidationDetails = (
+	value: unknown,
+	preservePrototype = false
+) => {
+	const projected = projectValidationValue(value, {
+		depth: new WeakSet(),
+		nodes: 0,
+		entries: 0,
+		strings: 0,
+		preservePrototype
+	})
+	const result =
+		projected === OMIT_VALIDATION_VALUE ? null : (projected as unknown)
+
+	try {
+		const serialized = JSON.stringify(result)
+		if (typeof serialized === 'string' && validationOutputFits(serialized))
+			return result
+	} catch {}
+
+	return validationSerializationFallback()
+}
+
+const stringifyValidationDetails = (value: unknown, space?: number) => {
+	const projected = projectValidationDetails(value)
+
+	try {
+		const serialized = JSON.stringify(projected, null, space)
+		if (validationOutputFits(serialized)) return serialized
+	} catch {}
+
+	return JSON.stringify(validationSerializationFallback(), null, space)
+}
+
+const stringifyCustomValidationError = (value: unknown) => {
+	if (value !== null && typeof value === 'object')
+		return stringifyValidationDetails(value)
+
+	try {
+		return boundValidationString(String(value))
+	} catch {
+		return VALIDATION_UNSERIALIZABLE
+	}
+}
+
+const tryMapValueError = (error: ValueError | undefined) => {
+	try {
+		return mapValueError(error)
+	} catch {
+		return undefined
+	}
+}
+
+const readValidationDataProperty = (value: unknown, key: PropertyKey) => {
+	if (value === null || typeof value !== 'object') return
+
+	try {
+		const descriptor = Object.getOwnPropertyDescriptor(value, key)
+		if (descriptor && 'value' in descriptor) return descriptor.value
+	} catch {}
+}
+
+const formatStandardValidationPath = (value: unknown) => {
+	try {
+		if (!Array.isArray(value)) return 'root'
+
+		const length = Object.getOwnPropertyDescriptor(value, 'length')?.value
+		if (typeof length !== 'number') return 'root'
+
+		const output: string[] = []
+		let size = 0
+		const limit = Math.min(length, MAX_VALIDATION_ERROR_CONTAINER_ENTRIES)
+		for (let index = 0; index < limit; index++) {
+			const descriptor = Object.getOwnPropertyDescriptor(
+				value,
+				`${index}`
+			)
+			if (!descriptor || !('value' in descriptor)) continue
+
+			const part = descriptor.value
+			if (
+				typeof part === 'string' ||
+				typeof part === 'number' ||
+				typeof part === 'boolean' ||
+				typeof part === 'bigint'
+			) {
+				const formatted = boundValidationString(String(part))
+				size += formatted.length + 1
+				if (size > MAX_VALIDATION_ERROR_STRING_LENGTH) {
+					output.push(VALIDATION_TRUNCATED)
+					break
+				}
+				output.push(formatted)
+			} else output.push(VALIDATION_UNSERIALIZABLE)
+		}
+
+		if (limit < length) output.push(VALIDATION_TRUNCATED)
+		return boundValidationString(output.join('.')) || 'root'
+	} catch {
+		return 'root'
+	}
+}
+
 const takeErrors = (
 	iterator: ValueErrorIterator,
 	limit = MAX_ERRORS
@@ -250,7 +632,7 @@ const takeErrors = (
 	for (const error of iterator) {
 		if (!error) continue
 
-		const mapped = mapValueError(error)
+		const mapped = tryMapValueError(error)
 		if (mapped) errors.push(mapped)
 
 		if (errors.length >= limit) break
@@ -371,38 +753,47 @@ export class ValidationError extends Error {
 
 			const _errors = errors ?? standard.validate(value).issues
 
-			error = _errors?.[0]
+			error = readValidationDataProperty(_errors, 0)
+			const standardErrorPath = readValidationDataProperty(error, 'path')
+			const standardErrorMessage = readValidationDataProperty(
+				error,
+				'message'
+			)
+			const standardErrorProblem = readValidationDataProperty(
+				error,
+				'problem'
+			)
 
 			if (isProduction && !allowUnsafeValidationDetails)
-				message = JSON.stringify({
+				message = stringifyValidationDetails({
 					type: 'validation',
 					on: type,
 					found: value
 				})
 			else
-				message = JSON.stringify(
+				message = stringifyValidationDetails(
 					{
 						type: 'validation',
 						on: type,
-						property: error.path?.[0] || 'root',
-						message: error?.message,
-						summary: error?.problem,
+						property:
+							readValidationDataProperty(standardErrorPath, 0) ||
+							'root',
+						message: standardErrorMessage,
+						summary: standardErrorProblem,
 						expected,
 						found: value,
 						errors
 					},
-					null,
 					2
 				)
 
-			customError = error?.message
+			customError = standardErrorMessage
 		} else {
-			if (
-				value &&
-				typeof value === 'object' &&
-				value instanceof ElysiaCustomStatusResponse
-			)
-				value = value.response
+			if (value && typeof value === 'object')
+				try {
+					if (value instanceof ElysiaCustomStatusResponse)
+						value = value.response
+				} catch {}
 
 			error =
 				errors?.First() ??
@@ -444,7 +835,8 @@ export class ValidationError extends Error {
 											property: accessor,
 											message: error?.message,
 											summary:
-												mapValueError(error)?.summary,
+												tryMapValueError(error)
+													?.summary,
 											found: value,
 											expected,
 											errors:
@@ -467,24 +859,21 @@ export class ValidationError extends Error {
 					: undefined
 
 			if (customError !== undefined) {
-				message =
-					typeof customError === 'object'
-						? JSON.stringify(customError)
-						: customError + ''
+				message = stringifyCustomValidationError(customError)
 			} else if (isProduction && !allowUnsafeValidationDetails) {
-				message = JSON.stringify({
+				message = stringifyValidationDetails({
 					type: 'validation',
 					on: type,
 					found: value
 				})
 			} else {
-				message = JSON.stringify(
+				message = stringifyValidationDetails(
 					{
 						type: 'validation',
 						on: type,
 						property: accessor,
 						message: error?.message,
-						summary: mapValueError(error)?.summary,
+						summary: tryMapValueError(error)?.summary,
 						expected,
 						found: value,
 						errors:
@@ -492,7 +881,6 @@ export class ValidationError extends Error {
 								? takeErrors(validator.Errors(value))
 								: takeErrors(Value.Errors(validator, value))
 					},
-					null,
 					2
 				)
 			}
@@ -531,12 +919,18 @@ export class ValidationError extends Error {
 
 			// Map standard schema issues to the expected format
 			return (
-				issues?.slice(0, MAX_ERRORS).map((issue: any) => ({
-					summary: issue.message,
-					path: issue.path?.join('.') || 'root',
-					message: issue.message,
-					value: this.value
-				})) || []
+				issues?.slice(0, MAX_ERRORS).map((issue: any) => {
+					const message = readValidationDataProperty(issue, 'message')
+
+					return {
+						summary: message,
+						path: formatStandardValidationPath(
+							readValidationDataProperty(issue, 'path')
+						),
+						message,
+						value: this.value
+					}
+				}) || []
 			)
 		}
 
@@ -604,24 +998,35 @@ export class ValidationError extends Error {
 
 		const value = this.value
 		const expected = this.expected
-		const errors = this.all
+		let errors: ValueErrorWithSummary[] = []
+		let property: unknown = 'root'
+		let summary: string | undefined
 
-		return isProduction && !allowUnsafeValidatorDetails
-			? {
-					type: 'validation',
-					on: this.type,
-					found: value,
-					message
-				}
-			: {
-					type: 'validation',
-					on: this.type,
-					property: this.valueError?.path || 'root',
-					message,
-					summary: mapValueError(this.valueError)?.summary,
-					found: value,
-					expected,
-					errors
-				}
+		try {
+			errors = this.all
+			property = this.valueError?.path || 'root'
+			summary = tryMapValueError(this.valueError)?.summary
+		} catch {}
+
+		return projectValidationDetails(
+			isProduction && !allowUnsafeValidatorDetails
+				? {
+						type: 'validation',
+						on: this.type,
+						found: value,
+						message
+					}
+				: {
+						type: 'validation',
+						on: this.type,
+						property,
+						message,
+						summary,
+						found: value,
+						expected,
+						errors
+					},
+			true
+		)
 	}
 }

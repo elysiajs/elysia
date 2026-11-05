@@ -3,6 +3,48 @@ import { Elysia, t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 
 describe('handle path with spaces', () => {
+	it('treat static route paths as data', async () => {
+		const path = "/pages/o'brien"
+		const app = new Elysia().get(path, () => 'ok')
+
+		const response = await app.handle(
+			new Request(`http://localhost${path}`)
+		)
+
+		expect(response.status).toBe(200)
+		expect(await response.text()).toBe('ok')
+	})
+
+	it('treat dynamic route paths as data', async () => {
+		const marker = '__elysiaDynamicRouteCodegen'
+		const path = `/pages/x\`;globalThis.${marker}=true;c.route=\`y`
+
+		delete (globalThis as Record<string, unknown>)[marker]
+
+		const app = new Elysia().get(path, ({ route }) => route)
+		const response = await app.handle(
+			new Request(
+				`http://localhost${encodeURIComponent(path).replace(/%2F/g, '/')}`
+			)
+		)
+
+		expect(response.status).toBe(200)
+		expect(await response.text()).toBe(path)
+		expect((globalThis as Record<string, unknown>)[marker]).toBeUndefined()
+	})
+
+	it('treat custom methods as data', async () => {
+		const app = new Elysia()
+			.route("X'Y", '/custom-method', () => 'custom')
+			.get('/health', () => 'ok')
+		const response = await app.handle(
+			new Request('http://localhost/health')
+		)
+
+		expect(response.status).toBe(200)
+		expect(await response.text()).toBe('ok')
+	})
+
 	it('AOT on: static path', async () => {
 		const PATH = '/y a y'
 
@@ -122,4 +164,37 @@ describe('handle path with spaces', () => {
 		expect(optional.status).toBe(200)
 		expect(await optional.text()).toEqual('yay')
 	})
+})
+
+describe('encoded path separators', () => {
+	for (const aot of [true, false])
+		it(`preserves encoded slashes in named params with AOT ${aot ? 'on' : 'off'}`, async () => {
+			const app = new Elysia({ aot })
+				.get('/file/:name/end', ({ params }) => params.name)
+				.get('/wild/*', ({ params }) => params['*'])
+
+			const values = await Promise.all(
+				[
+					'/file/a%20b%2Fc/end',
+					'/file/a%2fb/end',
+					'/file/%2e%2e%2fsecret/end',
+					'/file/a%252Fb/end',
+					'/file/a%20b/end',
+					'/wild/a%2Fb'
+				].map((path) =>
+					app
+						.handle(new Request(`http://localhost${path}`))
+						.then((response) => response.text())
+				)
+			)
+
+			expect(values).toEqual([
+				'a b%2Fc',
+				'a%2fb',
+				'..%2fsecret',
+				'a%2Fb',
+				'a b',
+				'a%2Fb'
+			])
+		})
 })

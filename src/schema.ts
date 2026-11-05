@@ -1160,6 +1160,594 @@ export const getSchemaProperties = (
 	return undefined
 }
 
+const hasOwn = (value: object, key: PropertyKey) =>
+	Object.prototype.hasOwnProperty.call(value, key)
+
+const cloneDefaultValue = (value: any): any => {
+	if (Array.isArray(value)) return value.map(cloneDefaultValue)
+	if (value instanceof Date) return new Date(value)
+	if (value instanceof Map)
+		return new Map(
+			[...value].map(([key, entry]) => [
+				cloneDefaultValue(key),
+				cloneDefaultValue(entry)
+			])
+		)
+	if (value instanceof Set)
+		return new Set([...value].map(cloneDefaultValue))
+	if (ArrayBuffer.isView(value) && 'slice' in value)
+		return (value as any).slice()
+	if (value === null || typeof value !== 'object') return value
+
+	const cloned = Object.create(null)
+	for (const key of Reflect.ownKeys(value))
+		Object.defineProperty(cloned, key, {
+			value: cloneDefaultValue(value[key]),
+			enumerable: Object.prototype.propertyIsEnumerable.call(value, key),
+			configurable: true,
+			writable: true
+		})
+
+	return cloned
+}
+
+const cloneDefault = (value: unknown) =>
+	typeof value === 'function' ? value() : cloneDefaultValue(value)
+
+const resolveDefaultSchema = (
+	schema: TAnySchema,
+	references: TAnySchema[]
+): TAnySchema => {
+	if (schema[Kind] === 'Import') {
+		const definitions = Object.values(schema.$defs ?? {}) as TAnySchema[]
+		const target = schema.$defs?.[schema.$ref]
+		if (!target) return schema
+
+		return resolveDefaultSchema(
+			target,
+			[...references, ...definitions]
+		)
+	}
+
+	if (schema[Kind] === 'Ref' || schema[Kind] === 'This') {
+		const reference = references.find(
+			(reference) => reference.$id === schema.$ref
+		)
+		if (reference) return resolveDefaultSchema(reference, references)
+	}
+
+	return schema
+}
+
+export const cloneSchemaInput = (value: any): any => {
+	if (Array.isArray(value)) return value.map(cloneForDefaults)
+	if (
+		value === null ||
+		typeof value !== 'object' ||
+		value instanceof Date ||
+		value instanceof Map ||
+		value instanceof Set ||
+		value instanceof ArrayBuffer ||
+		ArrayBuffer.isView(value)
+	)
+		return value
+	if (
+		Object.getPrototypeOf(value) !== Object.prototype &&
+		Object.getPrototypeOf(value) !== null
+	)
+		return value
+
+	const cloned = Object.create(null)
+	for (const key of Object.getOwnPropertyNames(value))
+		Object.defineProperty(cloned, key, {
+			value: cloneSchemaInput(value[key]),
+			enumerable: Object.prototype.propertyIsEnumerable.call(value, key),
+			configurable: true,
+			writable: true
+		})
+	for (const key of Object.getOwnPropertySymbols(value))
+		Object.defineProperty(cloned, key, {
+			value: cloneSchemaInput(value[key]),
+			enumerable: Object.prototype.propertyIsEnumerable.call(value, key),
+			configurable: true,
+			writable: true
+		})
+
+	return cloned
+}
+
+const cloneForDefaults = cloneSchemaInput
+
+const skipFunctionDefaults = (
+	inputSchema: TAnySchema,
+	references: TAnySchema[],
+	functionDefaults: Map<TAnySchema, { skip: boolean; value?: unknown }>,
+	seen = new Set<TAnySchema>()
+) => {
+	const schema = resolveDefaultSchema(inputSchema, references)
+	if (seen.has(schema)) return
+	seen.add(schema)
+
+	if (
+		typeof schema.default === 'function' &&
+		!functionDefaults.has(schema)
+	)
+		functionDefaults.set(schema, { skip: true })
+
+	for (const child of [
+		...Object.values(schema.properties ?? {}),
+		...Object.values(schema.patternProperties ?? {}),
+		...(schema.allOf ?? []),
+		...(schema.anyOf ?? []),
+		...(schema.oneOf ?? []),
+		...(Array.isArray(schema.items)
+			? schema.items
+			: schema.items
+				? [schema.items]
+				: []),
+		...(schema.not ? [schema.not] : []),
+		...(schema.additionalProperties &&
+		typeof schema.additionalProperties === 'object'
+			? [schema.additionalProperties]
+			: [])
+	] as TAnySchema[])
+		skipFunctionDefaults(child, references, functionDefaults, seen)
+}
+
+const matchesExistingProperties = (
+	inputSchema: TAnySchema,
+	input: any,
+	references: TAnySchema[]
+) => {
+	const schema = resolveDefaultSchema(inputSchema, references)
+	const properties = getSchemaProperties(schema)
+	if (!properties || input === null || typeof input !== 'object')
+		return input === undefined || Value.Check(schema, references, input)
+
+	for (const [key, propertySchema] of Object.entries(properties))
+		if (
+			hasOwn(input, key) &&
+			input[key] !== undefined &&
+			!Value.Check(propertySchema, references, input[key])
+		)
+			return false
+
+	return true
+}
+
+const prepareDefaultInput = (
+	inputSchema: TAnySchema,
+	input: any,
+	references: TAnySchema[],
+	nullish: boolean,
+	isRoot: boolean,
+	functionDefaults: Map<
+		TAnySchema,
+		{ skip: boolean; value?: unknown }
+	>
+): any => {
+	const schema = resolveDefaultSchema(inputSchema, references)
+	let value = input
+	const missing = value === undefined || (nullish && value === null)
+
+	if (typeof schema.default === 'function') {
+		if (missing) {
+			value = cloneDefault(schema.default)
+			functionDefaults.set(schema, { skip: false, value })
+		} else if (!functionDefaults.has(schema))
+			functionDefaults.set(schema, { skip: true })
+	} else if (missing && hasOwn(schema, 'default'))
+		value = cloneDefault(schema.default)
+
+	const properties = getSchemaProperties(schema)
+	if (
+		isRoot &&
+		value === undefined &&
+		(schema[Kind] === 'Object' || schema.type === 'object')
+	)
+		value = Object.create(null)
+	else value = cloneForDefaults(value)
+
+	if (
+		schema[Kind] === 'Object' &&
+		properties &&
+		value !== null &&
+		typeof value === 'object'
+	)
+		for (const [key, propertySchema] of Object.entries(properties)) {
+			const ownsProperty = hasOwn(value, key)
+			const rawPropertyValue = ownsProperty ? value[key] : undefined
+			const propertyValue = prepareDefaultInput(
+				propertySchema,
+				rawPropertyValue,
+				references,
+				nullish,
+				false,
+				functionDefaults
+			)
+
+			if (propertyValue !== undefined)
+				Object.defineProperty(value, key, {
+					value: propertyValue,
+					enumerable: true,
+					configurable: true,
+					writable: true
+				})
+		}
+	else if (Array.isArray(value) && schema.items)
+		if (Array.isArray(schema.items))
+			for (let i = 0; i < schema.items.length; i++)
+				value[i] = prepareDefaultInput(
+					schema.items[i],
+					value[i],
+					references,
+					nullish,
+					false,
+					functionDefaults
+				)
+		else
+			for (let i = 0; i < value.length; i++)
+				value[i] = prepareDefaultInput(
+					schema.items,
+					value[i],
+					references,
+					nullish,
+					false,
+					functionDefaults
+				)
+
+	if (schema.allOf)
+		for (const member of schema.allOf)
+			prepareDefaultInput(
+				member,
+				input,
+				references,
+				nullish,
+				false,
+				functionDefaults
+			)
+
+	for (const members of [schema.anyOf, schema.oneOf])
+		if (members) {
+			let selected = false
+			for (const member of members) {
+				if (
+					selected ||
+					!matchesExistingProperties(member, input, references)
+				) {
+					skipFunctionDefaults(
+						member,
+						references,
+						functionDefaults
+					)
+					continue
+				}
+
+				const candidate = prepareDefaultInput(
+					member,
+					input,
+					references,
+					nullish,
+					false,
+					functionDefaults
+				)
+				if (Value.Check(member, references, candidate)) {
+					selected = true
+					value = candidate
+				}
+			}
+		}
+
+	if (
+		schema.patternProperties &&
+		value !== null &&
+		typeof value === 'object'
+	)
+		for (const [pattern, propertySchema] of Object.entries(
+			schema.patternProperties
+		) as [string, TAnySchema][])
+			for (const key of Object.keys(value))
+				if (new RegExp(pattern).test(key))
+					value[key] = prepareDefaultInput(
+						propertySchema,
+						value[key],
+						references,
+						nullish,
+						false,
+						functionDefaults
+					)
+
+	return value
+}
+
+const withResolvedFunctionDefaults = <T>(
+	functionDefaults: Map<TAnySchema, { skip: boolean; value?: unknown }>,
+	run: () => T
+): T => {
+	const originals: [TAnySchema, PropertyDescriptor][] = []
+
+	try {
+		// All user factories are resolved before this synchronous block.
+		for (const [schema, resolved] of functionDefaults) {
+			const descriptor = Object.getOwnPropertyDescriptor(schema, 'default')
+			if (!descriptor) continue
+
+			originals.push([schema, descriptor])
+			if (resolved.skip) delete schema.default
+			else
+				Object.defineProperty(schema, 'default', {
+					...descriptor,
+					value: resolved.value
+				})
+		}
+
+		return run()
+	} finally {
+		for (const [schema, descriptor] of originals)
+			Object.defineProperty(schema, 'default', descriptor)
+	}
+}
+
+const restoreArrayBuffers = (
+	inputSchema: TAnySchema,
+	input: any,
+	defaulted: any,
+	references: TAnySchema[]
+): any => {
+	const schema = resolveDefaultSchema(inputSchema, references)
+	if (schema[Kind] === 'ArrayBuffer' && input instanceof ArrayBuffer)
+		return input
+
+	const properties = getSchemaProperties(schema)
+	if (
+		properties &&
+		input !== null &&
+		typeof input === 'object' &&
+		defaulted !== null &&
+		typeof defaulted === 'object'
+	)
+		for (const [key, propertySchema] of Object.entries(properties)) {
+			if (!hasOwn(input, key) || !hasOwn(defaulted, key)) continue
+
+			Object.defineProperty(defaulted, key, {
+				value: restoreArrayBuffers(
+					propertySchema,
+					input[key],
+					defaulted[key],
+					references
+				),
+				enumerable: true,
+				configurable: true,
+				writable: true
+			})
+		}
+	else if (Array.isArray(input) && Array.isArray(defaulted) && schema.items) {
+		if (Array.isArray(schema.items))
+			for (let i = 0; i < schema.items.length; i++)
+				defaulted[i] = restoreArrayBuffers(
+					schema.items[i],
+					input[i],
+					defaulted[i],
+					references
+				)
+		else
+			for (let i = 0; i < input.length; i++)
+				defaulted[i] = restoreArrayBuffers(
+					schema.items,
+					input[i],
+					defaulted[i],
+					references
+				)
+	}
+
+	return defaulted
+}
+
+const repairPrototypeDefaults = (
+	inputSchema: TAnySchema,
+	input: any,
+	references: TAnySchema[],
+	nullish: boolean
+): any => {
+	const schema = resolveDefaultSchema(inputSchema, references)
+
+	if (schema.anyOf || schema.oneOf) {
+		const members = schema.anyOf ?? schema.oneOf
+		for (const member of members) {
+			const candidate = repairPrototypeDefaults(
+				member,
+				cloneForDefaults(input),
+				references,
+				nullish
+			)
+			if (Value.Check(member, references, candidate)) return candidate
+		}
+		return input
+	}
+
+	if (schema.allOf) {
+		let value = input
+		for (const member of schema.allOf)
+			value = repairPrototypeDefaults(
+				member,
+				value,
+				references,
+				nullish
+			)
+		return value
+	}
+
+	const properties = getSchemaProperties(schema)
+	if (properties && input !== null && typeof input === 'object')
+		for (const [key, propertySchema] of Object.entries(properties)) {
+			const ownsProperty = hasOwn(input, key)
+			const needsDefault =
+				!ownsProperty || (nullish && input[key] === null)
+
+			if (needsDefault && hasOwn(propertySchema, 'default'))
+				Object.defineProperty(input, key, {
+					value: cloneDefault(propertySchema.default),
+					enumerable: true,
+					configurable: true,
+					writable: true
+				})
+
+			if (hasOwn(input, key))
+				Object.defineProperty(input, key, {
+					value: repairPrototypeDefaults(
+						propertySchema,
+						input[key],
+						references,
+						nullish
+					),
+					enumerable: true,
+					configurable: true,
+					writable: true
+				})
+		}
+	else if (
+		Array.isArray(input) &&
+		schema.items &&
+		!Array.isArray(schema.items)
+	)
+		for (let i = 0; i < input.length; i++)
+			input[i] = repairPrototypeDefaults(
+				schema.items,
+				input[i],
+				references,
+				nullish
+			)
+
+	return input
+}
+
+const removeFileDefaults = (
+	inputSchema: TAnySchema,
+	value: any,
+	references: TAnySchema[]
+) => {
+	const schema = resolveDefaultSchema(inputSchema, references)
+	const properties = getSchemaProperties(schema)
+
+	if (properties && value !== null && typeof value === 'object')
+		for (const [key, propertySchema] of Object.entries(properties)) {
+			if (!hasOwn(value, key)) continue
+
+			if (
+				(propertySchema[Kind] === 'File' && value[key] === 'File') ||
+				(propertySchema[Kind] === 'Files' && value[key] === 'Files')
+			)
+				delete value[key]
+			else removeFileDefaults(propertySchema, value[key], references)
+		}
+	else if (
+		Array.isArray(value) &&
+		schema.items &&
+		!Array.isArray(schema.items)
+	)
+		for (const item of value) removeFileDefaults(schema.items, item, references)
+}
+
+const mergeDefaultResult = (original: any, defaulted: any): any => {
+	if (Array.isArray(defaulted)) {
+		const target = Array.isArray(original) ? original : []
+		target.length = defaulted.length
+		for (let i = 0; i < defaulted.length; i++)
+			target[i] = mergeDefaultResult(
+				Array.isArray(original) ? original[i] : undefined,
+				defaulted[i]
+			)
+		return target
+	}
+
+	if (
+		defaulted === null ||
+		typeof defaulted !== 'object' ||
+		defaulted instanceof Date ||
+		defaulted instanceof Map ||
+		defaulted instanceof Set ||
+		defaulted instanceof ArrayBuffer ||
+		ArrayBuffer.isView(defaulted)
+	)
+		return defaulted
+
+	const target =
+		original !== null && typeof original === 'object' && !Array.isArray(original)
+			? original
+			: {}
+
+	for (const key of Object.getOwnPropertyNames(defaulted))
+		Object.defineProperty(target, key, {
+			value: mergeDefaultResult(
+				hasOwn(target, key) ? target[key] : undefined,
+				defaulted[key]
+			),
+			enumerable: Object.prototype.propertyIsEnumerable.call(defaulted, key),
+			configurable: true,
+			writable: true
+		})
+
+	for (const key of Object.getOwnPropertySymbols(defaulted))
+		Object.defineProperty(target, key, {
+			value: mergeDefaultResult(
+				hasOwn(target, key) ? target[key] : undefined,
+				defaulted[key]
+			),
+			enumerable: Object.prototype.propertyIsEnumerable.call(defaulted, key),
+			configurable: true,
+			writable: true
+		})
+
+	return target
+}
+
+export const applySchemaDefaults = (
+	checker: TypeCheck<any> | ElysiaTypeCheck<any>,
+	value: unknown,
+	nullish = false
+) => {
+	// @ts-expect-error private property
+	const schema = checker.schema as TAnySchema | undefined
+	if (!schema) return value
+
+	const references = typeof checker.References === 'function'
+		? (checker.References() as TAnySchema[])
+		: (Object.values(schema.$defs ?? {}) as TAnySchema[])
+
+	const functionDefaults = new Map<
+		TAnySchema,
+		{ skip: boolean; value?: unknown }
+	>()
+	const prepared = prepareDefaultInput(
+		schema,
+		value,
+		references,
+		nullish,
+		true,
+		functionDefaults
+	)
+	return withResolvedFunctionDefaults(functionDefaults, () => {
+		const defaulted = repairPrototypeDefaults(
+			schema,
+			restoreArrayBuffers(
+				schema,
+				prepared,
+				Value.Default(
+					schema,
+					references,
+					cloneForDefaults(prepared)
+				),
+				references
+			),
+			references,
+			nullish
+		)
+		removeFileDefaults(schema, defaulted, references)
+
+		return mergeDefaultResult(value, defaulted)
+	})
+}
+
 export const mergeObjectSchemas = (
 	schemas: TSchema[]
 ): {

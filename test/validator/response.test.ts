@@ -563,7 +563,7 @@ describe('Response Validator', () => {
 		expect(result.join('')).toContain('data: {"name":"Name"}')
 	})
 
-	it('handle distinct union', () => {
+	it('handle distinct union', async () => {
 		const app = new Elysia()
 			.get('/health', () => ({ status: 'healthy' }) as const, {
 				response: {
@@ -576,10 +576,9 @@ describe('Response Validator', () => {
 					])
 				}
 			})
-			.listen(3000)
 
-		const status = app.handle(req('/health')).then((x) => x.status)
+		const response = await app.handle(req('/health'))
 
-		expect(status).resolves.toBe(200)
+		expect(response.status).toBe(200)
 	})
 })

@@ -624,6 +624,11 @@ export type HookContainer<T extends Function = Function> = {
 }
 
 export interface LifeCycleStore {
+	config?: {
+		allowMeta?: boolean
+		mount?: Function
+		cookie?: ElysiaConfig<any>['cookie']
+	}
 	type?: ContentType
 	start: HookContainer<GracefulHandler<any>>[]
 	request: HookContainer<PreHandler<any, any>>[]
@@ -1722,7 +1727,13 @@ type _ResolveReturnTypeArray<T, Carry = {}> = T extends [
 		: _ResolveReturnTypeArray<Rest, Carry & {}>
 	: Prettify<Carry>
 
-export type AnyLocalHook = LocalHook<any, any, any, any, any>
+export type AnyLocalHook = LocalHook<any, any, any, any, any> & {
+	config?: {
+		allowMeta?: boolean
+		mount?: Function
+		cookie?: ElysiaConfig<any>['cookie']
+	}
+}
 
 export interface BaseHookLifeCycle<
 	in out Schema extends RouteSchema,

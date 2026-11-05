@@ -1,3 +1,34 @@
+# 1.4.31 - 5 Nov 2026
+Advisory:
+- GHSA-8v2r-hrw2-w54f: harden generated multipart request handling
+- GHSA-wfrv-2qh2-qjg3: harden generated route compilation
+- GHSA-952m-m7x7-mg46: harden generated schema compilation
+- GHSA-g7gw-g6xr-hc3w: harden generated validation
+- GHSA-7jpf-w5v7-43vw: harden generated request processing
+- GHSA-49jc-gq6m-2p59: harden generated schema processing
+- GHSA-8m2q-mx4w-gx5x: harden generated file validation
+- GHSA-mmpg-3m88-65rj: harden generated handler compilation
+- GHSA-mmpm-xfx6-v8p7: harden object construction and property assignment
+- GHSA-8fvr-j2m8-w3g5: strengthen authorization handling
+- GHSA-3xqr-x7wh-2j94: strengthen route authorization
+- GHSA-wc83-j7p2-6rv9: preserve authorization across plugins
+- GHSA-9rcf-wx52-g3qx: strengthen signed-cookie decoding
+- GHSA-3mvx-9fjx-ggrv: strengthen signed-cookie decoding
+- GHSA-ghvf-2m42-wm6j: strengthen signed-cookie verification
+- GHSA-878j-w97q-ggw5: harden incoming WebSocket validation
+- GHSA-7f78-4837-6rc4: harden outgoing WebSocket validation
+- GHSA-99h3-78f3-ggfr: bound validation-error handling
+- GHSA-hrhv-3p8p-5744: bound multipart array parsing
+- GHSA-h497-rjj5-w9xr: bound multipart array parsing
+- GHSA-xj99-v483-474c: bound multipart array parsing
+- GHSA-6wqq-f7gp-pcm7: bound multipart parsing work
+- GHSA-pxh4-839p-c8c8: harden encoded path routing
+- GHSA-297c-f888-3xh9: harden streamed response framing
+- GHSA-2458-2qvh-2p36: harden streamed response framing
+- GHSA-w2mg-29g9-g8pq: harden default-value application
+- GHSA-jvp4-v264-6m79: bound stream fan-out
+- GHSA-29vh-32ww-hrmg: restrict published package contents
+
 # 1.4.30 - 26 Aug 2026
 Chore:
 - update test case for Bun 1.4
