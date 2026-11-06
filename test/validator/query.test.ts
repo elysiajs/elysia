@@ -166,6 +166,41 @@ describe('Query Validator', () => {
 		expect(res.status).toBe(200)
 	})
 
+	it('parse numeric literal union', async () => {
+		const app = new Elysia().get(
+			'/',
+			({ query: { totalPages } }) => ({
+				totalPages,
+				type: typeof totalPages
+			}),
+			{
+				query: t.Object({
+					totalPages: t.Union([
+						t.Literal(10),
+						t.Literal(50),
+						t.Literal(100)
+					])
+				})
+			}
+		)
+
+		const res = await app.handle(req('/?totalPages=50'))
+
+		expect(res.status).toBe(200)
+		expect(await res.json()).toEqual({
+			totalPages: 50,
+			type: 'number'
+		})
+
+		const invalid = await app.handle(req('/?totalPages=25'))
+
+		expect(invalid.status).toBe(422)
+
+		const invalidString = await app.handle(req('/?totalPages=abc'))
+
+		expect(invalidString.status).toBe(422)
+	})
+
 	it('parse single integer', async () => {
 		const app = new Elysia().get('/', ({ query: { limit } }) => limit, {
 			query: t.Object({
