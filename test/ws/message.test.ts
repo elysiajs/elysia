@@ -338,6 +338,7 @@ describe('WebSocket message', () => {
 	it('should parse objects', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
+				body: t.Any(),
 				message(ws, raw) {
 					ws.send(raw)
 				}
@@ -363,6 +364,7 @@ describe('WebSocket message', () => {
 	it('should parse arrays', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
+				body: t.Any(),
 				message(ws, raw) {
 					ws.send(JSON.stringify(raw))
 				}
@@ -388,6 +390,7 @@ describe('WebSocket message', () => {
 	it('should parse strings', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
+				body: t.Any(),
 				message(ws, raw) {
 					ws.send(JSON.stringify(raw))
 				}
@@ -413,6 +416,7 @@ describe('WebSocket message', () => {
 	it('should parse numbers', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
+				body: t.Any(),
 				message(ws, raw) {
 					ws.send(JSON.stringify(raw))
 				}
@@ -438,6 +442,7 @@ describe('WebSocket message', () => {
 	it('should parse true', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
+				body: t.Any(),
 				message(ws, raw) {
 					ws.send(JSON.stringify(raw))
 				}
@@ -463,6 +468,7 @@ describe('WebSocket message', () => {
 	it('should parse false', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
+				body: t.Any(),
 				message(ws, raw) {
 					ws.send(JSON.stringify(raw))
 				}
@@ -488,6 +494,7 @@ describe('WebSocket message', () => {
 	it('should parse null', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
+				body: t.Any(),
 				message(ws, raw) {
 					ws.send(JSON.stringify(raw))
 				}
@@ -513,6 +520,7 @@ describe('WebSocket message', () => {
 	it('should parse not parse /hello', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
+				body: t.Any(),
 				message(ws, raw) {
 					ws.send(JSON.stringify(raw))
 				}
@@ -530,6 +538,33 @@ describe('WebSocket message', () => {
 		const { type, data } = await message
 		expect(type).toBe('message')
 		expect(data).toInclude('/hello')
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('should not parse json-like text frames without a body schema', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				message(ws, raw) {
+					ws.send(raw as string)
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+
+		const m1 = wsMessage(ws)
+		ws.send('["ping"]')
+		const { data: d1 } = await m1
+		expect(d1).toBe('["ping"]')
+
+		const m2 = wsMessage(ws)
+		ws.send('{"key":"val"}')
+		const { data: d2 } = await m2
+		expect(d2).toBe('{"key":"val"}')
 
 		await wsClosed(ws)
 		app.stop()
