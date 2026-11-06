@@ -166,6 +166,24 @@ describe('Static code analysis', () => {
 		expect(response).toBe('hi')
 	})
 
+	it('handles route added after async plugin compilation', async () => {
+		const plugin = async () => {
+			await new Promise((resolve) => setTimeout(resolve, 1))
+
+			return new Elysia()
+		}
+
+		const app = new Elysia({ precompile: true }).use(plugin())
+
+		await new Promise((resolve) => setTimeout(resolve, 25))
+
+		app.use(new Elysia().get('/late', () => 'ok'))
+
+		const response = await app.handle(req('/late')).then((x) => x.text())
+
+		expect(response).toBe('ok')
+	})
+
 	it('parse custom parser with schema', async () => {
 		const app = new Elysia()
 			.onParse((request, contentType) => {
