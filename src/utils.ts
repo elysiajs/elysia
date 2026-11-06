@@ -1149,6 +1149,9 @@ export const getLoosePath = (path: string) => {
 export const isNotEmpty = (obj?: Object) => {
 	if (!obj) return false
 
+	if (typeof Headers !== 'undefined' && obj instanceof Headers)
+		return !obj.keys().next().done
+
 	for (const _ in obj) return true
 
 	return false
