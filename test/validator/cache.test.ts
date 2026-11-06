@@ -708,3 +708,98 @@ describe('TypeBoxValidatorCache idle timer', () => {
 		expect(ref!.deref()).toBeUndefined()
 	})
 })
+
+// A refine is a closure the structural key cannot see (`~refine` is
+// non-enumerable), so a schema carrying one must be identity-only. The walk
+// used to look for it only under the keywords it had listed (`properties`,
+// `items`, `anyOf`, ...). Under any other applicator (`contains`, `if/then`,
+// `prefixItems`, ...) the refine was invisible: two routes whose schemas differ
+// only in that refine got the same key and SHARED one compiled validator, so
+// whichever route was requested first decided what the other accepted.
+describe('TypeBoxValidatorCache refine under any keyword', () => {
+	afterEach(() => Validator.clear())
+
+	const meta = (schema: unknown) =>
+		computeSchemaMeta(schema as TSchema, false)
+	const refine = () => t.Refine(t.String(), (v) => v === 'c')
+
+	it('treats a refine as opaque under every applicator keyword', () => {
+		const cases: [string, unknown][] = [
+			['contains', t.Array(t.String(), { contains: refine() } as any)],
+			['if', { type: 'string', if: refine() }],
+			[
+				'then',
+				{ type: 'string', if: { type: 'string' }, then: refine() }
+			],
+			[
+				'else',
+				{ type: 'string', if: { type: 'string' }, else: refine() }
+			],
+			['prefixItems', { type: 'array', prefixItems: [refine()] }],
+			['propertyNames', { type: 'object', propertyNames: refine() }],
+			[
+				'dependentSchemas',
+				{ type: 'object', dependentSchemas: { a: refine() } }
+			],
+			[
+				'additionalItems',
+				{ type: 'array', items: [], additionalItems: refine() }
+			],
+			['unevaluatedItems', { type: 'array', unevaluatedItems: refine() }],
+			[
+				'unevaluatedProperties',
+				{ type: 'object', unevaluatedProperties: refine() }
+			],
+			['definitions', { type: 'object', definitions: { R: refine() } }],
+			['dependencies', { type: 'object', dependencies: { a: refine() } }]
+		]
+
+		// a structural key here would let a same-shaped schema with another
+		// refine be served this one's validator
+		const keyed = cases
+			.filter(([, schema]) => meta(schema).special !== true)
+			.map(([keyword]) => keyword)
+
+		expect(keyed).toEqual([])
+	})
+
+	it('scopes a $ref under contains to its model registry', () => {
+		// without `hasRef` the models token is left off the key and an app's
+		// `$ref` validator is served to an app whose models say otherwise
+		expect(
+			meta({ type: 'array', contains: { $ref: 'Model' } }).hasRef
+		).toBe(true)
+	})
+
+	const contains = (want: string) =>
+		t.Array(t.String(), {
+			contains: t.Refine(t.String(), (v) => v === want)
+		} as any)
+
+	const conditional = (want: string) =>
+		t.Object({ x: t.String() }, {
+			if: { type: 'object' },
+			then: t.Refine(t.Object({ x: t.String() }), (v) => v.x === want)
+		} as any)
+
+	for (const [label, make, body] of [
+		['contains', contains, (v: string) => [v]],
+		['if/then', conditional, (v: string) => ({ x: v })]
+	] as const)
+		for (const first of ['c', 'd'])
+			it(`keeps ${label} routes apart when /a${first} is requested first`, async () => {
+				const app = new Elysia()
+					.post('/ac', { body: make('c') }, () => 'ok')
+					.post('/ad', { body: make('d') }, () => 'ok')
+				const other = first === 'c' ? 'd' : 'c'
+				const status = (path: string, value: string) =>
+					app.handle(post(path, body(value))).then((r) => r.status)
+
+				// the first request builds and caches its route's validator; the
+				// second route must build its own, not be served the first's
+				expect(await status(`/a${first}`, first)).toBe(200)
+				expect(await status(`/a${first}`, other)).toBe(422)
+				expect(await status(`/a${other}`, other)).toBe(200)
+				expect(await status(`/a${other}`, first)).toBe(422)
+			})
+})

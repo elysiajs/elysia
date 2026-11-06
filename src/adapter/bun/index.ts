@@ -401,7 +401,11 @@ export const BunAdapter = createAdapter({
 			return live && app.server === server
 				? live(request, srv)
 				: requestReady.promise.then(() => {
-						if (app.server !== server || !live)
+						if (
+							app.server !== server ||
+							!live ||
+							(wsDrifted && request.headers.has('upgrade'))
+						)
 							return unavailableFetch()
 
 						return live(request, srv)
@@ -428,6 +432,14 @@ export const BunAdapter = createAdapter({
 			(app as AnyElysia).pending ? undefined : handoff
 		)
 
+		// A request upgrades only on a listener that had `websocket` when it
+		// arrived, and the socket keeps that listener's limits through `reload`
+		const wsProvider = app['~hasWS']
+			? app['~ext']?.capability?.ws?.provider
+			: undefined
+		const wsBound = wsProvider?.declaredOptions(app as AnyElysia)
+		if (wsBound) serve.websocket = { ...wsBound, message() {} }
+
 		const server = (app.server = Bun.serve(
 			serve.routes || serve.error || htmlRoutes
 				? {
@@ -439,6 +451,8 @@ export const BunAdapter = createAdapter({
 		))
 
 		let live: ((request: Request, server: unknown) => unknown) | undefined
+		// the build's limits differ from the ones a parked upgrade would keep
+		let wsDrifted = false
 		let shutdownAttempt: Promise<void> | undefined
 		let wsLifecycle: WSLifecycle | undefined
 		let modulesReady: Promise<void> | undefined
@@ -471,6 +485,9 @@ export const BunAdapter = createAdapter({
 					throw new Error(
 						'[Elysia] internal: WebSocket routes are present but no capability provider was resolved'
 					)
+
+				wsDrifted =
+					!!wsBound && !Bun.deepEquals(wsBound, resolved.config ?? {})
 
 				const handler = resolved.provider.buildGlobalWSHandler()
 				websocket = resolved.config

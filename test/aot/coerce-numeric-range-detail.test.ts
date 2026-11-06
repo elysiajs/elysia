@@ -2,6 +2,7 @@ import '../../src/compile/aot-capture'
 import { afterEach, describe, expect, it, spyOn } from 'bun:test'
 
 import { System } from 'typebox/system'
+import { Value } from 'typebox/value'
 
 import { Elysia, t } from '../../src'
 import { Compiled } from '../../src/compile/aot'
@@ -160,6 +161,12 @@ const json = (body: unknown): RequestInit => ({
 	body: JSON.stringify(body)
 })
 
+// TypeBox's own first message, so a coerced lane that drifts from it fails
+const contradiction: string = Value.Errors(
+	t.Number({ minimum: 10, maximum: 0 }),
+	5
+)[0].message
+
 const cases: [
 	path: string,
 	init: RequestInit | undefined,
@@ -179,8 +186,9 @@ const cases: [
 	// TypeBox's float tolerance, as a JSON body number gets it
 	['/fraction?n=0.3', undefined, 200, '0.3'],
 	['/fraction?n=0.35', undefined, 422, 'must be multiple of 0.1'],
-	// TypeBox's constraint order: maximum is reported before minimum
-	['/contradiction?n=5', undefined, 422, 'must be <= 0'],
+	// whichever of minimum/maximum TypeBox reports first (its order changed
+	// in 1.3.33), the coerced lane reports the same one
+	['/contradiction?n=5', undefined, 422, contradiction],
 	['/integer?n=12', undefined, 200, '12'],
 	['/integer?n=5', undefined, 422, 'must be >= 10'],
 	['/integer?n=12.5', undefined, 422, 'must be integer'],
@@ -204,7 +212,7 @@ const cases: [
 	// the uncoerced reference every coerced lane above must match
 	['/body', json({ n: 5 }), 422, 'must be >= 10'],
 	['/body/fraction', json({ n: 0.3 }), 200, '0.3'],
-	['/body/contradiction', json({ n: 5 }), 422, 'must be <= 0'],
+	['/body/contradiction', json({ n: 5 }), 422, contradiction],
 	// a user's own union is not a coercion: TypeBox's first error stays first
 	['/body/user-union', json({ v: 'abc' }), 422, 'must be number']
 ]

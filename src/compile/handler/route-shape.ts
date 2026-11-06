@@ -5,7 +5,7 @@ import { defaultAdapter } from '../../adapter/constants'
 import { frozenRootOf } from '../../generation'
 import { returnedErrorClasses } from '../../handler/utils'
 import { originalFunction } from '../../type/shared'
-import { isAsyncFunction } from '../utils'
+import { isAsyncFunction, mayReturnPromise } from '../utils'
 import { deriveModes } from './utils'
 import { isResponseMap } from './frozen-validator'
 import {
@@ -216,7 +216,12 @@ export function routeShape(
 		feed('|')
 
 		const fns = (hook as any)?.[event]
-		if (fns) for (const fn of Array.isArray(fns) ? fns : [fns]) shape(fn)
+		if (fns)
+			for (const fn of Array.isArray(fns) ? fns : [fns]) {
+				if (event === 'transform')
+					feed(mayReturnPromise(fn) ? 'p' : 's')
+				shape(fn)
+			}
 	}
 
 	// fetch-level, not in the route hook, see `compileHandler`

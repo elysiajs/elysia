@@ -180,6 +180,71 @@ describe('Macro handler', () => {
 		expect(order).toEqual(['wrap', 'handler'])
 	})
 
+	describe('from a guard', () => {
+		const tap = (order: string[], name: string) => ({
+			handler: (handler: Function) => (context: unknown) => {
+				order.push(name)
+				return handler(context)
+			}
+		})
+
+		const reached = (order: string[]) => () => {
+			order.push('handler')
+			return 'ok'
+		}
+
+		it('wraps a route that has its own hook', async () => {
+			const order: string[] = []
+			const app = new Elysia()
+				.macro({ tap: tap(order, 'tap') })
+				.guard({ tap: true }, (app) =>
+					app.get('/', { afterHandle: () => {} }, reached(order))
+				)
+
+			await expect(app.handle('/').then((x) => x.text())).resolves.toBe(
+				'ok'
+			)
+			expect(order).toEqual(['tap', 'handler'])
+		})
+
+		it('wraps outside a macro on the route', async () => {
+			const order: string[] = []
+			const app = new Elysia()
+				.macro({ a: tap(order, 'a'), b: tap(order, 'b') })
+				.guard({ a: true }, (app) =>
+					app.get('/', { b: true }, reached(order))
+				)
+
+			await app.handle('/')
+			expect(order).toEqual(['a', 'b', 'handler'])
+		})
+
+		it('stacks flat guards, the earlier one outermost', async () => {
+			const order: string[] = []
+			const app = new Elysia()
+				.macro({ a: tap(order, 'a'), b: tap(order, 'b') })
+				.guard({ a: true })
+				.guard({ b: true })
+				.get('/', reached(order))
+
+			await app.handle('/')
+			expect(order).toEqual(['a', 'b', 'handler'])
+		})
+
+		it('wraps once for a named plugin used at two layers', async () => {
+			const order: string[] = []
+			const audit = new Elysia({ name: 'audit' })
+				.macro({ tap: tap(order, 'tap') })
+				.guard('global', { tap: true })
+			const app = new Elysia()
+				.use(audit)
+				.use(new Elysia().use(audit).get('/', reached(order)))
+
+			await app.handle('/')
+			expect(order).toEqual(['tap', 'handler'])
+		})
+	})
+
 	describe('AOT', () => {
 		afterEach(() => {
 			Compiled.clear()

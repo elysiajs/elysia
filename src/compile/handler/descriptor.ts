@@ -88,6 +88,8 @@ export interface RouteCompileState {
 	vali: RouteValidator<any> | undefined
 	inference: Sucrose.Inference
 	cookieConfig: CompiledCookieConfig | undefined
+	// the route reads or validates cookie: it gets a jar, not only a signer
+	needsCookie: boolean
 
 	beforeHandlePrefix: CompactBeforeHandlePrefix | undefined
 	traceHandlers: Function[] | undefined
@@ -250,9 +252,14 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 	const cookieValiIsAsync = vali?.cookie && isAsyncValidator(vali.cookie)
 
 	const needsCookie = !!vali?.cookie || !!inference.cookie
-	const cookieConfig = needsCookie
-		? Reconstruct.cookie(hook as any, root)
-		: undefined
+	// a hook or handler can write `set.cookie` without reading `cookie`: a
+	// signing config still signs what it writes, the route just gets no jar
+	let cookieConfig =
+		needsCookie || frozenRootOf(root)['~config']?.cookie?.sign
+			? Reconstruct.cookie(hook as any, root)
+			: undefined
+	if (!needsCookie && !cookieConfig?.hasSign) cookieConfig = undefined
+
 	const hasCookieSign = !!cookieConfig?.hasSign
 
 	const syncCookieSign = hasCookieSign && hasSyncHmac && !inAotBuild()
@@ -348,7 +355,9 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		afterResponseForcesAsync ||
 		handlerResultObserved ||
 		lifecycleForcesAsync ||
-		asyncCookieSign ||
+		// the jar parses on the signer's promise; without a jar a sync route
+		// chains the signer onto its response, a cookie-free one pays no Promise
+		(asyncCookieSign && needsCookie) ||
 		responseValiAsync ||
 		headersValiIsAsync ||
 		paramsValiIsAsync ||
@@ -455,6 +464,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		vali,
 		inference,
 		cookieConfig,
+		needsCookie,
 
 		beforeHandlePrefix,
 		traceHandlers,

@@ -620,6 +620,24 @@ export const TYPEBOX_REQUIRE_FILTER =
 export const EXACT_MIRROR_REQUIRE_FILTER =
 	/[\\/]elysia[\\/](dist|src)[\\/]type[\\/]validator[\\/]exact-mirror-require\.(m?js|ts)$/
 
+/** `.ts` texts of the TypeBox stubs applied in every mode, typed like the modules they replace */
+export const TYPED_TYPEBOX_STUBS = {
+	// `-live` imports the interface back from here, re-exporting it would be circular
+	type:
+		`export * from './typebox-type-live'\n` +
+		`export interface TypeboxTypeNamespaces {\n` +
+		`\ttype: typeof import('typebox/type')\n` +
+		`\tsystem: Pick<typeof import('typebox/system'), 'Arguments' | 'Environment' | 'Hashing' | 'Memory' | 'Settings'> &\n` +
+		`\t\tPartial<Pick<typeof import('typebox/system'), 'System'>>\n` +
+		`}\n`,
+	require:
+		`import type { TypeboxNamespaces } from './typebox-value'\n` +
+		`import type { TypeboxTypeNamespaces } from './typebox-type'\n` +
+		`export const requireTypebox = (): TypeboxNamespaces | undefined => undefined\n` +
+		`export const importTypebox = (): Promise<[TypeboxTypeNamespaces, TypeboxNamespaces]> | undefined => undefined\n`,
+	exactMirrorRequire: `export const requireExactMirror = (): unknown => undefined\n`
+}
+
 export const ELYSIA_MODULE_FILTER =
 	/[\\/]elysia[\\/](dist|src)[\\/].+\.(m?js|ts)x?$/
 
@@ -701,19 +719,26 @@ export const PARAM_TABLE_FILTER =
 	/[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]handler[\\/]param-table\.(m?js|ts)$/
 
 /** `param-table` holding only the resolvers of `aliases`, see `StubPlan.params` */
-export const paramTableSource = (aliases: string[]): string =>
+export const paramTableSource = (aliases: string[], typed?: boolean): string =>
 	(aliases.length
 		? `import { ${aliases.join(', ')} } from './param-resolvers'\n`
-		: '') + `export const handlerParams = { ${aliases.join(', ')} }\n`
+		: '') +
+	(typed
+		? `import type { Resolver } from './param-resolvers'\nexport const handlerParams: Record<string, Resolver | undefined> = { ${aliases.join(', ')} }\n`
+		: `export const handlerParams = { ${aliases.join(', ')} }\n`)
 
 export const STUB_SOURCES: Record<
 	Exclude<keyof StubPlan, 'adapter' | 'isProduction' | 'router' | 'params'>,
-	Array<{ filter: RegExp; source: string }>
+	// `typed`: the `.ts` target's text when deriving it from `source` is not enough
+	Array<{ filter: RegExp; source: string; typed?: string }>
 > = {
 	staticClone: [
 		{
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]compile[\\/]handler[\\/]static-clone-resolver\.(m?js|ts)$/,
-			source: `export const staticCloneResolver = undefined\n`
+			source: `export const staticCloneResolver = undefined\n`,
+			typed:
+				`import type { cloneStaticValue } from './utils'\n` +
+				`export const staticCloneResolver: (() => typeof cloneStaticValue) | undefined = undefined\n`
 		}
 	],
 	jit: [
@@ -748,7 +773,11 @@ export const STUB_SOURCES: Record<
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] WebSocket route builder was stripped (strip mode) but a WS route was used. Rebuild with strip:false.")}\n` +
 				`export function buildWSRoute(){return e()}\n` +
-				`export function buildGlobalWSHandler(){return e()}\n`
+				`export function buildGlobalWSHandler(){return e()}\n` +
+				// `plugin/websocket` reads these at load, only a `.ws()` route calls them
+				`export function resolveWSOptions(){return e()}\n` +
+				`export function accumulateWSOptions(){return e()}\n` +
+				`export function declaredWSOptions(){return e()}\n`
 		}
 	],
 	reconstruct: [
@@ -794,7 +823,30 @@ export const STUB_SOURCES: Record<
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] trace support was stripped (strip mode) but a route used trace. Rebuild with strip:false.")}\n` +
 				`export function createTracer(){return e()}\n` +
-				`export function unionTracePhases(){return new Set()}\n`
+				`export function unionTracePhases(){return new Set()}\n` +
+				`export function requestLane(){return e()}\n` +
+				`export function afterResponseBracket(){return e()}\n`,
+			// importers keep their type imports, the trace handler types become opaque
+			typed:
+				`import type { TraceEvent } from './constants'\n` +
+				`const e=(): never=>{throw new Error("[elysia-aot] trace support was stripped (strip mode) but a route used trace. Rebuild with strip:false.")}\n` +
+				`export function createTracer(..._: any[]): any{return e()}\n` +
+				`export function unionTracePhases(_?: readonly Function[]): Set<TraceEvent> | null{return new Set()}\n` +
+				`export function requestLane(..._: any[]): any{return e()}\n` +
+				`export function afterResponseBracket(..._: any[]): any{return e()}\n` +
+				`export type { TraceEvent }\n` +
+				`export type TraceHandler<_Route = any, _Singleton = any> = any\n` +
+				`export type TraceProcess<_Type = any, _WithChildren = any> = any\n` +
+				`export type TraceStream = any\n` +
+				`export type TraceEndDetail = any\n` +
+				`export type TraceListener = any\n` +
+				`export interface TraceCapability {\n` +
+				`\treadonly id: string\n` +
+				`\treadonly createTracer: typeof createTracer\n` +
+				`\treadonly unionTracePhases: typeof unionTracePhases\n` +
+				`\treadonly requestLane: typeof requestLane\n` +
+				`\treadonly afterResponseBracket: typeof afterResponseBracket\n` +
+				`}\n`
 		}
 	],
 	sucrose: [
@@ -838,6 +890,8 @@ export const STUB_SOURCES: Record<
 				`const s=(t)=>t!=null&&(t.body!=null||t.query!=null||t.params!=null||t.headers!=null||t.cookie!=null||t.response!=null)\n` +
 				`export function snapshotSchema(v){return v===null||typeof v!=="object"||"~standard" in v?v:e()}\n` +
 				`export function snapshotHookSchemas(h){return h&&(s(h)||Array.isArray(h.schemas)&&h.schemas.some(s))?e():h}\n` +
+				// a direct validator built after the build keeps the caller's schema
+				`export const ownSchema=(v)=>v\n` +
 				// imported by the AOT plugin, which a bundle may keep
 				`export let snapshotCalls=0\n`
 		}
@@ -846,11 +900,16 @@ export const STUB_SOURCES: Record<
 		{
 			// no jar exists to be returned as a response, `buildCookieJar` is stubbed
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]cookie\.(m?js|ts)$/,
-			source: `export class Cookie{constructor(){throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a route used cookies. Rebuild with strip:false.")}static isCookie(){return false}}\n`
+			source: `export class Cookie{constructor(){throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a route used cookies. Rebuild with strip:false.")}static isCookie(){return false}}\n`,
+			typed: `export class Cookie<T = any>{declare value: T;[key: string]: any;constructor(..._: any[]){throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a route used cookies. Rebuild with strip:false.")}static isCookie(v: unknown): v is Cookie{return false}}\n`
 		},
 		{
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]serialize\.(m?js|ts)$/,
-			source: `export function serializeCookie(){throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a response set a cookie. Rebuild with strip:false.")}\n`
+			source: `export function serializeCookie(){throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a response set a cookie. Rebuild with strip:false.")}\n`,
+			// the caller filters the result in a callback, `any` would leave its parameter untyped
+			typed:
+				`import type { Context } from '../context'\n` +
+				`export function serializeCookie(_: Context['set']['cookie']): string | string[] | undefined{throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a response set a cookie. Rebuild with strip:false.")}\n`
 		},
 		{
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]lib\.(m?js|ts)$/,
@@ -869,29 +928,90 @@ export const STUB_SOURCES: Record<
 	bridge: [
 		{
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]type[\\/]bridge\.(m?js|ts)$/,
-			source: `export * from './bridge-live'\n`
+			source: `export * from './bridge-live'\n`,
+			// the bridge's own types; `declare` emits nothing, so the values stay `-live`'s
+			typed:
+				`import type { TAny, TSchema, Ref as RefType } from 'typebox/type'\n` +
+				`import type { Compile as CompileType } from 'typebox/compile'\n` +
+				`import type { Create as CreateType, Decode as DecodeType, HasCodec as HasCodecType, Clone as CloneType, Check as CheckType, Errors as ErrorsType } from 'typebox/value'\n` +
+				`import type { applyCoercions as applyCoercionsType, coerceFormData as coerceFormDataType, coerceQuery as coerceQueryType, coerceRoot as coerceRootType, coerceStringToStructure as coerceStringToStructureType, coerceBody as coerceBodyType } from './coerce'\n` +
+				`import type { TypeBoxValidator as TypeBoxValidatorType, TypeBoxValidatorCache as TypeBoxValidatorCacheType, mayHaveFileType as mayHaveFileTypeType } from './validator'\n` +
+				`import type { Intersect as IntersectType } from './elysia/intersect'\n` +
+				`import type { hasTypes as hasTypesType } from './utils'\n` +
+				`interface TypeboxModule {\n` +
+				`\tCompile: typeof CompileType\n` +
+				`\tCreate: typeof CreateType\n` +
+				`\tDecode: typeof DecodeType\n` +
+				`\tapplyCoercions: typeof applyCoercionsType\n` +
+				`\tTypeBoxValidator: typeof TypeBoxValidatorType\n` +
+				`\tTypeBoxValidatorCache: typeof TypeBoxValidatorCacheType\n` +
+				`\tcoerceFormData: typeof coerceFormDataType\n` +
+				`\tcoerceQuery: typeof coerceQueryType\n` +
+				`\tcoerceRoot: typeof coerceRootType\n` +
+				`\tcoerceStringToStructure: typeof coerceStringToStructureType\n` +
+				`\tcoerceBody: typeof coerceBodyType\n` +
+				`\thasTypes: typeof hasTypesType\n` +
+				`\tmayHaveFileType: typeof mayHaveFileTypeType\n` +
+				`\tHasCodec: typeof HasCodecType\n` +
+				`\tIntersect: typeof IntersectType\n` +
+				`\tRef: typeof RefType\n` +
+				`\tClone: typeof CloneType\n` +
+				`\tCheck: typeof CheckType\n` +
+				`\tErrors: typeof ErrorsType\n` +
+				`\twarmTypebox: () => void\n` +
+				`\tpreloadTypebox: () => Promise<void> | undefined\n` +
+				`}\n` +
+				`export * from './bridge-live'\n` +
+				`export declare let TypeBoxValidator: typeof TypeBoxValidatorType\n` +
+				`export type TypeBoxValidator<T extends TSchema = TAny> = TypeBoxValidatorType<T>\n` +
+				`export declare let TypeBoxValidatorCache: typeof TypeBoxValidatorCacheType\n` +
+				`export type TypeBoxValidatorCache = TypeBoxValidatorCacheType\n` +
+				`export declare function useTypebox(mod: TypeboxModule): void\n`
 		}
 	],
 	typeboxValue: [
 		{
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]type[\\/]typebox-value\.(m?js|ts)$/,
-			source: `export * from './typebox-value-live'\n`
+			source: `export * from './typebox-value-live'\n`,
+			// `-live` imports the interface back from here, re-exporting it would be circular
+			typed:
+				`export * from './typebox-value-live'\n` +
+				`export interface TypeboxNamespaces {\n` +
+				`\tvalue: Pick<typeof import('typebox/value'), 'Check' | 'Clean' | 'Clone' | 'Create' | 'Decode' | 'DecodeUnsafe' | 'Default' | 'Encode' | 'EncodeUnsafe' | 'Errors' | 'HasCodec'>\n` +
+				`\tschema: Pick<typeof import('typebox/schema'), 'Compile' | 'Build'>\n` +
+				`\tcompile: Pick<typeof import('typebox/compile'), 'Compile'>\n` +
+				`}\n`
 		}
 	],
 	exactMirror: [
 		{
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]type[\\/]validator[\\/]exact-mirror\.(m?js|ts)$/,
-			source: `export * from './exact-mirror-live'\n`
+			source: `export * from './exact-mirror-live'\n`,
+			typed:
+				`export * from './exact-mirror-live'\n` +
+				`export type CreateMirror = (schema: any, options?: any) => any\n`
 		}
 	]
 }
 
+/**
+ * `.ts` text of a stub, for a loader that compiles it as TypeScript: `typed`,
+ * else `source` with a bare `()` taking any arguments and a bare `(x)` as `any`
+ */
+export const typedStubSource = (source: string, typed?: string): string =>
+	typed ??
+	source.replace(/(?<!constructor)\((\w?)\)(?=\{|=>)/g, (_m, name: string) =>
+		name ? `(${name}: any)` : '(..._: any[]): any'
+	)
+
 export const alignStubExtensions = (
 	stubSource: string,
-	targetPath: string
+	targetPath: string,
+	typed?: string
 ): string => {
 	const ext = targetPath.slice(targetPath.lastIndexOf('.'))
-	if (ext !== '.mjs' && ext !== '.js' && ext !== '.cjs') return stubSource
+	if (ext !== '.mjs' && ext !== '.js' && ext !== '.cjs')
+		return typed ?? stubSource
 
 	// CJS output copies re-exported bindings by value, so a require cycle
 	// (validator -> error -> bridge -> bridge-live -> validator) freezes
@@ -1449,7 +1569,9 @@ export async function generateCompiledArtifacts(
 				!hasReplayableCapture,
 				adapterStub,
 				productionStub,
-				wsCookie,
+				// the fetch handler signs a 404 or onRequest answer by the
+				// root cookie config, outside the handler JIT too
+				wsCookie || !!typedApp['~config']?.cookie?.sign,
 				exactMirror,
 				artifacts.key,
 				{

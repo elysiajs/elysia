@@ -2,11 +2,12 @@ import { Create } from './type/bridge'
 
 import type { MaybePromise } from './types'
 import { isProduction } from './universal/is-production'
-import { StatusMap, StatusMapBack } from './constants'
+import { StatusMap, StatusMapBack, PROBLEM_JSON } from './constants'
 import { primitiveElysiaTypes } from './type/constants'
 import { skipClone } from './adapter/skip-clone'
 
 export { isProduction } from './universal/is-production'
+export { PROBLEM_JSON } from './constants'
 
 const expectedCache = new WeakMap<object, unknown>()
 
@@ -288,10 +289,19 @@ function walkComposition(
 	}
 }
 
+// RFC 6901: TypeBox >= 1.3.35 escapes keys in `instancePath` ('~' as '~0',
+// '/' as '~1'). Older versions pass keys raw, so there a key holding '/' or
+// a literal '~0'/'~1' cannot be told apart and decodes wrong
+const decodePointer = (pointer: string) =>
+	pointer.replace(/~1/g, '/').replace(/~0/g, '~')
+
 const walkSubSchema = (schema: any, instancePath: string | undefined) =>
 	!schema || !instancePath
 		? schema
-		: walkComposition(schema, instancePath.split('/').filter(Boolean))
+		: walkComposition(
+				schema,
+				instancePath.split('/').filter(Boolean).map(decodePointer)
+			)
 
 const FOUND_ECHO_LIMIT = 8192
 const FOUND_ECHO_OMITTED = `[value exceeds ${FOUND_ECHO_LIMIT} byte echo limit]`
@@ -382,7 +392,8 @@ const jsonLengthWithin = (value: unknown, budget: number): number => {
 export function subValueAt(value: unknown, path: unknown) {
 	let parts: any[] | undefined
 
-	if (typeof path === 'string') parts = path.split('/').filter(Boolean)
+	if (typeof path === 'string')
+		parts = path.split('/').filter(Boolean).map(decodePointer)
 	else if (Array.isArray(path)) parts = path
 
 	if (!parts) return
@@ -464,6 +475,19 @@ function scopeIssues(errors: any[]) {
 	return out ?? errors
 }
 
+// one accessor pair for every instance: fresh closures per error drop V8
+// objects to dictionary mode
+const lazyErrors = {
+	get(this: ValidationError) {
+		return this['~resolve']().errors
+	},
+	set(this: ValidationError, v: unknown) {
+		defineData(this, 'errors', v)
+	},
+	enumerable: true,
+	configurable: true
+}
+
 export class ValidationError extends ElysiaError {
 	/** Response validation is a server error; other validation is a client error. */
 	status: 422 | 500 = 422
@@ -500,14 +524,7 @@ export class ValidationError extends ElysiaError {
 
 		this.#findCustomError = findCustomError
 
-		Object.defineProperty(this, 'errors', {
-			get: () => this['~resolve']().errors,
-			set(v) {
-				defineData(this, 'errors', v)
-			},
-			enumerable: true,
-			configurable: true
-		})
+		Object.defineProperty(this, 'errors', lazyErrors)
 	}
 
 	/** @internal lazily resolve and memoize errors/customError/message */
@@ -629,7 +646,9 @@ export class ValidationError extends ElysiaError {
 					Array.isArray(raw) && raw.length
 						? raw.map(segmentString).join('.')
 						: typeof raw === 'string' && raw
-							? raw.replace(/^\//, '').replace(/\//g, '.')
+							? decodePointer(
+									raw.replace(/^\//, '').replace(/\//g, '.')
+								)
 							: 'root'
 
 				const issue = {
@@ -913,8 +932,6 @@ export const status = <
 	response?: T
 ) => new ElysiaStatus<Code, T>(code, response as T)
 
-export const PROBLEM_JSON = 'application/problem+json'
-
 /**
  * RFC 9457 Problem Details shape.
  *
@@ -1043,7 +1060,22 @@ export function internalServerErrorBody(error: any) {
 	if (!isProduction()) {
 		if (error?.message != null) body.detail = error.message
 		if (error?.name) body.name = error.name
-		if (error?.cause !== undefined) body.cause = error.cause
+		// Development is the default when NODE_ENV is unset, so a served
+		// cause is public: an HTTP client's Error carries the upstream
+		// response, request config and Authorization header. Serve only what
+		// names it; `Error.isError` covers an Error from another realm
+		const cause = error?.cause
+		if (cause instanceof Error || Error.isError?.(cause))
+			body.cause = {
+				name: String((cause as Error).name),
+				message: String((cause as Error).message)
+			}
+		else if (
+			typeof cause === 'string' ||
+			typeof cause === 'number' ||
+			typeof cause === 'boolean'
+		)
+			body.cause = cause
 	}
 
 	return body
@@ -1210,6 +1242,9 @@ export type TaggedHTTPError<Type extends string, Annotation = {}> = {
  * through to the next one. A response that depends on the request belongs in
  * `.onError(Class, handler)`
  *
+ * `headers` is served only from a class that extends `HTTPError`, not from
+ * one that implements it
+ *
  * @example
  * ```ts
  * class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT') {
@@ -1279,7 +1314,14 @@ export abstract class HTTPError<
 	 */
 	declare readonly status?: number | keyof StatusMap
 
-	/** Headers merged into `set.headers` when the error is served */
+	/**
+	 * Headers merged into `set.headers` when the error is served
+	 *
+	 * Only from a class that extends this module's `HTTPError`: on an error
+	 * that only implements the contract, or extends the `HTTPError` of
+	 * another loaded copy of Elysia (a duplicate install, a bundled plugin),
+	 * they are ignored
+	 */
 	declare readonly headers?: Record<string, string>
 
 	/**

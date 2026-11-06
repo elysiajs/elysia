@@ -1,5 +1,5 @@
 import { dangerousKeys } from '../../constants'
-import { nullObject } from '../../utils'
+import { EmptyObject } from '../../utils'
 
 type FormDataEntryValue = string | File
 
@@ -143,7 +143,7 @@ function setNested(
 		const existing = current[key]
 		if (existing === undefined) {
 			if (--budget.left < 0) return
-			current = current[key] = nextIsArrayIdx ? [] : nullObject()
+			current = current[key] = nextIsArrayIdx ? [] : new EmptyObject()
 			continue
 		}
 		if (
@@ -161,12 +161,12 @@ function setNested(
 			}
 		}
 		if (--budget.left < 0) return
-		current = current[key] = nextIsArrayIdx ? [] : nullObject()
+		current = current[key] = nextIsArrayIdx ? [] : new EmptyObject()
 	}
 }
 
 export function formDataToObject(form: FormData): Record<string, unknown> {
-	const body: Record<string, unknown> = nullObject()
+	const body: Record<string, unknown> = new EmptyObject()
 
 	let grouped: Map<string, FormDataEntryValue[]> | undefined
 	form.forEach((value, key) => {

@@ -20,8 +20,12 @@ export function clearSharedReferenceCaches() {
 // Not a cache, provenance, never cleared
 const pureRefinements = new WeakSet<object>()
 
-export function pureRefine<T>(node: T): T {
-	const refinements = (node as any)?.['~refine']
+export function pureRefine<T>(node: T): T
+export function pureRefine(node: unknown) {
+	const refinements =
+		typeof node === 'object' && node !== null
+			? (node as { '~refine'?: unknown })['~refine']
+			: undefined
 
 	if (Array.isArray(refinements))
 		for (const refinement of refinements)
@@ -43,6 +47,11 @@ export const replaceFunction = <T extends Function>(
 	Object.defineProperty(replacement, '~original', {
 		value: (original as any)['~original'] ?? original
 	}) as any
+
+// RFC 6901 pointer segment, as TypeBox >= 1.3.35 writes its error paths
+/** @internal */
+export const escapePointerSegment = (key: string) =>
+	key.replace(/~/g, '~0').replace(/\//g, '~1')
 
 /** @internal */
 export const originalFunction = <T extends Function>(

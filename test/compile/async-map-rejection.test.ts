@@ -128,4 +128,18 @@ for (const rejection of rejectionCases)
 
 			await expectHandled(app, mapError, seen)
 		})
+
+		// A request hook's early return is mapped before any route runs: its
+		// rejection must still reach onError instead of escaping `fetch`
+		it('handles a response-map rejection on a request hook early return', async () => {
+			for (const hook of [() => routeValue, async () => routeValue]) {
+				const { adapter, mapError, onError, seen } = setup()
+				const app = new Elysia({ adapter })
+					.onError(onError)
+					.onRequest(hook)
+					.get('/', () => 'unreachable')
+
+				await expectHandled(app, mapError, seen)
+			}
+		})
 	})

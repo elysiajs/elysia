@@ -106,3 +106,5 @@ export type StatusMapBack = typeof StatusMapBack
 export const dangerousKeys = new Set(['__proto__', 'constructor', 'prototype'])
 export const isDynamicRegex = /[:*]/
 export const needEncodeRegex = /[^A-Za-z0-9\-_.!~*'();,/?:@&=+$#]/
+
+export const PROBLEM_JSON = 'application/problem+json'

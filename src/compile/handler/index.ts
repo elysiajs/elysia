@@ -25,6 +25,11 @@ import type { Context } from '../../context'
 import {
 	cloneHook,
 	flattenChain,
+	deriveEntryFn,
+	hookOrigin,
+	macroSource,
+	pathOf,
+	topPath,
 	flattenChainInfo,
 	installsOverlap,
 	type Installs,
@@ -217,15 +222,6 @@ export function resolveWSLocalHook(
 // is shared by reference across every app that reuses the plugin it lives in
 const chainNodeMemos: ResolutionMemo = new WeakMap()
 
-/**
- * Drop this root's resolved-hook memos.
- * (JIT or rebuild) compile repopulates them anyway, just uncached
- */
-export function clearHandlerAnalysisCaches(root: AnyElysia) {
-	localHookMemos.delete(root)
-	chainNodeMemos.delete(root)
-}
-
 function resolveChainNode(
 	root: AnyElysia,
 	node: ChainNode
@@ -255,7 +251,6 @@ function resolveChainNode(
 			applyMacros(resolved, scope, frozenRoot, scopeMacro, rootMacro)
 
 		promoteDerive(resolved)
-		runIntrospect(resolved)
 		perScope.set(added, resolved)
 	}
 
@@ -278,6 +273,111 @@ export const localMacroRoot = (
 	frozenRootOf(instance)['~ext']?.macro
 		? instance
 		: root
+
+const macroKeyOf = (instance: AnyElysia, root: AnyElysia) => {
+	const scope = frozenRootOf(localMacroRoot(instance, root))['~ext']?.macro
+	const top = frozenRootOf(root)['~ext']?.macro
+
+	return (key: string) => (!!scope && key in scope) || (!!top && key in top)
+}
+
+export interface HookSource {
+	readonly from: 'route' | 'guard' | 'call'
+	readonly role: string
+	readonly path: readonly string[]
+}
+
+export function attachSource(
+	hooks: any,
+	root: AnyElysia,
+	[, , , instance, local, appHook, inheritedChain, macroScope]: InternalRoute,
+	written: Partial<AnyLocalHook> | undefined
+) {
+	const source = new Map<unknown, HookSource[]>()
+	const add = (
+		fn: unknown,
+		from: HookSource['from'],
+		role: string,
+		path: readonly string[]
+	) => {
+		const list = source.get(fn)
+
+		if (list) list.push({ from, role, path })
+		else source.set(fn, [{ from, role, path }])
+	}
+
+	const listed = (list: unknown[] | undefined, from: HookSource['from']) => {
+		if (list)
+			for (let i = 0; i < list.length; i += 3)
+				add(list[i], from, list[i + 1] as string, list[i + 2] as any)
+	}
+
+	const wrote = (
+		hook: object,
+		from: HookSource['from'],
+		owner: AnyElysia
+	) => {
+		const isMacro = macroKeyOf(owner, root)
+		for (const key in hook)
+			if (!isMacro(key) || (from === 'guard' && key === 'derive'))
+				for (const fn of [(hook as any)[key]].flat())
+					if (typeof fn === 'function')
+						add(fn, from, key, pathOf(topPath, key))
+	}
+
+	listed(local && macroSource.get(local), 'route')
+
+	const compiled =
+		local &&
+		resolveLocalHook(
+			localMacroRoot((macroScope ?? instance) as AnyElysia, root),
+			local,
+			root
+		)
+
+	if (compiled !== local) listed(macroSource.get(compiled!), 'route')
+	if (written) wrote(written, 'route', (macroScope ?? instance) as AnyElysia)
+
+	const resolve = chainResolver(root)
+	const seen = new Set<object>()
+	const collect = (node: ChainNode) => {
+		const stored = (node as { added: Partial<AppHook> }).added
+		const added = resolve ? resolve(node) : stored
+		if (!added || seen.has(added)) return added
+		seen.add(added)
+
+		listed(macroSource.get(added), 'guard')
+		const origin = hookOrigin.get(
+			(
+				(node as { registration?: { added: object } }).registration ??
+				(node as { added: object })
+			).added
+		)
+
+		if (origin === true) {
+			const derives = (stored as any)['~deriveEntries']
+			if (derives)
+				for (const entry of derives)
+					add(deriveEntryFn(entry), 'call', 'derive', topPath)
+			else
+				for (const key in stored)
+					for (const fn of [(stored as any)[key]].flat())
+						if (typeof fn === 'function')
+							add(fn, 'call', key, topPath)
+		} else if (origin)
+			wrote(
+				origin,
+				'guard',
+				((node as { owner?: AnyElysia }).owner ?? root) as AnyElysia
+			)
+
+		return added
+	}
+	flattenChain(appHook as ChainNode, collect)
+	if (instance !== root) flattenChain(inheritedChain as ChainNode, collect)
+
+	hooks['~source'] = source
+}
 
 /** Whether a hook can be skipped by a native static response. */
 function isEmptyPipelineHook(hook: AnyLocalHook | undefined) {

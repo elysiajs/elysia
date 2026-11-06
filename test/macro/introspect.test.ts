@@ -130,7 +130,7 @@ describe('Macro introspect', () => {
 		expect(seen).toEqual(['b', 'a', 'a'])
 	})
 
-	it('runs once for a guard, on the guard hooks shared by its routes', async () => {
+	it('runs once per route of a guard', async () => {
 		const log: string[] = []
 		let calls = 0
 		const macro = last(log)
@@ -150,8 +150,59 @@ describe('Macro introspect', () => {
 
 		await app.handle('/a')
 		await app.handle('/b')
-		expect(calls).toBe(1)
+		expect(calls).toBe(2)
 		expect(log).toEqual(['guard', 'mark', 'guard', 'mark'])
+	})
+
+	// the macro's hook must outlast a hook the guard cannot know about
+	it("sees the route's own afterHandle when a guard applies it", async () => {
+		const log: string[] = []
+		const app = new Elysia()
+			.macro({ last: last(log) })
+			.guard({ last: true }, (app) =>
+				app.get('/', { afterHandle: push(log, 'route') }, () => 'ok')
+			)
+
+		await app.handle('/')
+		expect(log).toEqual(['route', 'mark'])
+	})
+
+	it("runs a guard's before the route's own macro", async () => {
+		const seen: string[] = []
+		const named = (name: string) => ({
+			afterHandle: () => {},
+			introspect: () => {
+				seen.push(name)
+			}
+		})
+		const app = new Elysia()
+			.macro({ outer: named('outer'), inner: named('inner') })
+			.guard({ outer: true }, (app) =>
+				app.get('/', { inner: true }, () => 'ok')
+			)
+
+		await app.handle('/')
+		expect(seen).toEqual(['outer', 'inner'])
+	})
+
+	it('runs once for a named plugin used at two layers', async () => {
+		let calls = 0
+		const audit = new Elysia({ name: 'audit' })
+			.macro({
+				counted: {
+					afterHandle: () => {},
+					introspect: () => {
+						calls++
+					}
+				}
+			})
+			.guard('global', { counted: true })
+		const app = new Elysia()
+			.use(audit)
+			.use(new Elysia().use(audit).get('/', () => 'ok'))
+
+		await app.handle('/')
+		expect(calls).toBe(1)
 	})
 
 	it('strips a schema before validation', async () => {

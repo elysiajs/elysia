@@ -70,6 +70,8 @@ const MAP_DERIVE_APP = resolve(
 	'fixtures/mode-map-derive-app.ts'
 )
 const FILE_SCHEMA_APP = resolve(import.meta.dir, 'fixtures/mode-file-app.ts')
+const SANITIZE_APP = resolve(import.meta.dir, 'fixtures/sealed-sanitize-app.ts')
+const STREAM_APP = resolve(import.meta.dir, 'fixtures/sealed-stream-app.ts')
 
 async function buildEsbuild(
 	app: string,
@@ -147,6 +149,8 @@ beforeAll(async () => {
 	code.esbuildDuplicate = await buildEsbuild(DUPLICATE_ROUTE_APP, true)
 	code.esbuildMapDerive = await buildEsbuild(MAP_DERIVE_APP)
 	code.esbuildFile = await buildEsbuild(FILE_SCHEMA_APP)
+	code.esbuildSanitize = await buildEsbuild(SANITIZE_APP)
+	code.esbuildStream = await buildEsbuild(STREAM_APP)
 
 	// A live esbuild service can interfere with importing freshly written bundles.
 	await esbuild.stop()
@@ -347,6 +351,62 @@ describe('AOT seal eligibility', () => {
 })
 
 /** Standard Schema validation does not require the TypeBox bridge. */
+// a sanitizer is config, not a schema: it must not cost the seal, and a sealed
+// bundle has no exact-mirror to fall back on
+describe('AOT sealing with sanitize', () => {
+	it('seals an app that sanitizes', async () => {
+		const { mode } = await generateCompiledArtifacts(SANITIZE_APP)
+
+		expect(mode).toBe('sealed')
+		expect(dragsTypeBox(code.esbuildSanitize!)).toBe(false)
+		expect(code.esbuildSanitize).not.toContain('exact-mirror')
+	})
+
+	it('sanitizes a body and a response in a sealed bundle', async () => {
+		const app = await loadApp('esbuildSanitize')
+
+		const response = await app.handle(
+			new Request('http://localhost/s', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name: 'x', extra: 1 })
+			})
+		)
+
+		expect(response.status).toBe(200)
+		await expect(response.json()).resolves.toEqual({ name: 'x!!' })
+	})
+})
+
+// a chunk is cleaned by the mirror a route already froze: streaming a response
+// must not cost the seal
+describe('AOT sealing with a streamed response', () => {
+	it('seals an app whose generators are cleaned', async () => {
+		const { mode } = await generateCompiledArtifacts(STREAM_APP)
+
+		expect(mode).toBe('sealed')
+		expect(dragsTypeBox(code.esbuildStream!)).toBe(false)
+		expect(code.esbuildStream).not.toContain('exact-mirror')
+	})
+
+	it('cleans the chunks of a sealed bundle', async () => {
+		const app = await loadApp('esbuildStream')
+		const body = (path: string) =>
+			app
+				.handle(new Request(`http://localhost${path}`))
+				.then((response: Response) => response.text())
+
+		expect(await body('/plain')).toBe('{"a":1}{"a":2}')
+		expect(await body('/sse')).toBe(
+			'id: 1\nevent: e\ndata: {"name":"a"}\n\n'
+		)
+		expect(await body('/mismatch')).toBe('text{}{"a":1}')
+		expect(await body('/framed')).toBe('data: {"name":"a"}\n\n')
+		await expect(body('/throw')).rejects.toBeInstanceOf(TypeError)
+		expect(await body('/standard')).toBe('{"a":1}{"a":"text"}')
+	})
+})
+
 describe('AOT sealing with Standard Schema', () => {
 	it('a pure Standard Schema app seals without TypeBox coverage', async () => {
 		const { mode, stub } =

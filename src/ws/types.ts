@@ -146,6 +146,8 @@ export type WSHandlerResult<Response> = {} extends Response
 	:
 			| WSResponsePayload<Response>
 			| InlineHandlerResponse<Response>
+			// answered as a thrown one, as on HTTP
+			| Error
 			| void
 			| Generator<
 					WSResponsePayload<Response>,
@@ -156,6 +158,8 @@ export type WSHandlerResult<Response> = {} extends Response
 					WSResponsePayload<Response> | void
 			  >
 
+// A returned value as the function giving it, so a returned error types as
+// on HTTP. A yield is sent as data, so it stays a value
 export type WSHandlerResponse<Handler> = Handler extends (
 	...args: any[]
 ) => infer R
@@ -163,7 +167,7 @@ export type WSHandlerResponse<Handler> = Handler extends (
 			| Generator<infer Yield, any, any>
 			| AsyncGenerator<infer Yield, any, any>
 		? Yield
-		: Exclude<Awaited<R>, void | undefined>
+		: () => Exclude<Awaited<R>, void | undefined>
 	: never
 
 export type WSParseHandler<Route extends RouteSchema, Context = {}> = (
@@ -229,15 +233,7 @@ export type WSLocalHook<
 
 	parse?: MaybeArray<WSParseHandler<Schema>>
 	transform?: MaybeArray<TransformHandler<UpgradeSchema<Schema>, Singleton>>
-	beforeHandle?: MaybeArray<
-		OptionalHandler<
-			UpgradeSchema<Schema>,
-			Singleton,
-			undefined,
-			'local',
-			never
-		>
-	>
+	beforeHandle?: MaybeArray<OptionalHandler<UpgradeSchema<Schema>, Singleton>>
 	// runs after the message is sent: what it returns is dropped
 	afterHandle?: MaybeArray<
 		(context: Context<Schema, Singleton>) => MaybePromise<void>
@@ -285,6 +281,7 @@ export type WSMessageHandler<
 export interface WSValidatorLike {
 	Check(data: unknown): boolean
 	Errors(data: unknown): any[]
+	Clean?(data: unknown): unknown
 }
 
 /** keyed by numeric status */
@@ -345,4 +342,9 @@ export interface WSCapability {
 	 * warning on conflicting keys (Bun uses one global config per server).
 	 */
 	accumulateOptions(target: WSOptions, routeOptions: WSOptions): void
+	/**
+	 * The server-tuning config a build would produce, read from the declared
+	 * routes without compiling them.
+	 */
+	declaredOptions(app: AnyElysia): WSOptions
 }

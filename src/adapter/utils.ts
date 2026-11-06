@@ -1,5 +1,6 @@
-import { isByteStream, isNotEmpty, nullObject, sseData } from '../utils'
+import { EmptyObject, isByteStream, isNotEmpty, sseData } from '../utils'
 import { StatusMap } from '../constants'
+import { ElysiaStatus } from '../error'
 
 import { serializeCookie } from '../cookie/serialize'
 import { hasHeaderShorthand } from '../universal/constants'
@@ -32,7 +33,7 @@ export function materializeSetHeaders(set: Context['set']) {
 	const headers = set.headers
 	if ((headers as any)[defaultHeaders] !== headers) return headers
 
-	return (set.headers = Object.assign(nullObject(), headers))
+	return (set.headers = Object.assign(new EmptyObject(), headers))
 }
 
 const sseFormat = (data: string) => sseData(data) + '\n'
@@ -78,7 +79,7 @@ export function handleFile(
 					status: 416,
 					headers: mergeHeaders(
 						new Headers({ 'content-range': `bytes */${size}` }),
-						set?.headers ?? nullObject()
+						set?.headers ?? new EmptyObject()
 					)
 				})
 
@@ -95,7 +96,7 @@ export function handleFile(
 					status: 206,
 					headers: mergeHeaders(
 						rangeHeaders,
-						set?.headers ?? nullObject()
+						set?.headers ?? new EmptyObject()
 					)
 				}
 			)
@@ -112,7 +113,7 @@ export function handleFile(
 			set.status === 416)
 
 	const defaultHeader: Record<string, string> = immutable
-		? nullObject()
+		? new EmptyObject()
 		: { 'accept-ranges': 'bytes' }
 	if (!immutable && size)
 		defaultHeader['content-range'] = `bytes 0-${size - 1}/${size}`
@@ -147,7 +148,7 @@ function normalizeHeaders(set: Context['set']) {
 	const headers = set.headers
 	if (!(headers instanceof Headers)) return
 
-	const flat: Record<string, unknown> = Object.create(null)
+	const flat: Record<string, unknown> = new EmptyObject()
 
 	for (const [key, value] of headers) if (key !== setCookie) flat[key] = value
 
@@ -185,7 +186,7 @@ export function responseToSetHeaders(response: Response, set?: Context['set']) {
 			set.status = response.status
 	} else if (!response) {
 		return {
-			headers: nullObject(),
+			headers: new EmptyObject(),
 			status: set?.status ?? 200
 		}
 	} else if (hasHeaderShorthand) {
@@ -195,7 +196,7 @@ export function responseToSetHeaders(response: Response, set?: Context['set']) {
 		}
 	} else {
 		set = {
-			headers: nullObject(),
+			headers: new EmptyObject(),
 			status: set?.status ?? 200
 		}
 
@@ -222,6 +223,48 @@ interface CreateHandlerParameter {
 		request?: Request,
 		owned?: boolean
 	): Response
+}
+
+const describesFields = (schema: any): boolean =>
+	schema?.type === 'object' ||
+	schema?.type === 'array' ||
+	!!schema?.allOf?.some(describesFields)
+
+const hasFields = (value: unknown) =>
+	Array.isArray(value) ||
+	Object.prototype.toString.call(value) === '[object Object]'
+
+const unwrapChunk = (chunk: any, value: any, typedSSE: boolean) =>
+	chunk.toSSE
+		? { ...chunk, ...value, data: value.data }
+		: typedSSE
+			? value.data
+			: value
+
+function cleanChunk(validator: any, chunk: any, typedSSE: boolean) {
+	const payload = chunk.toSSE
+		? { ...chunk }
+		: typedSSE
+			? { data: chunk }
+			: chunk
+
+	if (validator.Clean)
+		return hasFields(payload) || !describesFields(validator.schema)
+			? unwrapChunk(chunk, validator.Clean(payload), typedSSE)
+			: chunk
+
+	try {
+		const parsed: any = validator.From(payload, 'response', true)
+
+		return parsed instanceof Promise
+			? parsed.then(
+					(value) => unwrapChunk(chunk, value, typedSSE),
+					() => chunk
+				)
+			: unwrapChunk(chunk, parsed, typedSSE)
+	} catch {
+		return chunk
+	}
 }
 
 export function createStreamHandler({
@@ -260,6 +303,11 @@ export function createStreamHandler({
 				headers: { 'content-type': 'application/octet-stream' }
 			})
 		}
+
+		// taken before the first pull: a stream the error hook answers with
+		// is not this route's response
+		const pickChunk = (set as any)?.['~chunk']
+		if (pickChunk) (set as any)['~chunk'] = undefined
 
 		const typedSSE =
 			!skipFormat && 'sse' in generator && (generator as any).sse === true
@@ -300,8 +348,44 @@ export function createStreamHandler({
 			// @ts-ignore
 			generator = init.value
 		else if (init && (typeof init?.done === 'undefined' || init?.done)) {
-			if (set) return mapResponse(init.value, set, request, owned)
-			return mapCompactResponse(init.value, request, owned)
+			let value = init.value
+			if (pickChunk) {
+				if (
+					value instanceof Promise ||
+					typeof (value as any)?.then === 'function'
+				)
+					value = await value
+
+				const wrapped = value instanceof ElysiaStatus
+				const validator = pickChunk(
+					wrapped ? value.status : (set?.status ?? 200)
+				)
+				if (validator) {
+					let body = wrapped ? value.response : value
+					if (
+						body instanceof Promise ||
+						typeof (body as any)?.then === 'function'
+					)
+						body = await body
+
+					if (typeof (body as any)?.next === 'function') {
+						if (set) (set as any)['~chunk'] = pickChunk
+					} else if (
+						!(body instanceof Error) &&
+						!(body instanceof Response) &&
+						!(body instanceof ReadableStream)
+					)
+						body = await (validator.mayReturnPromise
+							? validator.From(body, 'response', true)
+							: validator.EncodeFrom(body, 'response'))
+
+					if (wrapped) value.response = body
+					else value = body
+				}
+			}
+
+			if (set) return mapResponse(value, set, request, owned)
+			return mapCompactResponse(value, request, owned)
 		}
 
 		// Check if stream is from a pre-formatted Response body
@@ -329,7 +413,7 @@ export function createStreamHandler({
 					: 'application/json'
 				: 'text/plain'
 
-		set ??= { status: 200, headers: nullObject() } as Context['set']
+		set ??= { status: 200, headers: new EmptyObject() } as Context['set']
 		const headers = materializeSetHeaders(set)
 
 		if (!typedSSE) hput(headers, 'transfer-encoding', 'chunked', 1)
@@ -446,25 +530,74 @@ export function createStreamHandler({
 			}
 
 			if (typeof value === 'object')
-				try {
-					controller.enqueue(
-						textEncoder.encode(format(JSON.stringify(value)))
-					)
-				} catch {
-					controller.enqueue(
-						textEncoder.encode(format((value as object).toString()))
-					)
-				}
+				controller.enqueue(
+					textEncoder.encode(format(JSON.stringify(value)))
+				)
 			else
 				controller.enqueue(
 					textEncoder.encode(format((value as any).toString()))
 				)
 		}
 
+		const validator = sourceStream
+			? undefined
+			: pickChunk?.(set.status ?? 200)
+
+		const enqueueChunk =
+			validator?.Clean || validator?.mayReturnPromise
+				? (
+						controller: ReadableStreamDefaultController,
+						value: unknown
+					) => {
+						const cleaned = cleanChunk(validator, value, typedSSE)
+
+						return cleaned instanceof Promise && cleaned !== value
+							? cleaned.then((value) =>
+									enqueueValue(controller, value)
+								)
+							: enqueueValue(controller, cleaned)
+					}
+				: enqueueValue
+
+		// one controller per stream: the pull callbacks are made once, not per
+		// chunk
+		let controller!: ReadableStreamDefaultController
+
+		const fail = (error: unknown) => {
+			finalize('error', controller, error)
+		}
+
+		// `null` / `undefined` are skipped; returning without an enqueue
+		// would leave the stream waiting for a pull that never comes
+		const step = (
+			result: IteratorResult<unknown>
+		): Promise<void> | undefined => {
+			while (true) {
+				if (result.done || end) {
+					finalize('close', controller)
+					return
+				}
+
+				const chunk = result.value
+				if (chunk !== undefined && chunk !== null)
+					return enqueueChunk(controller, chunk)
+
+				const next = iterator.next() as
+					| IteratorResult<unknown>
+					| Promise<IteratorResult<unknown>>
+				if (typeof (next as Promise<unknown>).then === 'function')
+					return Promise.resolve(next).then(step)
+
+				result = next as IteratorResult<unknown>
+			}
+		}
+
 		return new Response(
 			new ReadableStream(
 				{
-					start(controller) {
+					start(c) {
+						controller = c
+
 						if (signal) {
 							onAbort = () => finalize('close', controller)
 
@@ -483,12 +616,8 @@ export function createStreamHandler({
 						)
 							return
 
-						const fail = (error: unknown) => {
-							finalize('error', controller, error)
-						}
-
 						try {
-							return enqueueValue(controller, init.value)?.catch(
+							return enqueueChunk(controller, init.value)?.catch(
 								fail
 							)
 						} catch (error) {
@@ -496,42 +625,9 @@ export function createStreamHandler({
 						}
 					},
 
-					pull(controller) {
+					pull() {
 						// Respect abort/cancel that happened between pull() calls.
 						if (end) return
-
-						const fail = (error: unknown) => {
-							finalize('error', controller, error)
-						}
-
-						// `null` / `undefined` are skipped; returning without an
-						// enqueue would leave the stream waiting for a pull
-						// that never comes
-						const step = (
-							result: IteratorResult<unknown>
-						): Promise<void> | undefined => {
-							while (true) {
-								if (result.done || end) {
-									finalize('close', controller)
-									return
-								}
-
-								const chunk = result.value
-								if (chunk !== undefined && chunk !== null)
-									return enqueueValue(controller, chunk)
-
-								const next = iterator.next() as
-									| IteratorResult<unknown>
-									| Promise<IteratorResult<unknown>>
-								if (
-									typeof (next as Promise<unknown>).then ===
-									'function'
-								)
-									return Promise.resolve(next).then(step)
-
-								result = next as IteratorResult<unknown>
-							}
-						}
 
 						// A sync generator steps without a microtask per chunk
 						try {
@@ -574,8 +670,12 @@ export function handleSet(set: Context['set']) {
 	if (set.headers instanceof Headers) normalizeHeaders(set)
 
 	const proto = Object.getPrototypeOf(set.headers)
-	if (proto !== null && proto !== Object.prototype) {
-		const flat: Record<string, unknown> = Object.create(null)
+	if (
+		proto !== null &&
+		proto !== Object.prototype &&
+		proto !== EmptyObject.prototype
+	) {
+		const flat: Record<string, unknown> = new EmptyObject()
 
 		for (const key of Object.keys(set.headers)) flat[key] = set.headers[key]
 		set.headers = flat as Context['set']['headers']
@@ -875,8 +975,11 @@ export function tee<T>(
 			const consumed = min - base
 			if (min !== Infinity && consumed > 0) {
 				for (let i = 0; i < consumed; i++) windowBytes -= sizes[i]
-				buffer.splice(0, consumed)
-				sizes.splice(0, consumed)
+				// in place: `splice` allocates an array of the removed entries
+				buffer.copyWithin(0, consumed)
+				buffer.length -= consumed
+				sizes.copyWithin(0, consumed)
+				sizes.length -= consumed
 				base = min
 			}
 		}
@@ -976,10 +1079,20 @@ export function tee<T>(
 				return this
 			},
 
-			next: () =>
-				new Promise<IteratorResult<T>>((resolve, reject) =>
+			next: () => {
+				// a buffered entry needs no pending resolver
+				const i = cursors[me]
+				if (i < base + buffer.length) {
+					const value = buffer[i - base]
+					cursors[me] = i + 1
+					trim()
+					return Promise.resolve({ done: false, value })
+				}
+
+				return new Promise<IteratorResult<T>>((resolve, reject) =>
 					serve(me, { resolve, reject })
-				),
+				)
+			},
 
 			// Synchronous-effect return, see the tee() doc comment
 			return: (value?: unknown) => {
@@ -1010,5 +1123,10 @@ export function tee<T>(
 			}
 		})
 
-	return Array.from({ length: branches }, (_, b) => makeBranch(b))
+	const out = Array.from({ length: branches }, (_, b) => makeBranch(b))
+
+	// the value branch is what the stream handler frames
+	if ((source as any).sse === true) (out[0] as any).sse = true
+
+	return out
 }

@@ -142,6 +142,69 @@ describe('trace capability', () => {
 				warn.mockRestore()
 			}
 		})
+
+		// An older copy's provider only carries createTracer/unionTracePhases.
+		// The fetch handler reaches the request/afterResponse lanes through
+		// the provider, so absorbing it must not serve those phases untraced
+		describe('provider from an older copy without the fetch lanes', () => {
+			const legacyTrace = () => {
+				const current = (trace() as any)['~ext'].capability.trace
+					.provider
+				const id = current.id + '#legacy'
+				const app = new Elysia({ name: 'legacy-trace', seed: id })
+				;(app as any)['~ext'] = {
+					capability: {
+						trace: {
+							provider: {
+								id,
+								createTracer: current.createTracer,
+								unionTracePhases: current.unionTracePhases
+							}
+						}
+					}
+				}
+
+				return app
+			}
+
+			it('throws building the fetch handler for a request tracer', () => {
+				const app = new Elysia()
+					.use(legacyTrace())
+					.trace(({ onRequest }) => {
+						onRequest(() => {})
+					})
+					.get('/', () => 'ok')
+
+				expect(() => void app.fetch).toThrow('older elysia copy')
+			})
+
+			it('throws building the fetch handler for an afterResponse tracer', () => {
+				const app = new Elysia()
+					.use(legacyTrace())
+					.trace(({ onAfterResponse }) => {
+						onAfterResponse(() => {})
+					})
+					.get('/', () => 'ok')
+
+				expect(() => void app.fetch).toThrow('older elysia copy')
+			})
+
+			// a handle-only tracer never reaches the fetch lanes, it keeps working
+			it('still traces a handle-only tracer', async () => {
+				let handled = 0
+				const app = new Elysia()
+					.use(legacyTrace())
+					.trace(({ onHandle }) => {
+						onHandle(() => {
+							handled++
+						})
+					})
+					.get('/', () => 'ok')
+
+				expect(await app.handle('/').then((r) => r.text())).toBe('ok')
+				expect(handled).toBe(1)
+			})
+		})
 	})
 
 	describe('direct compiler path (unsealed, no seal)', () => {

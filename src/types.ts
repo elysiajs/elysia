@@ -633,10 +633,7 @@ export type OptionalHandler<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = DefaultSingleton,
 	Path extends string | undefined = undefined,
-	ParamsScope extends 'local' | 'plugin' | 'global' = 'local',
-	// An HTTP hook's returned error goes to the error pipeline, like a
-	// handler's. A WebSocket hook's is served as a plain value, so `never`
-	ReturnedError = Error
+	ParamsScope extends 'local' | 'plugin' | 'global' = 'local'
 > = (
 	context: LifecycleContext<Route, Singleton, Path, ParamsScope>
 ) => MaybePromise<
@@ -645,7 +642,8 @@ export type OptionalHandler<
 		:
 				| Route['response'][keyof Route['response']]
 				| InlineHandlerResponse<Route['response']>
-				| ReturnedError
+				// goes to the error pipeline, like a handler's
+				| Error
 				| void
 >
 
@@ -1074,9 +1072,11 @@ export type MacroProperty<
 	 * Inspect or rewrite the hooks a route compiles with. Runs once per
 	 * route at compile time, after every macro on the route has expanded,
 	 * on the route's final hooks: its own, the ones every macro added and
-	 * the ones it inherits from hooks registered before it. A WebSocket
-	 * route hands over its own hooks only. Applied by
-	 * a guard, it sees the guard's hooks once instead of each route's.
+	 * the ones it inherits from hooks registered before it. Applied by a
+	 * guard, it runs for each route of the guard, before the route's own
+	 * macros. A macro on a WebSocket route sees the route's own hooks only.
+	 * A guard's runs twice per WebSocket route, on the merged hooks that
+	 * feed its validators and on the inherited hooks that feed its events.
 	 * A `schema: 'merge'` guard's response map
 	 * (`hooks.schemas[i].response`) is read-only
 	 *
@@ -2116,17 +2116,17 @@ type ElaborateOption<
 			}
 		: Option
 
-// A lambda's schema members replace the macro's returned ones, so a generic
-// macro can type what TypeScript erases to the constraint
+// A lambda's schema and meta members replace the macro's returned ones, so a
+// generic macro can type what TypeScript erases to the constraint
 type MacroLambdaSchema<Def, HookValue> = Def extends {
 	$type?: infer Lambda extends MacroTypeLambda
 }
-	? [Extract<keyof Lambda, InputSchemaKey>] extends [never]
+	? [Extract<keyof Lambda, InputSchemaKey | 'meta'>] extends [never]
 		? Def
-		: Omit<Def, Extract<keyof Lambda, InputSchemaKey>> &
+		: Omit<Def, Extract<keyof Lambda, InputSchemaKey | 'meta'>> &
 				Pick<
 					Lambda & { input: HookValue },
-					Extract<keyof Lambda, InputSchemaKey>
+					Extract<keyof Lambda, InputSchemaKey | 'meta'>
 				>
 	: Def
 
@@ -2258,14 +2258,31 @@ type InnerMacroToContext<
 										meta: 'meta' extends keyof Def
 											? { value: Def['meta'] }
 											: unknown
-										// may be absent if the macro may not apply
+										// may be absent if the macro may not apply. A
+										// lambda sees its own value, so a function
+										// that may return nothing doesn't make it
+										// optional, only a macro that may not run
 										derive: ([Maybe] extends [true]
 											? Partial<MacroDerive<Def>>
 											: MacroDerive<Def>) &
-											MacroLambdaContext<
-												Value,
-												SelectedMacro[key]
-											>
+											([
+												MacroMaybeOff<
+													MacroFn[key],
+													SelectedMacro[key],
+													{},
+													MaybeOff
+												>
+											] extends [true]
+												? Partial<
+														MacroLambdaContext<
+															Value,
+															SelectedMacro[key]
+														>
+													>
+												: MacroLambdaContext<
+														Value,
+														SelectedMacro[key]
+													>)
 									} & ([Maybe] extends [true]
 										? MaybeMacroSchema<Def, Definitions>
 										: UnwrapMacroSchema<
@@ -4667,6 +4684,11 @@ export type AddWSRoute<
 	Volatile
 >
 
+// What a WebSocket handler returned, see `WSHandlerResponse`: a yield is
+// data, never an error
+type WSReturned<Response> = [Response] extends [() => infer V] ? V : never
+
+// A returned error is answered as a thrown one, as on HTTP
 type ComposeWSRoute<
 	Path extends string,
 	Schema extends RouteSchema,
@@ -4690,7 +4712,8 @@ type ComposeWSRoute<
 					HookError
 				>,
 				UnhandledErrorResponse<
-					UnhandledReturnedError<HookError, Errors>
+					| UnhandledReturnedError<WSReturned<Response>, Errors>
+					| UnhandledReturnedError<HookError, Errors>
 				>
 			>
 		>
@@ -4698,12 +4721,17 @@ type ComposeWSRoute<
 			Path,
 			Schema,
 			MacroContext,
-			ComposeElysiaResponse<
-				ResponseSchema,
-				Response,
-				Possibility,
-				Errors,
-				Path
+			UnionResponseStatus<
+				ComposeElysiaResponse<
+					ResponseSchema,
+					Response,
+					Possibility,
+					Errors,
+					Path
+				>,
+				UnhandledErrorResponse<
+					UnhandledReturnedError<WSReturned<Response>, Errors>
+				>
 			>
 		>
 

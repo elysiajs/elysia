@@ -30,3 +30,30 @@ describe('cloneHook collection isolation', () => {
 		expect(local.schemas).toHaveLength(1)
 	})
 })
+
+describe('mergeHook', () => {
+	// a merge that spreads a hook instead of keeping it drops a guard
+	it('keeps a hook flagged Symbol.isConcatSpreadable', () => {
+		const auth = Object.assign(() => 'denied', {
+			[Symbol.isConcatSpreadable]: true
+		})
+		const local = () => {}
+
+		expect(
+			mergeHook(
+				{ beforeHandle: local } as any,
+				{
+					beforeHandle: auth
+				} as any
+			).beforeHandle
+		).toEqual([auth, local])
+		expect(
+			mergeHook(
+				{ beforeHandle: [local] } as any,
+				{
+					beforeHandle: [auth]
+				} as any
+			).beforeHandle
+		).toEqual([auth, local])
+	})
+})

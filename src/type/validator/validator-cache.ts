@@ -30,15 +30,6 @@ export function fnKey(fn: Function) {
 	return '<fn:' + id + '>'
 }
 
-// `mode` tracks whether a value sits on the structural path that isOpaque and
-// hasRef are defined over: the child set `schemaSome` descends, plus `$defs`:
-//   NODE       a schema node; its flags count
-//   CONTAINER  holds schema nodes as its members (`properties`, `anyOf`, …)
-//   OFF        ordinary JSON data (`required`, `enum`, `default`, …)
-const OFF = 0
-const NODE = 1
-const CONTAINER = 2
-
 // eslint-disable-next-line no-control-regex
 const needsEscape = /["\\\u0000-\u001f\ud800-\udfff]/
 
@@ -58,55 +49,20 @@ interface WalkState {
 	depth: number
 }
 
-function childMode(key: string, value: unknown): number {
-	switch (key) {
-		// `$defs`: t.Cyclic holds its schemas there, a refine or codec in one
-		// must make the schema identity-only or two routes share a validator
-		case 'properties':
-		case 'patternProperties':
-		case '$defs':
-			return CONTAINER
-
-		case 'items':
-			return Array.isArray(value) ? CONTAINER : NODE
-
-		case 'anyOf':
-		case 'allOf':
-		case 'oneOf':
-			return Array.isArray(value) ? CONTAINER : OFF
-
-		case 'additionalProperties':
-			return value && typeof value === 'object' ? NODE : OFF
-
-		case 'not':
-			return NODE
-
-		default:
-			return OFF
-	}
-}
-
-function walk(
-	value: any,
-	key: string | number,
-	mode: number,
-	state: WalkState
-) {
+function walk(value: any, key: string | number, state: WalkState) {
 	if (value !== null && typeof value === 'object') {
 		const elyTyp = value['~elyTyp']
 
-		if (mode === NODE) {
-			if (
-				!state.isOpaque &&
-				(value['~refine'] || elyTyp === ELYSIA_TYPES.NoValidate)
-			) {
-				state.isOpaque = true
-				// the structural key is dead the moment the schema is opaque
-				if (!state.forceKey) state.buildKey = false
-			}
-
-			if (!state.hasRef && value['$ref']) state.hasRef = true
+		if (
+			!state.isOpaque &&
+			(value['~refine'] || elyTyp === ELYSIA_TYPES.NoValidate)
+		) {
+			state.isOpaque = true
+			// the structural key is dead the moment the schema is opaque
+			if (!state.forceKey) state.buildKey = false
 		}
+
+		if (!state.hasRef && value['$ref']) state.hasRef = true
 
 		if (
 			!state.hasFileType &&
@@ -145,10 +101,10 @@ function walk(
 
 			const serialized =
 				value['~optional'] === true
-					? walkOptional(value, mode, state)
+					? walkOptional(value, state)
 					: Array.isArray(value)
-						? walkArray(value, mode, state)
-						: walkObject(value, mode, state)
+						? walkArray(value, state)
+						: walkObject(value, state)
 
 			state.depth--
 
@@ -175,7 +131,7 @@ function walk(
 }
 
 // `Object.keys` is exactly `JSON.stringify`'s own-enumerable key order.
-function walkObject(value: any, mode: number, state: WalkState) {
+function walkObject(value: any, state: WalkState) {
 	const keys = Object.keys(value)
 
 	// `join` builds a flat string; a `+=` key stays a rope whose fibers the
@@ -186,16 +142,7 @@ function walkObject(value: any, mode: number, state: WalkState) {
 		const key = keys[i]!
 		const child = value[key]
 
-		const piece = walk(
-			child,
-			key,
-			mode === CONTAINER
-				? NODE
-				: mode === NODE
-					? childMode(key, child)
-					: OFF,
-			state
-		)
+		const piece = walk(child, key, state)
 		if (piece === undefined) continue
 
 		if (state.buildKey) {
@@ -209,23 +156,14 @@ function walkObject(value: any, mode: number, state: WalkState) {
 	return parts.join('')
 }
 
-function walkOptional(value: any, mode: number, state: WalkState): string {
+function walkOptional(value: any, state: WalkState): string {
 	const parts = ['{']
 	let emittedOptional = false
 
 	for (const key in value) {
 		const child = value[key]
 
-		const piece = walk(
-			child,
-			key,
-			mode === CONTAINER
-				? NODE
-				: mode === NODE
-					? childMode(key, child)
-					: OFF,
-			state
-		)
+		const piece = walk(child, key, state)
 
 		if (key === '~optional') emittedOptional = true
 		if (piece === undefined) continue
@@ -246,13 +184,11 @@ function walkOptional(value: any, mode: number, state: WalkState): string {
 	return parts.join('')
 }
 
-function walkArray(value: any[], mode: number, state: WalkState): string {
-	const elementMode = mode === CONTAINER ? NODE : OFF
-
+function walkArray(value: any[], state: WalkState): string {
 	const parts = ['[']
 
 	for (let i = 0; i < value.length; i++) {
-		const piece = walk(value[i], i, elementMode, state)
+		const piece = walk(value[i], i, state)
 
 		if (state.buildKey) {
 			if (i) parts.push(',')
@@ -279,7 +215,7 @@ export function computeSchemaMeta(
 		depth: 0
 	}
 
-	const key = walk(schema, '', NODE, state)
+	const key = walk(schema, '', state)
 	const special = state.hasCodec || state.isOpaque
 
 	return {

@@ -123,6 +123,30 @@ describe('request hooks', () => {
 		expect(res.status).toBe(401)
 	})
 
+	// `null` is a value, not "continue": it ends the request with an empty
+	// body, sync or after an async hook, and must not be read as a thenable
+	it('early return null', async () => {
+		let handled = 0
+
+		const first = new Elysia()
+			.onRequest(() => null)
+			.get('/', () => void handled++)
+
+		const afterAsync = new Elysia()
+			.onRequest(async () => {})
+			.onRequest(() => null)
+			.get('/', () => void handled++)
+
+		for (const app of [first, afterAsync]) {
+			const res = await app.handle('/')
+
+			expect(res.status).toBe(200)
+			await expect(res.text()).resolves.toBe('')
+		}
+
+		expect(handled).toBe(0)
+	})
+
 	it('support array', async () => {
 		let total = 0
 
@@ -195,6 +219,30 @@ describe('request hooks', () => {
 		expect(handlerCalled).toBe(false)
 		expect(res.status).toBe(200)
 		await expect(res.text()).resolves.toBe('')
+	})
+
+	// Short-circuiting on the abort before the hook settles would leave its
+	// rejection unhandled instead of reaching onError
+	it('settles a pending request hook that aborted before rejecting', async () => {
+		const controller = new AbortController()
+		const errors: string[] = []
+
+		const app = new Elysia()
+			.onError(({ error }) => {
+				errors.push((error as Error).message)
+				return 'handled'
+			})
+			.onRequest(() => {
+				controller.abort()
+				return Promise.reject(new Error('after abort'))
+			})
+			.get('/', () => 'NOOP')
+
+		const res = await app.handle('/', { signal: controller.signal })
+
+		expect(errors).toEqual(['after abort'])
+		expect(res.status).toBe(500)
+		await expect(res.text()).resolves.toBe('handled')
 	})
 
 	it('stops traced request hooks on abort', async () => {

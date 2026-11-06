@@ -54,4 +54,26 @@ describe('default response headers', () => {
 			expect(response.headers.get('x-version')).toBe('1')
 		}
 	})
+
+	// handleSet copies set.headers only to strip a foreign prototype (own keys
+	// alone reach the response); the record Elysia builds per request, fresh or
+	// copied from the defaults on first write, must not be copied again
+	it.each<Record<string, string>>([{}, { 'x-default': '1' }])(
+		'maps the per-request set.headers without copying it (%o)',
+		async (defaults) => {
+			let set: { headers: unknown } | undefined
+			let written: unknown
+
+			const app = new Elysia().headers(defaults).get('/', (context) => {
+				context.set.headers['x-written'] = '1'
+				set = context.set
+				written = context.set.headers
+				return 'ok'
+			})
+
+			const response = await app.handle(new Request('http://localhost/'))
+			expect(response.headers.get('x-written')).toBe('1')
+			expect(set!.headers).toBe(written)
+		}
+	)
 })

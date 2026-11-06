@@ -1962,6 +1962,270 @@ describe('error fallback lanes', () => {
 		})
 	})
 
+	describe('upstream headers on an Error this copy did not author', () => {
+		// openai v4's APIError: a string `type`, the upstream status and a
+		// plain copy of the UPSTREAM response headers. Escaping a route, none
+		// of them is the app's: the upstream's session cookie, framing that
+		// describes the upstream body (a gzip content-encoding over a
+		// plaintext problem document made every decoding client fail to read
+		// the 401 / 429), and CORS, cache, HSTS, clear-site-data or
+		// x-accel-redirect decisions made for another origin
+		const upstreamHeaders = () => ({
+			'Set-Cookie': '__cf_bm=upstream; Path=/',
+			'content-length': '3',
+			'Content-Encoding': 'gzip',
+			'transfer-encoding': 'chunked',
+			connection: 'close',
+			'keep-alive': 'timeout=5',
+			'proxy-authenticate': 'Basic realm="upstream"',
+			'access-control-allow-origin': '*',
+			'access-control-allow-credentials': 'true',
+			'cache-control': 'public, max-age=31536000',
+			vary: 'Origin',
+			'www-authenticate': 'Bearer realm="OpenAI API"',
+			'strict-transport-security': 'max-age=31536000; includeSubDomains',
+			'clear-site-data': '"cookies"',
+			'x-accel-redirect': '/internal/secret',
+			'openai-organization': 'org-upstream',
+			'x-request-id': 'req_upstream',
+			'retry-after': '20'
+		})
+
+		const tiers = {
+			message: {},
+			detail: { detail: 'Incorrect API key provided' },
+			value: { value: { error: 'Incorrect API key provided' } },
+			'promised value': {
+				get value() {
+					return Promise.resolve({
+						error: 'Incorrect API key provided'
+					})
+				}
+			}
+		}
+
+		const sdkError = (tier: keyof typeof tiers, headers = true) =>
+			Object.defineProperties(
+				Object.assign(new Error('401 Incorrect API key provided'), {
+					status: 401,
+					type: 'invalid_request_error',
+					...(headers ? { headers: upstreamHeaders() } : {})
+				}),
+				Object.getOwnPropertyDescriptors(tiers[tier])
+			)
+
+		const served = async (error: () => Error, returned: boolean) => {
+			const response = await new Elysia()
+				.get('/', () => {
+					if (returned) return error()
+					throw error()
+				})
+				.handle('/')
+
+			return {
+				status: response.status,
+				headers: [...response.headers],
+				body: await response.text()
+			}
+		}
+
+		for (const production of [false, true])
+			for (const tier of Object.keys(tiers) as (keyof typeof tiers)[])
+				for (const returned of [false, true])
+					it(`serve no upstream header at all (${tier} tier, ${returned ? 'returned' : 'thrown'}${production ? ', production' : ''})`, async () => {
+						// a production 4xx is not masked, its headers would merge
+						if (production) process.env.NODE_ENV = 'production'
+
+						const withHeaders = await served(
+							() => sdkError(tier),
+							returned
+						)
+
+						// the same error without `headers`: everything else
+						// on the wire is Elysia's own
+						expect(withHeaders).toEqual(
+							await served(() => sdkError(tier, false), returned)
+						)
+
+						expect(withHeaders.status).toBe(401)
+						for (const name of Object.keys(upstreamHeaders()))
+							if (name !== 'content-length')
+								expect(
+									withHeaders.headers.some(
+										([key]) => key === name.toLowerCase()
+									)
+								).toBe(false)
+					})
+
+		// The app's own cookie and headers are the app's decision: the error
+		// must neither drop them nor slip the upstream's in beside them
+		it("keep the handler's cookie and headers, add no upstream one", async () => {
+			const app = new Elysia().get('/', ({ cookie, set }) => {
+				cookie.session.value = 'app'
+				set.headers['cache-control'] = 'no-store'
+				set.headers['x-app'] = 'kept'
+
+				throw sdkError('message')
+			})
+
+			const response = await app.handle('/')
+			const cookies = response.headers.getSetCookie()
+
+			expect(response.status).toBe(401)
+			expect(cookies).toHaveLength(1)
+			expect(cookies[0]).toStartWith('session=app')
+			expect(response.headers.get('cache-control')).toBe('no-store')
+			expect(response.headers.get('x-app')).toBe('kept')
+			expect(response.headers.get('x-request-id')).toBeNull()
+		})
+
+		// Nothing on an Error tells an app's hand-written duck from an SDK's
+		// error, so the duck is served without its headers: extending
+		// HTTPError is how an error says its headers are the app's
+		it('serve a documented duck without its headers', async () => {
+			class RateLimited extends Error implements HTTPError {
+				readonly type = 'RATE_LIMITED'
+				readonly status = 429
+				readonly headers = { 'retry-after': '30' }
+			}
+
+			class Extended extends HTTPError.id('RATE_LIMITED', 429) {
+				override readonly headers = { 'retry-after': '30' }
+			}
+
+			const app = new Elysia()
+				.get('/duck', () => {
+					throw new RateLimited('slow down')
+				})
+				.get('/extended', () => {
+					throw new Extended('slow down')
+				})
+
+			const duck = await app.handle('/duck')
+
+			// still its status and problem document, only the headers go
+			expect(duck.status).toBe(429)
+			expect(duck.headers.get('retry-after')).toBeNull()
+			await expect(duck.json()).resolves.toEqual({
+				type: 'RATE_LIMITED',
+				title: 'Too Many Requests',
+				detail: 'slow down',
+				status: 429
+			})
+
+			const extended = await app.handle('/extended')
+
+			expect(extended.status).toBe(429)
+			expect(extended.headers.get('retry-after')).toBe('30')
+		})
+
+		// instanceof cannot see another loaded copy's class, so a plugin
+		// bundling its own Elysia is a foreign error to this app
+		it("serve another copy's HTTPError without its headers", async () => {
+			const other: { HTTPError: typeof HTTPError } = await import(
+				new URL('../../dist/index.mjs', import.meta.url).href
+			)
+			expect(other.HTTPError).not.toBe(HTTPError)
+
+			class SessionExpired extends other.HTTPError.id(
+				'SESSION_EXPIRED',
+				401
+			) {
+				override readonly headers = {
+					'Set-Cookie': 'session=; Max-Age=0; Path=/',
+					'x-plugin': 'yes'
+				}
+			}
+
+			const app = new Elysia().get('/', () => {
+				throw new SessionExpired('sign in again')
+			})
+
+			const response = await app.handle('/')
+
+			expect(response.status).toBe(401)
+			expect(response.headers.get('set-cookie')).toBeNull()
+			expect(response.headers.get('x-plugin')).toBeNull()
+			// only the headers go, the problem document is whole
+			await expect(response.json()).resolves.toEqual({
+				type: 'SESSION_EXPIRED',
+				code: 'SESSION_EXPIRED',
+				title: 'Unauthorized',
+				detail: 'sign in again',
+				status: 401
+			})
+		})
+
+		// A foreign `headers` may be an accessor of someone else's class:
+		// running it has side effects, and one that throws would turn the
+		// 401 into a 500
+		it('never read the headers of an error that is not an HTTPError', async () => {
+			let read = 0
+
+			const app = new Elysia().get('/', () => {
+				throw Object.defineProperty(
+					sdkError('message', false),
+					'headers',
+					{
+						get() {
+							read++
+							throw new Error('headers accessor ran')
+						}
+					}
+				)
+			})
+
+			const response = await app.handle('/')
+
+			expect(response.status).toBe(401)
+			expect(read).toBe(0)
+		})
+
+		// An HTTPError of this copy is authored by the app: clearing the
+		// session on a 401 is a legitimate use, so its headers are served
+		it("keep the set-cookie of this copy's HTTPError", async () => {
+			class SessionExpired extends HTTPError.id('SESSION_EXPIRED', 401) {
+				override readonly headers = {
+					'Set-Cookie': 'session=; Max-Age=0; Path=/'
+				}
+			}
+
+			const app = new Elysia().get('/', () => {
+				throw new SessionExpired('sign in again')
+			})
+
+			const response = await app.handle('/')
+
+			expect(response.status).toBe(401)
+			expect(response.headers.get('set-cookie')).toBe(
+				'session=; Max-Age=0; Path=/'
+			)
+		})
+
+		// What is checked is what gets served: an accessor read twice could
+		// answer differently the second time
+		it("read the headers of this copy's HTTPError once", async () => {
+			let read = 0
+
+			class Counted extends HTTPError.id('COUNTED', 401) {}
+
+			Object.defineProperty(Counted.prototype, 'headers', {
+				get() {
+					return { 'x-read': `${++read}` }
+				}
+			})
+
+			const app = new Elysia().get('/', () => {
+				throw new Counted()
+			})
+
+			const response = await app.handle('/')
+
+			expect(response.headers.get('x-read')).toBe('1')
+			expect(read).toBe(1)
+		})
+	})
+
 	it('never adopt a validation section as a problem type', async () => {
 		const app = new Elysia()
 			.onError(() => problem(422, { detail: 'invalid' }))

@@ -1,10 +1,10 @@
-import { nullObject } from '../utils'
+import { EmptyObject } from '../utils'
 import { dangerousKeys } from '../constants'
 import { InvalidCookie } from './error'
 import type { CookieOptions } from './types'
 
 export function parse(str: string): Record<string, string | undefined> {
-	const obj = nullObject()
+	const obj = new EmptyObject()
 	const len = str.length
 
 	if (len < 2) return obj

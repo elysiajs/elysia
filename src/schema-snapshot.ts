@@ -1,3 +1,4 @@
+import { isPureRefinement, pureRefine } from './type/shared'
 import { env } from './universal'
 import { evictOldestHalf } from './utils'
 
@@ -71,10 +72,30 @@ function isImmutableNode(value: object) {
 	return immutable
 }
 
+function copyMarker(marker: any, copies: Map<object, object>) {
+	let out = copies.get(marker)
+	if (!out)
+		copies.set(
+			marker,
+			(out = Array.isArray(marker)
+				? marker.map((refinement) => {
+						const copy = { ...refinement }
+						if (isPureRefinement(refinement))
+							pureRefine({ '~refine': [copy] })
+
+						return copy
+					})
+				: { ...marker })
+		)
+
+	return out
+}
+
 function deepCloneSchema(
 	value: any,
 	freeze: boolean,
-	seen?: Map<object, object>,
+	seen: Map<object, object> | undefined,
+	copies: Map<object, object>,
 	canShare = true
 ) {
 	if (value === null || typeof value !== 'object') return value
@@ -89,7 +110,7 @@ function deepCloneSchema(
 		seen.set(value, out)
 
 		for (let i = 0; i < value.length; i++)
-			out[i] = deepCloneSchema(value[i], freeze, seen)
+			out[i] = deepCloneSchema(value[i], freeze, seen, copies)
 
 		return freeze ? Object.freeze(out) : out
 	}
@@ -115,12 +136,17 @@ function deepCloneSchema(
 
 		// non-enumerable markers (`~kind`, `~optional`, ...) are copied by
 		// reference, matching `copyNonEnumerable`, but `~cookieFrom` is cloned
+		// and `~refine` / `~codec` copied unfrozen
 		if (!allEnumerable && !isEnumerable.call(value, key)) {
 			Object.defineProperty(out, key, {
 				value:
 					key === '~cookieFrom'
-						? deepCloneSchema(property, freeze, seen)
-						: property,
+						? deepCloneSchema(property, freeze, seen, copies)
+						: (key === '~refine' || key === '~codec') &&
+							  property &&
+							  typeof property === 'object'
+							? copyMarker(property, copies)
+							: property,
 				enumerable: false,
 				writable: true,
 				configurable: true
@@ -129,7 +155,7 @@ function deepCloneSchema(
 			continue
 		}
 
-		const cloned = deepCloneSchema(property, freeze, seen)
+		const cloned = deepCloneSchema(property, freeze, seen, copies)
 
 		if (key === '__proto__')
 			Object.defineProperty(out, key, {
@@ -147,7 +173,7 @@ function deepCloneSchema(
 		const property = value[key]
 
 		if (isEnumerable.call(value, key))
-			out[key] = deepCloneSchema(property, freeze, seen)
+			out[key] = deepCloneSchema(property, freeze, seen, copies)
 		else
 			Object.defineProperty(out, key, {
 				value: property,
@@ -274,7 +300,7 @@ function fingerprint(
 
 function cloneOrWarn(object: object, freeze: boolean): object | undefined {
 	try {
-		return deepCloneSchema(object, freeze, undefined, false)
+		return deepCloneSchema(object, freeze, undefined, new Map(), false)
 	} catch (error) {
 		console.warn(
 			'[Elysia] schema snapshot failed; schema kept by reference:',
@@ -302,6 +328,31 @@ export function snapshotSchema<T>(schema: T): T {
 	produced.add(cloned)
 
 	return cloned as T
+}
+
+const refineMemo = new WeakMap<object, boolean>()
+
+// any keyword, like `collectRefinements` reaches `$defs` or `prefixItems`
+function hasRefine(schema: any, seen = new WeakSet<object>()): boolean {
+	if (!schema || typeof schema !== 'object' || seen.has(schema)) return false
+	seen.add(schema)
+
+	if (schema['~refine']) return true
+	for (const key in schema) if (hasRefine(schema[key], seen)) return true
+
+	return false
+}
+
+// a direct validator's schema is the caller's, a route's is already a snapshot
+export function ownSchema<T>(schema: T): T {
+	if (schema === null || typeof schema !== 'object' || produced.has(schema))
+		return schema
+
+	let needed = refineMemo.get(schema)
+	if (needed === undefined)
+		refineMemo.set(schema, (needed = hasRefine(schema)))
+
+	return needed ? snapshotSchema(schema) : schema
 }
 
 /**

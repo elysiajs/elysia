@@ -31,8 +31,8 @@ interface TypeboxModule {
 	Create: typeof CreateType
 	Decode: typeof DecodeType
 	applyCoercions: typeof applyCoercionsType
-	TypeBoxValidator: TypeBoxValidatorType
-	TypeBoxValidatorCache: TypeBoxValidatorCacheType
+	TypeBoxValidator: typeof TypeBoxValidatorType
+	TypeBoxValidatorCache: typeof TypeBoxValidatorCacheType
 	coerceFormData: typeof coerceFormDataType
 	coerceQuery: typeof coerceQueryType
 	coerceRoot: typeof coerceRootType
@@ -85,11 +85,11 @@ export let Decode: typeof DecodeType = stub('Decode')
 
 export let applyCoercions: typeof applyCoercionsType = stub('applyCoercions')
 
-export let TypeBoxValidator: TypeBoxValidatorType =
+export let TypeBoxValidator: typeof TypeBoxValidatorType =
 	stubClass('TypeBoxValidator')
 export type TypeBoxValidator<T extends TSchema = TAny> = TypeBoxValidatorType<T>
 
-export let TypeBoxValidatorCache: TypeBoxValidatorCacheType = stubClass(
+export let TypeBoxValidatorCache: typeof TypeBoxValidatorCacheType = stubClass(
 	'TypeBoxValidatorCache'
 )
 export type TypeBoxValidatorCache = TypeBoxValidatorCacheType

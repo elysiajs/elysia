@@ -7,7 +7,10 @@ import { handleWSResponse, drainWaiters } from '../../src/ws/route'
 class FakeWS {
 	sent: unknown[] = []
 	readyState = 1
-	raw = { data: {} as any }
+	raw = {
+		data: {} as any,
+		send: (data: unknown) => this.send(data)
+	}
 
 	// Each entry is the status returned by the next send.
 	private script: number[]
@@ -21,6 +24,10 @@ class FakeWS {
 	send = (data: unknown): number => {
 		this.sent.push(data)
 		return this.script.length ? this.script.shift()! : this.auto
+	}
+
+	async '~frame'(data: unknown) {
+		return data
 	}
 
 	// Wake generators waiting for Bun's drain event.

@@ -3,7 +3,7 @@ import { parse } from './lib'
 
 import { Cookie } from './cookie'
 import { cookieWire } from './serialize'
-import { nullObject } from '../utils'
+import { EmptyObject, nullObject } from '../utils'
 
 import type { Context } from '../context'
 import type { BaseCookie } from './types'
@@ -33,7 +33,7 @@ export function parseCookieRawSync(
 	cookieString: string | null | undefined,
 	_config: CompiledCookieConfig
 ) {
-	if (!cookieString) return nullObject()
+	if (!cookieString) return new EmptyObject()
 
 	const cookies = parse(cookieString)
 	const out: Record<string, unknown> = cookies
@@ -58,14 +58,14 @@ export function parseCookieRawDeferred(
 	cookieString: string | null | undefined,
 	_config: CompiledCookieConfig
 ): Record<string, unknown> {
-	return cookieString ? parse(cookieString) : nullObject()
+	return cookieString ? parse(cookieString) : new EmptyObject()
 }
 
 export function parseCookieRawLazy(
 	cookieString: string | null | undefined,
 	config: CompiledCookieConfig
 ): Record<string, unknown> {
-	if (!cookieString) return nullObject()
+	if (!cookieString) return new EmptyObject()
 
 	const cookies = parse(cookieString)
 	const out: Record<string, unknown> = cookies
@@ -92,6 +92,8 @@ export function parseCookieRawLazy(
  * `null` rotation secret) can forge it
  */
 const invalidSignatureMarker = () => {
+	// must stay null-prototype, not EmptyObject: materialize matches it by
+	// `getPrototypeOf(rawValue) === null`, anything else fails open
 	const marker = nullObject()
 	marker['~invalid'] = 1
 
@@ -106,7 +108,7 @@ export async function parseCookieRaw(
 	if (!config.hasSign) return parseCookieRawSync(cookieString, config)
 	if (hasSyncHmac) return parseCookieRawSigned(cookieString, config, lazy)
 
-	if (!cookieString) return nullObject()
+	if (!cookieString) return new EmptyObject()
 
 	const cookies = parse(cookieString)
 	const out: Record<string, unknown> = cookies
@@ -147,7 +149,7 @@ export function parseCookieRawSigned(
 ): Record<string, unknown> {
 	if (!config.hasSign) return parseCookieRawSync(cookieString, config)
 
-	if (!cookieString) return nullObject()
+	if (!cookieString) return new EmptyObject()
 
 	const cookies = parse(cookieString)
 	const out: Record<string, unknown> = cookies
@@ -187,7 +189,7 @@ class CookieJarHandler {
 	declare config: CompiledCookieConfig
 	declare lazySign: 1 | undefined
 	declare deferDecode: 1 | undefined
-	declare materialized: Record<string, 1> | undefined
+	declare materialized: string | Record<string, 1> | undefined
 	declare cache: Record<string, Cookie<unknown>> | undefined
 
 	constructor(
@@ -205,21 +207,24 @@ class CookieJarHandler {
 	}
 
 	materialize(store: Record<string, BaseCookie>, name: string): BaseCookie {
-		if (this.materialized?.[name]) return store[name]!
+		const done = this.materialized
+		if (
+			done !== undefined &&
+			(done === name || (typeof done === 'object' && done[name]))
+		)
+			return store[name]!
 
 		const config = this.config
 		const rawValue = store[name] as unknown
 		const fieldDefaults = config.fields[name]?.defaults
 		const entry = Object.assign(
-			nullObject(),
+			new EmptyObject(),
 			config.defaults,
-			fieldDefaults,
-			{
-				value: this.deferDecode
-					? maybeJsonDecode(decodeComponent(rawValue as string))
-					: rawValue
-			}
+			fieldDefaults
 		)
+		entry.value = this.deferDecode
+			? maybeJsonDecode(decodeComponent(rawValue as string))
+			: rawValue
 
 		if (entry.expires instanceof Date)
 			entry.expires = new Date(entry.expires.getTime())
@@ -248,7 +253,14 @@ class CookieJarHandler {
 		}
 
 		store[name] = entry
-		;(this.materialized ??= nullObject())[name] = 1
+
+		const seen = this.materialized
+		if (seen === undefined) this.materialized = name
+		else if (typeof seen === 'string') {
+			const record: Record<string, 1> = new EmptyObject()
+			record[seen] = record[name] = 1
+			this.materialized = record
+		} else seen[name] = 1
 
 		return entry
 	}
@@ -257,18 +269,18 @@ class CookieJarHandler {
 		if (!(key in store)) return
 
 		const entry = this.materialize(store, key)
-		if ('~unsign' in entry)
+		if ((entry as any)['~unsign'] !== undefined)
 			resolvePendingCookie(entry as Record<string, any>, key)
 	}
 
 	get(store: Record<string, BaseCookie>, key: string) {
-		return ((this.cache ??= nullObject())[key] ??= new Cookie(
+		return ((this.cache ??= new EmptyObject())[key] ??= new Cookie(
 			key,
 			this.setRef,
 			key in store
 				? this.materialize(store, key)
 				: Object.assign(
-						nullObject(),
+						new EmptyObject(),
 						this.config.defaults,
 						this.config.fields[key]?.defaults
 					),
@@ -365,29 +377,43 @@ function dropSigned(
 	config: CompiledCookieConfig,
 	set: Context['set'] | undefined
 ) {
-	// Record `set` that outlive a replaced cookie and a derive's context
-	// every later sign of the request refuses,
-	// so no answer goes out with its cookie silently missing (`~finalizeError`)
-	if (set)
-		Object.defineProperty(set, '~signFailed', {
-			value: true,
-			configurable: true
-		})
+	let marked = false
+	try {
+		if (set)
+			Object.defineProperty(set, '~signFailed', {
+				value: true,
+				configurable: true
+			})
+		marked = true
+	} catch {}
 
 	const signed = (name: string) =>
 		config.fields[name]?.sign ||
 		config.globalSign === true ||
 		config.globalSignSet?.has(name)
 
+	// a bag is user-writable: a trap that throws or refuses keeps the cookie
 	let kept = false
-	for (const name in cookies)
-		if (signed(name) && !Reflect.deleteProperty(cookies!, name)) kept = true
+	try {
+		for (const name in cookies)
+			if (signed(name))
+				try {
+					if (!Reflect.deleteProperty(cookies!, name)) kept = true
+				} catch {
+					kept = true
+				}
+	} catch {
+		kept = true
+	}
 
 	// keep the frozen one, the response sends a copy without them
-	if (kept && set?.cookie === cookies) {
-		const copy = nullObject()
-		for (const name in cookies)
-			if (!signed(name)) copy[name] = cookies![name]
+	if ((kept || !marked) && set?.cookie === cookies) {
+		const copy = new EmptyObject()
+		if (!marked) Object.defineProperty(copy, '~signFailed', { value: true })
+		try {
+			for (const name in cookies)
+				if (!signed(name)) copy[name] = cookies![name]
+		} catch {}
 		set!.cookie = copy
 	}
 }
@@ -423,10 +449,33 @@ export function signCookieValues(
 		throw error
 	}
 
-	return signPending(pending).catch((error) => {
-		dropSigned(cookies, config, set)
+	return signSettled(pending, cookies, config, set)
+}
+
+async function signSettled(
+	pending: [property: BaseCookie, value: string, key: string][],
+	cookies: Context['set']['cookie'] | undefined,
+	config: CompiledCookieConfig,
+	set: Context['set'] | undefined
+) {
+	try {
+		for (let pass = 1; ; pass++) {
+			await signPending(pending)
+
+			if (set) cookies = set.cookie
+			const next = collectSignPending(cookies, config)
+			if (!next) return
+			if (pass === 4)
+				throw new TypeError(
+					'Signed cookies kept changing while being signed'
+				)
+
+			pending = next
+		}
+	} catch (error) {
+		dropSigned(set ? set.cookie : cookies, config, set)
 		throw error
-	})
+	}
 }
 
 async function signPending(

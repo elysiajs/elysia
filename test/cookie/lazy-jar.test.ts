@@ -178,3 +178,33 @@ if (!hasSyncHmac) {
 		})
 	}
 }
+
+describe('lazy jar re-entrancy', () => {
+	// a codec can read another cookie while its own cookie materializes; the
+	// outer read must not forget the inner one, or `b` is built a second time
+	// around its already-built entry
+	it('keeps a cookie materialized by a codec of another cookie', async () => {
+		let jar: any
+		const a = t
+			.Codec(t.String())
+			.Decode((value: string) => ({
+				toJSON: () => ({ value, hasB: 'b' in jar })
+			}))
+			.Encode((value: any) => JSON.stringify(value))
+
+		const app = new Elysia().get(
+			'/',
+			{ cookie: t.Cookie({ a, b: t.String() }) },
+			({ cookie }: any) => {
+				jar = cookie
+				void cookie.a.value
+				return cookie.b.value
+			}
+		)
+
+		const res = await app.handle(req('/', 'a=A; b=B'))
+
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('B')
+	})
+})

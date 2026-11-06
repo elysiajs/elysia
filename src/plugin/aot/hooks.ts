@@ -15,6 +15,8 @@ import {
 	TYPEBOX_SYSTEM_LITE_FILTER,
 	TYPEBOX_REQUIRE_FILTER,
 	EXACT_MIRROR_REQUIRE_FILTER,
+	TYPED_TYPEBOX_STUBS,
+	typedStubSource,
 	ELYSIA_MODULE_FILTER,
 	NO_STUB,
 	adapterConstantsSource,
@@ -44,9 +46,31 @@ export interface AotPluginHooks {
 	buildEnd(): void
 	resolveId(id: string, importer?: string): string | undefined
 	load(id: string): string | undefined
-	transform(code: string, id: string): string | undefined
+	/**
+	 * `asTypeScript`: `true` only from `setupAotOnLoad`, whose loader compiles a
+	 * `.ts` id as TypeScript. A bundler `transform` may get a `.ts` id already
+	 * transpiled (plain Rollup ignores `enforce`), so it keeps the JS stub
+	 */
+	transform(
+		code: string,
+		id: string,
+		asTypeScript?: boolean
+	): string | undefined
 	isTransformCandidate(id: string): boolean
 }
+
+// `=== true`: Vite passes its transform options object as the third argument
+const stubFor = (
+	id: string,
+	asTypeScript: unknown,
+	source: string,
+	typed?: string
+) =>
+	alignStubExtensions(
+		source,
+		id,
+		asTypeScript === true ? typedStubSource(source, typed) : undefined
+	)
 
 export const createAotPluginHooks = (
 	entry: string,
@@ -115,7 +139,7 @@ export const createAotPluginHooks = (
 			if (id === VIRTUAL_ROUTER) return routerStubSource
 			if (id === VIRTUAL_DEURI) return deuriStubSource
 		},
-		transform(code, id) {
+		transform(code, id, asTypeScript) {
 			const cleanId = id.split('?', 1)[0]
 			const elysia = isElysiaModule(cleanId)
 
@@ -126,27 +150,45 @@ export const createAotPluginHooks = (
 				if (!elysia && key !== 'typeboxValue' && key !== 'exactMirror')
 					continue
 
-				for (const { filter, source: stubSource } of STUB_SOURCES[key])
+				for (const {
+					filter,
+					source: stubSource,
+					typed
+				} of STUB_SOURCES[key])
 					if (filter.test(cleanId))
-						return alignStubExtensions(stubSource, cleanId)
+						return stubFor(cleanId, asTypeScript, stubSource, typed)
 			}
 
 			if (elysia && stub.params && PARAM_TABLE_FILTER.test(cleanId))
-				return alignStubExtensions(
+				return stubFor(
+					cleanId,
+					asTypeScript,
 					paramTableSource(stub.params),
-					cleanId
+					paramTableSource(stub.params, true)
 				)
 
 			if (TYPEBOX_REQUIRE_FILTER.test(cleanId))
-				return `export const requireTypebox = () => undefined\nexport const importTypebox = () => undefined\n`
+				return stubFor(
+					cleanId,
+					asTypeScript,
+					`export const requireTypebox = () => undefined\nexport const importTypebox = () => undefined\n`,
+					TYPED_TYPEBOX_STUBS.require
+				)
 
 			if (EXACT_MIRROR_REQUIRE_FILTER.test(cleanId))
-				return `export const requireExactMirror = () => undefined\n`
+				return stubFor(
+					cleanId,
+					asTypeScript,
+					`export const requireExactMirror = () => undefined\n`,
+					TYPED_TYPEBOX_STUBS.exactMirrorRequire
+				)
 
 			if (TYPEBOX_TYPE_FILTER.test(cleanId))
-				return alignStubExtensions(
+				return stubFor(
+					cleanId,
+					asTypeScript,
 					`export * from './typebox-type-live'\n`,
-					cleanId
+					TYPED_TYPEBOX_STUBS.type
 				)
 
 			// Full AOT keeps every Locale table so TypeSystem.Locale works.
@@ -158,9 +200,10 @@ export const createAotPluginHooks = (
 				stub.adapter !== false &&
 				ADAPTER_CONSTANTS_FILTER.test(cleanId)
 			)
-				return alignStubExtensions(
-					adapterConstantsSource(stub.adapter),
-					cleanId
+				return stubFor(
+					cleanId,
+					asTypeScript,
+					adapterConstantsSource(stub.adapter)
 				)
 
 			if (
@@ -168,16 +211,17 @@ export const createAotPluginHooks = (
 				stub.adapter === 'web-standard' &&
 				ADAPTER_BUN_FILTER.test(cleanId)
 			)
-				return alignStubExtensions(bunAdapterStubSource, cleanId)
+				return stubFor(cleanId, asTypeScript, bunAdapterStubSource)
 
 			if (
 				elysia &&
 				stub.isProduction &&
 				IS_PRODUCTION_FILTER.test(cleanId)
 			)
-				return alignStubExtensions(
-					`export const isProduction = () => true\n`,
-					cleanId
+				return stubFor(
+					cleanId,
+					asTypeScript,
+					`export const isProduction = () => true\n`
 				)
 
 			let out = code
@@ -224,21 +268,23 @@ export const createTypeboxWiringHooks = (): AotPluginHooks => {
 		load() {
 			return undefined
 		},
-		transform(_code, id) {
+		transform(_code, id, asTypeScript) {
 			const cleanId = id.split('?', 1)[0]
 
 			// CJS cannot tree-shake the live namespace requires; leave it unchanged.
 			if (cleanId.endsWith('.js')) return undefined
 
 			if (TYPEBOX_TYPE_FILTER.test(cleanId))
-				return alignStubExtensions(
+				return stubFor(
+					cleanId,
+					asTypeScript,
 					`export * from './typebox-type-live'\n`,
-					cleanId
+					TYPED_TYPEBOX_STUBS.type
 				)
 
-			for (const { filter, source } of STUB_SOURCES.typeboxValue)
+			for (const { filter, source, typed } of STUB_SOURCES.typeboxValue)
 				if (filter.test(cleanId))
-					return alignStubExtensions(source, cleanId)
+					return stubFor(cleanId, asTypeScript, source, typed)
 
 			return undefined
 		},
@@ -320,7 +366,7 @@ export async function setupAotOnLoad(
 		if (!hooks.isTransformCandidate(args.path)) return undefined
 
 		const original = await readText(args.path)
-		const contents = hooks.transform(original, args.path)
+		const contents = hooks.transform(original, args.path, true)
 		if (contents === undefined) return undefined
 
 		return { contents, loader: resolveLoader(args.path) }

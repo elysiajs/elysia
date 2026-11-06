@@ -5,8 +5,10 @@ import { Default } from 'typebox/value'
 import { Elysia, t, ValidationError } from '../../src'
 import { TypeBoxValidator } from '../../src/type/validator'
 import {
+	applyPrecomputed,
 	createDefaultCloner,
 	createMergerFromSource,
+	createObjectDefaultMerger,
 	precomputeCompileFailures
 } from '../../src/type/validator/default-precompute'
 import { setupTypebox } from '../../src/type/compat'
@@ -20,6 +22,72 @@ import '../../src/compile/aot-capture'
 setupTypebox()
 
 describe('TypeBoxValidator default precompute', () => {
+	it('applies defaults for every Object.prototype data name', () => {
+		const names = Object.getOwnPropertyNames(Object.prototype).filter(
+			(name) => name !== '__proto__'
+		)
+		const schema = Type.Object(
+			Object.fromEntries(
+				names.map((name) => [name, Type.Any({ default: false })])
+			)
+		)
+		const output = new TypeBoxValidator(schema).FromSync({} as any) as any
+
+		for (const name of names) {
+			expect(Object.hasOwn(output, name)).toBe(true)
+			expect(output[name]).toBe(false)
+		}
+	})
+
+	it('applies prototype-named defaults and preserves explicit own functions', () => {
+		const schema = Type.Object({
+			valueOf: Type.Any({ default: false }),
+			constructor: Type.Any({ default: '' }),
+			nested: Type.Object({
+				toString: Type.Any({ default: 0 })
+			})
+		})
+		const validator = new TypeBoxValidator(schema)
+
+		expect(validator.precomputeSafe).toBe(true)
+
+		const missing = validator.FromSync({ nested: {} } as any) as any
+		expect(missing.valueOf).toBe(false)
+		expect(missing.constructor).toBe('')
+		expect(missing.nested.toString).toBe(0)
+		for (const [value, key] of [
+			[missing, 'valueOf'],
+			[missing, 'constructor'],
+			[missing.nested, 'toString']
+		] as const)
+			expect(Object.hasOwn(value, key)).toBe(true)
+
+		let inheritedReads = 0
+		const inherited = Object.create(null)
+		Object.defineProperty(inherited, 'valueOf', {
+			get() {
+				inheritedReads++
+				return Object.prototype.valueOf
+			}
+		})
+		const inheritedInput = Object.create(inherited)
+		inheritedInput.nested = {}
+		const inheritedOutput = validator.FromSync(inheritedInput) as any
+		expect(inheritedReads).toBe(0)
+		expect(inheritedOutput.valueOf).toBe(false)
+
+		const explicit = {
+			valueOf: Object.prototype.valueOf,
+			constructor: Object.prototype.constructor,
+			nested: { toString: Object.prototype.toString }
+		}
+		const preserved = validator.FromSync(explicit as any) as any
+
+		expect(preserved.valueOf).toBe(Object.prototype.valueOf)
+		expect(preserved.constructor).toBe(Object.prototype.constructor)
+		expect(preserved.nested.toString).toBe(Object.prototype.toString)
+	})
+
 	it('primitive default + undefined input matches Default(schema, undefined)', () => {
 		const schema = Type.String({ default: 'foo' })
 		const v = new TypeBoxValidator(schema)
@@ -127,6 +195,89 @@ describe('TypeBoxValidator default precompute', () => {
 		expect(out).toEqual(Default(schema, { rows: [{}, { qty: 5 }] }) as any)
 		expect(out).toEqual({ rows: [{ qty: 1 }, { qty: 5 }] } as any)
 	})
+})
+
+describe('object default merger own-property boundary', () => {
+	const defaults = {
+		valueOf: false,
+		constructor: '',
+		nested: { toString: 0 }
+	}
+
+	const mergers = [
+		[
+			'interpreted',
+			(value: Record<string, unknown>) =>
+				applyPrecomputed(defaults, value)
+		],
+		['generated', createObjectDefaultMerger(defaults)!]
+	] as const
+
+	for (const [name, merge] of mergers) {
+		it(`${name} ignores inherited values without invoking their getters`, () => {
+			let inheritedReads = 0
+			const inherited = Object.create(null)
+			Object.defineProperty(inherited, 'valueOf', {
+				enumerable: true,
+				get() {
+					inheritedReads++
+					return Object.prototype.valueOf
+				}
+			})
+			inherited.extra = 'inherited'
+
+			const input = Object.create(inherited)
+			input.nested = Object.create({
+				toString: Object.prototype.toString,
+				extra: 'inherited'
+			})
+
+			const output = merge(input) as any
+
+			expect(inheritedReads).toBe(0)
+			expect(output.valueOf).toBe(false)
+			expect(output.constructor).toBe('')
+			expect(output.nested.toString).toBe(0)
+			expect(Object.hasOwn(output, 'extra')).toBe(false)
+			expect(Object.hasOwn(output.nested, 'extra')).toBe(false)
+		})
+
+		it(`${name} preserves explicit own prototype functions`, () => {
+			const input = {
+				valueOf: Object.prototype.valueOf,
+				constructor: Object.prototype.constructor,
+				nested: { toString: Object.prototype.toString }
+			}
+
+			const output = merge(input) as any
+
+			expect(output.valueOf).toBe(Object.prototype.valueOf)
+			expect(output.constructor).toBe(Object.prototype.constructor)
+			expect(output.nested.toString).toBe(Object.prototype.toString)
+			if (name === 'generated') expect(output).toBe(input)
+		})
+
+		it(`${name} preserves a non-enumerable own value`, () => {
+			const input = Object.defineProperty({}, 'valueOf', {
+				value: Object.prototype.valueOf
+			})
+			const output = merge(input) as any
+
+			expect(output.valueOf).toBe(Object.prototype.valueOf)
+		})
+
+		it(`${name} applies defaults to explicit own undefined`, () => {
+			const output = merge({
+				valueOf: undefined,
+				constructor: undefined,
+				nested: { toString: undefined }
+			}) as any
+
+			expect(output.valueOf).toBe(false)
+			expect(output.constructor).toBe('')
+			expect(output.nested.toString).toBe(0)
+		})
+	}
 })
 
 describe('EncodeFrom error path', () => {
@@ -517,8 +668,6 @@ describe('default cloner emits only plain data', () => {
 		['nested function', { a: () => 1 }],
 		['cycle', cycle],
 		['own __proto__ at depth', { a: [withKey('__proto__')] }],
-		['own constructor at depth', { a: { b: withKey('constructor') } }],
-		['own prototype at depth', [withKey('prototype')]],
 		[
 			'accessor',
 			{
@@ -545,6 +694,18 @@ describe('default cloner emits only plain data', () => {
 		expect(out).toEqual({ a: { x: 1 }, b: [{ x: 1 }, { x: 1 }] })
 		expect(out.a).not.toBe(out.b[0])
 		expect(out.b[0]).not.toBe(out.b[1])
+	})
+
+	it('emits constructor and prototype as inert own data', () => {
+		const value = {
+			constructor: { ok: true },
+			prototype: { ok: true }
+		}
+		const out = createDefaultCloner(value)!() as any
+
+		expect(out).toEqual(value)
+		expect(Object.hasOwn(out, 'constructor')).toBe(true)
+		expect(Object.hasOwn(out, 'prototype')).toBe(true)
 	})
 
 	it('accepts undefined only as the whole default', () => {

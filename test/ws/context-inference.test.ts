@@ -166,7 +166,9 @@ describe('WebSocket context inference', () => {
 			.use(websocket())
 			.ws('/ws', {
 				message(ws) {
-					const view = (ws as any).data.elysia
+					// no cast: AOT keeps `(ws as any)` as `(ws)`, which widens every channel
+					// @ts-expect-error internal per-connection view
+					const view = ws.data.elysia
 					ws.send(
 						`${'headers' in view}:${'query' in view}:${'cookie' in view}`
 					)

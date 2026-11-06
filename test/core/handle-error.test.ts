@@ -1,6 +1,10 @@
 import { Elysia, InternalServerError, NotFound, t } from '../../src'
+import { websocket } from '../../src/plugin/websocket'
 
 import { describe, expect, it } from 'bun:test'
+import { runInNewContext } from 'node:vm'
+
+import { newWebsocket, wsClosed, wsMessage, wsOpen } from '../ws/utils'
 
 describe('Handle Error', () => {
 	it('handle NOT_FOUND', async () => {
@@ -811,5 +815,193 @@ describe('Handle Error', () => {
 
 		// No fallback error was logged.
 		expect(logged).toEqual([])
+	})
+})
+
+// Development is the default when NODE_ENV is unset, so the development 500
+// body is often public. The usual cause of a 500 is a failed upstream call
+// wrapped as `new Error('...', { cause })`, and an HTTP client's Error carries
+// the upstream response, the request config and the outgoing Authorization
+// header. The body names the cause, which is what a developer needs, and
+// never serialises it
+describe('development 500 cause', () => {
+	const clientError = () =>
+		Object.assign(new Error('Request failed with status code 401'), {
+			name: 'AxiosError',
+			config: {
+				headers: { Authorization: 'Bearer UPSTREAM-TOKEN' }
+			},
+			response: {
+				status: 401,
+				headers: { 'set-cookie': 'upsess=UPSTREAM-COOKIE' },
+				data: 'UPSTREAM-BODY'
+			}
+		})
+
+	const wrapped = (cause: unknown) =>
+		new Error('profile lookup failed', { cause })
+
+	const named = {
+		type: 'internal-server-error',
+		code: 'internal-server-error',
+		title: 'Internal Server Error',
+		status: 500,
+		detail: 'profile lookup failed',
+		name: 'Error',
+		cause: {
+			name: 'AxiosError',
+			message: 'Request failed with status code 401'
+		}
+	}
+
+	// every lane that answers with the 500 body: thrown, returned (mapped
+	// apart from the error handler), from a hook, past an onError that
+	// declines, and after an await
+	const lanes: Record<
+		string,
+		() => { handle(path: string): Promise<Response> }
+	> = {
+		thrown: () =>
+			new Elysia().get('/', () => {
+				throw wrapped(clientError())
+			}),
+		returned: () => new Elysia().get('/', () => wrapped(clientError())),
+		beforeHandle: () =>
+			new Elysia().get(
+				'/',
+				{
+					beforeHandle() {
+						throw wrapped(clientError())
+					}
+				},
+				() => 'unreachable'
+			),
+		onError: () =>
+			new Elysia()
+				.onError(() => {})
+				.get('/', () => {
+					throw wrapped(clientError())
+				}),
+		async: () =>
+			new Elysia().get('/', async () => {
+				await Bun.sleep(0)
+				throw wrapped(clientError())
+			})
+	}
+
+	for (const lane in lanes)
+		it(`names an HTTP client cause without its upstream data (${lane})`, async () => {
+			const res = await lanes[lane]!().handle('/')
+			const text = await res.text()
+
+			expect(res.status).toBe(500)
+			expect(text).not.toContain('UPSTREAM')
+			expect(JSON.parse(text)).toEqual(named)
+		})
+
+	it('names an HTTP client cause in a WebSocket error frame', async () => {
+		const app = new Elysia()
+			.use(websocket())
+			.ws('/ws', {
+				message() {
+					throw wrapped(clientError())
+				}
+			})
+			.listen(0)
+
+		let ws: WebSocket | undefined
+
+		try {
+			ws = newWebsocket(app.server!)
+			await wsOpen(ws)
+
+			const msg = wsMessage(ws)
+			ws.send('trigger')
+			const data = String((await msg).data)
+
+			expect(data).not.toContain('UPSTREAM')
+			expect(JSON.parse(data)).toEqual(named)
+		} finally {
+			if (ws && ws.readyState !== WebSocket.CLOSED) await wsClosed(ws)
+			app.stop()
+		}
+	})
+
+	it('names an Error cause from another realm and a DOMException', async () => {
+		// a vm or worker Error fails instanceof, a DOMException fails
+		// Error.isError on Bun: either check alone would drop one of them
+		const foreign = runInNewContext(`new Error('foreign upstream')`)
+		const abort = new DOMException('upstream timed out', 'TimeoutError')
+
+		for (const [cause, name, message] of [
+			[foreign, 'Error', 'foreign upstream'],
+			[abort, 'TimeoutError', 'upstream timed out']
+		] as const) {
+			const res = await new Elysia()
+				.get('/', () => {
+					throw wrapped(cause)
+				})
+				.handle('/')
+
+			expect(((await res.json()) as { cause: unknown }).cause).toEqual({
+				name,
+				message
+			})
+		}
+	})
+
+	it('shows a primitive cause and drops any other value', async () => {
+		const causeOf = async (cause: unknown) => {
+			const body = await new Elysia()
+				.get('/', () => {
+					throw wrapped(cause)
+				})
+				.handle('/')
+				.then((res) => res.json() as Promise<{ cause?: unknown }>)
+
+			return 'cause' in body ? body.cause : 'absent'
+		}
+
+		// a primitive is what the developer wrote, it holds no upstream graph
+		expect(await causeOf('ECONNREFUSED 10.0.0.5:5432')).toBe(
+			'ECONNREFUSED 10.0.0.5:5432'
+		)
+		expect(await causeOf(503)).toBe(503)
+		expect(await causeOf(false)).toBe(false)
+
+		// a plain object or a Response is an arbitrary graph: a client's
+		// response, a request config, a DB handle
+		expect(
+			await causeOf({
+				headers: { authorization: 'Bearer UPSTREAM-TOKEN' }
+			})
+		).toBe('absent')
+		expect(await causeOf(new Response('UPSTREAM-BODY'))).toBe('absent')
+	})
+
+	it('serves no cause in production', async () => {
+		const nodeEnv = process.env.NODE_ENV
+		process.env.NODE_ENV = 'production'
+
+		try {
+			for (const cause of [clientError(), 'ECONNREFUSED']) {
+				const res = await new Elysia()
+					.get('/', () => {
+						throw wrapped(cause)
+					})
+					.handle('/')
+
+				expect(res.status).toBe(500)
+				expect(await res.json()).toEqual({
+					type: 'internal-server-error',
+					code: 'internal-server-error',
+					title: 'Internal Server Error',
+					status: 500
+				})
+			}
+		} finally {
+			if (nodeEnv === undefined) delete process.env.NODE_ENV
+			else process.env.NODE_ENV = nodeEnv
+		}
 	})
 })

@@ -8,9 +8,10 @@ const N = 2000
 // every app stays reachable, so none is collected inside another's census
 const keep: Elysia<any, any, any, any, any, any, any, any>[] = []
 
-// bytes each route retains once compiled: the slope between two apps of N
+// what each route retains once compiled: the slope between two apps of N
 // routes, so whatever one app or the module costs cancels out
-const bytesPerRoute = async (
+const perRoute = async (
+	measure: (stats: Awaited<ReturnType<typeof settle>>) => number,
 	register: (app: Elysia, paths: string[]) => unknown,
 	eager: boolean
 ) => {
@@ -30,7 +31,7 @@ const bytesPerRoute = async (
 			}
 
 		keep.push(app)
-		return (await settle()).heapSize
+		return measure(await settle())
 	}
 
 	await compiled('w')
@@ -39,6 +40,9 @@ const bytesPerRoute = async (
 
 	return (after - before) / N
 }
+
+const bytesPerRoute = perRoute.bind(null, (stats) => stats.heapSize)
+const mapsPerRoute = perRoute.bind(null, (stats) => stats.objectTypeCounts.Map!)
 
 // A numeric key makes JSC allocate indexed storage sized to the key, so a
 // `{ 200: validator }` costs ~2.3 KB per route and `{ 401, 403 }` ~3.2 KB.
@@ -67,6 +71,21 @@ for (const eager of [false, true])
 						)
 				}, eager)
 			).toBeLessThan(2000)
+		})
+
+		it('a compiled route keeps no response Map', async () => {
+			// The Map is what `compile` reads the statuses from: the route
+			// closes over its entries, a 2-entry Map kept is 256 B per route
+			expect(
+				await mapsPerRoute((app, paths) => {
+					for (const path of paths)
+						app.get(
+							path,
+							{ response: { 200: t.String(), 404: t.String() } },
+							() => 'hi'
+						)
+				}, eager)
+			).toBeLessThan(0.5)
 		})
 
 		it('a shared status map guard keeps no status-indexed object per route', async () => {
