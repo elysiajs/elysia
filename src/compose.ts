@@ -854,7 +854,7 @@ export const composeHandler = ({
 		let afterResponse = ''
 
 		afterResponse +=
-			`\n${setImmediateFn}(async()=>{` +
+			`\n${setImmediateFn}(async()=>{try{` +
 			`if(c.responseValue){` +
 			`if(c.responseValue instanceof ElysiaCustomStatusResponse) c.set.status=c.responseValue.code\n` +
 			(hasStream
@@ -876,15 +876,14 @@ export const composeHandler = ({
 				const endUnit = reporter.resolveChild(
 					hooks.afterResponse[i].fn.name
 				)
-				const prefix = isAsync(hooks.afterResponse[i]) ? 'await ' : ''
-				afterResponse += `\n${prefix}e.afterResponse[${i}](c)\n`
+				afterResponse += `\ntry{await e.afterResponse[${i}](c)}catch{}\n`
 				endUnit()
 			}
 		}
 
 		reporter.resolve()
 
-		afterResponse += '})\n'
+		afterResponse += '}catch{}})\n'
 
 		return (_afterResponse = afterResponse)
 	}
@@ -2334,18 +2333,15 @@ export const composeGeneralHandler = (
 	if (app.event.afterResponse?.length && !app.event.error) {
 		afterResponse = '\nc.error=notFound\n'
 
-		const prefix = app.event.afterResponse.some(isAsync) ? 'async' : ''
 		afterResponse +=
-			`\n${setImmediateFn}(${prefix}()=>{` +
+			`\n${setImmediateFn}(async()=>{try{` +
 			`if(c.responseValue instanceof ElysiaCustomStatusResponse) c.set.status=c.responseValue.code\n`
 
 		for (let i = 0; i < app.event.afterResponse.length; i++) {
-			const fn = app.event.afterResponse[i].fn
-
-			afterResponse += `\n${isAsyncName(fn) ? 'await ' : ''}afterResponse[${i}](c)\n`
+			afterResponse += `\ntry{await afterResponse[${i}](c)}catch{}\n`
 		}
 
-		afterResponse += `})\n`
+		afterResponse += `}catch{}})\n`
 	}
 
 	// @ts-ignore
@@ -2569,8 +2565,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		if (!hooks.afterResponse?.length && !hasTrace) return ''
 
 		let afterResponse = ''
-		const prefix = hooks.afterResponse?.some(isAsync) ? 'async' : ''
-		afterResponse += `\n${setImmediateFn}(${prefix}()=>{`
+		afterResponse += `\n${setImmediateFn}(async()=>{try{`
 
 		const reporter = createReport({
 			context: 'context',
@@ -2585,10 +2580,11 @@ export const composeErrorHandler = (app: AnyElysia) => {
 
 		if (hooks.afterResponse?.length && hooks.afterResponse) {
 			for (let i = 0; i < hooks.afterResponse.length; i++) {
-				const fn = hooks.afterResponse[i].fn
-				const endUnit = reporter.resolveChild(fn.name)
+				const endUnit = reporter.resolveChild(
+					hooks.afterResponse[i].fn.name
+				)
 
-				afterResponse += `\n${isAsyncName(fn) ? 'await ' : ''}afterResponse[${i}](context)\n`
+				afterResponse += `\ntry{await afterResponse[${i}](context)}catch{}\n`
 
 				endUnit()
 			}
@@ -2596,7 +2592,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 
 		reporter.resolve()
 
-		afterResponse += `})\n`
+		afterResponse += `}catch{}})\n`
 
 		return afterResponse
 	}
