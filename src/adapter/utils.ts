@@ -213,6 +213,8 @@ interface CreateHandlerParameter {
 	mapCompactResponse(response: unknown, request?: Request): Response
 }
 
+const encoder = new TextEncoder()
+
 const enqueueBinaryChunk = (
 	controller: ReadableStreamDefaultController,
 	chunk: unknown
@@ -345,17 +347,17 @@ export const createStreamHandler =
 					// @ts-ignore
 					if (init.value.toSSE)
 						// @ts-ignore
-						controller.enqueue(init.value.toSSE())
+						controller.enqueue(encoder.encode(init.value.toSSE()))
 					else if (enqueueBinaryChunk(controller, init.value)) return
 					else if (typeof init.value === 'object')
 						try {
 							controller.enqueue(
-								format(JSON.stringify(init.value))
+								encoder.encode(format(JSON.stringify(init.value)))
 							)
 						} catch {
-							controller.enqueue(format(init.value.toString()))
+							controller.enqueue(encoder.encode(format(init.value.toString())))
 						}
-					else controller.enqueue(format(init.value.toString()))
+					else controller.enqueue(encoder.encode(format(init.value.toString())))
 				},
 
 				async pull(controller) {
@@ -384,17 +386,17 @@ export const createStreamHandler =
 						// @ts-ignore
 						if (chunk.toSSE)
 							// @ts-ignore
-							controller.enqueue(chunk.toSSE())
+							controller.enqueue(encoder.encode(chunk.toSSE()))
 						else if (enqueueBinaryChunk(controller, chunk)) return
 						else if (typeof chunk === 'object')
 							try {
 								controller.enqueue(
-									format(JSON.stringify(chunk))
+									encoder.encode(format(JSON.stringify(chunk)))
 								)
 							} catch {
-								controller.enqueue(format(chunk.toString()))
+								controller.enqueue(encoder.encode(format(chunk.toString())))
 							}
-						else controller.enqueue(format(chunk.toString()))
+						else controller.enqueue(encoder.encode(format(chunk.toString())))
 					} catch (error) {
 						console.warn(error)
 
