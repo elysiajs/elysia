@@ -1403,64 +1403,40 @@ describe('a plugin seen below, then used directly, with macros', () => {
 })
 
 describe('same-name variants with different hooks', () => {
-	const capture = async (build: () => unknown) => {
-		const original = console.warn
-		const warnings: string[] = []
-		console.warn = (message: string) => {
-			warnings.push(message)
-		}
-		try {
-			build()
-		} finally {
-			console.warn = original
-		}
-		return warnings
-	}
-
-	it('warns once in development when a variant is skipped', async () => {
-		const warnings = await capture(() =>
-			new Elysia()
-				.use(
-					named('variant-a').use(
-						named('variant-warn').onBeforeHandle(
-							'global',
-							() => 'a'
-						)
-					)
+	// same name and no seed is one plugin: a config variant is skipped
+	// silently, so a variant needs its own seed to install its hooks
+	const variants = (seeded: boolean) =>
+		new Elysia()
+			.use(
+				named('variant-a').use(
+					named(
+						'variant-skip',
+						seeded ? 'a' : undefined
+					).onBeforeHandle('global', mark('a'))
 				)
-				.use(
-					named('variant-b').use(
-						named('variant-warn').onBeforeHandle(
-							'global',
-							() => 'b'
-						)
-					)
+			)
+			.use(
+				named('variant-b').use(
+					named(
+						'variant-skip',
+						seeded ? 'b' : undefined
+					).onBeforeHandle('global', mark('b'))
 				)
-				.use(
-					named('variant-c').use(
-						named('variant-warn').onBeforeHandle(
-							'global',
-							() => 'c'
-						)
-					)
-				)
-		)
+			)
+			.get('/', ok)
 
-		expect(warnings).toHaveLength(1)
-		expect(warnings[0]).toContain('give each variant its own seed')
-	})
+	for (const [seeded, expected] of [
+		[false, ['a']],
+		[true, ['a', 'b']]
+	] as const)
+		it(`${seeded ? 'installs every seeded' : 'skips a seedless'} variant`, async () => {
+			const app = variants(seeded)
 
-	it('stays quiet for identically built instances', async () => {
-		const make = () =>
-			named('variant-same').onBeforeHandle('global', () => 'same')
-		const warnings = await capture(() =>
-			new Elysia()
-				.use(named('same-a').use(make()))
-				.use(named('same-b').use(make()))
-		)
-
-		expect(warnings).toEqual([])
-	})
+			log.length = 0
+			const response = await app.handle(new Request('http://localhost/'))
+			expect(response.status).toBe(200)
+			expect(log).toEqual([...expected])
+		})
 })
 
 describe('repeated admitting uses of same-name variants', () => {

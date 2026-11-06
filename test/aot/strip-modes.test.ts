@@ -155,6 +155,21 @@ describe('forced AOT stripping', () => {
 		)
 	})
 
+	// `plugin/trace` imports every trace export at load, a `.use(trace())`
+	// without a `.trace()` handler still gets the stub: a missing export fails the build
+	it('strips the trace runtime when the trace plugin has no trace handler', async () => {
+		const text = await build(
+			'test/aot/fixtures/strip-trace-plugin-app.ts',
+			true
+		)
+		expect(text).toContain('trace support was stripped')
+
+		const app = await load(text)
+		await expect(
+			app.handle(new Request('http://localhost/')).then((r) => r.text())
+		).resolves.toBe('hi')
+	})
+
 	it('builds and serves a fully precompiled app', async () => {
 		const text = await build('test/aot/fixtures/strip-forced-app.ts', true)
 

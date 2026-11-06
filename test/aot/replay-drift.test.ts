@@ -304,6 +304,21 @@ const drifted: Row[] = [
 		requests: [['/s']]
 	},
 	{
+		why: 'a Promise-returning transform cannot hide behind ~original',
+		build: () => new Elysia().get('/s', { transform: [noop] }, secret),
+		runtime: () => {
+			const transform = () => Promise.reject(status(401, 'DENIED'))
+			Object.defineProperty(transform, '~original', { value: noop })
+
+			return new Elysia().get(
+				'/s',
+				{ transform: [transform] },
+				secret
+			)
+		},
+		requests: [['/s']]
+	},
+	{
 		why: 'a beforeHandle that became async still lets the handler run',
 		build: () => new Elysia().get('/s', { beforeHandle: [noop] }, secret),
 		runtime: () =>

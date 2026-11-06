@@ -169,6 +169,341 @@ for (const async of [false, true]) {
 	check(pair.split(';')[0]!.split('.').length, 2, 'rotation: signed once')
 }
 
+// No route answers a 404 or an onRequest answer: the app-level cookie config
+// signs there, and must on the asynchronous (subtle) lane too. A hook there
+// has no jar, it writes `set.cookie`
+const writeSet = ({ set }: any) => {
+	set.cookie = { session: { value: 'user-42' } }
+}
+const early =
+	(hook: (context: any) => unknown) =>
+	(app: any): any =>
+		app.onRequest(hook).get('/', () => 'route')
+{
+	const exits: [name: string, path: string, build: () => any][] = [
+		['404', '/missing', () => early(writeSet)(new Elysia(config))],
+		[
+			'404 answered by onError',
+			'/missing',
+			() => early(writeSet)(new Elysia(config)).onError(() => 'handled')
+		],
+		[
+			'sync onRequest answer',
+			'/',
+			() =>
+				early((c) => {
+					writeSet(c)
+					return 'early'
+				})(new Elysia(config))
+		],
+		[
+			'async onRequest answer',
+			'/',
+			() =>
+				early(async (c) => {
+					writeSet(c)
+					return 'early'
+				})(new Elysia(config))
+		],
+		[
+			'onRequest answer whose mapResponse writes the cookie',
+			'/',
+			() => early(() => 'early')(new Elysia(config)).mapResponse(writeSet)
+		],
+		[
+			'onRequest throw handled by onError',
+			'/',
+			() =>
+				early((c) => {
+					writeSet(c)
+					throw new Error('boom')
+				})(new Elysia(config)).onError(() => 'handled')
+		]
+	]
+
+	for (const [name, path, build] of exits) {
+		const res = await make(build).handle(
+			new Request(`http://localhost${path}`)
+		)
+		check(await emitted(res), 'user-42', `${name}: signed`)
+	}
+}
+
+// A mapResponse hook replaces `set.cookie` while the asynchronous sign of the
+// old bag is pending, and the response serializes the bag `set` holds after.
+// What is sent must be what was signed: the replacement signed, never sent
+// unsigned. A synchronous sign serializes before the replacement lands
+{
+	const replace = ({ set }: any) => {
+		queueMicrotask(() => {
+			set.cookie = { session: { value: 'replacement' } }
+		})
+	}
+	const racing: [name: string, build: () => any][] = [
+		[
+			'matched route',
+			() =>
+				new Elysia(config)
+					.mapResponse(replace)
+					.get('/', ({ cookie: { session } }: any) => {
+						session.value = 'user-42'
+						return 'ok'
+					})
+		],
+		[
+			'onRequest answer',
+			() =>
+				early((c) => {
+					writeSet(c)
+					return 'early'
+				})(new Elysia(config).mapResponse(replace))
+		],
+		[
+			'onRequest throw handled by onError',
+			() =>
+				early((c) => {
+					writeSet(c)
+					throw new Error('boom')
+				})(new Elysia(config).mapResponse(replace)).onError(
+					() => 'handled'
+				)
+		]
+	]
+
+	for (const [name, build] of racing) {
+		const res = await make(build).handle(new Request('http://localhost/'))
+		// `replacement` on subtle proves the swap landed mid-sign
+		check(
+			await emitted(res),
+			lane === 'subtle' ? 'replacement' : 'user-42',
+			`${name}: bag replaced while signing`
+		)
+	}
+}
+
+// `set.cookie` written on a route that never reads `cookie`: the route has no
+// jar, yet it signs. On subtle and aot the signer is asynchronous and a sync
+// route chains it onto its response, each exit of it: the handler's, the
+// afterResponse lane's and an error hook's answer. A failed sign still drops
+// the session, never sends it unsigned
+{
+	// `session` alone: `emitted` reads the first set-cookie pair
+	const write = (set: any) => {
+		set.cookie = { session: { value: 'user-42' } }
+	}
+
+	const writers: Record<string, (app: any) => any> = {
+		handler: (app) =>
+			app.get('/', ({ set }: any) => {
+				write(set)
+
+				return 'ok'
+			}),
+		'generator handler': (app) =>
+			app.get('/', function* ({ set }: any) {
+				write(set)
+				yield 'ok'
+			}),
+		onRequest: (app) =>
+			app.onRequest(({ set }: any) => write(set)).get('/', () => 'ok'),
+		'error hook': (app) =>
+			app.get(
+				'/',
+				{
+					error: ({ set }: any) => {
+						write(set)
+
+						return 'handled'
+					}
+				},
+				() => {
+					throw new Error('boom')
+				}
+			),
+		'static value route': (app) =>
+			app.onRequest(({ set }: any) => write(set)).get('/', 'ok'),
+		'handler on the afterResponse lane': (app) =>
+			app
+				.onAfterResponse(() => {})
+				.get('/', ({ set }: any) => {
+					write(set)
+
+					return 'ok'
+				}),
+		'handler answered by an error hook': (app) =>
+			app
+				.onError(() => 'handled')
+				.get('/', ({ set }: any) => {
+					write(set)
+
+					throw new Error('boom')
+				}),
+		'handler an error hook declines': (app) =>
+			app
+				.onError(() => {})
+				.get('/', ({ set }: any) => {
+					write(set)
+
+					throw new Error('boom')
+				}),
+		// a sync handler's pending value writes after the route returned:
+		// every lane's signer waits for it to settle. Signing before it left
+		// the cookie unsigned on jit, and a failed sign answered 200
+		'pending value of a sync handler': (app) =>
+			app.get('/', ({ set }: any) =>
+				Promise.resolve().then(() => {
+					write(set)
+
+					return 'ok'
+				})
+			)
+	}
+
+	for (const [name, wire] of Object.entries(writers)) {
+		const signed = make(() => wire(new Elysia(config)))
+		const res = await signed.handle(new Request('http://localhost/'))
+		check(await emitted(res), 'user-42', `set.cookie by ${name}: signed`)
+
+		const failed = make(() =>
+			wire(
+				new Elysia({
+					cookie: { secrets: [null, 's'] as any, sign: ['session'] }
+				})
+			)
+		)
+		const closed = await failed.handle(new Request('http://localhost/'))
+		await closed.text()
+		check(closed.status, 500, `set.cookie by ${name}: failed sign status`)
+		check(
+			await emitted(closed),
+			'missing',
+			`set.cookie by ${name}: failed sign drops the session`
+		)
+	}
+
+	// Every route of a signing app may write `set.cookie`, so every one signs.
+	// A route that writes no cookie must not pay a Promise for it: turning
+	// async cost ~105 ns per request (+40%) on an AOT build
+	const { setOnEmit } = await import('../../src/compile/handler/jit')
+	const sources: string[] = []
+	setOnEmit((code) => sources.push(code))
+	try {
+		const res = await make(() =>
+			new Elysia(config).get('/:id', ({ params }: any) => params.id)
+		).handle(new Request('http://localhost/1'))
+		check(await res.text(), '1', 'cookie-free route: answers')
+	} finally {
+		setOnEmit(undefined)
+	}
+	check(sources.length > 0, true, 'cookie-free route: compiled')
+	check(
+		sources.some((code) => code.includes('async function route(')),
+		false,
+		'cookie-free route: stays sync'
+	)
+}
+
+// The documented jar, from a sync handler's pending value: the session it
+// writes once it settles is signed, a write before the return is overwritten
+// by it, never sent in its place, and a failed sign drops it. On jit the sync
+// signer ran before the value settled: unsigned, the stale value, or 200
+{
+	const routes: Record<string, (context: any) => unknown> = {
+		'jar write after settling': ({ cookie: { session } }: any) =>
+			Promise.resolve().then(() => {
+				session.value = 'user-42'
+
+				return 'ok'
+			}),
+		'jar overwrite after settling': ({ cookie: { session } }: any) => {
+			session.value = 'stale'
+
+			return Promise.resolve().then(() => {
+				session.value = 'user-42'
+
+				return 'ok'
+			})
+		}
+	}
+
+	for (const [name, handler] of Object.entries(routes)) {
+		const res = await make(() =>
+			new Elysia(config).get('/', handler)
+		).handle(new Request('http://localhost/'))
+		check(await res.text(), 'ok', `${name}: answers`)
+		check(await emitted(res), 'user-42', `${name}: signed`)
+
+		const closed = await make(() =>
+			new Elysia({
+				cookie: { secrets: [null, 's'] as any, sign: ['session'] }
+			}).get('/', handler)
+		).handle(new Request('http://localhost/'))
+		await closed.text()
+		check(closed.status, 500, `${name}: failed sign status`)
+		check(
+			await emitted(closed),
+			'missing',
+			`${name}: failed sign drops the session`
+		)
+	}
+}
+
+// Signing rewrites a cookie's value to its wire form, so it must wait for a
+// sync handler's pending value: a continuation that reads the cookie back
+// must see what the app wrote. On jit the sync signer ran first and the
+// continuation extended the signed string ('seed.<HMAC>-next')
+{
+	const routes: Record<string, (context: any) => unknown> = {
+		'jar read back after settling': ({ cookie: { session } }: any) => {
+			session.value = 'seed'
+
+			return Promise.resolve().then(() => {
+				session.value += '-next'
+
+				return 'ok'
+			})
+		},
+		'set.cookie read back after settling': ({ set }: any) => {
+			set.cookie = { session: { value: 'seed' } }
+
+			return Promise.resolve().then(() => {
+				set.cookie.session.value += '-next'
+
+				return 'ok'
+			})
+		}
+	}
+
+	for (const [name, handler] of Object.entries(routes)) {
+		const res = await make(() =>
+			new Elysia(config).get('/', handler)
+		).handle(new Request('http://localhost/'))
+		check(await res.text(), 'ok', `${name}: answers`)
+		check(await emitted(res), 'seed-next', `${name}: signed as written`)
+	}
+
+	// the pending value rejects after a write made before the return: the
+	// error exit still signs that write (or drops it), never sends it raw
+	const rejected = make(() =>
+		new Elysia(config).get('/', ({ cookie: { session } }: any) => {
+			session.value = 'user-42'
+
+			return Promise.resolve().then(() => {
+				throw new Error('boom')
+			})
+		})
+	)
+	const res = await rejected.handle(new Request('http://localhost/'))
+	await res.text()
+	check(res.status, 500, 'rejected pending value: status')
+	const value = await emitted(res)
+	check(
+		value === 'user-42' || value === 'missing',
+		true,
+		`rejected pending value: signed or dropped, got ${String(value)}`
+	)
+}
+
 // Signing fails closed: when the signer throws or rejects (an HSM or WebCrypto
 // outage), a cookie meant to be signed is dropped instead of leaving unsigned,
 // the error response still goes out and an unsigned cookie is kept. Runs last,

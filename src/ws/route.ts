@@ -27,7 +27,8 @@ import {
 import {
 	composeRouteHook,
 	localMacroRoot,
-	resolveWSLocalHook
+	resolveWSLocalHook,
+	runIntrospect
 } from '../compile/handler'
 import {
 	Capture,
@@ -385,6 +386,9 @@ export function buildWSRoute(
 		app,
 		route[7] as AnyElysia | undefined
 	) ?? hook) as AnyWSLocalHook
+	// a chain macro's `introspect` runs here for the schemas, and on
+	// `flatAppHook` below for the events: each reads its own object
+	runIntrospect(composed)
 
 	let validators: RouteValidator<any>
 
@@ -480,6 +484,7 @@ export function buildWSRoute(
 			route[7] as AnyElysia | undefined,
 			false
 		) as Partial<AppHook> | undefined) ?? ({} as Partial<AppHook>)
+	runIntrospect(flatAppHook)
 
 	const parseHooks = concatHooks(hook.parse as any) as any[]
 
@@ -557,8 +562,11 @@ export function buildWSRoute(
 		afterResponse: afterResponses as any
 	})
 
+	const needsCookie = !!(validators.cookie || inference.cookie)
+	// a hook can write `set.cookie` without reading `cookie`: a signing config
+	// still signs it, as on an HTTP route, the upgrade just gets no jar
 	const cookieConfig =
-		validators.cookie || inference.cookie
+		needsCookie || frozenRootOf(app)['~config']?.cookie?.sign
 			? compileCookieConfig(
 					composed.cookie as any,
 					frozenRootOf(app)['~config']?.cookie as any,
@@ -939,7 +947,7 @@ export function buildWSRoute(
 				;(context as any).headers = r
 			}
 
-			if (cookieConfig) {
+			if (cookieConfig && needsCookie) {
 				const cookieHeader = request.headers.get('cookie')
 
 				if (validators.cookie) {
@@ -1261,6 +1269,20 @@ export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 		}
 	}
 
+	const admit = (ws: ServerWebSocket<WSConnectionData>) => {
+		const data = ws.data
+		const inflight = (data.inflight ?? 0) + 1
+		if (inflight > MAX_INFLIGHT_MESSAGES) {
+			try {
+				ws.close(1013, 'Too many in-flight messages')
+			} catch {}
+			return false
+		}
+		data.inflight = inflight
+
+		return true
+	}
+
 	const release = (ws: ServerWebSocket<WSConnectionData>) => {
 		const data = ws.data
 		const inflight = data.inflight
@@ -1295,20 +1317,31 @@ export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 		else release(ws)
 	}
 
+	function dispatchControl(
+		ws: ServerWebSocket<WSConnectionData>,
+		callback: NonNullable<WSConnectionData['ping']>,
+		data: Buffer
+	) {
+		let result
+		try {
+			result = runLifecycle(callback, getElysia(ws), data)
+		} catch (error) {
+			release(ws)
+			throw error
+		}
+
+		if (result instanceof Promise)
+			trackWSSettling(ws.data, result, () => release(ws))
+		else release(ws)
+	}
+
 	const handler: WebSocketHandler<WSConnectionData> = {
 		message(ws, message) {
 			if (lifecycle?.closing) return
 			const data = ws.data
 			if (!data.message) return
 
-			const inflight = (data.inflight ?? 0) + 1
-			if (inflight > MAX_INFLIGHT_MESSAGES) {
-				try {
-					ws.close(1013, 'Too many in-flight messages')
-				} catch {}
-				return
-			}
-			data.inflight = inflight
+			if (!admit(ws)) return
 
 			const opening = data.opening
 			if (opening)
@@ -1379,20 +1412,14 @@ export function buildGlobalWSHandler(): WebSocketHandler<WSConnectionData> {
 		ping(ws, data) {
 			if (lifecycle?.closing) return
 			const ping = ws.data.ping
-			trackWSSettling(
-				ws.data,
-				ping && runLifecycle(ping, getElysia(ws), data),
-				() => releaseLifecycle(ws)
-			)
+			if (!ping || !admit(ws)) return
+			dispatchControl(ws, ping, data)
 		},
 		pong(ws, data) {
 			if (lifecycle?.closing) return
 			const pong = ws.data.pong
-			trackWSSettling(
-				ws.data,
-				pong && runLifecycle(pong, getElysia(ws), data),
-				() => releaseLifecycle(ws)
-			)
+			if (!pong || !admit(ws)) return
+			dispatchControl(ws, pong, data)
 		}
 	}
 

@@ -151,9 +151,13 @@ describe('generator chunks follow the response schema', () => {
 	})
 
 	it('keeps a route without a response schema as it was', async () => {
-		const app = new Elysia().get('/', yields({ a: 1, secret: 'x' }))
+		const yielded = new Elysia().get('/', yields({ a: 1, secret: 'x' }))
+		const returned = new Elysia().get('/', function* () {
+			return { a: 1, secret: 'x' }
+		})
 
-		expect(await body(app)).toBe('{"a":1,"secret":"x"}')
+		expect(await body(yielded)).toBe('{"a":1,"secret":"x"}')
+		expect(await body(returned)).toBe('{"a":1,"secret":"x"}')
 	})
 
 	it('does not reach a set of a response that is not a generator', async () => {
@@ -217,6 +221,55 @@ describe('the schema of a chunk is the schema of its status', () => {
 
 		expect(response.status).toBe(201)
 		expect(await response.text()).toBe('{"b":2}')
+	})
+
+	it('picks the entry of a status set before the generator returns', async () => {
+		const app = new Elysia().get(
+			'/',
+			{ response: schemas },
+			function* ({ set }): Generator<any, any> {
+				set.status = 'Created'
+				return { a: 1, b: 2 }
+			}
+		)
+
+		const response = await get(app)
+
+		expect(response.status).toBe(201)
+		expect(await response.text()).toBe('{"b":2}')
+	})
+
+	it('picks the entry of status() returned by the generator', async () => {
+		const app = new Elysia().get(
+			'/',
+			{ response: schemas },
+			function* (): Generator<any, any> {
+				return status(201, { a: 1, b: 2 })
+			}
+		)
+
+		const response = await get(app)
+
+		expect(response.status).toBe(201)
+		expect(await response.text()).toBe('{"b":2}')
+	})
+
+	it('maps an unmatched status before its promised body rejects', async () => {
+		const app = new Elysia().get(
+			'/',
+			{
+				response: { 200: t.String() },
+				error: () => 'failed'
+			},
+			function* (): Generator<any, any> {
+				return status(201, Promise.reject(new Error('boom')) as any)
+			}
+		)
+
+		const response = await get(app)
+
+		expect(response.status).toBe(201)
+		expect(await response.text()).toBe('failed')
 	})
 
 	it('picks the entry of a status set before the handler returned', async () => {
@@ -885,6 +938,18 @@ describe('a chunk Clean can not strip errors the stream', () => {
 describe('a Standard Schema cleans by parsing', () => {
 	const schema = z.object({ a: z.number() })
 
+	it('strips an initial generator return', async () => {
+		const app = new Elysia().get(
+			'/',
+			{ response: schema },
+			function* (): Generator<any, any> {
+				return { a: 1, secret: 'x' }
+			}
+		)
+
+		expect(await body(app)).toBe('{"a":1}')
+	})
+
 	it('strips what the schema strips on a returned value', async () => {
 		expect(await body(stream(schema, { a: 1, secret: 'x' }))).toBe(
 			'{"a":1}'
@@ -1019,15 +1084,7 @@ describe('a chunk is cleaned the way the app configures Clean', () => {
 })
 
 describe('cleaning stays out of the stream lifecycle', () => {
-	it('sends a generator return value as it did', async () => {
-		const returned = new Elysia().get(
-			'/',
-			{ response: object },
-			function* (): Generator<any, any> {
-				return { a: 1, secret: 'kept' }
-			}
-		)
-
+	it('cleans each generator return before its first yield', async () => {
 		const afterYield = new Elysia().get(
 			'/',
 			{ response: object },
@@ -1037,7 +1094,24 @@ describe('cleaning stays out of the stream lifecycle', () => {
 			}
 		)
 
-		expect(await body(returned)).toBe('{"a":1,"secret":"kept"}')
+		for (const handler of [
+			function* () {
+				return { a: 1, secret: 'x' }
+			},
+			async function* () {
+				return { a: 1, secret: 'x' }
+			},
+			function* () {
+				return Promise.resolve({ a: 1, secret: 'x' })
+			},
+			function* () {
+				return yields({ a: 1, secret: 'x' })()
+			}
+		])
+			expect(
+				await body(new Elysia().get('/', { response: object }, handler as any))
+			).toBe('{"a":1}')
+
 		expect(await body(afterYield)).toBe('{"a":1}')
 	})
 
@@ -1235,6 +1309,34 @@ describe('out of scope stays as it was', () => {
 		)
 
 		expect(await body(app)).toBe('{"a":1,"secret":"x"}')
+	})
+
+	it('leaves promised and status-wrapped ReadableStreams', async () => {
+		const stream = () =>
+			new ReadableStream({
+				start(controller) {
+					controller.enqueue('{"a":1,"secret":"x"}')
+					controller.close()
+				}
+			})
+		const promised = new Elysia().get(
+			'/',
+			{ response: object },
+			function* (): Generator<any, any> {
+				return Promise.resolve(stream())
+			}
+		)
+		const wrapped = new Elysia().get(
+			'/',
+			{ response: { 201: object } },
+			function* (): Generator<any, any> {
+				return status(201, Promise.resolve(stream()) as any)
+			}
+		)
+
+		expect(await body(promised)).toBe('{"a":1,"secret":"x"}')
+		expect((await get(wrapped)).status).toBe(201)
+		expect(await body(wrapped)).toBe('{"a":1,"secret":"x"}')
 	})
 
 	it('leaves a ReadableStream a generator yields first', async () => {

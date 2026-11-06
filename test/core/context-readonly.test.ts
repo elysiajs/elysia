@@ -1,20 +1,38 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../src'
+import { trace } from '../../src/plugin/trace'
 
 describe('context.path', () => {
-	it('warns once when a request hook assigns to path and still reroutes the request', async () => {
-		const warnings: string[] = []
-		const warn = console.warn
-		console.warn = (...values) => warnings.push(values.join(' '))
-		// the warning is dev-only
-		const nodeEnv = process.env.NODE_ENV
-		process.env.NODE_ENV = 'development'
-
-		try {
-			const app = new Elysia()
-				.onRequest((context) => {
+	// a request hook may reroute by assigning context.path, in every
+	// onRequest lane: sync, async (awaited hook) and traced
+	for (const [lane, build] of [
+		[
+			'sync',
+			(app: Elysia) =>
+				app.onRequest((context) => {
 					;(context as any).path = '/moved'
 				})
+		],
+		[
+			'async',
+			(app: Elysia) =>
+				app.onRequest(async (context) => {
+					;(context as any).path = '/moved'
+				})
+		],
+		[
+			'trace',
+			(app: Elysia) =>
+				app
+					.use(trace())
+					.trace(() => {})
+					.onRequest((context) => {
+						;(context as any).path = '/moved'
+					})
+		]
+	] as const)
+		it(`reroutes the request when a request hook assigns to path (${lane})`, async () => {
+			const app = build(new Elysia() as Elysia)
 				.get('/original', () => 'original')
 				.get('/moved', () => 'moved')
 
@@ -23,14 +41,7 @@ describe('context.path', () => {
 
 			await expect((await request()).text()).resolves.toBe('moved')
 			await expect((await request()).text()).resolves.toBe('moved')
-			expect(warnings).toHaveLength(1)
-			expect(warnings[0]).toContain('context.path is readonly')
-		} finally {
-			console.warn = warn
-			if (nodeEnv === undefined) delete process.env.NODE_ENV
-			else process.env.NODE_ENV = nodeEnv
-		}
-	})
+		})
 
 	it('remains enumerable and serializable inside request hooks', async () => {
 		let keys: string[] = []
@@ -73,41 +84,25 @@ describe('context.path', () => {
 		expect(keys).not.toContain('~path')
 	})
 
-	it('does not warn again after the app publishes a new generation', async () => {
-		// Warning state belongs to the app, not the rebuilt handler.
-		const warnings: string[] = []
-		const warn = console.warn
-		console.warn = (...values) => warnings.push(values.join(' '))
-		// The warning is development-only.
-		const nodeEnv = process.env.NODE_ENV
-		process.env.NODE_ENV = 'development'
+	it('still reroutes after the app publishes a new generation', async () => {
+		const app = new Elysia()
+			.onRequest((context) => {
+				;(context as any).path = '/moved'
+			})
+			.get('/original', () => 'original')
+			.get('/moved', () => 'moved')
 
-		try {
-			const app = new Elysia()
-				.onRequest((context) => {
-					;(context as any).path = '/moved'
-				})
-				.get('/original', () => 'original')
-				.get('/moved', () => 'moved')
+		await expect((await app.handle('/original')).text()).resolves.toBe(
+			'moved'
+		)
+		;(app as any)['~generation'] = undefined
+		app.get('/late', () => 'late')
+		void app.fetch
+		expect(app['~generation']).toBeDefined()
 
-			await expect((await app.handle('/original')).text()).resolves.toBe(
-				'moved'
-			)
-			expect(warnings).toHaveLength(1)
-			;(app as any)['~generation'] = undefined
-			app.get('/late', () => 'late')
-			void app.fetch
-			expect(app['~generation']).toBeDefined()
-
-			await expect((await app.handle('/original')).text()).resolves.toBe(
-				'moved'
-			)
-			expect(warnings).toHaveLength(1)
-		} finally {
-			console.warn = warn
-			if (nodeEnv === undefined) delete process.env.NODE_ENV
-			else process.env.NODE_ENV = nodeEnv
-		}
+		await expect((await app.handle('/original')).text()).resolves.toBe(
+			'moved'
+		)
 	})
 
 	it('is a writable data property when no request hook is registered', async () => {

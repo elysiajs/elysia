@@ -34,6 +34,41 @@ describe('guard scope', () => {
 		).toThrow("guard('plugin', { ... })")
 	})
 
+	// an unsupported arity used to register nothing and return the app: a
+	// guard that silently does not apply is an auth fail-open
+	it('rejects an unsupported argument count at registration', async () => {
+		let denied = 0
+		const deny = {
+			beforeHandle() {
+				denied++
+				return new Response('denied', { status: 401 })
+			}
+		}
+
+		expect(() =>
+			(new Elysia() as any).guard('plugin', deny, (app: Elysia) =>
+				app.get('/secret', () => 'secret')
+			)
+		).toThrow('[Elysia] use guard(hook), guard(hook, callback)')
+		expect(() => (new Elysia() as any).guard()).toThrow(
+			'[Elysia] use guard(hook), guard(hook, callback)'
+		)
+
+		// the supported forms apply the hook
+		const app = new Elysia()
+			.guard(deny, (app) => app.get('/a', () => 'a'))
+			.guard('local', deny)
+			.get('/b', () => 'b')
+
+		expect(
+			(await app.handle(new Request('http://localhost/a'))).status
+		).toBe(401)
+		expect(
+			(await app.handle(new Request('http://localhost/b'))).status
+		).toBe(401)
+		expect(denied).toBe(2)
+	})
+
 	it('enforces a plugin-scoped guard schema on parent routes', async () => {
 		const plugin = new Elysia({ name: 'org-guard' }).guard('plugin', {
 			body: t.Object({ org: t.String() })

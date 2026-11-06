@@ -1060,7 +1060,22 @@ export function internalServerErrorBody(error: any) {
 	if (!isProduction()) {
 		if (error?.message != null) body.detail = error.message
 		if (error?.name) body.name = error.name
-		if (error?.cause !== undefined) body.cause = error.cause
+		// Development is the default when NODE_ENV is unset, so a served
+		// cause is public: an HTTP client's Error carries the upstream
+		// response, request config and Authorization header. Serve only what
+		// names it; `Error.isError` covers an Error from another realm
+		const cause = error?.cause
+		if (cause instanceof Error || Error.isError?.(cause))
+			body.cause = {
+				name: String((cause as Error).name),
+				message: String((cause as Error).message)
+			}
+		else if (
+			typeof cause === 'string' ||
+			typeof cause === 'number' ||
+			typeof cause === 'boolean'
+		)
+			body.cause = cause
 	}
 
 	return body
@@ -1227,6 +1242,9 @@ export type TaggedHTTPError<Type extends string, Annotation = {}> = {
  * through to the next one. A response that depends on the request belongs in
  * `.onError(Class, handler)`
  *
+ * `headers` is served only from a class that extends `HTTPError`, not from
+ * one that implements it
+ *
  * @example
  * ```ts
  * class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT') {
@@ -1296,7 +1314,14 @@ export abstract class HTTPError<
 	 */
 	declare readonly status?: number | keyof StatusMap
 
-	/** Headers merged into `set.headers` when the error is served */
+	/**
+	 * Headers merged into `set.headers` when the error is served
+	 *
+	 * Only from a class that extends this module's `HTTPError`: on an error
+	 * that only implements the contract, or extends the `HTTPError` of
+	 * another loaded copy of Elysia (a duplicate install, a bundled plugin),
+	 * they are ignored
+	 */
 	declare readonly headers?: Record<string, string>
 
 	/**

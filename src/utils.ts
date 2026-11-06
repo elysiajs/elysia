@@ -5,7 +5,6 @@ import { isBun } from './universal/constants'
 import type { Context } from './context'
 import type {
 	AppHook,
-	MaybeArray,
 	EventFn,
 	EventScope,
 	Macro,
@@ -406,23 +405,26 @@ export function compactBeforeHandlePrefix(start: ChainNode | undefined) {
 }
 
 // A registration (`ChainNode.key`) installs one bit per lifecycle event it
-// holds; the bit is the event's index in `lifecycleEvents`. `derive` lowers
+// holds; the bit is the event's index in `installEvents`. `derive` lowers
 // into `beforeHandle` but is its own lifecycle; schemas never deduplicate
 const deriveSlot = 15
 
 export type Installs = ReadonlyMap<string, number>
 
 // a finished layer is not written again: with no outer one it is reused
-const withLayer = (outer: Installs | undefined, layer: Map<string, number>) => {
+function withLayer(outer: Installs | undefined, layer: Map<string, number>) {
 	if (!outer?.size) return layer
+
 	const merged = new Map(outer)
 	for (const [id, bits] of layer) merged.set(id, (merged.get(id) ?? 0) | bits)
+
 	return merged
 }
 
 /** Whether `a` and `b` install any event of one registration */
-export const installsOverlap = (a: Installs, b: Installs) => {
+export function installsOverlap(a: Installs, b: Installs) {
 	for (const [id, bits] of a) if ((b.get(id) ?? 0) & bits) return true
+
 	return false
 }
 
@@ -437,7 +439,8 @@ function installBits(added: Partial<AppHook> | undefined) {
 
 	for (const key in added) {
 		const v = (added as any)[key]
-		const slot = lifecycleEvents.indexOf(key)
+		const slot = installEvents.indexOf(key)
+
 		if (v == null || slot === -1) continue
 
 		if (key === 'beforeHandle')
@@ -552,19 +555,19 @@ export function flattenChain(
 		}
 
 		if (phase === 1) {
-			// only a registration node gets here, never a combine one
 			const {
 				key: id,
 				propagated,
 				scope
 			} = node as Extract<ChainNode, { added: unknown }>
-			// an exported registration runs each event once, at its outermost
-			// layer (a `local` one has no key: its instance's own, Elysia 1)
+
 			const counted = id !== undefined
 			if (info && counted) info.named = true
+
 			const done = counted
 				? (outer?.get(id) ?? 0) | (shadow?.get(node) ?? 0)
 				: 0
+
 			let bits = 0
 
 			const added = resolveAdded
@@ -583,7 +586,7 @@ export function flattenChain(
 					// `~deriveEntries` is rebuilt per occurrence below
 					if (v == null || key === '~deriveEntries') continue
 
-					const slot = lifecycleEvents.indexOf(key)
+					const slot = installEvents.indexOf(key)
 
 					if (key === 'beforeHandle') {
 						for (const fn of Array.isArray(v) ? v : [v]) {
@@ -1098,72 +1101,6 @@ export function mergeResponse(
 	return b ?? a
 }
 
-/**
- * a is mutable, b is immutable
- *
- * If both are arrays, mutates a by pushing/appending b
- */
-export function mergeArray<
-	A extends MaybeArray<unknown> | undefined,
-	B extends MaybeArray<unknown> | undefined
->(
-	a: A,
-	b: B,
-	reverse = false
-): (A extends unknown[] ? A : []) | (B extends unknown[] ? B : []) {
-	if (!a) return b as any
-	if (!b) return a as any
-
-	const aIsArray = Array.isArray(a)
-	const bIsArray = Array.isArray(b)
-
-	if (reverse) {
-		if (aIsArray && bIsArray) {
-			if (b.length === 1) {
-				a.unshift(b[0])
-				return a as any
-			}
-
-			return (b as unknown[]).concat(a) as any
-		}
-
-		if (aIsArray) {
-			;(a as unknown[]).unshift(b)
-			return a as any
-		}
-
-		if (bIsArray) {
-			const out = new Array(b.length + 1)
-			for (let i = 0; i < b.length; i++) out[i] = b[i]
-			out[b.length] = a
-
-			return out as any
-		}
-
-		return [b, a] as any
-	}
-
-	if (aIsArray && bIsArray) {
-		for (let i = 0; i < b.length; i++) a.push(b[i])
-		return a as any
-	}
-
-	if (aIsArray) {
-		;(a as unknown[]).push(b)
-		return a as any
-	}
-
-	if (bIsArray) {
-		const out = new Array(b.length + 1)
-		out[0] = a
-		for (let i = 0; i < b.length; i++) out[i + 1] = b[i]
-
-		return out as any
-	}
-
-	return [a, b] as any
-}
-
 const hookSchemaKeys = [
 	'body',
 	'headers',
@@ -1184,10 +1121,11 @@ const hookEventKeys = [
 	'mapResponse',
 	'afterResponse',
 	'error',
-	'trace'
+	'trace',
+	'handler',
+	'~introspect'
 ] as const
 
-// an event's index is its slot in `flattenChain`
 const lifecycleEvents = [
 	'start',
 	'stop',
@@ -1203,6 +1141,10 @@ const lifecycleEvents = [
 ]
 
 export const eventProperties = new Set(lifecycleEvents)
+
+// an event's index is its slot in `flattenChain`. A macro's `handler` and
+// `~introspect` lists install like events, though no hook option names them
+const installEvents = [...lifecycleEvents, 'handler', '~introspect']
 
 export function hookToGuard(
 	a: Partial<AppHook & Macro> & {
@@ -1285,6 +1227,13 @@ export function pathOf(parent: readonly string[], key: string) {
 	return path
 }
 
+const list = (v: any): any[] => (Array.isArray(v) ? v : [v])
+
+// b's entries before a's, as a new array. Each side is wrapped first: `concat`
+// would spread a hook flagged `Symbol.isConcatSpreadable` and drop it
+const prepend = (a: any, b: any): any =>
+	!a ? b : !b ? a : list(b).concat(list(a))
+
 export function mergeHook(
 	a: Partial<AppHook>,
 	b: Partial<AppHook> | undefined
@@ -1299,15 +1248,14 @@ export function mergeHook(
 
 	for (const key of hookEventKeys)
 		if ((a as any)[key] || (b as any)[key])
-			(a as any)[key] = mergeArray((a as any)[key], (b as any)[key], true)
+			(a as any)[key] = prepend((a as any)[key], (b as any)[key])
 
-	if (a.schemas || b.schemas)
-		a.schemas = mergeArray(a.schemas, b.schemas, true) as any
+	if (a.schemas || b.schemas) a.schemas = prepend(a.schemas, b.schemas)
 
 	const aDerive = (a as any)['~deriveEntries']
 	const bDerive = (b as any)['~deriveEntries']
 	if (aDerive || bDerive)
-		(a as any)['~deriveEntries'] = mergeArray(aDerive, bDerive, true)
+		(a as any)['~deriveEntries'] = prepend(aDerive, bDerive)
 
 	return a
 }
@@ -1338,9 +1286,7 @@ export const createErrorEventHandler = (fn: EventFn<'error'>, error: Error) => {
 const isObject = (item: any): item is Object =>
 	item && typeof item === 'object' && !Array.isArray(item)
 
-const isClassRegex = /^\s*class\s+/
 const isClass = (v: Object) =>
-	(typeof v === 'function' && isClassRegex.test(v.toString())) ||
 	// built-in tag, not `v.toString()`: Date, Map, URL, typed arrays,
 	// `import * as X` ([object Module]) and Symbol.toStringTag values like
 	// [object Prisma]; plain and Object.create(null) objects read [object Object]

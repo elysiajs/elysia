@@ -150,6 +150,32 @@ describe('stream terminal ownership', () => {
 		expect(counts()).toEqual([1, 1])
 	})
 
+	// a client must not take '[object Object]' for the chunk's data
+	it('errors the stream on an unserializable object chunk', async () => {
+		const circular: Record<string, unknown> = {}
+		circular.self = circular
+
+		const app = new Elysia().get('/', async function* () {
+			yield 'first'
+			yield circular
+		})
+
+		const response = await app.handle('/')
+		const reader = response.body!.getReader()
+		const decoder = new TextDecoder()
+		let received = ''
+		const observed = await (async () => {
+			for (;;) {
+				const { done, value } = await reader.read()
+				if (done) return undefined
+				received += decoder.decode(value)
+			}
+		})().catch((error) => error)
+
+		expect(observed).toBeInstanceOf(TypeError)
+		expect(received).toBe('first')
+	})
+
 	it('keeps a locked stream failure on the response body', async () => {
 		const stream = new ReadableStream({
 			start(controller) {

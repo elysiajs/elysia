@@ -251,7 +251,6 @@ function resolveChainNode(
 			applyMacros(resolved, scope, frozenRoot, scopeMacro, rootMacro)
 
 		promoteDerive(resolved)
-		runIntrospect(resolved)
 		perScope.set(added, resolved)
 	}
 

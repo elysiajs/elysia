@@ -1,5 +1,6 @@
 import { EmptyObject, isByteStream, isNotEmpty, sseData } from '../utils'
 import { StatusMap } from '../constants'
+import { ElysiaStatus } from '../error'
 
 import { serializeCookie } from '../cookie/serialize'
 import { hasHeaderShorthand } from '../universal/constants'
@@ -305,8 +306,8 @@ export function createStreamHandler({
 
 		// taken before the first pull: a stream the error hook answers with
 		// is not this route's response
-		const responses = (set as any)?.['~chunk']
-		if (responses) (set as any)['~chunk'] = undefined
+		const pickChunk = (set as any)?.['~chunk']
+		if (pickChunk) (set as any)['~chunk'] = undefined
 
 		const typedSSE =
 			!skipFormat && 'sse' in generator && (generator as any).sse === true
@@ -347,8 +348,44 @@ export function createStreamHandler({
 			// @ts-ignore
 			generator = init.value
 		else if (init && (typeof init?.done === 'undefined' || init?.done)) {
-			if (set) return mapResponse(init.value, set, request, owned)
-			return mapCompactResponse(init.value, request, owned)
+			let value = init.value
+			if (pickChunk) {
+				if (
+					value instanceof Promise ||
+					typeof (value as any)?.then === 'function'
+				)
+					value = await value
+
+				const wrapped = value instanceof ElysiaStatus
+				const validator = pickChunk(
+					wrapped ? value.status : (set?.status ?? 200)
+				)
+				if (validator) {
+					let body = wrapped ? value.response : value
+					if (
+						body instanceof Promise ||
+						typeof (body as any)?.then === 'function'
+					)
+						body = await body
+
+					if (typeof (body as any)?.next === 'function') {
+						if (set) (set as any)['~chunk'] = pickChunk
+					} else if (
+						!(body instanceof Error) &&
+						!(body instanceof Response) &&
+						!(body instanceof ReadableStream)
+					)
+						body = await (validator.mayReturnPromise
+							? validator.From(body, 'response', true)
+							: validator.EncodeFrom(body, 'response'))
+
+					if (wrapped) value.response = body
+					else value = body
+				}
+			}
+
+			if (set) return mapResponse(value, set, request, owned)
+			return mapCompactResponse(value, request, owned)
 		}
 
 		// Check if stream is from a pre-formatted Response body
@@ -493,15 +530,9 @@ export function createStreamHandler({
 			}
 
 			if (typeof value === 'object')
-				try {
-					controller.enqueue(
-						textEncoder.encode(format(JSON.stringify(value)))
-					)
-				} catch {
-					controller.enqueue(
-						textEncoder.encode(format((value as object).toString()))
-					)
-				}
+				controller.enqueue(
+					textEncoder.encode(format(JSON.stringify(value)))
+				)
 			else
 				controller.enqueue(
 					textEncoder.encode(format((value as any).toString()))
@@ -510,7 +541,7 @@ export function createStreamHandler({
 
 		const validator = sourceStream
 			? undefined
-			: responses?.get(set.status ?? 200)
+			: pickChunk?.(set.status ?? 200)
 
 		const enqueueChunk =
 			validator?.Clean || validator?.mayReturnPromise

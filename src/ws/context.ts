@@ -54,7 +54,7 @@ export interface WSConnectionData {
 	pong?: (elysia: ElysiaWS<any>, data: Buffer) => void | Promise<void>
 
 	closeHandlerInvoked?: boolean
-	/** in-flight `message` handlers, bounded by `MAX_INFLIGHT_MESSAGES` */
+	/** in-flight message, ping and pong handlers */
 	inflight?: number
 	/** settles when an async `open` hook finished; dispatch chains onto it */
 	opening?: Promise<void>

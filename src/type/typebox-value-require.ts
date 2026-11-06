@@ -20,11 +20,15 @@ export const requireTypebox = (): TypeboxNamespaces | undefined => {
 
 // A computed specifier here made bundled servers load a second, unbundled
 // TypeBox from node_modules on listen (+40 ms, +20 MB)
-export const importTypebox = ():
+//
+// One at a time, smallest graph first (system ⊂ type ⊂ value): parallel roots
+// fan out all ~680 modules at once, ~2 MB more RSS and ~12 ms slower on Bun
+export const importTypebox: () =>
 	| Promise<[TypeboxTypeNamespaces, TypeboxNamespaces]>
-	| undefined =>
-	Promise.all([
-		import('typebox/type'),
-		import('./typebox-system-lite'),
-		import('./typebox-value-ops')
-	]).then(([type, system, ops]) => [{ type, system }, fromOps(ops)])
+	| undefined = async () => {
+	const system = await import('./typebox-system-lite')
+	const type = await import('typebox/type')
+	const ops = await import('./typebox-value-ops')
+
+	return [{ type, system }, fromOps(ops)]
+}

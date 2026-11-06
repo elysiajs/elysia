@@ -4,7 +4,6 @@ import { defaultAdapter } from '../adapter/constants'
 
 import type { AnyElysia } from '../base'
 import {
-	hasAsync,
 	emptyResponse,
 	getNotFoundBody,
 	getNotFound,
@@ -14,13 +13,10 @@ import {
 import { createContext, type Context } from '../context'
 import { origin } from '../adapter/origin'
 import { createErrorHandler } from './error'
-import {
-	requestId,
-	flattenChain,
-	nullObject,
-	isNotEmpty,
-	authorityEnd
-} from '../utils'
+import { compileCookieConfig } from '../cookie/config'
+import { signCookieValues } from '../cookie/utils'
+import { frozenRootOf } from '../generation'
+import { flattenChain, nullObject, isNotEmpty, authorityEnd } from '../utils'
 import { handleSet, hput, materializeSetHeaders } from '../adapter/utils'
 import {
 	InternalServerError,
@@ -67,18 +63,6 @@ function decodeParams(params: Record<string, string>) {
 	}
 
 	return params
-}
-
-// Warn once per app, even when its fetch handler is rebuilt.
-const warnedPathMutation = new WeakSet<AnyElysia>()
-
-function warnPathMutation(app: AnyElysia) {
-	if (warnedPathMutation.has(app)) return
-	warnedPathMutation.add(app)
-
-	console.warn(
-		'[elysia] context.path is readonly; request-hook rerouting will stop working in a future release.'
-	)
 }
 
 function finalizeError(
@@ -286,7 +270,6 @@ export function createFetchHandler(
 	const hasError = !!errorHooks
 
 	const abortSignal = app['~config']?.abortSignal !== false
-	const watchPath = !isProduction()
 
 	/**
 	 * Arm `context['~sig']` unless this request is provably the untouched
@@ -397,6 +380,70 @@ export function createFetchHandler(
 			? createErrorHandler(undefined, plainMap as any, allowUnsafe)
 			: handleError
 
+	// from failed cookie signing
+	const signFailed = (set: Context['set']) =>
+		(set as { '~signFailed'?: true })['~signFailed'] === true ||
+		(!Object.isExtensible(set) &&
+			(set.cookie as { '~signFailed'?: true } | undefined)?.[
+				'~signFailed'
+			] === true)
+
+	const failClosed =
+		(
+			withHooks: typeof handleRouteError,
+			root?: boolean
+		): typeof handleRouteError =>
+		(context, error, sign) => {
+			const set = context.set
+			const end = () =>
+				handleRouteError(
+					context,
+					signFailed(set) ? new InternalServerError() : error,
+					sign
+				)
+
+			if (signFailed(set)) return end()
+
+			const signed = (r: unknown) => (signFailed(set) ? end() : r)
+
+			try {
+				const response = withHooks(context, error, sign)
+
+				return response instanceof Promise
+					? response.then(signed, root ? undefined : end)
+					: signed(response)
+			} catch (e) {
+				if (root) throw e
+
+				return end()
+			}
+		}
+
+	const rootCookie = frozenRootOf(app)['~config']?.cookie
+	let rootCookieConfig: ReturnType<typeof compileCookieConfig> | undefined
+	if (rootCookie?.sign)
+		try {
+			rootCookieConfig = compileCookieConfig(undefined, rootCookie)
+		} catch {
+			rootCookieConfig = {
+				...compileCookieConfig(undefined, {
+					...rootCookie,
+					secrets: '~'
+				}),
+				globalSecrets: undefined
+			}
+		}
+
+	const rootSign = rootCookieConfig?.hasSign
+		? (set: Context['set']) =>
+				set.cookie &&
+				signCookieValues(set.cookie, rootCookieConfig!, set)
+		: undefined
+
+	const handleRootError = rootSign
+		? failClosed(handleError, true)
+		: handleError
+
 	const hasTrace = !!traceHandlers?.length
 
 	const traceProvider = hasTrace
@@ -415,8 +462,20 @@ export function createFetchHandler(
 	const traceAfterResponsePhase =
 		hasTrace && (tracePhases === null || tracePhases.has('afterResponse'))
 
+	if (
+		(traceRequestPhase || traceAfterResponsePhase) &&
+		typeof traceProvider!.requestLane !== 'function'
+	)
+		throw new Error(
+			'[Elysia] the trace capability comes from an older elysia copy without request/afterResponse tracing: install a single elysia version'
+		)
+
 	const tracerFactories = hasTrace
 		? traceHandlers!.map((fn) => traceProvider!.createTracer(fn as any))
+		: undefined
+
+	const traceAR = traceAfterResponsePhase
+		? traceProvider!.afterResponseBracket(tracerFactories!)
 		: undefined
 
 	const afterResponse = (
@@ -435,7 +494,7 @@ export function createFetchHandler(
 			| undefined
 		if (
 			!afterResponses?.length &&
-			!traceAfterResponsePhase &&
+			!traceAR &&
 			!queue?.length &&
 			!(context as any)['~dispose']
 		)
@@ -447,38 +506,7 @@ export function createFetchHandler(
 			if (afterResponses?.length || queue?.length)
 				materializeSetHeaders(context.set)
 
-			// Bracket the hooks like the compiled lane does, so the reported
-			// duration is the hooks' and not ~0
-			let cache: any[] | undefined
-			let reports: unknown[] | undefined
-			if (traceAfterResponsePhase) {
-				cache = (context as any).trace as any[] | undefined
-
-				// A matched route traced itself with the tracers registered
-				// before it: never start the app's, a later one included
-				if (!cache && tracerFactories && afterResponses !== null) {
-					context.rid ??= requestId()
-					cache = tracerFactories.map((f) => f(context as any))
-					;(context as any).trace = cache
-				}
-
-				if (cache) {
-					const total = afterResponses?.length ?? 0
-					reports = new Array(cache.length)
-					for (let i = 0; i < cache.length; i++)
-						// subscription-gated: unsubscribed = flat
-						// timestamps only (no recorder/literal)
-						reports[i] =
-							cache[i].b(7, total) ||
-							cache[i].begin(7, {
-								id: context.rid ?? '',
-								event: 'afterResponse',
-								name: 'afterResponse',
-								begin: performance.now(),
-								total
-							})
-				}
-			}
+			const end = traceAR?.(context, afterResponses)
 
 			if (afterResponses)
 				for (let i = 0; i < afterResponses.length; i++)
@@ -506,16 +534,15 @@ export function createFetchHandler(
 			// derive values are released after the user's own callbacks
 			await drainDisposables(context)
 
-			if (reports)
-				for (let i = 0; i < reports.length; i++) cache![i].r(reports[i])
+			end?.()
 		})
 	}
 
 	const fail = (
 		context: Context,
 		error: Error,
-		sign?: (set: Context['set']) => unknown
-	) => finalizeError(context, handleError, afterResponse, error, sign)
+		sign: ((set: Context['set']) => unknown) | undefined = rootSign
+	) => finalizeError(context, handleRootError, afterResponse, error, sign)
 
 	const routeAfterResponse = (context: Context, status?: number) =>
 		afterResponse(context, status, null)
@@ -538,37 +565,15 @@ export function createFetchHandler(
 
 		let handle = routeHandlers.get(route)
 		if (!handle) {
-			const withHooks = createErrorHandler(
-				route.error?.length ? (route.error as any) : undefined,
-				(route.mapResponse?.length
-					? mapWithHooks.bind(null, route.mapResponse as any)
-					: plainMap) as any,
-				allowUnsafe
+			handle = failClosed(
+				createErrorHandler(
+					route.error?.length ? (route.error as any) : undefined,
+					(route.mapResponse?.length
+						? mapWithHooks.bind(null, route.mapResponse as any)
+						: plainMap) as any,
+					allowUnsafe
+				)
 			)
-
-			handle = (context, error, sign) => {
-				const set = context.set as { '~signFailed'?: true }
-				const end = () =>
-					handleRouteError(
-						context,
-						set['~signFailed'] ? new InternalServerError() : error,
-						sign
-					)
-
-				if (set['~signFailed']) return end()
-
-				const signed = (r: unknown) => (set['~signFailed'] ? end() : r)
-
-				try {
-					const response = withHooks(context, error, sign)
-
-					return response instanceof Promise
-						? response.then(signed, end)
-						: signed(response)
-				} catch {
-					return end()
-				}
-			}
 
 			routeHandlers.set(route, handle)
 		}
@@ -576,107 +581,64 @@ export function createFetchHandler(
 		return finalizeError(context, handle, routeAfterResponse, error, sign)
 	}
 
+	// the plain 404, signed as the error lane signs, see `rootSign`
+	const signedNotFound = rootSign && failClosed(handleRouteError)
+
 	const onNotFound = (context: Context) => {
-		if (hasError)
+		if (hasError) return fail(context, new NotFound())
+
+		if (signedNotFound && context.set.cookie)
 			return finalizeError(
 				context,
-				handleError,
+				signedNotFound,
 				afterResponse,
-				new NotFound()
+				new NotFound(),
+				rootSign
 			)
 
 		afterResponse(context, 404)
 		return notFound(context)
 	}
 
-	if (traceRequestPhase) {
-		const onRequests = requestHooks ?? []
+	// an onRequest answer, see `rootSign`
+	const signedEarly: typeof mapResponse | undefined =
+		rootSign &&
+		((response, set, context) => {
+			const checked = (r: unknown) =>
+				signFailed(set) ? fail(context, new InternalServerError()) : r
+			const mapped = mapResponse(response, set, context, rootSign)
 
-		return async (
-			request: Request,
-			server?: Server | null
-		): Promise<Response> => {
-			const context = new Context(request)
-			materializeSetHeaders(context.set)
-			if (armEager(request, context))
-				return emptyResponse.clone() as Response
+			return typeof (mapped as any)?.then === 'function'
+				? Promise.resolve(mapped).then(checked)
+				: checked(mapped)
+		})
 
-			const path = extractPath(request.url, context)
-			context.server = server ?? null
+	// without mapResponse hooks nothing sets a cookie while mapping, so an
+	// answer without one skips the signer
+	const mapEarly: typeof mapResponse = !signedEarly
+		? mapResponse
+		: mapResponseHooks?.length
+			? signedEarly
+			: (response, set, context) =>
+					set.cookie
+						? signedEarly(response, set, context)
+						: mapResponse(response, set, context)
 
-			context.rid = requestId()
-
-			const traceLength = tracerFactories!.length
-			const trace: any[] = new Array(traceLength)
-			for (let i = 0; i < traceLength; i++)
-				trace[i] = tracerFactories![i](context as any)
-
-			// @ts-expect-error private property
-			context.trace = trace
-
-			const requestReports = new Array(traceLength)
-			for (let i = 0; i < traceLength; i++)
-				requestReports[i] =
-					trace[i].b(0, onRequests.length) ||
-					trace[i].begin(0, {
-						id: context.rid,
-						event: 'request',
-						name: 'request',
-						begin: performance.now(),
-						total: onRequests.length
-					})
-
-			let routed = false
-			try {
-				const endReports = new Array(traceLength)
-				for (let i = 0; i < onRequests.length; i++) {
-					for (let j = 0; j < traceLength; j++)
-						endReports[j] = requestReports[j].shift?.()?.({
-							id: context.rid,
-							event: 'request',
-							name: (onRequests[i] as any).name || 'anonymous',
-							begin: performance.now()
-						})
-
-					let result = onRequests[i](context as any)
-					if (typeof (result as any)?.then === 'function') {
-						if (abortSignal)
-							(context as any)['~sig'] ??= request.signal
-						result = await result
-					}
-
-					if (watchPath && context.path !== path)
-						warnPathMutation(app)
-
-					for (let j = 0; j < traceLength; j++) endReports[j]?.()
-
-					if (armedAbort(context)) {
-						for (let j = 0; j < traceLength; j++)
-							trace[j].r(requestReports[j])
-
-						return emptyResponse.clone() as Response
-					}
-
-					if (result !== undefined) {
-						for (let j = 0; j < traceLength; j++)
-							trace[j].r(requestReports[j])
-
-						const response = (await mapResponse(
-							result,
-							context.set,
-							context
-						)) as Response
-
-						afterResponse(context)
-						return response
-					}
-				}
-
-				for (let i = 0; i < traceLength; i++)
-					trace[i].r(requestReports[i])
-
-				routed = true
-				return await findRoute(
+	if (traceRequestPhase)
+		return traceProvider!.requestLane({
+			Context,
+			onRequests: requestHooks,
+			tracerFactories: tracerFactories!,
+			abortSignal,
+			armEager,
+			armedAbort,
+			extractPath,
+			mapResponse: mapEarly,
+			afterResponse,
+			fail,
+			failRoute,
+			route: (context, request) =>
+				findRoute(
 					context,
 					request,
 					map,
@@ -689,119 +651,49 @@ export function createFetchHandler(
 					hasDynamicWS,
 					app
 				)
-			} catch (error) {
-				for (let i = 0; i < traceLength; i++)
-					trace[i].r(requestReports[i], error as Error)
-
-				return (routed ? failRoute : fail)(context, error as Error)
-			}
-		}
-	}
+		})
 
 	if (requestHooks) {
 		const onRequests = requestHooks
 
-		if (hasAsync(onRequests))
-			return async (
-				request: Request,
-				server?: Server | null
-			): Promise<Response> => {
-				const context = new Context(request)
-				materializeSetHeaders(context.set)
-				if (armEager(request, context))
-					return emptyResponse.clone() as Response
+		const respond = (context: Context, result: unknown) => {
+			const response = mapEarly(result, context.set, context) as
+				| Response
+				| PromiseLike<Response>
 
-				const path = extractPath(request.url, context)
-				context.server = server ?? null
+			// an adapter may map to any thenable, not only a native Promise
+			if (typeof (response as any)?.then === 'function')
+				return Promise.resolve(response).then(
+					(response) => {
+						afterResponse(context)
+						return response
+					},
+					(error) => fail(context, error)
+				)
 
-				let routed = false
-				try {
-					for (let i = 0; i < onRequests.length; i++) {
-						let result = onRequests[i](context)
-						if (typeof (result as any)?.then === 'function') {
-							if (abortSignal)
-								(context as any)['~sig'] ??= request.signal
-							result = await result
-						}
+			afterResponse(context)
+			return response as Response
+		}
 
-						if (watchPath && context.path !== path)
-							warnPathMutation(app)
-
-						if (armedAbort(context))
-							return emptyResponse.clone() as Response
-
-						if (result !== undefined) {
-							const response = (await mapResponse(
-								result,
-								context.set,
-								context
-							)) as Response
-
-							afterResponse(context)
-							return response
-						}
-					}
-
-					routed = true
-					return findRoute(
-						context,
-						request,
-						map,
-						router,
-						onNotFound,
-						handleRouteError,
-						routeAfterResponse,
-						strictPath,
-						hasWS,
-						hasDynamicWS,
-						app
-					)
-				} catch (error) {
-					return (routed ? failRoute : fail)(context, error as Error)
-				}
-			}
-
-		return (
+		const run = (
+			context: Context,
 			request: Request,
-			server?: Server | null
+			i: number
 		): MaybePromise<Response> => {
-			const context = new Context(request)
-			materializeSetHeaders(context.set)
-			if (armEager(request, context))
-				return emptyResponse.clone() as Response
-
-			const path = extractPath(request.url, context)
-			context.server = server ?? null
-
 			let routed = false
 			try {
-				for (let i = 0; i < onRequests.length; i++) {
+				for (; i < onRequests.length; i++) {
 					const result = onRequests[i](context)
-					if (watchPath && context.path !== path)
-						warnPathMutation(app)
+
+					// a pending hook is awaited even when the request aborted, so
+					// its rejection reaches `fail` instead of going unhandled
+					if (typeof (result as any)?.then === 'function')
+						return resume(context, request, i, result as any)
 
 					if (abortSignal && (context as any)['~sig']?.aborted)
 						return emptyResponse.clone() as Response
 
-					if (result !== undefined) {
-						const response = mapResponse(
-							result,
-							context.set,
-							context
-						) as Response | Promise<Response>
-
-						if (response instanceof Promise)
-							return response.then(
-								(response) => {
-									afterResponse(context)
-									return response
-								},
-								catchError(context, handleError, afterResponse)
-							)
-
-						afterResponse(context)
-						return response
-					}
+					if (result !== undefined) return respond(context, result)
 				}
 
 				routed = true
@@ -821,6 +713,47 @@ export function createFetchHandler(
 			} catch (error) {
 				return (routed ? failRoute : fail)(context, error as Error)
 			}
+		}
+
+		const resume = (
+			context: Context,
+			request: Request,
+			i: number,
+			pending: PromiseLike<unknown>
+		) => {
+			if (abortSignal) (context as any)['~sig'] ??= request.signal
+
+			return Promise.resolve(pending).then(
+				(result) => {
+					if (armedAbort(context))
+						return emptyResponse.clone() as Response
+
+					if (result === undefined)
+						return run(context, request, i + 1)
+
+					try {
+						return respond(context, result)
+					} catch (error) {
+						return fail(context, error as Error)
+					}
+				},
+				(error) => fail(context, error as Error)
+			)
+		}
+
+		return (
+			request: Request,
+			server?: Server | null
+		): MaybePromise<Response> => {
+			const context = new Context(request)
+			materializeSetHeaders(context.set)
+			if (armEager(request, context))
+				return emptyResponse.clone() as Response
+
+			extractPath(request.url, context)
+			context.server = server ?? null
+
+			return run(context, request, 0)
 		}
 	}
 

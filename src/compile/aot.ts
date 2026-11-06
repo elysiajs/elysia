@@ -278,6 +278,11 @@ let programs = new WeakMap<ProgramId, CompiledProgram>()
 
 const programFor = (id?: ProgramId) => (id ? programs.get(id) : undefined)
 
+/**
+ * @internal AOT manifest registry, written by the module a build plugin
+ * generates. Not for hand registration: its contract follows the plugin and
+ * can change in any release
+ */
 export abstract class Compiled {
 	static register(manifest: CompiledProgramRegistration, key = '') {
 		;(registered ??= nullObject())[key] = manifest

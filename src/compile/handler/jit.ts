@@ -487,6 +487,7 @@ export function compileHandlerJit(
 		vali,
 		inference,
 		cookieConfig,
+		needsCookie,
 		beforeHandlePrefix,
 		tracePhases,
 		hasAnyPhase,
@@ -699,7 +700,9 @@ export function compileHandlerJit(
 
 	if (hasStl) code += 'let _stl,_sv\n'
 
-	if (asyncCookieSign) code += 'let _sg\n'
+	// a sync route with an async signer: `_sgt` chains it onto the response
+	const thenSign = asyncCookieSign && !isAsync
+	if (asyncCookieSign && isAsync) code += 'let _sg\n'
 
 	if (hasTrace) {
 		const tracers = Reconstruct.trace(hook!, root)
@@ -828,7 +831,9 @@ export function compileHandlerJit(
 			)
 		}
 
-	if (cookieConfig) {
+	// without a jar the config is only the signer's, for `set.cookie` writes
+	if (cookieConfig && !needsCookie) link(cookieConfig, 'cc')
+	else if (cookieConfig) {
 		// `_ck` is local to this section: it runs as one unit between await points
 		const cookieStart = code.length
 		link(buildCookieJar, 'bcj')
@@ -1011,21 +1016,40 @@ export function compileHandlerJit(
 		s +
 		`return _m\n`
 
+	const awaitSign = `_sg=scv(c.set.cookie,cc,c.set)\nif(_sg){${arm ? `${arm}\n` : ''}await _sg}\n`
 	const signPrefix = syncCookieSign
 		? `scv(c.set.cookie,cc,c.set)\n`
-		: asyncCookieSign
-			? `_sg=scv(c.set.cookie,cc,c.set)\nif(_sg){${arm ? `${arm}\n` : ''}await _sg}\n`
+		: asyncCookieSign && isAsync
+			? awaitSign
 			: ''
+	// no cookie and a settled value: map at once, no Promise
+	const signMap = (value: string) =>
+		thenSign
+			? `(c.set.cookie||typeof _r?.then==='function'?_sgt(c,_r,(_r)=>${value}):${value})`
+			: value
+	// a sync route's handler may return a pending value that writes once it
+	// settles: `_sgt` signs once it has. A settled value signs and maps at
+	// once, no Promise
+	const settleSign = syncCookieSign && !isAsync && !syncAfterResponse
 
 	if (syncCookieSign || asyncCookieSign) link(signCookieValues, 'scv')
 
 	// A streamed body runs on the first pull, after the sign above: the
 	// stream handler signs again before it builds the headers
-	const streamSign = signPrefix
+	const streamSign = hasCookieSign
 		? `if(typeof _r?.next==='function')c.set['~sign']=_sgn\n`
 		: ''
 
-	let factoryHelpers = ''
+	let factoryHelpers =
+		thenSign || settleSign
+			? // a pending value settles first: what it writes is signed too
+				`function _sgt(c,_r,m){\n` +
+				`if(typeof _r?.then==='function')return Promise.resolve(_r).then((_v)=>_sgt(c,_v,m))\n` +
+				streamSign +
+				`const _sg=scv(c.set.cookie,cc,c.set)\n` +
+				`return _sg?_sg.then(()=>m(_r)):m(_r)\n` +
+				`}\n`
+			: ''
 	// first await point inside the error hooks, `-1` without error hooks
 	let tailCatch = -1
 
@@ -1156,7 +1180,7 @@ export function compileHandlerJit(
 				`c.responseValue=_r\n` +
 				signPrefix +
 				streamSign +
-				`const _m=${mapValue('_r')}\n` +
+				`const _m=${signMap(mapValue('_r'))}\n` +
 				mapThenSchedule(
 					syncScheduleDecl ? `_scf(c,_stl)\n` : scheduleAfterResponse,
 					`(_e)=>{_sv?.return()\n${freThenSchedule('_e')}}`
@@ -1244,8 +1268,7 @@ export function compileHandlerJit(
 
 				// a generator's chunks are cleaned by the stream handler, once
 				// the status it sends them with is known
-				link(vali, 'va')
-				const streamClean = `c.set['~chunk']=va.response\n`
+				const streamClean = `c.set['~chunk']=_st=>${pick}\n`
 
 				code += plain(
 					`if(_r instanceof es){\n` +
@@ -1255,13 +1278,19 @@ export function compileHandlerJit(
 							? `if(_vr&&_r.response instanceof Promise)_r.response=${awaitValue('_r.response', arm)}\n`
 							: '') +
 						`if(typeof _r.response?.next==='function')${streamClean}` +
-						`else if(_vr)_r.response=${responseValiAsync ? awaitValue(encodeStatus, arm) : encodeStatus}\n` +
+						`else if(_vr){\n` +
+						`c['~validated']=_st\n` +
+						`_r.response=${responseValiAsync ? awaitValue(encodeStatus, arm) : encodeStatus}\n` +
+						`}\n` +
 						`}else if(typeof _r?.next==='function')${streamClean}` +
 						`else if(!(_r instanceof Response)` +
 						`&&!(_r instanceof ReadableStream)){\n` +
 						// a named status ('Created') validates as the code it is sent with
 						`const _sr=c.set.status??200,_st=typeof _sr==='string'?(sm[_sr]??_sr):_sr,_vr=${pick}\n` +
-						`if(_vr)_r=${responseValiAsync ? awaitValue(encodeBody, arm) : encodeBody}\n` +
+						`if(_vr){\n` +
+						`c['~validated']=_st\n` +
+						`_r=${responseValiAsync ? awaitValue(encodeBody, arm) : encodeBody}\n` +
+						`}\n` +
 						`}\n`
 				)
 				code += abortCheck()
@@ -1269,8 +1298,14 @@ export function compileHandlerJit(
 
 			const deferSchedule = !!schedule
 
-			code += plain(signPrefix + streamSign)
-			const finalMap = mapValue('_r')
+			// signing rewrites each value to its wire form: a pending value
+			// signs only once it settles, or a continuation that reads a
+			// cookie back would extend the signed string
+			code += plain((settleSign ? '' : signPrefix) + streamSign)
+			const mapped = mapValue('_r')
+			const finalMap = settleSign
+				? `(typeof _r?.then==='function'?_sgt(c,_r,(_r)=>${mapped}):(${signPrefix.trim()},${mapped}))`
+				: signMap(mapped)
 			const onMapReject = syncErrorHook
 				? `(_e)=>_ce(_e,c)`
 				: dedupSchedule
@@ -1344,12 +1379,12 @@ export function compileHandlerJit(
 				`function _fbm(_r,_s,_c){return ${map}(_r,_s,_c.request,true)}\n` +
 				`${asyncCookieSign ? 'async ' : ''}function _efb(e,c){\n` +
 				(asyncCookieSign ? `let _sg${arm ? ',_as' : ''}\n` : ``) +
-				signPrefix +
+				(asyncCookieSign ? awaitSign : signPrefix) +
 				`return _em(c,fbr(c,e,_fbm))\n` +
 				`}\n`
 
 			let errorJar = ''
-			if (cookieConfig) {
+			if (cookieConfig && needsCookie) {
 				const [parseRaw, key, jarArgs] = !hasCookieSign
 					? [parseCookieRawDeferred, 'pcrd', ',undefined,1']
 					: syncCookieSign
@@ -1408,7 +1443,8 @@ export function compileHandlerJit(
 									arm
 								)
 							: '') + declined,
-						signPrefix,
+						(response) =>
+							`${signPrefix}return _em(c,${signMap(response)})\n`,
 						asyncMode,
 						arm,
 						declined

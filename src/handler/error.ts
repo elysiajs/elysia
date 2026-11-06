@@ -148,7 +148,12 @@ export function statusFallbackBody(
 	asDetail?: boolean
 ) {
 	const masked = isProduction() && (status as number) >= 500
-	const declared = error.response
+	const response = error.response
+	const declared =
+		typeof response !== 'string' &&
+		(error instanceof Error || Error.isError?.(error))
+			? undefined
+			: response
 
 	if (declared !== undefined && !(masked && typeof declared === 'object'))
 		return declared
@@ -272,9 +277,12 @@ export function fallbackErrorResponse(
 		)
 	}
 
+	// Only this copy's HTTPError: another Error's `headers` may be an HTTP
+	// client's copy of an upstream response (openai v4's APIError), so it is
+	// not even read
 	function mergeHeaders() {
-		if (self.headers)
-			Object.assign(materializeSetHeaders(context.set), self.headers)
+		const headers = owned && self.headers
+		if (headers) Object.assign(materializeSetHeaders(context.set), headers)
 	}
 
 	// Legacy lane: what an error that never self-described has always served

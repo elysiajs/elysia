@@ -35,6 +35,7 @@ import type {
 
 import { ListenCallback, Serve, Server } from './universal'
 import { isBun } from './universal/constants'
+import { dangerousKeys } from './constants'
 
 import {
 	buildRouteTable,
@@ -291,39 +292,6 @@ const extCallbackIndexes = new WeakMap<
 
 // registers nothing: every value is nullish or an empty array. A hollow node
 // takes no key, so it shifts no ordinal and installs nothing
-// named plugins (by hash) warned about, see `warnVariant`
-const warnedVariants = new Set<number | undefined>()
-
-// the source of a registration's hooks: identically built instances of a
-// plugin create other closures from the same source
-const hookSource = (added: object) => {
-	let source = ''
-	for (const key in added)
-		for (const v of ([] as unknown[]).concat((added as any)[key]))
-			source += key + (typeof v === 'function' ? v : typeof v)
-	return source
-}
-
-// development only: a same-name instance registering other hooks where its
-// twin is (D1) is skipped as a duplicate; config variants need a seed
-const warnVariant = (
-	origin: number | undefined,
-	a: ChainNode,
-	b: ChainNode
-) => {
-	if (
-		warnedVariants.has(origin) ||
-		hookSource((a as { added: object }).added) ===
-			hookSource((b as { added: object }).added)
-	)
-		return
-
-	warnedVariants.add(origin)
-	console.warn(
-		'[Elysia] same-name plugin variants register different hooks, one is skipped: give each variant its own seed'
-	)
-}
-
 const hasHook = (v: unknown) => v != null && (!Array.isArray(v) || v.length > 0)
 
 const hollow = (added: object) => {
@@ -1083,6 +1051,10 @@ export class Elysia<
 		}
 
 		this.#assertTableMutable(field === 'store' ? 'state' : 'decorate')
+		// the keys `mergeDeep` skips: an own `__proto__` in either table turns
+		// a spread or assign copy of it, or the context prototype, into a swap
+		if (dangerousKeys.has(name)) return this
+
 		const ext = this.#ext
 		// whether #table starts the table, rather than share a parent's
 		let fresh = true
@@ -1125,8 +1097,12 @@ export class Elysia<
 					return this
 				}
 
-				if (fresh) Object.assign(target, value)
-				else
+				if (fresh) {
+					Object.assign(target, value)
+					// the keys `mergeDeep` skips on a later call: an own
+					// `__proto__` here would reach the context prototype
+					for (const key of dangerousKeys) delete target[key]
+				} else
 					ext[field] = mergeDeep(
 						target,
 						value as any,
@@ -1146,7 +1122,12 @@ export class Elysia<
 						markSingletons(value)
 					}
 				} else {
-					ext[field] = (value as Function)(target)
+					const table = (value as Function)(target)
+					// the result becomes the table, held to the same rule
+					if (table && typeof table === 'object')
+						for (const key of dangerousKeys) delete table[key]
+
+					ext[field] = table
 
 					markStoredSingletons(ext[field], ext[field] as object)
 				}
@@ -4136,11 +4117,7 @@ export class Elysia<
 			maybeHook.as !== undefined
 		)
 			throw new Error(
-				`[elysia] guard({ as: '${maybeHook.as}' }) was removed in 2.0. ` +
-					`Pass the scope as the first argument instead: ` +
-					`guard('${maybeHook.as === 'scoped' ? 'plugin' : maybeHook.as}', { ... }). ` +
-					`To combine a guard schema with a route's own schema for the ` +
-					`same slot, add schema: 'merge'.`
+				`[elysia] guard({ as: '${maybeHook.as}' }) was removed in 2.0, use guard('${maybeHook.as === 'scoped' ? 'plugin' : maybeHook.as}', { ... })`
 			)
 
 		if (arguments.length === 1)
@@ -4157,7 +4134,9 @@ export class Elysia<
 			)
 		}
 
-		return this
+		throw new Error(
+			'[Elysia] use guard(hook), guard(hook, callback) or guard(scope, hook)'
+		)
 	}
 
 	#guard(scope: EventScope, hook: Partial<AnyLocalHook>): this {
@@ -4679,14 +4658,12 @@ export class Elysia<
 
 	macro(macro: Macro, definition?: unknown) {
 		this.#assertMutable('macro')
-		if (typeof macro === 'function')
-			throw new Error(
-				'use `.macro({ name: fn })` instead of `.macro(fn)`'
-			)
-		if (definition != null || typeof macro === 'string')
-			throw new Error(
-				'[Elysia] .macro(name, definition) was removed in 2.0 — use .macro({ [name]: definition })'
-			)
+		if (
+			definition != null ||
+			typeof macro === 'function' ||
+			typeof macro === 'string'
+		)
+			throw new Error('[Elysia] use .macro({ name: definition })')
 
 		const m = this.#ensureMacroTable() as any
 
@@ -4781,16 +4758,10 @@ export class Elysia<
 				if (seedSource === null || seedType !== 'object')
 					seedKey = `${key}\0${seedType}\0${serializeMacroSeed('', seedSource)}`
 				else
-					try {
-						seedKey =
-							key +
-							'\0object\0' +
-							JSON.stringify(seedSource, serializeMacroSeed)
-					} catch {
-						throw new Error(
-							`[Elysia] macro "${key}" received a circular seed value; pass a primitive \`seed\` to dedup it.`
-						)
-					}
+					seedKey =
+						key +
+						'\0object\0' +
+						JSON.stringify(seedSource, serializeMacroSeed)
 
 				seed = seedKey
 			} else seed = hook
@@ -4866,25 +4837,17 @@ export class Elysia<
 					continue
 				}
 
-				if (k === 'schema') {
-					const incoming: any[] = Array.isArray(v) ? v : [v]
-					if (!input.schemas) (input as any).schemas = []
+				if (k === 'schema' || schemaProperties.has(k)) {
+					if (k === 'schema' || v != null)
+						coalesceSchemas(
+							((input as any).schemas ||= []),
+							k === 'schema'
+								? Array.isArray(v)
+									? v
+									: [v]
+								: [{ [k]: v }]
+						)
 
-					coalesceSchemas((input as any).schemas as any[], incoming)
-
-					delete input[key]
-					continue
-				}
-
-				if (schemaProperties.has(k)) {
-					if (v === undefined || v === null) {
-						delete input[key]
-						continue
-					}
-					;(input as any).schemas ??= []
-					coalesceSchemas((input as any).schemas as any[], [
-						{ [k]: v }
-					])
 					delete input[key]
 					continue
 				}
@@ -5735,9 +5698,6 @@ export class Elysia<
 				// Ceiling: per receiver and plugin instance, one copy per
 				// registration per admitting `.use()`; a call admits only when
 				// `.as()` exported a registration older than one already here
-				if (held !== registration && !isProduction())
-					warnVariant(origin, held, registration)
-
 				if (
 					scopeChild ||
 					held !== registration ||
@@ -8170,17 +8130,7 @@ export class Elysia<
 	#satisfyJit(table: RouteTable, index: number) {
 		if ((table.flags[index] & RouteFlag.ExactDuplicate) !== 0) return false
 
-		if (this.jitColdRemaining === undefined) {
-			if (
-				this['~generation'] === undefined &&
-				this['~config']?.precompile !== true &&
-				isProduction() &&
-				!Capture.isAotBuildEnv()
-			)
-				table.flags[index] |= RouteFlag.JITSatisfied
-
-			return false
-		}
+		if (this.jitColdRemaining === undefined) return false
 		if ((table.flags[index] & RouteFlag.JITCold) === 0) return false
 
 		table.flags[index] &= ~RouteFlag.JITCold
@@ -8507,15 +8457,10 @@ export class Elysia<
 				let cold = 0
 
 				for (let i = 0; i < routeCount; i++) {
-					const satisfied =
-						(table.flags[i] & RouteFlag.JITSatisfied) !== 0
-					table.flags[i] &= ~(
-						RouteFlag.JITCold | RouteFlag.JITSatisfied
-					)
+					table.flags[i] &= ~RouteFlag.JITCold
 					const flags = table.flags[i]
 					// Bun serves an HTML bundle natively, it never reaches `~dispatch`
 					if (
-						satisfied ||
 						(flags & (RouteFlag.WS | RouteFlag.ExactDuplicate)) !==
 							0 ||
 						compiled?.[i] !== undefined ||
@@ -8892,14 +8837,10 @@ export class Elysia<
 			this['~config']?.adapter ?? (isBun ? BunAdapter : undefined)
 		)?.listen
 
-		if (!listen) {
-			// @ts-ignore
-			const deno = typeof Deno !== 'undefined'
-
+		if (!listen)
 			throw new Error(
-				`[Elysia] listen() requires an adapter on ${deno ? 'Deno' : typeof process === 'undefined' ? 'this runtime' : 'Node.js'} — https://elysiajs.com/integrations/${deno ? 'deno' : 'node'}`
+				'[Elysia] listen() requires an adapter on this runtime, see https://elysiajs.com/integrations/node'
 			)
-		}
 
 		if (!Capture.isAotBuildEnv()) listen(this, options, callback)
 

@@ -15,7 +15,7 @@ import {
 import { defaultHeaders } from './adapter/default-headers'
 import type { AnyElysia } from './base'
 import type { Server } from './universal/server'
-import type { StatusMap } from './constants'
+import { dangerousKeys, type StatusMap } from './constants'
 import type { Cookie } from './cookie/cookie'
 import type { BaseCookie } from './cookie/types'
 
@@ -53,6 +53,10 @@ class Decorator {}
 Object.defineProperty(Decorator.prototype, 'defer', defer)
 
 function decoratorMembers(members: object) {
+	// an own `__proto__` (a table written past decorate's own guard) would
+	// run the prototype setter below and cut Decorator out of the chain
+	for (const key of dangerousKeys) delete (members as any)[key]
+
 	// a context inherits every member, so each is shared: the derive identity
 	// scan (`for..in`) never sees one under a symbol key
 	for (const key of Reflect.ownKeys(members))
@@ -112,6 +116,8 @@ function buildEmptyContext(members: object, headers: object | null = null) {
 		declare route?: string
 		declare trace?: any[]
 		declare '~sig'?: AbortSignal
+		// the status a response schema ran under, which a later hook can't rewrite
+		declare '~validated'?: number | string
 		declare request: Request
 
 		// a parameter property compiles to a class field, which caps JSC's

@@ -823,13 +823,17 @@ export const STUB_SOURCES: Record<
 			source:
 				`const e=()=>{throw new Error("[elysia-aot] trace support was stripped (strip mode) but a route used trace. Rebuild with strip:false.")}\n` +
 				`export function createTracer(){return e()}\n` +
-				`export function unionTracePhases(){return new Set()}\n`,
+				`export function unionTracePhases(){return new Set()}\n` +
+				`export function requestLane(){return e()}\n` +
+				`export function afterResponseBracket(){return e()}\n`,
 			// importers keep their type imports, the trace handler types become opaque
 			typed:
 				`import type { TraceEvent } from './constants'\n` +
 				`const e=(): never=>{throw new Error("[elysia-aot] trace support was stripped (strip mode) but a route used trace. Rebuild with strip:false.")}\n` +
 				`export function createTracer(..._: any[]): any{return e()}\n` +
 				`export function unionTracePhases(_?: readonly Function[]): Set<TraceEvent> | null{return new Set()}\n` +
+				`export function requestLane(..._: any[]): any{return e()}\n` +
+				`export function afterResponseBracket(..._: any[]): any{return e()}\n` +
 				`export type { TraceEvent }\n` +
 				`export type TraceHandler<_Route = any, _Singleton = any> = any\n` +
 				`export type TraceProcess<_Type = any, _WithChildren = any> = any\n` +
@@ -840,6 +844,8 @@ export const STUB_SOURCES: Record<
 				`\treadonly id: string\n` +
 				`\treadonly createTracer: typeof createTracer\n` +
 				`\treadonly unionTracePhases: typeof unionTracePhases\n` +
+				`\treadonly requestLane: typeof requestLane\n` +
+				`\treadonly afterResponseBracket: typeof afterResponseBracket\n` +
 				`}\n`
 		}
 	],
@@ -1563,7 +1569,9 @@ export async function generateCompiledArtifacts(
 				!hasReplayableCapture,
 				adapterStub,
 				productionStub,
-				wsCookie,
+				// the fetch handler signs a 404 or onRequest answer by the
+				// root cookie config, outside the handler JIT too
+				wsCookie || !!typedApp['~config']?.cookie?.sign,
 				exactMirror,
 				artifacts.key,
 				{

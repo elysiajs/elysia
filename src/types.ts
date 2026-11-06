@@ -1072,9 +1072,11 @@ export type MacroProperty<
 	 * Inspect or rewrite the hooks a route compiles with. Runs once per
 	 * route at compile time, after every macro on the route has expanded,
 	 * on the route's final hooks: its own, the ones every macro added and
-	 * the ones it inherits from hooks registered before it. A WebSocket
-	 * route hands over its own hooks only. Applied by
-	 * a guard, it sees the guard's hooks once instead of each route's.
+	 * the ones it inherits from hooks registered before it. Applied by a
+	 * guard, it runs for each route of the guard, before the route's own
+	 * macros. A macro on a WebSocket route sees the route's own hooks only.
+	 * A guard's runs twice per WebSocket route, on the merged hooks that
+	 * feed its validators and on the inherited hooks that feed its events.
 	 * A `schema: 'merge'` guard's response map
 	 * (`hooks.schemas[i].response`) is read-only
 	 *

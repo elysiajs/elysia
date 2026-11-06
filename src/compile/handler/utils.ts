@@ -531,7 +531,8 @@ export const mapError = /*#__PURE__*/ map<
 		link: Link,
 		mapResponse: ElysiaAdapter['response']['map'],
 		schedule: string,
-		sign: string,
+		// signs, then returns the response: a sync route chains an async signer
+		sign: (response: string) => string,
 		mode: AsyncMode,
 		arm: string | undefined,
 		declined: string
@@ -548,8 +549,7 @@ export const mapError = /*#__PURE__*/ map<
 		`if(_r instanceof es||_r instanceof Response)c.set.status=_r.status\n` +
 		`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
 		schedule +
-		sign +
-		`return _em(c,${map}(aet(_r,e),c.set,c.request,true))\n` +
+		sign(`${map}(aet(_r,e),c.set,c.request,true)`) +
 		`}\n`
 	)
 })

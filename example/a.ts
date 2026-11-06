@@ -1,4 +1,4 @@
-import { Elysia, t } from '../src'
+import { Elysia, inAotBuild, Manifest, t } from '../src'
 
 const app = new Elysia()
 	.get(

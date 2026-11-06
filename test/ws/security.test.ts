@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { websocket } from '../../src/plugin/websocket'
+import { buildGlobalWSHandler } from '../../src/ws/route'
 import { newWebsocket, wsOpen, wsMessage, wsClosed, wsClose } from './utils'
 
 /**
@@ -302,6 +303,60 @@ describe('WebSocket foreign error disclosure', () => {
 
 		expect(body).toBe('explicit body')
 	})
+
+	// The HTTP-client shape at 4xx, where no mask applies: an axios-like
+	// object or a fetch wrapper's upstream `Response` on `.response`. The
+	// frame is the error's message, in development (the default) too
+	for (const env of ['development', 'production'])
+		for (const kind of ['object', 'response'])
+			it(`serves a 401 client error's message, not its ${kind} .response (${env})`, async () => {
+				process.env.NODE_ENV = env
+
+				const app = new Elysia()
+					.use(websocket())
+					.ws('/e', {
+						message() {
+							throw Object.assign(
+								new Error(
+									'Request failed with status code 401'
+								),
+								{
+									status: 401,
+									response:
+										kind === 'object'
+											? {
+													data: 'UPSTREAM-BODY',
+													config: {
+														headers: {
+															authorization:
+																'Bearer SECRET'
+														}
+													}
+												}
+											: new Response('UPSTREAM-BODY', {
+													status: 401,
+													headers: {
+														'set-cookie':
+															'upsess=SECRET'
+													}
+												})
+								}
+							)
+						}
+					})
+					.listen(0)
+
+				const ws = newWebsocket(app.server!, '/e')
+				await wsOpen(ws)
+				const frame = wsMessage(ws)
+				ws.send('go')
+				const body = String((await frame).data)
+
+				await wsClosed(ws)
+				app.stop()
+
+				expect(body).toBe('Request failed with status code 401')
+			})
 })
 
 describe('WebSocket derive prototype integrity', () => {
@@ -358,6 +413,37 @@ describe('WebSocket derive prototype integrity', () => {
 })
 
 describe('WebSocket dispatch admission', () => {
+	it('shares one in-flight bound across message, ping and pong', async () => {
+		const handler = buildGlobalWSHandler()
+		const pending = Promise.withResolvers<void>()
+		const calls = { message: 0, ping: 0, pong: 0 }
+		const closes: [number, string][] = []
+		const socket: any = {
+			data: {
+				message: () => (calls.message++, pending.promise),
+				ping: () => (calls.ping++, pending.promise),
+				pong: () => (calls.pong++, pending.promise)
+			},
+			readyState: 1,
+			close: (code: number, reason: string) => closes.push([code, reason])
+		}
+
+		for (let i = 0; i < 128; i++) {
+			handler.ping!(socket, Buffer.alloc(0))
+			handler.pong!(socket, Buffer.alloc(0))
+		}
+		handler.message(socket, 'x')
+
+		expect(calls).toEqual({ message: 0, ping: 128, pong: 128 })
+		expect(closes).toEqual([[1013, 'Too many in-flight messages']])
+		expect(socket.data.inflight).toBe(256)
+
+		pending.resolve()
+		await Bun.sleep(0)
+		expect(socket.data.inflight).toBe(0)
+		expect(socket.data.settling).toBe(0)
+	})
+
 	// Bun's knobs bound the payload and the outbound buffer, never handler
 	// concurrency, so one socket could pipeline frames into a slow `message`
 	// and hold unbounded handlers in memory. Out-of-order completion below the
