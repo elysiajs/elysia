@@ -2016,6 +2016,8 @@ export const composeHandler = ({
 
 			endUnit()
 
+			fnLiteral += `if(er!==undefined&&er!==null){`
+
 			if (hooks.mapResponse?.length) {
 				const mapResponseReporter = report('mapResponse', {
 					total: hooks.mapResponse?.length
@@ -2051,6 +2053,7 @@ export const composeHandler = ({
 
 			fnLiteral += afterResponse(false)
 			fnLiteral += `return er}`
+			fnLiteral += '}'
 		}
 	}
 
