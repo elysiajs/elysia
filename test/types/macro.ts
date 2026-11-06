@@ -319,3 +319,63 @@ const app = new Elysia()
 		})
 		.listen(3000)
 }
+
+// Cross-plugin object macro: resolve receives dependent macro's resolved values
+{
+	const sessionsPlugin = new Elysia().macro({
+		sessions: {
+			resolve: () => ({
+				sessions: {
+					create: () => {},
+					get: () => {},
+					delete: () => {}
+				}
+			})
+		}
+	})
+
+	new Elysia().use(sessionsPlugin).macro({
+		auth: {
+			sessions: true,
+			resolve: ({ sessions }) => {
+				expectTypeOf<typeof sessions>().not.toBeAny()
+				expectTypeOf(sessions).toEqualTypeOf<{
+					create: () => void
+					get: () => void
+					delete: () => void
+				}>()
+
+				return { auth: { currentUser: sessions.get() } }
+			}
+		}
+	})
+}
+
+// Cross-plugin named macro: resolve receives dependent macro's resolved values (regression guard)
+{
+	const sessionsPlugin = new Elysia().macro({
+		sessions: {
+			resolve: () => ({
+				sessions: {
+					create: () => {},
+					get: () => {},
+					delete: () => {}
+				}
+			})
+		}
+	})
+
+	new Elysia().use(sessionsPlugin).macro('auth', {
+		sessions: true,
+		resolve: ({ sessions }) => {
+			expectTypeOf<typeof sessions>().not.toBeAny()
+			expectTypeOf(sessions).toEqualTypeOf<{
+				create: () => void
+				get: () => void
+				delete: () => void
+			}>()
+
+			return { auth: { currentUser: sessions.get() } }
+		}
+	})
+}
