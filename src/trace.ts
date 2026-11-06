@@ -1,7 +1,7 @@
 import { traceEvents, type TraceEvent } from './constants'
 import { inferParameterReads } from './sucrose'
 import { requestId } from './utils'
-import { emptyResponse } from './handler/utils'
+import { emptyResponse, forwardError } from './handler/utils'
 import { materializeSetHeaders } from './adapter/utils'
 import type { Context } from './context'
 import type { Server } from './universal/server'
@@ -636,8 +636,8 @@ export function requestLane(kit: TraceRequestKit) {
 				})
 
 		let routed = false
+		const endReports = new Array(traceLength)
 		try {
-			const endReports = new Array(traceLength)
 			for (let i = 0; i < onRequests.length; i++) {
 				for (let j = 0; j < traceLength; j++)
 					endReports[j] = requestReports[j].shift?.()?.({
@@ -653,14 +653,17 @@ export function requestLane(kit: TraceRequestKit) {
 					result = await result
 				}
 
-				for (let j = 0; j < traceLength; j++) endReports[j]?.()
-
 				if (armedAbort(context)) {
-					for (let j = 0; j < traceLength; j++)
+					for (let j = 0; j < traceLength; j++) {
+						endReports[j]?.()
 						trace[j].r(requestReports[j])
+					}
 
 					return emptyResponse.clone() as Response
 				}
+
+				forwardError(result)
+				for (let j = 0; j < traceLength; j++) endReports[j]?.()
 
 				if (result !== undefined) {
 					for (let j = 0; j < traceLength; j++)
@@ -682,8 +685,10 @@ export function requestLane(kit: TraceRequestKit) {
 			routed = true
 			return await route(context, request)
 		} catch (error) {
-			for (let i = 0; i < traceLength; i++)
+			for (let i = 0; i < traceLength; i++) {
+				if (!routed) endReports[i]?.(error)
 				trace[i].r(requestReports[i], error as Error)
+			}
 
 			return (routed ? failRoute : fail)(context, error as Error)
 		}

@@ -7,7 +7,8 @@ import {
 	emptyResponse,
 	getNotFoundBody,
 	getNotFound,
-	drainDisposables
+	drainDisposables,
+	forwardError
 } from './utils'
 
 import { createContext, type Context } from '../context'
@@ -657,7 +658,7 @@ export function createFetchHandler(
 		const onRequests = requestHooks
 
 		const respond = (context: Context, result: unknown) => {
-			const response = mapEarly(result, context.set, context) as
+			const response = mapEarly(forwardError(result), context.set, context) as
 				| Response
 				| PromiseLike<Response>
 
