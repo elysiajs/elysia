@@ -721,6 +721,8 @@ export const unsignCookie = async (input: string, secret: string | null) => {
 		return false
 	}
 
+	if (secret === null) return false
+
 	const tentativeValue = input.slice(0, dot)
 	const encodedSignature = input.slice(dot + 1)
 	if (!/^[A-Za-z0-9+/]{43}$/.test(encodedSignature)) return false
