@@ -36,7 +36,7 @@ const handleElysiaFile = (
 		set.status !== 416
 	)
 		return file.stats!.then((stat) => {
-			const size = stat.size as number
+			const size = stat?.size as number | undefined
 
 			if (size !== undefined) {
 				set.headers['content-range'] = `bytes 0-${size - 1}/${size}`
