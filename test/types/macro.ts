@@ -231,6 +231,44 @@ import { expectTypeOf } from 'expect-type'
 		)
 }
 
+// resolve union of object shapes preserves shared context
+{
+	const plugin = new Elysia({ name: 'plugin' }).macro({
+		withUser: {
+			resolve() {
+				if (Math.random() > 0.5)
+					return {
+						user: {
+							id: 'a'
+						}
+					}
+
+				return {
+					user: {
+						id: 'b'
+					},
+					admin: true
+				}
+			}
+		}
+	})
+
+	new Elysia()
+		.use(plugin)
+		.get(
+			'/',
+			({ user, admin }) => {
+				expectTypeOf(user).toEqualTypeOf<{ id: string }>()
+				expectTypeOf(admin).toEqualTypeOf<boolean | undefined>()
+
+				return user.id
+			},
+			{
+				withUser: true
+			}
+		)
+}
+
 // resolve with custom status
 {
 	const app = new Elysia()
