@@ -89,11 +89,12 @@ export class ElysiaCustomStatusResponse<
 
 	constructor(code: Code, response: T) {
 		const res =
-			response ??
-			(code in InvertedStatusMap
-				? // @ts-expect-error Always correct
-					InvertedStatusMap[code]
-				: code)
+			response === undefined
+				? code in InvertedStatusMap
+					? // @ts-expect-error Always correct
+						InvertedStatusMap[code]
+					: code
+				: response
 
 		// @ts-ignore Trust me bro
 		this.code = StatusMap[code] ?? code
