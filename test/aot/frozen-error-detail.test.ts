@@ -143,6 +143,28 @@ describe('sealed validation errors identify offending fields', () => {
 		expect(fErr.all.length).toBeGreaterThan(0)
 		expect(fErr.all[0].message).toBe('must have required properties name')
 	})
+
+	// TypeBox >= 1.3.35 escapes keys in `instancePath` (RFC 6901), and the
+	// readers decode it, so a raw '/' or '~' would name a different field
+	it('escapes a property key holding pointer characters', () => {
+		const scalar = t.Object({ 'a/b': t.Number(), 'a~b': t.Number() })
+		// a codec field is not walked, so it takes the per-property fallback
+		const codec = t.Object({ 'a/b': t.Date() })
+
+		for (const [schema, input, pointer, path] of [
+			[scalar, { 'a/b': 'x', 'a~b': 1 }, '/a~1b', 'a/b'],
+			[scalar, { 'a/b': 1, 'a~b': 'x' }, '/a~0b', 'a~b'],
+			[codec, { 'a/b': 'garbage' }, '/a~1b', 'a/b']
+		] as const) {
+			freeze(schema)
+			const fErr = validationError(bridgeFree(schema)!.body, input)
+
+			expect(fErr.errors[0].instancePath).toBe(pointer)
+			expect(fErr.errors[0].schemaPath).toBe(`#/properties${pointer}`)
+			expect(fErr.payload.property).toBe(pointer)
+			expect(fErr.all[0].path).toBe(path)
+		}
+	})
 })
 
 describe('sealed codec errors remain visible', () => {

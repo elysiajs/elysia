@@ -7,14 +7,12 @@ module.exports = (Elysia, format) => {
 	}
 
 	if (
-		!error?.message.includes(
-			'[Elysia] listen() requires an adapter on Node.js'
-		) ||
+		!error?.message.includes('[Elysia] listen() requires an adapter') ||
 		!error.message.includes('https://elysiajs.com/integrations/node')
 	)
 		throw new Error(
 			`❌ ${format} Node.js listen() message: ${error?.message ?? 'did not throw'}`
 		)
 
-	console.log(`✅ ${format} Node.js listen() names the runtime`)
+	console.log(`✅ ${format} Node.js listen() asks for an adapter`)
 }

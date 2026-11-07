@@ -1,18 +1,22 @@
 import { env } from '../universal'
-import { nullObject } from '../utils'
+import { isNotEmpty, nullObject } from '../utils'
 import packageJson from '../../package.json'
 import type { CoerceNode } from '../type/coerce'
 import type { routeShape } from './handler/route-shape'
+import type { resolveHandlerParams } from './handler/params'
+import type { buildFrozenRouteValidator } from './handler/frozen-validator'
+import type { ValidatorOptions } from '../validator'
 
-export const AOT_MANIFEST_FORMAT = 8
+export const AOT_MANIFEST_FORMAT = 9
 const AOT_ABI = `${packageJson.version}:${AOT_MANIFEST_FORMAT}`
 
 export interface AotFingerprint {
 	abi: string
 }
 
+// the owning app: an instance's `~programId` getter returns itself
 export interface ProgramId {
-	readonly _: unique symbol
+	readonly '~programId': ProgramId
 }
 
 const sharedAotFingerprint: AotFingerprint = Object.freeze({ abi: AOT_ABI })
@@ -89,8 +93,8 @@ export type FrozenMirrorFactory = (
 
 export interface FrozenMirror {
 	/**
-	 * Without `u`: `(v) => cleaned` directly
-	 * With `u`: `({ unions }) => (v) => cleaned`
+	 * Without `u` or sanitize: `(v) => cleaned` directly
+	 * With either: `({ unions, h0..hN }) => (v) => cleaned`
 	 */
 	s: FrozenMirrorFactory | ((value: unknown) => unknown)
 	// unions (`u[ui][i]`)
@@ -99,7 +103,7 @@ export interface FrozenMirror {
 
 export type FrozenBothFactory = (
 	External: unknown,
-	// `d` (`{ unions }` built from the entry's `u`) feeds the mirror
+	// `d` (`{ unions }` from the entry's `u`, `h0..hN` from sanitize) feeds the mirror
 	d: unknown
 ) => {
 	check?: (value: unknown) => boolean
@@ -219,17 +223,20 @@ export interface ReconstructImpl {
 	): StringCodecNode[]
 	instantiateFrozenMirror(
 		frozen: FrozenMirror,
-		schema: unknown
+		schema: unknown,
+		sanitize?: ValidatorOptions['sanitize']
 	): (value: unknown) => unknown
 	instantiateFrozenDecodeMirror(
 		frozen: FrozenMirror,
 		schema: unknown,
+		sanitize?: ValidatorOptions['sanitize'],
 		dir?: 'decode' | 'encode'
 	): (value: unknown) => unknown
 	instantiateFrozenBoth(
 		frozen: FrozenValidator,
 		checkSchema: unknown,
-		mirrorSchema: unknown
+		mirrorSchema: unknown,
+		sanitize?: ValidatorOptions['sanitize']
 	): {
 		check?: (value: unknown) => boolean
 		clean?: (value: unknown) => unknown
@@ -240,8 +247,16 @@ export interface ReconstructImpl {
 	): void
 }
 
+export interface ReplayImpl {
+	// left out by a manifest with no handler
+	resolveHandlerParams?: typeof resolveHandlerParams
+	// left out by a manifest with no frozen validator
+	buildFrozenRouteValidator?: typeof buildFrozenRouteValidator
+}
+
 let reconstructImpl: ReconstructImpl | undefined
 let routeShapeImpl: typeof routeShape | undefined
+let replayImpl: ReplayImpl | undefined
 
 export function reconstruct() {
 	if (reconstructImpl === undefined)
@@ -273,6 +288,46 @@ let programs = new WeakMap<ProgramId, CompiledProgram>()
 
 const programFor = (id?: ProgramId) => (id ? programs.get(id) : undefined)
 
+const replayMissing = () =>
+	new Error(
+		'[elysia-aot] Replay module is not installed: please rebuild th server'
+	)
+
+export function replayHandlerParams(
+	...args: Parameters<typeof resolveHandlerParams>
+) {
+	const resolve = replayImpl?.resolveHandlerParams
+	if (!resolve) throw replayMissing()
+
+	return resolve(...args)
+}
+
+/**
+ * Without a frozen validator there is nothing to rebuild: undefined, the
+ * caller builds a live `RouteValidator`. A program with one and no builder
+ * throws, a route the build froze must never fall through to a live validator
+ */
+export function frozenRouteValidator(
+	...args: Parameters<typeof buildFrozenRouteValidator>
+): ReturnType<typeof buildFrozenRouteValidator> {
+	const build = replayImpl?.buildFrozenRouteValidator
+	if (build) return build(...args)
+
+	// either holds an entry only for a captured validator, which is what
+	// makes the manifest import the builder (`hasCaptured` in `emitModule`)
+	const program = programFor(args[1]['~programId'])
+	if (
+		program &&
+		(program.lazyGroups?.length || isNotEmpty(program.validators))
+	)
+		throw replayMissing()
+}
+
+/**
+ * @internal AOT manifest registry, written by the module a build plugin
+ * generates. Not for hand registration: its contract follows the plugin and
+ * can change in any release
+ */
 export abstract class Compiled {
 	static register(manifest: CompiledProgramRegistration, key = '') {
 		;(registered ??= nullObject())[key] = manifest
@@ -292,7 +347,9 @@ export abstract class Compiled {
 		}
 
 		if (manifest.fingerprint.abi !== fingerprint.abi)
-			throw new Error(`[elysia-aot] Mismatch fingerprint`)
+			throw new Error(
+				`[elysia-aot] Mismatch fingerprint: the manifest was built for elysia ${manifest.fingerprint.abi}, this is ${fingerprint.abi} (version:format). Rebuild the app`
+			)
 
 		claimed![key] = new WeakRef(id)
 		registered![key] = undefined
@@ -319,6 +376,11 @@ export abstract class Compiled {
 
 	static set routeShape(impl: typeof routeShape | undefined) {
 		routeShapeImpl = impl
+	}
+
+	/** Frozen validator + handler param replay, installed by the generated manifest */
+	static set replay(impl: ReplayImpl | undefined) {
+		replayImpl = impl
 	}
 
 	static getHandler(
@@ -507,6 +569,8 @@ export interface CapturedHandler {
 	// empty on a WS route
 	code: string
 	k: number | undefined
+	// WS only: the route built a cookie config, see `planFromReport`
+	cookie?: boolean
 }
 
 function captureHandler(v: CapturedHandler) {
@@ -544,6 +608,15 @@ const captureGet = (loc: {
 
 const isAotBuildEnv = () => !!env.ELYSIA_AOT_BUILD
 
+/**
+ * `vs<i>` / `vr<i>`: status and validator of the route's i-th declared response
+ */
+export const isResponseParam = (name: string) => /^v[rs]\d+$/.test(name)
+
+export const isBridgeNotInitialized = (error: unknown) =>
+	error instanceof Error &&
+	error.message.startsWith("Typebox module isn't initialized")
+
 export function inAotBuild() {
 	if (activeSession?.capture === undefined && !isAotBuildEnv()) return false
 	if (captureImpl === undefined) throw aotActivationError()
@@ -577,7 +650,6 @@ export interface CaptureImpl {
 		hasDefault: boolean
 		coerces: unknown
 		normalize: boolean | 'exactMirror' | 'typebox' | undefined
-		sanitize: unknown
 		buildResult: CheckBuildResult
 	}): void
 

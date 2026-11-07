@@ -184,14 +184,12 @@ export abstract class Validator {
 				)
 				if (cached) return cached
 			} else if (!cache && !bypassCache) {
-				// @ts-expect-error
 				const created = new TypeBoxValidatorCache()
 				cache = created
 				if (appSpecific && app) tbCaches.set(app, created)
 				else tbCache = created
 			}
 
-			// @ts-expect-error
 			const validator = new TypeBoxValidator(
 				schema,
 				options,
@@ -393,6 +391,8 @@ export class MultiValidator extends Validator {
 		const shouldClose = options?.normalize === false
 
 		const compileMember = (rawSchema: TSchema, hd: boolean) => {
+			// through the bridge: a direct schema-snapshot import pulls it into the core bundle (~+300 B)
+			rawSchema = (TypeBoxValidator as any).own(rawSchema)
 			let coercedSchema = applyCoercions(rawSchema, options?.coerces)
 			if (shouldClose)
 				coercedSchema = nonAdditionalProperties(
@@ -646,5 +646,5 @@ export class MultiValidator extends Validator {
 	}
 }
 
-let tbCache: typeof TypeBoxValidatorCache | undefined
-let tbCaches = new WeakMap<object, typeof TypeBoxValidatorCache>()
+let tbCache: TypeBoxValidatorCache | undefined
+let tbCaches = new WeakMap<object, TypeBoxValidatorCache>()

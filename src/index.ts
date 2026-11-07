@@ -79,6 +79,7 @@ export type { BaseCookie, CookieOptions } from './cookie/types'
 export type { Server } from './universal/server'
 export type { TCookieObject, TCookieField } from './type/elysia/cookie'
 export type { TFiles } from './type/elysia/files'
+export type { TMaybeEmpty } from './type/elysia/maybe-empty'
 
 export { Elysia, AnyElysia }
 export default Elysia

@@ -1,4 +1,4 @@
-import { Evaluate, Intersect, Module } from '../typebox-type'
+import { Evaluate, Intersect, Module, mutableTypes } from '../typebox-type'
 import type { Validator as BaseTypeBoxValidator } from 'typebox/schema'
 import type {
 	Static,
@@ -30,7 +30,9 @@ import {
 
 import { ELYSIA_TYPES } from '../constants'
 import {
+	cloneNode,
 	dropCompiledSource,
+	escapePointerSegment,
 	isPureRefinement,
 	replaceFunction
 } from '../shared'
@@ -53,7 +55,7 @@ import {
 	takeFileTypeChecks,
 	type PendingFileTypeCheck
 } from '../elysia/file-type'
-import { ELYSIA_FORM_PROTOTYPE, nullObject } from '../../utils'
+import { ELYSIA_FORM_PROTOTYPE, EmptyObject, nullObject } from '../../utils'
 import { ValidationError } from '../../error'
 import {
 	applyPrecomputed,
@@ -65,6 +67,7 @@ import {
 } from './default-precompute'
 import { buildFindCustomError } from './custom-error'
 import { exactMirrorRequired, getExactMirror } from './exact-mirror'
+import { ownSchema, snapshotSchema } from '../../schema-snapshot'
 export { TypeBoxValidatorCache, mayHaveFileType } from './validator-cache'
 import {
 	isFullyClosedObject,
@@ -151,6 +154,8 @@ const freshRefineValidation = (
 }
 
 const UNAWAITED_REFINE = '[Elysia] t.Refine check must be synchronous'
+const FROZEN_REFINE =
+	'[Elysia] t.Refine entry is frozen (TypeBox immutableTypes) and the schema could not be snapshotted: use a plain-object schema'
 
 const guardedChecks = new WeakSet<Function>()
 
@@ -165,6 +170,8 @@ function guardRefinement(refinement: Refinement) {
 		isPureRefinement(refinement)
 	)
 		return
+
+	if (Object.isFrozen(refinement)) throw new Error(FROZEN_REFINE)
 
 	const guarded = function (this: unknown, value: unknown) {
 		const result = check.call(this, value)
@@ -209,6 +216,8 @@ function collectRefinements(
 				if (!group.pure)
 					for (let index = 0; index < members.length; index++) {
 						const refinement = members[index]
+						if (Object.isFrozen(refinement))
+							throw new Error(FROZEN_REFINE)
 						refinement.check = replaceFunction(function (
 							this: unknown,
 							value: unknown
@@ -356,6 +365,58 @@ export function shallowMergeObjects(members: any[]): TSchema | null {
 
 let inlineRefId = 0
 
+// TypeBox Module() rebuilds Object/Array/Union/Record nodes from enumerable
+// keys only, dropping hidden `~codec`/`~refine` (eg. t.Date, t.Codec(t.Object))
+function restoreHidden(src: any, dst: any, models: Record<string, any>) {
+	if (!dst || typeof dst !== 'object' || dst['~kind'] === 'Cyclic') return
+
+	while (src?.['~kind'] === 'Ref' && dst['~kind'] !== 'Ref')
+		src = models[src.$ref]
+
+	if (!src || src === dst || src['~kind'] !== dst['~kind']) return
+
+	if (src['~kind'])
+		for (const key of Object.getOwnPropertyNames(src)) {
+			const descriptor = Object.getOwnPropertyDescriptor(src, key)!
+			if (!descriptor.enumerable && !(key in dst))
+				Object.defineProperty(dst, key, descriptor)
+		}
+
+	for (const key in dst) restoreHidden(src[key], dst[key], models)
+}
+
+function module(models: Record<string, TSchema>) {
+	const instantiated: any = mutableTypes(() => Module(models))
+
+	for (const key in models)
+		restoreHidden(models[key], instantiated[key], models)
+
+	return instantiated
+}
+
+function opaqueCodecs(node: any, memo = new Map<object, any>()): any {
+	if (!node || typeof node !== 'object') return node
+	if (node['~codec']) return {}
+
+	let out = memo.get(node)
+	if (out) return out
+
+	memo.set(node, (out = node))
+
+	for (const key in node) {
+		const next = opaqueCodecs(node[key], memo)
+		if (next === node[key]) continue
+
+		if (out === node)
+			out = Array.isArray(node) ? node.slice() : cloneNode(node, node)
+
+		out[key] = next
+	}
+
+	memo.set(node, out)
+	return out
+}
+
 const LAZY_JIT_THRESHOLD = 16
 
 export function schemaMayHaveAsyncRefine(
@@ -426,7 +487,7 @@ function findInstancePath(
 		const found = findInstancePath(
 			(value as Record<string, unknown>)[key],
 			target,
-			`${path}/${key}`
+			`${path}/${escapePointerSegment(key)}`
 		)
 		if (found !== undefined) return found
 	}
@@ -466,6 +527,8 @@ interface DefaultFastPath {
 export class TypeBoxValidator<
 	const in out T extends TSchema = TAny
 > extends Validator {
+	// MultiValidator compiles its members itself, the caller's included
+	static readonly own = ownSchema
 	// also guards the member's refinements so an async refine fails closed
 	static isAsyncMember(schema: TSchema, compiled: any): boolean {
 		const isAsync = (
@@ -484,7 +547,8 @@ export class TypeBoxValidator<
 	schema!: T
 
 	hasCodec!: boolean
-	isAsync!: boolean
+	// `declare`: the base initializes it, a redeclared field is a strict-mode error under Bun's AOT checker
+	declare isAsync: boolean
 	hasDefault!: boolean
 
 	#decodeMirror?: (value: unknown) => unknown
@@ -519,11 +583,16 @@ export class TypeBoxValidator<
 	) {
 		super()
 
+		if (!name) schema = ownSchema(schema)
+
 		if (isIntersectable) {
-			const members = [schema, ...options!.schemas!]
+			const members = [schema, ...options!.schemas!.map(ownSchema)]
+
 			// fast path because Evaluate(Intersect(...)) is deep clone
 			schema = (shallowMergeObjects(members) ??
-				Evaluate(Intersect(members as any))) as unknown as T
+				mutableTypes(() =>
+					Evaluate(Intersect(members as any))
+				)) as unknown as T
 		}
 
 		const originalElyTyp = (schema as any)?.['~elyTyp']
@@ -549,7 +618,8 @@ export class TypeBoxValidator<
 				const out: Record<string, TSchema> = {}
 
 				for (const modelName in models) {
-					const modelSchema = models[modelName]
+					// a direct validator's models are the caller's, own them like `.model()`
+					const modelSchema = snapshotSchema(models[modelName])
 					const value: Record<string, unknown> = {}
 					let source = modelSchema
 
@@ -570,14 +640,16 @@ export class TypeBoxValidator<
 					out[modelName] = value as TSchema
 				}
 
-				moduleCache.set(options.models, (modelModule = Module(out)))
+				moduleCache.set(options.models, (modelModule = module(out)))
 			}
 			schema = (modelModule as any)[name]
 
 			if (isIntersectable) {
-				const members = [schema, ...options!.schemas!]
+				const members = [schema, ...options!.schemas!.map(ownSchema)]
 				schema = (shallowMergeObjects(members) ??
-					Evaluate(Intersect(members as any))) as unknown as T
+					mutableTypes(() =>
+						Evaluate(Intersect(members as any))
+					)) as unknown as T
 			}
 		} else if (options?.models && typeof name !== 'string') {
 			schemaHasRef = frozen
@@ -585,12 +657,11 @@ export class TypeBoxValidator<
 				: schemaSome(schema, (n) => !!n.$ref)
 			if (schemaHasRef) {
 				const id = `inline@${++inlineRefId}`
-				schema = (
-					Module({
-						...options.models,
-						[id]: schema
-					} as Record<string, TSchema>) as any
-				)[id]
+				const models: Record<string, TSchema> = nullObject()
+				for (const key in options.models)
+					models[key] = snapshotSchema(options.models[key] as TSchema)
+				models[id] = schema as TSchema
+				schema = module(models)[id]
 			}
 		}
 
@@ -666,7 +737,6 @@ export class TypeBoxValidator<
 						hasDefault: this.hasDefault,
 						coerces: options.coerces,
 						normalize: options.normalize,
-						sanitize: options.sanitize,
 						buildResult: build
 					})
 				else if (!capturing) dropCompiledSource(this.tb)
@@ -740,23 +810,38 @@ export class TypeBoxValidator<
 
 		this.#noValidate = originalElyTyp === ELYSIA_TYPES.NoValidate
 		this.#isForm = originalElyTyp === ELYSIA_TYPES.Form
-		this.#hasOptional = !!(this.schema as any)?.['~optional']
+		// t.MaybeEmpty is optional as a property only: its own check (and any
+		// refine on it) still runs on an empty root
+		this.#hasOptional =
+			!!(this.schema as any)?.['~optional'] &&
+			(this.schema as any)['~elyTyp'] !== ELYSIA_TYPES.MaybeEmpty
 
 		if (frozen?.ic)
 			reconstruct().reconstructInnerCodecs(frozen.ic, this.schema)
+
+		// TypeBox Clean, over the schema with each codec opaque (`opaqueCodecs`)
+		let typeboxSchema: TSchema | undefined
+		const typeboxClean = (value: unknown) =>
+			Clean(
+				(typeboxSchema ??= this.hasCodec
+					? opaqueCodecs(this.schema)
+					: this.schema),
+				value
+			)
 
 		if (isFrozen && frozen!.cm) {
 			const both = reconstruct().instantiateFrozenBoth(
 				frozen!,
 				this.schema,
-				schema
+				schema,
+				options?.sanitize
 			)
 			this.reconstructedCheck = both.check
 			this.Clean =
 				options?.normalize === false
 					? undefined
 					: schemaHasDangerousProperties(this.schema)
-						? (value) => Clean(this.schema, value)
+						? typeboxClean
 						: both.clean
 		} else {
 			if (isFrozen)
@@ -793,7 +878,7 @@ export class TypeBoxValidator<
 					options?.normalize === 'typebox' ||
 					schemaHasDangerousProperties(this.schema)
 				)
-					this.Clean = (value) => Clean(this.schema, value)
+					this.Clean = typeboxClean
 				else {
 					const aot = options?.aot
 					const slot = options?.slot
@@ -808,9 +893,12 @@ export class TypeBoxValidator<
 									clean =
 										reconstruct().instantiateFrozenMirror(
 											m,
-											schema
+											schema,
+											options?.sanitize
 										)
 								} catch (error) {
+									if (options?.sanitize) throw error
+
 									warnMirrorFailure(schema, error)
 									clean = (v) => v
 								}
@@ -828,7 +916,7 @@ export class TypeBoxValidator<
 
 						const createMirror = getExactMirror()
 						this.Clean = !createMirror
-							? (value) => Clean(this.schema, value)
+							? typeboxClean
 							: (createMirror(schema, {
 									Compile,
 									sanitize: options?.sanitize
@@ -836,10 +924,12 @@ export class TypeBoxValidator<
 					}
 				}
 			} catch (error) {
+				// TypeBox Clean can't sanitize, like `exactMirrorRequired` above
+				if (options?.sanitize) throw error
+
 				warnMirrorFailure(schema, error)
 
-				if (options?.normalize !== false)
-					this.Clean = (value) => Clean(this.schema, value)
+				if (options?.normalize !== false) this.Clean = typeboxClean
 			}
 		}
 
@@ -961,6 +1051,7 @@ export class TypeBoxValidator<
 						run = reconstruct().instantiateFrozenDecodeMirror(
 							m,
 							schema,
+							options?.sanitize,
 							dir
 						)
 					} catch {
@@ -1226,7 +1317,7 @@ export class TypeBoxValidator<
 		if (value === undefined || value === null)
 			return {
 				value: (schema['~kind'] === 'Object'
-					? nullObject()
+					? new EmptyObject()
 					: value) as Static<T>
 			}
 
@@ -1236,7 +1327,7 @@ export class TypeBoxValidator<
 			!Array.isArray(value) &&
 			Object.keys(value as object).length === 0
 		)
-			return { value: nullObject() as Static<T> }
+			return { value: new EmptyObject() as Static<T> }
 	}
 
 	async FromAsync(value: Static<T>, type?: string): Promise<Static<T>> {

@@ -9,8 +9,7 @@ export const RouteFlag = {
 	Dynamic: 2,
 	Encode: 4,
 	ExactDuplicate: 8,
-	JITCold: 16,
-	JITSatisfied: 32
+	JITCold: 16
 } as const
 
 export interface RouteTable {

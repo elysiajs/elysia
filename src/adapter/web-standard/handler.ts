@@ -13,10 +13,10 @@ import { isProduction } from '../../universal/is-production'
 import { ElysiaFile } from '../../universal/file'
 import { Cookie } from '../../cookie/cookie'
 import {
+	EmptyObject,
 	formToFormData,
 	isElysiaForm,
-	isNotEmpty,
-	nullObject
+	isNotEmpty
 } from '../../utils'
 import {
 	ElysiaStatus,
@@ -35,7 +35,7 @@ const textPlainInit = {
 function handleElysiaFile(
 	file: ElysiaFile,
 	set: Context['set'] = {
-		headers: nullObject()
+		headers: new EmptyObject()
 	},
 	request?: Request
 ) {
@@ -187,16 +187,34 @@ function withStatus(
 	request?: Request,
 	owned?: boolean
 ) {
-	if (set) set.status = response.status
-	else
-		set = {
-			status: response.status,
-			headers: nullObject()
-		} as Context['set']
+	// each member read once and in this order, as the slow lane reads them
+	let extra: Record<string, string> | undefined
+	if (set) {
+		set.status = response.status
+		extra = response.headers
+	} else {
+		const status = response.status
+		extra = response.headers
 
-	if (response.headers) {
+		// Bun: a bare string needs no header record
+		if (isBun && !extra) {
+			const body = response.response
+			if (typeof body === 'string') return new Response(body, { status })
+
+			return mapResponseWithSet(
+				body,
+				{ status, headers: new EmptyObject() } as Context['set'],
+				request,
+				owned
+			)
+		}
+
+		set = { status, headers: new EmptyObject() } as Context['set']
+	}
+
+	if (extra) {
 		const headers = materializeSetHeaders(set)
-		for (const [key, value] of Object.entries(response.headers))
+		for (const [key, value] of Object.entries(response.headers!))
 			if (key.toLowerCase() !== 'set-cookie') hput(headers, key, value)
 			else if (headers instanceof Headers)
 				for (const cookie of ([] as string[]).concat(value))
@@ -357,7 +375,8 @@ export function errorToResponse(
 	owned = false
 ) {
 	if (error?.toResponse) {
-		const targetSet = set ?? ({ headers: nullObject() } as Context['set'])
+		const targetSet =
+			set ?? ({ headers: new EmptyObject() } as Context['set'])
 
 		const apply = (resolved: unknown) => {
 			if (resolved instanceof Response) targetSet.status = resolved.status
@@ -376,7 +395,7 @@ export function errorToResponse(
 	const body = internalServerErrorBody(error)
 	body.status = status
 
-	const headers = set ? materializeSetHeaders(set) : nullObject()
+	const headers = set ? materializeSetHeaders(set) : new EmptyObject()
 	hput(headers, 'content-type', PROBLEM_JSON)
 
 	return new Response(JSON.stringify(body), { status, headers })

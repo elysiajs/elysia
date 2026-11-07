@@ -8,7 +8,6 @@ import {
 	Capture,
 	captureImpl,
 	CompilerState,
-	Compiled,
 	setCaptureImpl,
 	type CaptureImpl,
 	type CapturedHandler,
@@ -20,8 +19,10 @@ import {
 } from './aot'
 
 import { buildCoercedFromPlan, captureCoercePlan } from '../type/coerce'
-import { buildFrozenCheck } from '../type/validator/frozen-check'
-import { captureCustomErrors } from '../type/validator/custom-error'
+import {
+	buildFrozenCheck,
+	captureCustomErrors
+} from '../type/validator/frozen-check'
 import {
 	captureStringCodecEntries,
 	compileWithBuild
@@ -42,9 +43,12 @@ import {
 import { isAsyncPredicate } from '../type/elysia/file-type'
 import { nullObject } from '../utils'
 import { env } from '../universal'
-import { collectExternals, Reconstruct } from './aot-reconstruct'
-import { routeShape } from './handler/route-shape'
-import { captureMirrorCodecs, captureMirrorUnions } from './aot-emit'
+import { collectExternals } from './aot-reconstruct'
+import {
+	captureMirrorCodecs,
+	captureMirrorUnions,
+	installReconstructImpl
+} from './aot-emit'
 import { getExactMirror } from '../type/validator/exact-mirror'
 
 // ─── capture-only default-precompute probes ────────────────────────────────
@@ -212,7 +216,6 @@ function maybeCapture(args: {
 	hasDefault: boolean
 	coerces: unknown
 	normalize: boolean | 'exactMirror' | 'typebox' | undefined
-	sanitize: unknown
 	buildResult: CheckBuildResult
 }) {
 	const {
@@ -279,10 +282,7 @@ function maybeCapture(args: {
 	const customErrors = captureCustomErrors(schema)
 	if (customErrors) Capture.set(loc, { customErrors })
 
-	const innerCodecs = captureStringCodecEntries(
-		schema as TSchema,
-		args.sanitize as any
-	)
+	const innerCodecs = captureStringCodecEntries(schema as TSchema)
 	if (innerCodecs) Capture.set(loc, { innerCodecs })
 
 	const cf = buildFrozenCheck(buildResult, schema)
@@ -318,22 +318,15 @@ function captureMirror(
 
 			const loc = { method: aot.method, path: aot.path, slot }
 
-			if (!ext)
-				Capture.set(loc, {
-					mirror: { source: emitted.source, hasExternals: false }
-				})
-			else if (ext.unions && !ext.hof) {
-				const u = captureMirrorUnions(schema, ext.unions)
+			// `ext.hof` comes back from the live config, not the manifest
+			const u = ext?.unions.length
+				? captureMirrorUnions(schema, ext.unions)
+				: undefined
 
-				if (u)
-					Capture.set(loc, {
-						mirror: {
-							source: emitted.source,
-							hasExternals: true,
-							u
-						}
-					})
-			}
+			if (u || !ext?.unions.length)
+				Capture.set(loc, {
+					mirror: { source: emitted.source, hasExternals: !!ext, u }
+				})
 		}
 	} catch {}
 }
@@ -361,11 +354,7 @@ function captureCodecMirror(
 		if (typeof emitted?.source === 'string') {
 			const ext = emitted.externals
 
-			if (
-				ext?.codecs &&
-				!ext.hof &&
-				captureMirrorCodecs(schema, ext.codecs, dir)
-			) {
+			if (ext?.codecs && captureMirrorCodecs(schema, ext.codecs, dir)) {
 				let u: { identifier: string; code: string }[][] | undefined
 
 				if (ext.unions?.length) {
@@ -527,11 +516,6 @@ export const snapshotCompiled = (): CompiledSnapshot => CompilerState.registry
 /** @internal restore registry after in-process AOT analysis */
 export function restoreCompiled(snapshot: CompiledSnapshot) {
 	CompilerState.registry = snapshot
-}
-
-export function installReconstructImpl() {
-	Compiled.reconstruct = Reconstruct
-	Compiled.routeShape = routeShape
 }
 
 setCaptureImpl({

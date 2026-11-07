@@ -108,6 +108,26 @@ describe('context access that cannot be statically identified', () => {
 		await expect(responseText(handler, 'dot5')).resolves.toBe('2')
 	})
 
+	// Bun AOT, Node and Deno keep the source as written (Bun reprints it with
+	// `;`): the identifier opening the next statement read as part of the
+	// right-hand side, so the destructure or alias was dropped and query was
+	// never parsed
+	it('keeps query available after a destructure without a semicolon', async () => {
+		const handler = new Function(
+			'return (context) => {\n const { query } = context\n return query.name\n}'
+		)()
+
+		await expect(responseText(handler, 'asi')).resolves.toBe('asi')
+	})
+
+	it('keeps query available after an alias without a semicolon', async () => {
+		const handler = new Function(
+			'return (context) => {\n const c = context\n return c.query.name\n}'
+		)()
+
+		await expect(responseText(handler, 'asi')).resolves.toBe('asi')
+	})
+
 	it('marks every context property as accessed', () => {
 		expect(
 			sucrose(function (context: any) {

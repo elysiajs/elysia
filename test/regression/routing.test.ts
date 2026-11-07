@@ -79,16 +79,17 @@ describe('JIT route aliases', () => {
 		await app.handle('/dir/')
 		await app.handle('/dir')
 
+		// the alias keeps its index, which resolves to the canonical handler
 		const map = (app as any)['~map'].GET
-		expect(map['/dir/']).toBe(map['/dir'])
-		expect(typeof map['/dir']).toBe('function')
+		expect(typeof map['/dir/']).toBe('function')
+		expect((app as any).compiled[~map['/dir']]).toBe(map['/dir/'])
 	})
 })
 
 // A lazy static route's `~map` slot holds its encoded index `~i` until the
 // first hit compiles it (no per-route closure). The encoding and the swap are
-// what these pin: a raw index 0 is falsy and would 404 the first route, and an
-// alias key left holding the index would dispatch through the slow path forever
+// what these pin: a raw index 0 is falsy and would 404 the first route. Alias
+// keys (loose, encoded) keep the index and resolve through `compiled`
 describe('lazy static routes', () => {
 	const lanes = (app: any) => {
 		const values: unknown[] = []
@@ -112,7 +113,7 @@ describe('lazy static routes', () => {
 		await expect((await app.handle('/')).text()).resolves.toBe('root')
 	})
 
-	it('a first hit on one alias compiles every alias key', async () => {
+	it('a first hit on one alias compiles the route once for every key', async () => {
 		const app = new Elysia()
 			.get('/dir/', () => 'dir')
 			.get('/café', () => 'coffee')
@@ -122,24 +123,22 @@ describe('lazy static routes', () => {
 		for (const key of ['/dir/', '/dir', '/café', '/caf%C3%A9'])
 			expect(typeof map[key]).toBe('number')
 
-		// recorded at build: without it `~dispatch` rescans the whole route
-		// table on every first hit (quadratic warm-up)
-		expect((app as any).jitAliases).toEqual([
-			{ method: 'GET', paths: ['/dir/', '/dir'] },
-			{ method: 'GET', paths: ['/café', '/caf%C3%A9'] }
-		])
-
 		await expect((await app.handle('/dir')).text()).resolves.toBe('dir')
 		await expect((await app.handle('/caf%C3%A9')).text()).resolves.toBe(
 			'coffee'
 		)
 
+		// only the canonical key is swapped: an alias keeps the index of the
+		// same compiled handler, so no alias list is kept per lazy route
 		expect(typeof map['/dir/']).toBe('function')
-		expect(map['/dir']).toBe(map['/dir/'])
 		expect(typeof map['/café']).toBe('function')
-		expect(map['/caf%C3%A9']).toBe(map['/café'])
+		expect(typeof map['/dir']).toBe('number')
+		expect(typeof map['/caf%C3%A9']).toBe('number')
+		expect((app as any).compiled[~map['/dir']]).toBe(map['/dir/'])
+		expect((app as any).compiled[~map['/caf%C3%A9']]).toBe(map['/café'])
 
 		await expect((await app.handle('/dir/')).text()).resolves.toBe('dir')
+		await expect((await app.handle('/dir')).text()).resolves.toBe('dir')
 	})
 
 	it('serves a lazy .all() route from the any-method lane', async () => {

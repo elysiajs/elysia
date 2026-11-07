@@ -12,9 +12,14 @@ import {
 import { Validator } from '../../src/validator'
 import { captureArtifacts } from '../../src/plugin/aot/source'
 import { Reconstruct } from '../../src/compile/aot-reconstruct'
-import { installReconstructImpl } from '../../src/compile/aot-capture'
+import { installReconstructImpl } from '../../src/compile/aot-emit'
 import { buildCoercedFromPlan } from '../../src/type/coerce-plan'
-import { routeShape } from '../../src/compile/handler/route-shape'
+import {
+	buildFrozenRouteValidator,
+	installReplay,
+	resolveHandlerParams,
+	routeShape
+} from '../../src/compile/handler/route-shape'
 
 export type Define = (app: AnyElysia) => AnyElysia
 
@@ -233,8 +238,19 @@ const evalManifest = (source: string): void => {
 		'Reconstruct',
 		'buildCoercedFromPlan',
 		'routeShape',
+		'installReplay',
+		'resolveHandlerParams',
+		'buildFrozenRouteValidator',
 		body
-	)(Compiled, Reconstruct, buildCoercedFromPlan, routeShape)
+	)(
+		Compiled,
+		Reconstruct,
+		buildCoercedFromPlan,
+		routeShape,
+		installReplay,
+		resolveHandlerParams,
+		buildFrozenRouteValidator
+	)
 }
 
 // Capture is process-global and non-reentrant. Restore the compiled registry

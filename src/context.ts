@@ -4,12 +4,18 @@ import {
 	type SelectiveProblem,
 	type SelectiveStatus
 } from './error'
-import { isNotEmpty, markSingletons, nullObject, redirect } from './utils'
+import {
+	EmptyObject,
+	isNotEmpty,
+	markSingletons,
+	nullObject,
+	redirect
+} from './utils'
 
 import { defaultHeaders } from './adapter/default-headers'
 import type { AnyElysia } from './base'
 import type { Server } from './universal/server'
-import type { StatusMap } from './constants'
+import { dangerousKeys, type StatusMap } from './constants'
 import type { Cookie } from './cookie/cookie'
 import type { BaseCookie } from './cookie/types'
 
@@ -41,15 +47,27 @@ const defer = {
 	}
 }
 
-function buildDecorator(members: object) {
-	class Decorator {}
-	Object.assign(Decorator.prototype, members)
+// top-level base: Bun's AOT compiler guards a constructor against its direct
+// base class, and a base built at runtime fails that guard on every request
+class Decorator {}
+Object.defineProperty(Decorator.prototype, 'defer', defer)
+
+function decoratorMembers(members: object) {
+	// an own `__proto__` (a table written past decorate's own guard) would
+	// run the prototype setter below and cut Decorator out of the chain
+	for (const key of dangerousKeys) delete (members as any)[key]
+
 	// a context inherits every member, so each is shared: the derive identity
 	// scan (`for..in`) never sees one under a symbol key
 	for (const key of Reflect.ownKeys(members))
 		markSingletons((members as Record<PropertyKey, unknown>)[key], 0)
-	Object.defineProperty(Decorator.prototype, 'defer', defer)
-	return Decorator
+	return members
+}
+
+function buildDecorator(members: object) {
+	class AppDecorator extends Decorator {}
+	Object.assign(AppDecorator.prototype, decoratorMembers(members))
+	return AppDecorator
 }
 
 const buildEmptyDecorator = () => buildDecorator({ status, problem, redirect })
@@ -82,10 +100,10 @@ export function clearContextCache(app?: AnyElysia) {
 	sharedEmptyContext = null
 }
 
-function buildEmptyContext(Base: any, headers: object | null = null) {
+function buildEmptyContext(members: object, headers: object | null = null) {
 	const immutableHeaders = headers !== null && Object.isFrozen(headers)
 
-	class Context extends Base {
+	class Context extends Decorator {
 		declare params?: Record<string, string>
 		declare headers?: Record<string, string>
 		declare qi: number
@@ -98,6 +116,8 @@ function buildEmptyContext(Base: any, headers: object | null = null) {
 		declare route?: string
 		declare trace?: any[]
 		declare '~sig'?: AbortSignal
+		// the status a response schema ran under, which a later hook can't rewrite
+		declare '~validated'?: number | string
 		declare request: Request
 
 		// a parameter property compiles to a class field, which caps JSC's
@@ -116,15 +136,23 @@ function buildEmptyContext(Base: any, headers: object | null = null) {
 				this.set = {
 					headers:
 						headers === null
-							? Object.create(null)
-							: Object.assign(Object.create(null), headers),
+							? new EmptyObject()
+							: Object.assign(new EmptyObject(), headers),
 					status: undefined,
 					cookie: undefined
 				}
 		}
 	}
 
+	Object.assign(Context.prototype, decoratorMembers(members))
 	return Context
+}
+
+const emptyMembers = { status, problem, redirect }
+function contextMembers(app: AnyElysia) {
+	const ext = app['~ext']
+	if (!ext?.decorator && !ext?.store) return emptyMembers
+	return { ...ext.decorator, store: ext.store, status, problem, redirect }
 }
 
 export function createContext(
@@ -147,8 +175,8 @@ export function createContext(
 
 	const context =
 		headers === null && !ext?.decorator && !ext?.store
-			? (sharedEmptyContext ??= buildEmptyContext(createBaseContext(app)))
-			: buildEmptyContext(createBaseContext(app), headers)
+			? (sharedEmptyContext ??= buildEmptyContext(emptyMembers))
+			: buildEmptyContext(contextMembers(app), headers)
 
 	contextCache.set(app, context)
 	return context

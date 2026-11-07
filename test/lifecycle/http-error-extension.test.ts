@@ -300,6 +300,51 @@ describe('HTTPError extension members', () => {
 		])
 	})
 
+	// The query and form body Elysia parses per request have no Object.prototype
+	// on the chain but are not `Object.create(null)`: an extension handing one
+	// back is still a plain object, not one whose members are dropped
+	it('serves the members of a parsed query or form body', async () => {
+		class Echo extends HTTPError.id('ECHO', 409) {
+			constructor(readonly echoed: Record<string, unknown>) {
+				super()
+			}
+
+			extension() {
+				return this.echoed
+			}
+		}
+
+		const app = new Elysia()
+			.get('/', ({ query }) => {
+				throw new Echo(query)
+			})
+			.post('/', ({ body }) => {
+				throw new Echo(body as Record<string, unknown>)
+			})
+
+		for (const request of [
+			new Request('http://localhost/?order=42'),
+			new Request('http://localhost/', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/x-www-form-urlencoded'
+				},
+				body: 'order=42'
+			})
+		]) {
+			const response = await app.handle(request)
+
+			expect(response.status).toBe(409)
+			expect(await response.json()).toEqual({
+				type: 'ECHO',
+				code: 'ECHO',
+				title: 'Conflict',
+				status: 409,
+				order: '42'
+			})
+		}
+	})
+
 	// Read once, as `value` is: what was checked is what runs
 	it('reads `extension` once', async () => {
 		class Flaky extends HTTPError.id('FLAKY', 409) {

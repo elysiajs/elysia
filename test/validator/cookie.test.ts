@@ -594,12 +594,16 @@ describe('Cookie Validation', () => {
 
 	it('handle prototype pollution', () => {
 		const app = new Elysia().get('/profile', ({ cookie }) => {
-			const proto = Object.getPrototypeOf(cookie)
-			const protoIsClean = proto === Object.prototype || proto === null
+			// the chain reaches neither Object.prototype nor the payload of
+			// the `__proto__` cookie
+			const protoIsClean =
+				!Object.prototype.isPrototypeOf(cookie) &&
+				!('toString' in cookie) &&
+				!('constructor' in cookie) &&
+				!('injected' in cookie)
 			return {
 				hasPhantomValue: 'value' in cookie,
 				prototypeIsClean: protoIsClean,
-				prototype: proto,
 				enumeratedKeys: (() => {
 					const keys: string[] = []
 					for (const k in cookie) keys.push(k)
@@ -621,7 +625,6 @@ describe('Cookie Validation', () => {
 		).resolves.toEqual({
 			hasPhantomValue: false,
 			prototypeIsClean: true,
-			prototype: null,
 			enumeratedKeys: ['a']
 		})
 	})
@@ -658,5 +661,23 @@ describe('Cookie Validation', () => {
 
 		expect(innerValue).toBe(9)
 		expect(typeof innerValue).toBe('number')
+	})
+
+	// t.MaybeEmpty is optional as a property only: as the root cookie schema an
+	// empty jar must still be validated, not skipped
+	it('root t.MaybeEmpty cookie still validates an empty jar', async () => {
+		const app = new Elysia().get(
+			'/',
+			{ cookie: t.MaybeEmpty(t.Object({ sid: t.String() })) },
+			() => 'ok'
+		)
+
+		const [valid, empty] = await Promise.all([
+			app.handle('/', { headers: { Cookie: 'sid=1' } }),
+			app.handle('/')
+		])
+
+		expect(valid.status).toBe(200)
+		expect(empty.status).toBe(422)
 	})
 })

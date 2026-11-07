@@ -172,14 +172,19 @@ describe('schema shape at registration', () => {
 					() => 'a'
 				)
 				.get('/unsafe-root', { body: t.Unsafe(t.String()) }, () => 'a')
+				// t.Object keeps an own `~kind`, so a clone stays a schema
+				.get(
+					'/unsafe-object',
+					{ body: t.Unsafe(t.Object({})) },
+					() => 'a'
+				)
 
-			expect(app.routes.length).toBe(3)
+			expect(app.routes.length).toBe(4)
 		})
 
-		// Root schemas still need `~kind`; `t.Unsafe` only copies own properties.
+		// Root schemas still need `~kind`
 		for (const [label, schema] of [
-			['a raw node', t.Unsafe({ type: 'object' })],
-			['a wrapped t.Object', t.Unsafe(t.Object({}))]
+			['a raw node', t.Unsafe({ type: 'object' })]
 		] as const)
 			it(`rejects ${label} in a slot root`, () => {
 				expect(() =>

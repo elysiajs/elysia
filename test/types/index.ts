@@ -529,11 +529,13 @@ app.derive(({ headers }) => {
 			'b' extends keyof typeof context ? true : false
 		>().toEqualTypeOf<false>()
 	})
-	// Derived values are available during transform hooks.
+	// derive runs in beforeHandle, after transform: `b` is undefined there
 	.onTransform((context) => {
 		expectTypeOf<
 			'b' extends keyof typeof context ? true : false
-		>().toEqualTypeOf<true>()
+		>().toEqualTypeOf<false>()
+		// decorators are set before any hook
+		expectTypeOf(context.a).toBeString()
 	})
 
 const plugin = (app: Elysia) =>
@@ -682,7 +684,8 @@ app.use(plugin).group(
 				on: string
 				found?: unknown
 				property?: string
-				expected?: string
+				expected?: unknown
+				errors?: { message?: string; [key: string]: unknown }[]
 			}
 		}
 	}>()
@@ -764,7 +767,8 @@ app.use(plugin).group(
 				on: string
 				found?: unknown
 				property?: string
-				expected?: string
+				expected?: unknown
+				errors?: { message?: string; [key: string]: unknown }[]
 			}
 		}
 	}>()
@@ -1182,11 +1186,12 @@ const a = app
 		// Derived values are available to handlers.
 		expectTypeOf<typeof b>().toBeString()
 	})
-	// A prior derive is visible during transform.
+	// derive runs in beforeHandle, after transform: a prior derive is not
+	// on the transform context yet
 	.onTransform((context) => {
 		expectTypeOf<
 			'b' extends keyof typeof context ? true : false
-		>().toEqualTypeOf<true>()
+		>().toEqualTypeOf<false>()
 	})
 	// Derived values remain visible to beforeHandle.
 	.onBeforeHandle((context) => {

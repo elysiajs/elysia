@@ -1,5 +1,7 @@
-import type { CheckBuildResult } from '../../compile/aot'
+import { Build } from '../typebox-value'
+import type { CapturedValidator, CheckBuildResult } from '../../compile/aot'
 import { alignBuildExternals, reconstructCheck } from '../../compile/aot-emit'
+import { collectCustomErrorNodes } from './custom-error'
 
 export function buildFrozenCheck(
 	build: CheckBuildResult | undefined,
@@ -25,4 +27,32 @@ export function buildFrozenCheck(
 		checkValue: check.value,
 		external: aligned.external.variables.length > 0
 	}
+}
+
+export function captureCustomErrors(
+	schema: unknown
+): CapturedValidator['customErrors'] | undefined {
+	const ceNodes = collectCustomErrorNodes(
+		schema as any,
+		[],
+		[],
+		new WeakSet()
+	)
+	if (!ceNodes.length) return
+
+	const entries: NonNullable<CapturedValidator['customErrors']> = []
+	for (const { path, node, union, segments } of ceNodes) {
+		// union-branch and array-item nodes are handled at runtime only
+		if (union || segments.some((s) => typeof s === 'object')) continue
+
+		try {
+			const cf = buildFrozenCheck(
+				Build(node) as unknown as CheckBuildResult,
+				node
+			)
+			if (cf) entries.push({ path, ...cf })
+		} catch {}
+	}
+
+	return entries.length ? entries : undefined
 }

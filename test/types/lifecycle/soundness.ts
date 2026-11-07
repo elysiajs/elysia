@@ -451,7 +451,8 @@ import { Prettify } from '../../../src/types'
 			on: string
 			found?: unknown
 			property?: string
-			expected?: string
+			expected?: unknown
+			errors?: { message?: string; [key: string]: unknown }[]
 		}
 	}>()
 }
@@ -534,7 +535,8 @@ import { Prettify } from '../../../src/types'
 			on: string
 			found?: unknown
 			property?: string
-			expected?: string
+			expected?: unknown
+			errors?: { message?: string; [key: string]: unknown }[]
 		}
 	}>()
 }
@@ -1701,7 +1703,8 @@ import { Prettify } from '../../../src/types'
 				on: string
 				found?: unknown
 				property?: string
-				expected?: string
+				expected?: unknown
+				errors?: { message?: string; [key: string]: unknown }[]
 			}
 		}
 	}>()
@@ -1768,7 +1771,8 @@ import { Prettify } from '../../../src/types'
 				on: string
 				found?: unknown
 				property?: string
-				expected?: string
+				expected?: unknown
+				errors?: { message?: string; [key: string]: unknown }[]
 			}
 		}
 	}>()
@@ -1953,7 +1957,8 @@ import { Prettify } from '../../../src/types'
 			on: string
 			found?: unknown
 			property?: string
-			expected?: string
+			expected?: unknown
+			errors?: { message?: string; [key: string]: unknown }[]
 		}
 	}>()
 }
@@ -2018,7 +2023,8 @@ import { Prettify } from '../../../src/types'
 			on: string
 			found?: unknown
 			property?: string
-			expected?: string
+			expected?: unknown
+			errors?: { message?: string; [key: string]: unknown }[]
 		}
 	}>()
 }

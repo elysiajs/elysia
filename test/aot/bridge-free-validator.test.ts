@@ -3,7 +3,11 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 
 import { Elysia, t } from '../../src'
 import { Validator } from '../../src/validator'
-import { Compiled, type ProgramId } from '../../src/compile/aot'
+import {
+	Compiled,
+	isBridgeNotInitialized,
+	type ProgramId
+} from '../../src/compile/aot'
 import {
 	beginValidatorCapture,
 	endValidatorCapture,
@@ -12,7 +16,6 @@ import {
 import { RouteValidator } from '../../src/validator/route'
 import {
 	buildFrozenRouteValidator,
-	isBridgeNotInitialized,
 	isCapturedBridgeFree
 } from '../../src/compile/handler/frozen-validator'
 

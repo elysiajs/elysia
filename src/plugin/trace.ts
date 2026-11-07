@@ -1,5 +1,10 @@
 import { Elysia } from '../index'
-import { createTracer, unionTracePhases } from '../trace'
+import {
+	createTracer,
+	unionTracePhases,
+	requestLane,
+	afterResponseBracket
+} from '../trace'
 
 import type { TraceCapability } from '../trace'
 
@@ -10,7 +15,9 @@ import type { TraceCapability } from '../trace'
 const provider = {
 	id: '@elysia/trace@' + import.meta.url,
 	createTracer,
-	unionTracePhases
+	unionTracePhases,
+	requestLane,
+	afterResponseBracket
 } as const satisfies TraceCapability
 
 /**

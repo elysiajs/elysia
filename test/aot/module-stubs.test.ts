@@ -263,6 +263,21 @@ describe('AOT module stubs', () => {
 		expect(res.headers.getAll('set-cookie')).toEqual(['seen=1'])
 	})
 
+	// A stubbed signer on a root-signing app would throw on the 404 and
+	// fail every response that sets the cookie, see `rootSign` in fetch.ts
+	it('keeps the cookie signer when the root config signs', async () => {
+		const text = await build('root-sign')
+		const stubbedSigner = text.includes('but a route used cookies')
+
+		const app = await load(text)
+		const res = await app.handle(req('/nope'))
+		expect(res.status).toBe(404)
+		expect(res.headers.getAll('set-cookie')).toEqual([
+			'session=user-42.1UOlODptcmBrbN8Ij6vnTfjVsg73tF9VWJLrmOZlKqg'
+		])
+		expect(stubbedSigner).toBe(false)
+	})
+
 	it('stubs only the memoirist Elysia imports, a user import keeps the real one', async () => {
 		const text = await build('user-memoirist')
 		// Elysia's routes are static, so its import still gets the stub

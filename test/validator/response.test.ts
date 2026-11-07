@@ -1073,3 +1073,186 @@ describe('Response Validator', () => {
 		expect(Object.getPrototypeOf(owner)).toBe(prototype)
 	})
 })
+
+// A plugin keeping the handler's value needs the schema Elysia chose for it:
+// `set.status` reads back whatever a later hook left there
+describe('The status a response schema ran under', () => {
+	const Row = t.Object({ id: t.Number() })
+	const row = () => ({ id: 1, secret: 'hunter2' })
+
+	const validatedUnder = async (
+		hook: Record<string, unknown>,
+		handler: (context: any) => unknown
+	) => {
+		let context: any
+		const app = new Elysia().get('/', hook as {}, (c: any) => {
+			context = c
+
+			return handler(c)
+		})
+
+		await (await app.handle('/')).text()
+
+		return context['~validated']
+	}
+
+	describe.each([
+		['sync route', Row, {}, (fn: Function) => fn],
+		[
+			'async handler',
+			Row,
+			{},
+			(fn: Function) => async (c: unknown) => fn(c)
+		],
+		[
+			'async tail',
+			Row,
+			{ afterResponse: async () => {} },
+			(fn: Function) => fn
+		],
+		[
+			'async schema',
+			z.object({ id: z.number() }).refine(async () => true),
+			{},
+			(fn: Function) => fn
+		]
+	] as const)('on a %s', (_, schema, extra, lane: any) => {
+		const hook = { response: { 200: schema, 201: schema }, ...extra }
+
+		it('records a plain value under set.status', async () => {
+			expect(
+				await validatedUnder(
+					hook,
+					lane(({ set }: any) => {
+						set.status = 201
+
+						return row()
+					})
+				)
+			).toBe(201)
+		})
+
+		it('records a returned status over set.status', async () => {
+			expect(
+				await validatedUnder(
+					hook,
+					lane(({ set, status }: any) => {
+						set.status = 200
+
+						return status(201, row())
+					})
+				)
+			).toBe(201)
+		})
+
+		it('records the code of a named status', async () => {
+			expect(
+				await validatedUnder(
+					hook,
+					lane(({ set }: any) => {
+						set.status = 'Created'
+
+						return row()
+					})
+				)
+			).toBe(201)
+		})
+
+		it('records nothing when no schema answers the status', async () => {
+			expect(
+				await validatedUnder(
+					hook,
+					lane(({ set }: any) => {
+						set.status = 202
+
+						return row()
+					})
+				)
+			).toBeUndefined()
+		})
+
+		it('records nothing when a hook answers with a Response', async () => {
+			expect(
+				await validatedUnder(
+					{ ...hook, mapResponse: () => new Response('plain') },
+					lane(row)
+				)
+			).toBeUndefined()
+		})
+
+		// the status of its chunks is only known at the first pull
+		it('records nothing for a generator', async () => {
+			expect(
+				await validatedUnder(
+					hook,
+					lane(function* () {
+						yield row()
+					})
+				)
+			).toBeUndefined()
+		})
+
+		it('records nothing for a generator in a status', async () => {
+			expect(
+				await validatedUnder(
+					hook,
+					lane(({ status }: any) =>
+						status(
+							200,
+							(function* () {
+								yield row()
+							})()
+						)
+					)
+				)
+			).toBeUndefined()
+		})
+	})
+
+	const afterRewrite = (rewrite: (context: any) => void) =>
+		new Promise((resolve) => {
+			new Elysia()
+				.get(
+					'/',
+					{
+						response: { 200: Row, 201: Row },
+						afterResponse(context: any) {
+							rewrite(context)
+							resolve(context['~validated'])
+						}
+					},
+					row
+				)
+				.handle('/')
+		})
+
+	it('stays after a later hook rewrites set.status', async () => {
+		expect(
+			await afterRewrite(({ set }) => {
+				set.status = 201
+			})
+		).toBe(200)
+	})
+
+	it('stays after a later hook replaces set', async () => {
+		expect(
+			await afterRewrite((context) => {
+				context.set = { headers: {}, status: 201 }
+			})
+		).toBe(200)
+	})
+
+	it('follows set replaced before the schema ran', async () => {
+		expect(
+			await validatedUnder(
+				{
+					response: { 200: Row, 201: Row },
+					afterHandle(context: any) {
+						context.set = { ...context.set, status: 201 }
+					}
+				},
+				row
+			)
+		).toBe(201)
+	})
+})

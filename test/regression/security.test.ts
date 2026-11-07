@@ -224,12 +224,15 @@ describe('response dispatch never reads a client-owned marker', () => {
 	})
 
 	// Defence in depth for the lanes above: the urlencoded and multipart body
-	// objects are built null-prototype, so they carry no constructor at all and
-	// never reach the mapper's `Object` branch in the first place.
-	it('builds urlencoded and multipart bodies without a prototype', async () => {
+	// objects are built off Object.prototype, so they carry no constructor at all
+	// and never reach the mapper's `Object` branch in the first place.
+	it('builds urlencoded and multipart bodies off Object.prototype', async () => {
 		const protos: unknown[] = []
 		const app = new Elysia().post('/echo', ({ body }) => {
-			protos.push(Object.getPrototypeOf(body))
+			protos.push(
+				Object.prototype.isPrototypeOf(body as object),
+				(body as any).constructor
+			)
 			return 'ok'
 		})
 
@@ -249,7 +252,7 @@ describe('response dispatch never reads a client-owned marker', () => {
 			new Request('http://e.ly/echo', { method: 'POST', body: fd })
 		)
 
-		expect(protos).toEqual([null, null])
+		expect(protos).toEqual([false, undefined, false, undefined])
 	})
 
 	// `form(body)` is a normal thing to write, and a JSON body can own a real
@@ -525,7 +528,7 @@ describe('production 422 does not echo the request body', () => {
 })
 
 describe('macro seed dedup is collision-safe', () => {
-	it('throws a clear error for a circular seed value', () => {
+	it('fails the route build on a circular seed value', () => {
 		const withMacro = new Elysia().macro({
 			auth: () => ({ beforeHandle() {} })
 		})
@@ -537,7 +540,7 @@ describe('macro seed dedup is collision-safe', () => {
 				.use(withMacro)
 				.get('/', { auth: circular } as any, () => 'x')
 				['fetch'].toString()
-		).toThrow(/circular seed/)
+		).toThrow(TypeError)
 	})
 
 	it('runs hooks for distinct function-valued seeds', async () => {

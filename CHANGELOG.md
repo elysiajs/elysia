@@ -54,7 +54,7 @@ Breaking Change:
 - AOT plugin `transform` hook and the rspack loader are now synchronous
 - AOT: `compileToSource` / `captureArtifacts` drop the `register` option and always emit the self-registering manifest (the `export const validators` / `handlers` / `groups` / `groupOf` / default-export form is gone)
 - AOT: remove `CompiledProgramRegistration.bf` and the `Compiled.reconstruct` getter (the setter stays)
-- AOT manifest format is now 7: an artifact built before this change is rejected at startup with `[elysia-aot] Mismatch fingerprint`; rebuild it
+- AOT manifest format is now 9: an artifact built before this change is rejected at startup with `[elysia-aot] Mismatch fingerprint`, which now names the version and format of both sides; rebuild it
 - remove `ElysiaConfig.handler` (`handler.standardHostname` was ignored; the path is taken from the request URL)
 - `.mount()` no longer takes a `{ detail }` argument; a mounted route is always `detail: { hide: true }`
 - remove the `NonResolvableMacroKey` type
@@ -62,7 +62,7 @@ Breaking Change:
 - `WSCapability.accumulateOptions(target, routeOptions)` drops its unused `path` parameter
 - `WSResponseValidator` (`elysia/ws/types`) is now a `Map<number, WSValidatorLike>` keyed by numeric status instead of an object indexed by status
 - `elysia/trace`: `TraceStream.id` is now typed `string`, matching the runtime request id (UUID); it was never a number in v2
-- `app.handler()` drops its unused 4th `precomputedStatic` parameter: `handler(index, immediate?, route?, aliases?, table?)`
+- `app.handler()` drops its unused 4th `precomputedStatic` parameter and its `aliases` parameter: `handler(index, immediate?, route?, table?)`; remove the `StaticMapAliases` type from `elysia/types`
 - remove the `ElysiaFile#length` getter (never read); read `value.size` on Bun (`value` is the `BunFile`) or `(await stats).size` elsewhere
 - remove `pushField` from `elysia/utils`
 - adapter `parse.default(context, contentType)` drops its 3rd `normalized` parameter: `contentType` must already be normalized (the framework always passes it normalized), `WebStandardAdapter.parse.default` no longer normalizes it
@@ -70,9 +70,14 @@ Breaking Change:
 - remove the protected `Cookie#setCookie` setter (the getter stays)
 - AOT: an entry whose default export is not an Elysia 2 app now throws instead of emitting an empty manifest with `strip: false`
 - remove the `introspect` config option: nothing read the route descriptors it kept, and it disabled the bare-route fast path. The macro `introspect` hook is unchanged
+- `tee(source)` from `elysia/adapter/utils` no longer fans a source out to `n` value branches: it returns one value iterator and one completion iterator that yields nothing and settles when the source ends; the 2nd `branches` argument is ignored
+- AOT: `routeShapeFrom` must resolve to the same copy of elysia as `registerFrom`; the generated manifest now throws at load when `elysia` and `elysia/route-shape` are different copies (duplicate install, a `paths` alias for bare `elysia` only) instead of answering `500` on every frozen route
 
 Behavior Change:
 
+- a macro applied by a `.guard()` reaches each route: its `handler` wraps a route that has its own hook, flat guards stack, and its `introspect` runs per route on the merged hooks instead of once on the guard's hooks (twice on a WebSocket route). A named plugin used at two layers still installs each once
+- a generator's chunks are cleaned by the route's `response` schema for the status they are sent with: fields the schema leaves out no longer reach the client, `status()` around a generator no longer fails with a 500, and `sse()` keeps its framing. A chunk is not validated: a string, bytes, a Blob, a Date or a Map goes out as it came, and Clean throwing errors the stream instead of sending the chunk. A `ReadableStream` and a generator inside a `Response` are unchanged
+- a generator chunk that `JSON.stringify` cannot serialize (an object with a cycle, a `BigInt` inside it or a throwing `toJSON`) errors the stream, like a returned object fails with a 500, instead of sending `[object Object]` or its `toString()`
 - AOT: a route whose runtime hooks, schemas, cookie signing or app config differ from the build now compiles at runtime and warns once (`[elysia-aot] GET /x differs from the AOT build, compiled at runtime`); with the handler JIT stripped it fails instead (a `500` on first request, or at boot under `precompile` / `.compile()`). A route whose schema cannot be compared (a custom prototype, a symbol key, a cycle) is never replayed. A conditional hook must change the hook list (`isProd ? [auth] : []`), never swap one function for another at the same position, and the runtime bundle must keep native `async` functions
 - a cookie schema whose signing config can't be resolved unambiguously now throws at compile: a `$ref` signing can't follow (JSON pointer, anchor, URL, unknown name, `$dynamicRef`, `$recursiveRef`), or same-named definitions that disagree on anything but `sign`
 - the 1.x `(path, handler, hook)` argument order now throws at registration instead of serving the hook object as the response, including a hook that only enables macros (`{ auth: true }`)
@@ -91,7 +96,7 @@ Behavior Change:
 - `.as()` now throws on a scope other than `'plugin'` / `'global'`: a 1.x `.as('scoped')`, an `.as('local')` or a typo silently lifted every hook into the parent
 - a `.guard()` / `.group()` `schema` other than `'merge'` / `'override'` now throws at registration: a 1.x `schema: 'standalone'` silently fell back to `override`, dropping the guard's own validation on routes with a schema
 - the error thrown when registering on a sealed app names the method that was called (`.get()`, `.onBeforeHandle()`) and what sealed it (first request, `listen` or `compile`)
-- `context.path` is now readonly, and its notice now fires only when a request hook actually changes the value
+- `context.path` is now readonly in types; a request hook that assigns it still reroutes, with no runtime notice
 - Validation error `payload.expected` values are shared and deeply frozen
 - Schemas are cloned on first registration and reused by identity
 - Signed-cookie verification now defaults to `verify: 'lazy'`
@@ -138,6 +143,25 @@ Behavior Change:
 - `secrets` is no longer a typed or forwarded property of `cookie.<name>`, and the cookie mutation APIs `set()`, `update()` and the `cookie` setter reject an object with a `secrets` key (a type error, and a throw at runtime) instead of sending the cookie unsigned. An updater callback now receives a copy, so a rejected update leaves the cookie unchanged. Signing comes only from the app or route cookie config
 - `t.UnionEnum` no longer sets an implicit `default` of its first value: a missing required field is now a `422` instead of being filled with that value, a missing optional field stays absent, and the schema no longer carries `default` (visible in OpenAPI output). Pass `default` explicitly to keep the old behaviour
 - `app.routes[i].hooks.response` and a macro `introspect` now get a copy of the route's status map (an empty `response: {}` stays the route's own), since equal maps are shared: a write no longer reaches other routes (an `introspect` write to a guard's map used to reach every route of the guard), and a write through `app.routes` no longer changes the route's validation. A `schema: 'merge'` guard's map (`hooks.schemas[i].response`) is frozen, not copied: an `introspect` writing into it now throws, failing the route's compile and `app.routes`
+- a named plugin installed by a child and then `.use()`d by the parent now applies its `plugin`-scope hooks, `derive`, guard schemas and macro guards to the parent's routes; the parent's `.use()` was skipped, so a plugin's auth `beforeHandle` never ran on them (1.x enforced it)
+- named plugins are deduplicated per registration: a plugin's `global` hook no longer shadows its other hooks of the same event (a `global` logger dropped a `plugin`-scope auth guard), and one function registered twice runs twice
+- a parent's later routes run a named plugin's hooks in the plugin's own order, even when part of it arrived earlier through a child (a `derive` before the `global` hook that reads it)
+- hooks added to a named plugin after it was installed arrive through a later `.use()` by another path; repeating `.use(p)` on the same instance still adds nothing
+- same-name plugin instances match by registration order: an identically built factory instance is the same plugin, and config variants of one `name` need their own `seed`
+- an empty registration (`guard({})`, `onRequest([])`) takes no part in named-plugin identity, so `onRequest([])` no longer uses up the plugin's once-per-app `request` install; `request` hooks added to an already-installed named plugin are still ignored
+- a guard holding both `request` and `beforeHandle`, lifted by a group and then `.use()`d directly, keeps its `beforeHandle`
+- an unnamed plugin `.use()`d twice inside a named plugin runs twice on the parent's routes too, as in 1.x
+- a named plugin seen through a child only adds the `decorate`, `state`, `model`, `headers`, `parser` and macro entries the parent lacks, never overriding the parent's
+- AOT: a manifest built before the named-plugin dedup change no longer matches routes whose plugin hooks changed (they compile at runtime, or fail with the JIT stripped); rebuild it
+- [Type] a `headers` schema key with an uppercase letter is a type error: request header names arrive lowercased, so it never matched. There is no runtime check
+- [Type] route, guard and macro `parse` / `transform` contexts are typed raw, as they run before validation: headers unvalidated, params strings, body `unknown`, query as parsed (a key with an array schema is always an array), `cookie` `undefined`, no `derive` keys
+- a WebSocket upgrade throws when a `derive` / `decorate` key collides with a WebSocket member (`send`, `raw`, `subscribe`, …) instead of breaking the connection
+- [Type] WebSocket: `body` is possibly `undefined` in the hooks that run at the upgrade (`transform`, `beforeHandle`, `error`), and `ws.defer` is no longer typed (a socket has none)
+- [Type] WebSocket `send` / `publish` / a returned value take the `200` schema's shape (other statuses go through `status()`), `afterHandle` returns `void` (its value is dropped) and `afterResponse`'s `responseValue` is `unknown`
+- the raw `query`, urlencoded and multipart `body`, cookie records and per-request `set.headers` are `EmptyObject` instances (exported from `elysia/utils`) instead of `Object.create(null)`, so V8 keeps them in fast mode. There is still no `Object.prototype` on the chain and request keys like `__proto__` stay plain data, but `Object.getPrototypeOf(x)` is now a frozen key-less object instead of `null`: `isPlainObject(x)` is `false`, and code that accepts only a `null` or `Object.prototype` prototype must also accept a key-less null-prototype one
+- `ValidationError#errors` and the lazy `query` an error hook sees are shared accessors that read from their receiver, so every error stays in V8's fast mode (about 2.8 KB less per 422 on Node). Reading `errors` through a `Proxy`, an `Object.create(error)` child or a detached getter now throws; read it from the error itself
+- a cookie entry clears its internal `~unsign` and `~raw` markers by setting them to `undefined` instead of deleting them, so the entry stays in V8's fast mode (about 300–450 B less per request on Node for a signed cookie read or a JSON cookie write). `Object.keys(cookie.x.cookie)` and the copy an updater receives can now list those keys with an `undefined` value
+- an async generator with a synchronous `finally`, cancelled by the client before its first chunk is read, now runs `afterResponse` before the generator's `finally` (already the order for a generator that awaits between yields or has an async `finally`)
 
 Improvement:
 
@@ -159,13 +183,26 @@ Improvement:
 - [Type] `.macro()` definitions infer each macro's schema from the definition record instead of five reverse-mapped channels: ~8.7k fewer instantiations per macro (repo type benchmark −13%)
 - an `.onError()` hook no longer disqualifies static-literal `GET` routes from Bun native static promotion: those routes are now promoted even when a global or route-local `.onError()` hook exists, because no user code runs on a promoted route and the hook can therefore never fire for it. `afterResponse`, `mapResponse`, `parse`, `transform`, schemas, `trace` and every other hook still keep the route on the JS lane. Since Bun's native static table now serves more routes, be aware that a promoted route answers `HEAD` (200) and conditional `GET` (`If-None-Match` matching Bun's `etag` -> 304) natively, without reaching the JS lane or your `.onError()` hook (see Known issue)
 - a route's `response` status map is kept frozen, and routes declaring equal maps (same statuses and schemas) share one container while it stays in the bounded snapshot cache, instead of a writable copy per route that JSC sized to the largest status: a route with `{ 200: t.String(), 404: t.String() }` retains 447 B instead of 5.8 KB, and about 5 KB less when every route's map differs
+- a generator / ReadableStream response makes its pull callbacks once per stream instead of per chunk, and a tee'd stream (afterResponse, trace) trims its buffer in place: about 120–180 B less per chunk, 500 B with afterResponse (Bun and Node)
+- a WebSocket message no longer allocates a closure scope for promise branches it doesn't take (about 48 B less per message)
+- an app with `onRequest()` hooks runs one request lane that turns async only when a hook returns a thenable, instead of a separate async lane for any hook that _may_ return a Promise: a hook that returns a value early or has an expression body answers synchronously from `fetch` (early return 228 ns to 166 ns on Bun), and an async hook allocates about 80 B less per request
+- a bundle without the AOT plugin no longer carries the AOT replay code (frozen validator builder, handler param resolvers): about 7 KB less minified for a hello world, and the CommonJS entry loads 9 fewer modules (about 18 KB minified)
+- a generator / ReadableStream response with `afterResponse` or `trace` streams 18–25% faster (Bun and Node): the completion side no longer buffers values
+- a static route's trailing-slash and percent-encoded spellings are no longer rewritten in the static map on first request (about 0.8 KB less minified)
 
 Bug fix:
 
+- an `Error` with a `status` and an object or `Response` `.response` (an HTTP client's failure, such as axios or a fetch wrapper) served that `.response` as the body: the upstream body, upstream headers and set-cookie, and the outgoing `Authorization` header reached the client, on HTTP and WebSocket, in development and on a production 4xx. It now answers with its status and message as documented (masked on a production 5xx); a string `.response` is still served
+- an `Error` that is not this copy's `HTTPError` but has a `status`, a string `type` and a `headers` object (an HTTP client's failure, such as openai v4's `APIError`, whose `headers` are the upstream response's) merged those headers into the response: the upstream set-cookie reached the client, and its `content-encoding` / `content-length` described the upstream body, so a decoding client could not read the 401 / 429, in development and on a production 4xx, and every other upstream header (`access-control-*`, `cache-control`, `vary`, `www-authenticate`, `retry-after`, vendor headers) rode along. Only an error extending this copy's `HTTPError` now has its `headers` served; an error that only implements the contract (`class X extends Error implements HTTPError`) or one extending the `HTTPError` of another loaded copy of Elysia (a duplicate install, a bundled plugin) serves its status and body without them
+- the first object-form `.decorate()` / `.state()` call kept own `__proto__`, `constructor` and `prototype` keys that later calls skip: a parsed `{"__proto__": {...}}` decorator replaced the context prototype (its keys reached every context, `defer` was gone). The name form (`.decorate('__proto__', v)`, `.state('__proto__', v)`) and a `.decorate(fn)` / `.state(fn)` result, on any call, now skip them too, and building the context skips them as well
 - AOT replay ran the build's frozen route when the runtime app registered different hooks or schemas: a `beforeHandle`, `derive`, `error` or `mapResponse` added at runtime (by a plugin, guard, macro or root hook) was skipped, a new or tightened validator and response redaction were not applied (HTTP and WebSocket), runtime cookie signing accepted unsigned cookies, and runtime default headers were dropped
 - cookie signing config was ignored when the cookie schema reached the route indirectly (a model name, `t.Ref`, a guard, a macro, a plugin model, `t.Intersect` / `t.Union`): forged unsigned cookies were accepted and outgoing cookies were not signed, on HTTP, WebSocket upgrades and AOT replay
 - `t.Partial`, `t.Required`, `t.Pick`, `t.Omit`, `t.ReadonlyObject`, `t.Composite`, `t.Interface`, `t.Mapped` and `t.Evaluate` dropped a `t.Cookie` signing config
 - cookies set before a WebSocket upgrade answers with an HTTP response (a hook return, validation or error response) are now signed like HTTP routes, and fail closed when signing fails
+- a cookie the app-level `cookie` config signs left unsigned on an exit no route answers (a 404, an `onRequest` return, throw or rejection, with or without `onError` / `mapResponse` / trace): it is now signed by that config, and fails closed to a `500` when signing fails
+- a cookie a signing `cookie` config covers left unsigned on a matched route whose own code never reads `cookie`: one written through `set.cookie` by an `onRequest`, `transform`, `beforeHandle`, `afterHandle`, `mapResponse`, `onError`, `derive` or macro hook, by the handler, on a static value route, a `mount()`, or a refused WebSocket upgrade. The route now carries the signer without a cookie jar, stays synchronous, and fails closed. A `sign` config with no usable secret now fails every route at compile instead of only the routes that read `cookie`
+- a handler that is not an `async` function but returns a promise, and writes a signed cookie after it settles (`({ cookie: { session } }) => load().then((user) => { session.value = user.id })`), sent that cookie unsigned on Bun's default signing lane: the signer ran before the promise settled. A failed signature answered 200, and a value written before the return was sent in place of the later one. The cookie is now signed once the value settles; a settled value maps as before, with no added Promise
+- the development 500 body served `error.cause` verbatim, and development is the default when `NODE_ENV` is unset: `new Error('x', { cause })` wrapping an HTTP client's error served its request config and `Authorization` header. An `Error` cause is now shown as `{ name, message }`, a string / number / boolean as is, anything else is dropped
 - a route with a non-literal path made every Eden path type-check; it now adds nothing to the route types
 - a response schema violation whose custom `error` callback throws answered `422` in development; it now answers the masked `500` like every other response violation
 - return 415 when unsure about content-type
@@ -214,12 +251,47 @@ Bug fix:
 - a failed router build left the app marked as built, so a retry answered 404 for every route
 - many `.group()` / `.guard()` callbacks that each `.use()` a plugin with many `global` hooks overflowed the stack at compile (`Maximum call stack size exceeded`); those hooks now stay inside each callback
 - AOT: the stripped `flushMemory()` now makes the same `Bun.gc()` / optional `globalThis.gc?.()` call as the unstripped helper
+- [#2024](https://github.com/elysiajs/elysia/issues/2024) an AOT wired build crashed at startup with `The superclass is not a constructor` (e.g. a response schema with a `t.Union` of literals)
+- `sanitize` was silently dropped from a binary compiled with `--disallow-code-generation-from-strings=strict`: the AOT build refused to freeze a sanitized mirror, and the live one fell back to TypeBox Clean, which can't sanitize. Sanitized mirrors are now frozen and take the functions from the app's config, and a slot that still can't get a mirror fails the route instead of serving unsanitized input
+- the AOT build renamed a schema key or string that looked like a check name (`check_0`, `check_ab`), so a valid request got a 422 or lost the key
+- update `exact-mirror` to `1.2.7`: `sanitize` reaches the items of an array of strings, and an object with absent optional keys stays out of V8 dictionary mode
+- [#2031](https://github.com/elysiajs/elysia/issues/2031) [Type] a generic macro's returned schema was typed at its constraint; a `$type` lambda's `body` / `query` / `params` / `headers` / `cookie` / `response` members now type it per call site
+- error hooks get `cookie` after a parse, transform, validation or cookie-signature failure (reading it crashed into a `500`); those cookies are not validated, signed ones are verified on read
+- setting a cookie whose schema field is a codec (e.g. `t.Date`) sends, and signs, the encoded value, so the next request reads it back instead of failing with `422`
+- a codec (`t.Date`, `t.Codec(...)`) or refinement inside a `.model()` or `t.Ref` schema was never decoded or enforced
+- `t.Cyclic` lost every codec and query / params / headers coercion inside it
+- `t.Codec`, `t.Refine` or `t.Unsafe` over a `t.Object` at a schema root was rejected as "not a schema"
+- `t.Refine` over a coerced `t.Number` / `t.Integer` / `t.Boolean` in query, params or headers runs on the decoded value, and its message callback gets that value
+- a number or boolean `t.Literal`, `t.Enum` or `t.UnionEnum` in query, params, headers or a form body failed validation, the value arriving as a string
+- `t.MaybeEmpty` properties are optional, and in query, params, headers or a form body an empty value (`?m=`) for a non-string `t.MaybeEmpty` is `undefined`
+- a `t.Form` body coerces its fields like a query (`n=9` for `t.Number()`, repeated keys for `t.Array(t.Number())`); it only did when the schema had a file
+- a root body `t.Union` of scalars (`t.Union([t.Number(), t.Boolean()])`) and a root query `t.Union` of objects did not coerce their members
+- `ws.cork(callback)` passed the raw Bun socket, so `send` inside it skipped encoding and validation; it now gets the Elysia wrapper
+- a `Response` or `Blob` returned from a WebSocket handler sends its body (text, or bytes when binary) instead of `{}`
+- [Type] joining a prefix ending in `/` with a path starting with `/` (`'/api/'` + `'/x'`) typed the route as `/api//x` in Eden
+- [Type] `.route('GET', …)` keyed its method uppercase in Eden; it is lowercase like `.get()`
+- [Type] a route under a param prefix or group was typed with an impossible `422`, and a refined `params` schema lost its `422`
+- [Type] a status only known as `number` (`status(code as number, …)`) wiped the whole response map, `200` included; it is now keyed `default` (needs a matching Eden release)
+- [Type] `status()` with an empty status (`204`, `304`, …) is typed `undefined` and a nullish body as the status text; a union code (`status(c ? 401 : 403, …)`) types its body at each status, a macro hook's included
+- [Type] a handler returning `T | undefined` keeps `T` at `200`, and a macro `beforeHandle` / `afterHandle` returning `null` keeps it in the response type
+- [Type] a route registered again at the same path and method types as the later one, which the router serves, instead of `never`
+- [Type] a hook without a scope on `new Elysia({ as })` types with that default scope
+- [Type] a function macro set to `false` is typed as applied, since it is still called; an object macro option only known as `boolean` (or left optional) keeps its statuses, its `derive` keys optional
+- [Type] a macro `derive` that may return nothing adds its keys as optional
+- [Type] an error hook's answer is typed at its status even where the route's response schema declares that status (it is not validated), for route, guard, macro and `.onError()` hooks; a route or macro `error` hook returning an `Error` is typed at the error's status, like a guard's
+- [Type] routes of a `.use()`d plugin carry the parent's guard schemas and prefix params, as they are validated with them
+- [Type] the `422` validation body's `expected` is typed `unknown` (the schema's example value, not a string) and its `errors` list is typed
+- AOT strip mode: an app with a WebSocket route failed to bundle from the published package (`No matching export ... hasSyncHmac`), and a WebSocket hook that reads `cookie` without a cookie schema threw `cookie support was stripped` at `listen()`
+- AOT strip mode: a traced app with no HTTP route (WebSocket-only, or no routes) threw `trace support was stripped`
+- a WebSocket route with `response: { 200: undefined }` threw at `listen()` once TypeBox was loaded
+- a static route's percent-encoded or trailing-slash alias could replace another static route registered at that exact spelling (`/caf%C3%A9/` next to `/café/`) after the first request
 
 Chore:
 
 - declare the minimum supported Node.js version (`engines.node`) and test it in CI
 - `build()` loads the TypeBox graph once when any route carries a TypeBox schema (~100 ms at boot, flat in route count), so the first schema-bearing request no longer stalls the event loop; schema-less, Standard-Schema-only and AOT apps are unaffected
 - a `listen()` boot that fails after the server bound (rejected async plugin, `onStart()` or `build()` throw) is rolled back, logged once as `[Elysia] listen() failed:` and sets `process.exitCode = 1`
+- a WebSocket upgrade that arrived before `listen()` finished starting (TypeBox still importing, an async `onStart()`) answered `400`: Bun only upgrades a request on a listener that had a `websocket` config when it arrived, and `listen()` added that config at `server.reload()`. The declared options now go to the initial `Bun.serve()` call, so the socket opens with its limits, and an invalid WebSocket option throws from `listen()`. If the built options end up different (an async plugin, a macro `introspect` or a route added after `listen()` changed them), an upgrade that arrived before then gets `503`, since its socket couldn't take the new limits
 
 Known issue:
 
@@ -228,6 +300,37 @@ Known issue:
 - a stream or generator that reaches 64 chunks or 4 MiB and that a later hook replaces, or that a throwing `afterHandle` / `mapResponse` leaves behind, is never drained, so `afterResponse` / dispose for that request do not run; the hook can `return()` / `cancel()` the `responseValue` it drops
 - routes served by Bun native static promotion (static-literal `GET` handlers with no hooks other than `error`) answer `HEAD` natively (200) and honour `If-None-Match` against Bun's own `etag` (304), while non-promoted routes answer `HEAD` only when `autoHead` is enabled (404 otherwise) and never send an `etag`. Accepted for 2.0; both divergences are pinned in `test/adapter/bun/native-head-policy.test.ts`
 - a static-value route (`.get(path, value)`) keeps the `.headers()` app defaults over a hook: a `request`, `transform`, `derive`, `beforeHandle`, `afterHandle`, `mapResponse` or `trace` hook that overrides or deletes such a header in `set.headers` (e.g. `cache-control: no-store` on a per-user response) is ignored on that route, because the defaults are prepared into its response at startup and a prepared response's own headers outrank `set`. A hook `content-type` likewise loses to the MIME generated for a static string, number, object or array, with or without `.headers()`. Headers that `.headers()` does not declare, and every header on a function route, apply normally. Use a function handler (`.get(path, () => value)`) when a hook must change these headers
+
+# 1.4.31 - 5 Nov 2026
+Advisory:
+- GHSA-8v2r-hrw2-w54f: harden generated multipart request handling
+- GHSA-wfrv-2qh2-qjg3: harden generated route compilation
+- GHSA-952m-m7x7-mg46: harden generated schema compilation
+- GHSA-g7gw-g6xr-hc3w: harden generated validation
+- GHSA-7jpf-w5v7-43vw: harden generated request processing
+- GHSA-49jc-gq6m-2p59: harden generated schema processing
+- GHSA-8m2q-mx4w-gx5x: harden generated file validation
+- GHSA-mmpg-3m88-65rj: harden generated handler compilation
+- GHSA-mmpm-xfx6-v8p7: harden object construction and property assignment
+- GHSA-8fvr-j2m8-w3g5: strengthen authorization handling
+- GHSA-3xqr-x7wh-2j94: strengthen route authorization
+- GHSA-wc83-j7p2-6rv9: preserve authorization across plugins
+- GHSA-9rcf-wx52-g3qx: strengthen signed-cookie decoding
+- GHSA-3mvx-9fjx-ggrv: strengthen signed-cookie decoding
+- GHSA-ghvf-2m42-wm6j: strengthen signed-cookie verification
+- GHSA-878j-w97q-ggw5: harden incoming WebSocket validation
+- GHSA-7f78-4837-6rc4: harden outgoing WebSocket validation
+- GHSA-99h3-78f3-ggfr: bound validation-error handling
+- GHSA-hrhv-3p8p-5744: bound multipart array parsing
+- GHSA-h497-rjj5-w9xr: bound multipart array parsing
+- GHSA-xj99-v483-474c: bound multipart array parsing
+- GHSA-6wqq-f7gp-pcm7: bound multipart parsing work
+- GHSA-pxh4-839p-c8c8: harden encoded path routing
+- GHSA-297c-f888-3xh9: harden streamed response framing
+- GHSA-2458-2qvh-2p36: harden streamed response framing
+- GHSA-w2mg-29g9-g8pq: harden default-value application
+- GHSA-jvp4-v264-6m79: bound stream fan-out
+- GHSA-29vh-32ww-hrmg: restrict published package contents
 
 # 1.4.30 - 26 Aug 2026
 

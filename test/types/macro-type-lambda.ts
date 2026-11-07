@@ -201,3 +201,201 @@ const channel = new Elysia({ name: 'channel' }).macro({
 			}
 		)
 }
+
+// #2031 A generic macro's return is typed with its type parameter at the
+// constraint, so the schema built from each call site's argument needs the
+// lambda's schema members.
+{
+	const Envelope = <T extends AnySchema>(data: T) =>
+		t.Object({ code: t.Number(), data: t.Union([data, t.Null()]) })
+
+	interface EnvelopeLambda extends MacroTypeLambda {
+		response: ReturnType<typeof Envelope<Extract<this['input'], AnySchema>>>
+	}
+
+	const erased = new Elysia()
+		.macro({
+			res<T extends AnySchema>(data: T) {
+				return { response: Envelope(data) }
+			}
+		})
+		.get('/', { res: t.Number() }, () => ({ code: 0, data: 'any' }))
+
+	// Without the lambda TypeScript can't apply the argument: `data` erases
+	expectTypeOf<
+		(typeof erased)['~Routes']['get']['response'][200]['data']
+	>().toEqualTypeOf<unknown>()
+
+	const app = new Elysia()
+		.macro({
+			res<T extends AnySchema>(data: T) {
+				return {
+					$type: macroType<EnvelopeLambda>(),
+					response: Envelope(data)
+				}
+			}
+		})
+		.get('/number', { res: t.Number() }, () => ({ code: 0, data: 1 }))
+		.get('/string', { res: t.String() }, () => ({ code: 0, data: 'a' }))
+		// @ts-expect-error the call site's schema constrains the handler
+		.get('/wrong', { res: t.Number() }, () => ({ code: 0, data: 'a' }))
+		.guard({ res: t.Boolean() }, (app) =>
+			app
+				.get('/guard', () => ({ code: 0, data: true }))
+				// @ts-expect-error a guard's macro value applies too
+				.get('/guard-wrong', () => ({ code: 0, data: 1 }))
+		)
+
+	expectTypeOf<
+		(typeof app)['~Routes']['number']['get']['response'][200]
+	>().toEqualTypeOf<{ code: number; data: number | null }>()
+	expectTypeOf<
+		(typeof app)['~Routes']['string']['get']['response'][200]
+	>().toEqualTypeOf<{ code: number; data: string | null }>()
+}
+
+// Schema members compose with `output`, and a status map goes through an
+// alias since `this` isn't allowed in a nested type literal.
+{
+	type EchoResponse<S> = {
+		200: Extract<S, AnySchema>
+		418: ReturnType<typeof t.String>
+	}
+	type Echo<S> = { echo: UnwrapSchema<Extract<S, AnySchema>> }
+
+	interface EchoLambda extends MacroTypeLambda {
+		body: Extract<this['input'], AnySchema>
+		response: EchoResponse<this['input']>
+		output: Echo<this['input']>
+	}
+
+	const app = new Elysia()
+		.macro({
+			echo: <T extends AnySchema>(schema: T) => ({
+				$type: macroType<EchoLambda>(),
+				body: schema,
+				response: { 200: schema, 418: t.String() },
+				derive: () => ({})
+			})
+		})
+		.post(
+			'/',
+			{ echo: t.Object({ n: t.Number() }) },
+			({ body, echo, status }) => {
+				expectTypeOf(body).toEqualTypeOf<{ n: number }>()
+				expectTypeOf(echo).toEqualTypeOf<{ n: number }>()
+
+				if (body.n) return status(418, 'tea')
+
+				return body
+			}
+		)
+
+	expectTypeOf<
+		(typeof app)['~Routes']['post']['response'][418]
+	>().toEqualTypeOf<string>()
+}
+
+// A function macro is typed as applied even on `false`, since it still runs,
+// so a lambda's `meta` is how it drops the meta Eden gates on
+{
+	interface LiveLambda extends MacroTypeLambda {
+		meta: this['input'] extends false ? unknown : { live: true }
+	}
+
+	const app = new Elysia()
+		.macro({
+			live: (enabled: boolean) => ({
+				$type: macroType<LiveLambda>(),
+				meta: { live: true } as const,
+				beforeHandle() {}
+			})
+		})
+		.get('/on', { live: true }, () => 'ok')
+		.get('/off', { live: false }, () => 'ok')
+
+	expectTypeOf<(typeof app)['~Routes']['on']['get']['meta']>().toEqualTypeOf<{
+		live: true
+	}>()
+	expectTypeOf<
+		'meta' extends keyof (typeof app)['~Routes']['off']['get'] ? true : false
+	>().toEqualTypeOf<false>()
+}
+
+// A lambda's output is absent whenever its macro may not run, like a derive
+declare const maybeSecure: boolean
+{
+	interface UserLambda extends MacroTypeLambda {
+		output: { user: { id: string } }
+	}
+
+	const app = new Elysia()
+		.macro({
+			who: (enabled: true) => ({
+				$type: macroType<UserLambda>(),
+				beforeHandle() {}
+			})
+		})
+		.macro({ secure: { who: true } })
+
+
+	app
+		.get('/on', { who: true }, ({ user }) => {
+			expectTypeOf(user).toEqualTypeOf<{ id: string }>()
+		})
+		.get('/empty', {}, ({ user }) => {
+			expectTypeOf(user).toEqualTypeOf<{ id: string } | undefined>()
+		})
+		.get('/maybe', { secure: maybeSecure }, ({ user }) => {
+			expectTypeOf(user).toEqualTypeOf<{ id: string } | undefined>()
+		})
+}
+
+// A conditional macro given `true` always runs, and its lambda decides from the
+// value, so its output stays required
+{
+	interface UserLambda extends MacroTypeLambda {
+		output: this['input'] extends true ? { user: { id: string } } : {}
+	}
+
+	new Elysia()
+		.macro({
+			who: (enabled: boolean) =>
+				enabled
+					? {
+							$type: macroType<UserLambda>(),
+							derive: () => ({ user: { id: 'x' } })
+						}
+					: undefined
+		})
+		.get('/on', { who: true }, ({ user }) => {
+			expectTypeOf(user).toEqualTypeOf<{ id: string }>()
+		})
+		.guard({ who: true }, (app) =>
+			app.get('/guarded', ({ user }) => {
+				expectTypeOf(user).toEqualTypeOf<{ id: string }>()
+			})
+		)
+}
+
+// An object macro that may be `false` is skipped, so its lambda output may be absent
+declare const maybeMark: boolean
+{
+	interface MarkLambda extends MacroTypeLambda {
+		output: { mark: string }
+	}
+
+	new Elysia()
+		.macro({
+			mark: {
+				$type: macroType<MarkLambda>(),
+				beforeHandle() {}
+			}
+		})
+		.get('/on', { mark: true }, ({ mark }) => {
+			expectTypeOf(mark).toEqualTypeOf<string>()
+		})
+		.get('/maybe', { mark: maybeMark }, ({ mark }) => {
+			expectTypeOf(mark).toEqualTypeOf<string | undefined>()
+		})
+}

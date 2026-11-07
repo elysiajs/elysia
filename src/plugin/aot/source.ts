@@ -170,10 +170,11 @@ export function replayStubbability(
 			else seen.add(key)
 		}
 
-		for (const route of history) {
+		for (let i = 0; i < history.length; i++) {
+			const route = history[i]
 			try {
 				if ((route[0] as unknown) === 'WS') continue
-				compileHandler(route, app)
+				app['~withRouteCookie'](i, compileHandler, route, app)
 			} catch {
 				JITProbe.record('handler:new-function')
 
@@ -192,22 +193,6 @@ export function replayStubbability(
 	}
 }
 
-// TypeBox names its compiled check function by content hash; the hash is
-// not stable across captures of the same logical schema, which would
-// defeat source-text dedup. Rename to positional names per source unit.
-const checkIdRegex = /\bcheck_[0-9a-f]+\b/g
-const normalizeCheckIdentifiers = (src: string): string => {
-	const seen = new Map<string, string>()
-	return src.replace(checkIdRegex, (id) => {
-		let name = seen.get(id)
-		if (name === undefined) {
-			name = `_k${seen.size}`
-			seen.set(id, name)
-		}
-		return name
-	})
-}
-
 type EntryEncoder = ReturnType<typeof createEntryEncoder>
 
 function createEntryEncoder() {
@@ -222,9 +207,7 @@ function createEntryEncoder() {
 					'[' +
 					branch
 						.map((b) => {
-							const src = normalizeCheckIdentifiers(
-								Source.checkFactory(b.identifier, b.code)
-							)
+							const src = Source.checkFactory(b.identifier, b.code)
 
 							let ref = branchRef.get(src)
 							if (ref === undefined) {
@@ -453,9 +436,7 @@ function emitRegistration(
 				const parts = entryParts(c, enc)
 				if (!parts.length) continue
 
-				const entrySrc = normalizeCheckIdentifiers(
-					`{ ${parts.join(', ')} }`
-				)
+				const entrySrc = `{ ${parts.join(', ')} }`
 				let e = entries.get(entrySrc)
 				if (!e) {
 					e = { ref: `_c${entries.size}`, groups: new Set() }
@@ -597,9 +578,7 @@ function emitRegistration(
 			const parts = entryParts(c, enc)
 			if (!parts.length) continue
 
-			const entrySrc = normalizeCheckIdentifiers(
-				`{ ${parts.join(', ')} }`
-			)
+			const entrySrc = `{ ${parts.join(', ')} }`
 
 			let ref = factoryRef.get(entrySrc)
 			if (ref === undefined) {
@@ -731,9 +710,20 @@ export function emitModule(
 			options?.reconstructFrom ?? 'elysia/reconstruct'
 		)
 
-	if (hasHandlers)
+	// a route compiled live on a cold bridge still reads its frozen validator,
+	// so the builder follows the captured validators, not the handlers
+	const replayMembers = [
+		hasHandlers && 'resolveHandlerParams',
+		hasCaptured && 'buildFrozenRouteValidator'
+	].filter(Boolean) as string[]
+
+	for (const name of [
+		hasHandlers && 'routeShape',
+		replayMembers.length && 'installReplay',
+		...replayMembers
+	].filter(Boolean) as string[])
 		body += importNamed(
-			'routeShape',
+			name,
 			options?.routeShapeFrom ?? 'elysia/route-shape'
 		)
 
@@ -756,6 +746,10 @@ export function emitModule(
 	// replay compares each route's `k` against this walker: without it the
 	// runtime compiles every route live
 	if (hasHandlers) body += 'Compiled.routeShape = routeShape\n'
+	// before `register`: a frozen route claimed without it fails closed.
+	// Throws when `Compiled` is another copy's, see `installReplay`
+	if (replayMembers.length)
+		body += `installReplay(Compiled, { ${replayMembers.join(', ')} })\n`
 
 	body += `export const fingerprint = ${JSON.stringify(fingerprint)}\n`
 	for (let i = 0; i < parts.length; i++)

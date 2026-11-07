@@ -37,7 +37,8 @@ export const autoHead =
 			const route = routes[i]
 			if (route[0] === 'GET' && !explicitHead.has(route[1]))
 				app['~addRoute'](
-					route.with(0, 'HEAD') as unknown as InternalRoute
+					route.with(0, 'HEAD') as unknown as InternalRoute,
+					i
 				)
 		}
 	}

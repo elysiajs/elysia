@@ -3,7 +3,8 @@ import {
 	buildWSRoute,
 	buildGlobalWSHandler,
 	resolveWSOptions,
-	accumulateWSOptions
+	accumulateWSOptions,
+	declaredWSOptions
 } from '../ws/route'
 
 import { fnv1a, nullObject } from '../utils'
@@ -14,7 +15,8 @@ const provider = {
 	buildWSRoute,
 	buildGlobalWSHandler,
 	resolveOptions: resolveWSOptions,
-	accumulateOptions: accumulateWSOptions
+	accumulateOptions: accumulateWSOptions,
+	declaredOptions: declaredWSOptions
 } as const satisfies WSCapability
 
 function stable(value: unknown): unknown {

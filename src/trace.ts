@@ -1,7 +1,16 @@
 import { traceEvents, type TraceEvent } from './constants'
 import { inferParameterReads } from './sucrose'
+import { requestId } from './utils'
+import { emptyResponse } from './handler/utils'
+import { materializeSetHeaders } from './adapter/utils'
 import type { Context } from './context'
-import type { Prettify, RouteSchema, SingletonBase } from './types'
+import type { Server } from './universal/server'
+import type {
+	MaybePromise,
+	Prettify,
+	RouteSchema,
+	SingletonBase
+} from './types'
 
 export type { TraceEvent }
 
@@ -552,8 +561,183 @@ export const createTracer =
 		return handle
 	}
 
+type TracerFactory = ReturnType<typeof createTracer>
+
+interface TraceRequestKit {
+	Context: new (request: Request) => Context
+	onRequests: ((context: Context) => unknown)[] | undefined
+	tracerFactories: TracerFactory[]
+	abortSignal: boolean
+	armEager(request: Request, context: Context): boolean
+	armedAbort(context: Context): boolean
+	extractPath(url: string, context: Context): string
+	mapResponse(
+		response: unknown,
+		set: Context['set'],
+		context: Context
+	): unknown
+	afterResponse(context: Context): void
+	fail(context: Context, error: Error): MaybePromise<Response>
+	failRoute(context: Context, error: Error): MaybePromise<Response>
+	route(context: Context, request: Request): MaybePromise<Response>
+}
+
+/**
+ * The fetch variant of an app whose trace handlers subscribe to `request`:
+ * every onRequest hook is bracketed, see `createFetchHandler`
+ */
+export function requestLane(kit: TraceRequestKit) {
+	const {
+		Context,
+		tracerFactories,
+		abortSignal,
+		armEager,
+		armedAbort,
+		extractPath,
+		mapResponse,
+		afterResponse,
+		fail,
+		failRoute,
+		route
+	} = kit
+	const onRequests = kit.onRequests ?? []
+
+	return async (
+		request: Request,
+		server?: Server | null
+	): Promise<Response> => {
+		const context = new Context(request)
+		materializeSetHeaders(context.set)
+		if (armEager(request, context)) return emptyResponse.clone() as Response
+
+		extractPath(request.url, context)
+		context.server = server ?? null
+
+		context.rid = requestId()
+
+		const traceLength = tracerFactories.length
+		const trace: any[] = new Array(traceLength)
+		for (let i = 0; i < traceLength; i++)
+			trace[i] = tracerFactories[i](context as any)
+
+		// @ts-expect-error private property
+		context.trace = trace
+
+		const requestReports = new Array(traceLength)
+		for (let i = 0; i < traceLength; i++)
+			requestReports[i] =
+				trace[i].b(0, onRequests.length) ||
+				trace[i].begin(0, {
+					id: context.rid,
+					event: 'request',
+					name: 'request',
+					begin: performance.now(),
+					total: onRequests.length
+				})
+
+		let routed = false
+		try {
+			const endReports = new Array(traceLength)
+			for (let i = 0; i < onRequests.length; i++) {
+				for (let j = 0; j < traceLength; j++)
+					endReports[j] = requestReports[j].shift?.()?.({
+						id: context.rid,
+						event: 'request',
+						name: (onRequests[i] as any).name || 'anonymous',
+						begin: performance.now()
+					})
+
+				let result = onRequests[i](context as any)
+				if (typeof (result as any)?.then === 'function') {
+					if (abortSignal) (context as any)['~sig'] ??= request.signal
+					result = await result
+				}
+
+				for (let j = 0; j < traceLength; j++) endReports[j]?.()
+
+				if (armedAbort(context)) {
+					for (let j = 0; j < traceLength; j++)
+						trace[j].r(requestReports[j])
+
+					return emptyResponse.clone() as Response
+				}
+
+				if (result !== undefined) {
+					for (let j = 0; j < traceLength; j++)
+						trace[j].r(requestReports[j])
+
+					const response = (await mapResponse(
+						result,
+						context.set,
+						context
+					)) as Response
+
+					afterResponse(context)
+					return response
+				}
+			}
+
+			for (let i = 0; i < traceLength; i++) trace[i].r(requestReports[i])
+
+			routed = true
+			return await route(context, request)
+		} catch (error) {
+			for (let i = 0; i < traceLength; i++)
+				trace[i].r(requestReports[i], error as Error)
+
+			return (routed ? failRoute : fail)(context, error as Error)
+		}
+	}
+}
+
+/**
+ * Bracket the app-level afterResponse hooks like the compiled lane does, so
+ * the reported duration is the hooks' and not ~0. The returned `end` closes
+ * the reports
+ */
+export const afterResponseBracket =
+	(tracerFactories: TracerFactory[]) =>
+	(
+		context: Context,
+		// `null` on a matched route's lane
+		afterResponses: readonly unknown[] | null | undefined
+	): (() => void) | undefined => {
+		let cache = (context as any).trace as any[] | undefined
+
+		// A matched route traced itself with the tracers registered
+		// before it: never start the app's, a later one included
+		if (!cache && afterResponses !== null) {
+			context.rid ??= requestId()
+			cache = tracerFactories.map((f) => f(context as any))
+			;(context as any).trace = cache
+		}
+
+		if (!cache) return
+
+		const total = afterResponses?.length ?? 0
+		const reports: any[] = new Array(cache.length)
+		for (let i = 0; i < cache.length; i++)
+			// subscription-gated: unsubscribed = flat
+			// timestamps only (no recorder/literal)
+			reports[i] =
+				cache[i].b(7, total) ||
+				cache[i].begin(7, {
+					id: context.rid ?? '',
+					event: 'afterResponse',
+					name: 'afterResponse',
+					begin: performance.now(),
+					total
+				})
+
+		return () => {
+			for (let i = 0; i < reports.length; i++) cache![i].r(reports[i])
+		}
+	}
+
 export interface TraceCapability {
 	readonly id: string
 	readonly createTracer: typeof createTracer
 	readonly unionTracePhases: typeof unionTracePhases
+	readonly requestLane: typeof requestLane
+	readonly afterResponseBracket: typeof afterResponseBracket
 }

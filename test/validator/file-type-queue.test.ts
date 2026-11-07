@@ -50,6 +50,32 @@ describe('file-type queue refinements', () => {
 		expect(error.property).toBe('/avatar')
 	})
 
+	// the path is a JSON pointer: a key holding '/' or '~' is escaped
+	// (RFC 6901) so the reader can split it back to the one key
+	it('escapes a failed detection key that holds pointer characters', async () => {
+		setFileTypeDetector(() => 'application/x-not-an-image')
+
+		let all: any[] = []
+		const app = new Elysia()
+			.onError(({ error }) => {
+				all = (error as any).all
+			})
+			.post(
+				'/',
+				{ body: t.Object({ 'a/b~c': t.File({ type: 'image' }) }) },
+				() => 'ok'
+			)
+
+		const response = await app.handle(
+			upload('/', { 'a/b~c': 'fake.jpg' }).request
+		)
+
+		expect(response.status).toBe(422)
+		const error = (await response.json()) as { property: string }
+		expect(error.property).toBe('/a~1b~0c')
+		expect(all[0].path).toBe('a/b~c')
+	})
+
 	// `t.File({ type })` is shared per options. A synchronous validator whose
 	// schema holds the node where its build never looks (`$defs`) used to wrap
 	// the shared refinement in place and drop its async marker: every later

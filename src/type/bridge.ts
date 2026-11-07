@@ -5,7 +5,8 @@ import type {
 	Decode as DecodeType,
 	HasCodec as HasCodecType,
 	Clone as CloneType,
-	Check as CheckType
+	Check as CheckType,
+	Errors as ErrorsType
 } from 'typebox/value'
 
 import type { applyCoercions as applyCoercionsType } from './coerce'
@@ -30,8 +31,8 @@ interface TypeboxModule {
 	Create: typeof CreateType
 	Decode: typeof DecodeType
 	applyCoercions: typeof applyCoercionsType
-	TypeBoxValidator: TypeBoxValidatorType
-	TypeBoxValidatorCache: TypeBoxValidatorCacheType
+	TypeBoxValidator: typeof TypeBoxValidatorType
+	TypeBoxValidatorCache: typeof TypeBoxValidatorCacheType
 	coerceFormData: typeof coerceFormDataType
 	coerceQuery: typeof coerceQueryType
 	coerceRoot: typeof coerceRootType
@@ -44,6 +45,7 @@ interface TypeboxModule {
 	Ref: typeof RefType
 	Clone: typeof CloneType
 	Check: typeof CheckType
+	Errors: typeof ErrorsType
 	warmTypebox: () => void
 	preloadTypebox: () => Promise<void> | undefined
 }
@@ -83,11 +85,11 @@ export let Decode: typeof DecodeType = stub('Decode')
 
 export let applyCoercions: typeof applyCoercionsType = stub('applyCoercions')
 
-export let TypeBoxValidator: TypeBoxValidatorType =
+export let TypeBoxValidator: typeof TypeBoxValidatorType =
 	stubClass('TypeBoxValidator')
 export type TypeBoxValidator<T extends TSchema = TAny> = TypeBoxValidatorType<T>
 
-export let TypeBoxValidatorCache: TypeBoxValidatorCacheType = stubClass(
+export let TypeBoxValidatorCache: typeof TypeBoxValidatorCacheType = stubClass(
 	'TypeBoxValidatorCache'
 )
 export type TypeBoxValidatorCache = TypeBoxValidatorCacheType
@@ -107,6 +109,7 @@ export let Intersect: typeof IntersectType = stub('Intersect')
 export let Ref: typeof RefType = stub('Ref')
 export let Clone: typeof CloneType = stub('Clone')
 export let Check: typeof CheckType = stub('Check')
+export let Errors: typeof ErrorsType = stub('Errors')
 export let warmTypebox: () => void = stub('warmTypebox')
 export let preloadTypebox: () => Promise<void> | undefined = () => undefined
 
@@ -133,6 +136,7 @@ export function useTypebox(mod: TypeboxModule) {
 	Ref = mod.Ref
 	Clone = mod.Clone
 	Check = mod.Check
+	Errors = mod.Errors
 	warmTypebox = mod.warmTypebox
 	preloadTypebox = mod.preloadTypebox
 }

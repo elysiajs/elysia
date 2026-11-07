@@ -1963,20 +1963,18 @@ describe('Macro removed forms', () => {
 					return 'unauthorized'
 				}
 			})
-		).toThrow(
-			'[Elysia] .macro(name, definition) was removed in 2.0 — use .macro({ [name]: definition })'
-		)
+		).toThrow('[Elysia] use .macro({ name: definition })')
 	})
 
 	it('throws on a bare string macro name', () => {
 		expect(() => (new Elysia() as any).macro('isAuth')).toThrow(
-			'[Elysia] .macro(name, definition) was removed in 2.0 — use .macro({ [name]: definition })'
+			'[Elysia] use .macro({ name: definition })'
 		)
 	})
 
-	it('keeps the .macro(fn) message', () => {
+	it('throws on the removed .macro(fn) form', () => {
 		expect(() => (new Elysia() as any).macro(() => ({}))).toThrow(
-			'use `.macro({ name: fn })` instead of `.macro(fn)`'
+			'[Elysia] use .macro({ name: definition })'
 		)
 	})
 

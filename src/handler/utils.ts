@@ -1,7 +1,8 @@
 import { isAsyncFunction, mayReturnPromise } from '../compile/utils'
 import { isDisposable, isSingleton } from '../utils'
 import { isCloudflareWorker, isFastly } from '../universal/constants'
-import { HTTPError, PROBLEM_JSON, problemTypeOf } from '../error'
+import { HTTPError, problemTypeOf } from '../error'
+import { PROBLEM_JSON } from '../constants'
 import { env } from '../universal'
 
 import type { AnyElysia } from '../base'

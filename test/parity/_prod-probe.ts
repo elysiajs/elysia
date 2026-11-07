@@ -87,8 +87,8 @@ async function main() {
 				throw InvalidCookie.signature('session')
 			}
 		})
-		// returned, not thrown: the frame is the instance serialized as data,
-		// so it never reaches the error lane's problem document
+		// returned, not thrown: answered as a thrown one, so it is served the
+		// same problem document as /ce
 		.use(websocket())
 		.ws('/ret', {
 			message() {

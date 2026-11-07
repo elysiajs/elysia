@@ -175,8 +175,9 @@ describe('AOT manifest ownership and compiler sessions', () => {
 			handlers
 		} as any)
 
+		// names both sides and the way out: a stale artifact is the usual cause
 		expect(() => void buildA().fetch).toThrow(
-			'[elysia-aot] Mismatch fingerprint'
+			`[elysia-aot] Mismatch fingerprint: the manifest was built for elysia ${stale}, this is ${app} (version:format). Rebuild the app`
 		)
 	})
 

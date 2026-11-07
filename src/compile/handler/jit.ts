@@ -487,6 +487,7 @@ export function compileHandlerJit(
 		vali,
 		inference,
 		cookieConfig,
+		needsCookie,
 		beforeHandlePrefix,
 		tracePhases,
 		hasAnyPhase,
@@ -699,7 +700,9 @@ export function compileHandlerJit(
 
 	if (hasStl) code += 'let _stl,_sv\n'
 
-	if (asyncCookieSign) code += 'let _sg\n'
+	// a sync route with an async signer: `_sgt` chains it onto the response
+	const thenSign = asyncCookieSign && !isAsync
+	if (asyncCookieSign && isAsync) code += 'let _sg\n'
 
 	if (hasTrace) {
 		const tracers = Reconstruct.trace(hook!, root)
@@ -828,7 +831,9 @@ export function compileHandlerJit(
 			)
 		}
 
-	if (cookieConfig) {
+	// without a jar the config is only the signer's, for `set.cookie` writes
+	if (cookieConfig && !needsCookie) link(cookieConfig, 'cc')
+	else if (cookieConfig) {
 		// `_ck` is local to this section: it runs as one unit between await points
 		const cookieStart = code.length
 		link(buildCookieJar, 'bcj')
@@ -872,9 +877,14 @@ export function compileHandlerJit(
 			if (vali?.cookie) {
 				link(vali, 'va')
 
-				const cookieIsOptional = !!(hook?.cookie as any)?.['~optional']
+				// t.MaybeEmpty is optional as a property only: an empty root jar is still validated
+				const cookieRoot = hook?.cookie as any
+				const cookieIsOptional =
+					!!cookieRoot?.['~optional'] &&
+					cookieRoot['~elyTyp'] !== ELYSIA_TYPES.MaybeEmpty
 				const value = `va.cookie.From(_ck,${fromArgs('cookie', cookieValiIsAsync)})`
 				const validateExpr = `_ck=${cookieValiIsAsync ? awaitValue(value, arm) : value}\n`
+
 				if (cookieIsOptional)
 					code += `if(Object.keys(_ck).length){${validateExpr}}\n`
 				else code += validateExpr
@@ -1006,21 +1016,40 @@ export function compileHandlerJit(
 		s +
 		`return _m\n`
 
+	const awaitSign = `_sg=scv(c.set.cookie,cc,c.set)\nif(_sg){${arm ? `${arm}\n` : ''}await _sg}\n`
 	const signPrefix = syncCookieSign
 		? `scv(c.set.cookie,cc,c.set)\n`
-		: asyncCookieSign
-			? `_sg=scv(c.set.cookie,cc,c.set)\nif(_sg){${arm ? `${arm}\n` : ''}await _sg}\n`
+		: asyncCookieSign && isAsync
+			? awaitSign
 			: ''
+	// no cookie and a settled value: map at once, no Promise
+	const signMap = (value: string) =>
+		thenSign
+			? `(c.set.cookie||typeof _r?.then==='function'?_sgt(c,_r,(_r)=>${value}):${value})`
+			: value
+	// a sync route's handler may return a pending value that writes once it
+	// settles: `_sgt` signs once it has. A settled value signs and maps at
+	// once, no Promise
+	const settleSign = syncCookieSign && !isAsync && !syncAfterResponse
 
 	if (syncCookieSign || asyncCookieSign) link(signCookieValues, 'scv')
 
 	// A streamed body runs on the first pull, after the sign above: the
 	// stream handler signs again before it builds the headers
-	const streamSign = signPrefix
+	const streamSign = hasCookieSign
 		? `if(typeof _r?.next==='function')c.set['~sign']=_sgn\n`
 		: ''
 
-	let factoryHelpers = ''
+	let factoryHelpers =
+		thenSign || settleSign
+			? // a pending value settles first: what it writes is signed too
+				`function _sgt(c,_r,m){\n` +
+				`if(typeof _r?.then==='function')return Promise.resolve(_r).then((_v)=>_sgt(c,_v,m))\n` +
+				streamSign +
+				`const _sg=scv(c.set.cookie,cc,c.set)\n` +
+				`return _sg?_sg.then(()=>m(_r)):m(_r)\n` +
+				`}\n`
+			: ''
 	// first await point inside the error hooks, `-1` without error hooks
 	let tailCatch = -1
 
@@ -1093,7 +1122,7 @@ export function compileHandlerJit(
 			(hasAfterResponse || traceHandleOn || hasDeriveDispose) &&
 			!syncAfterResponse
 				? `if(${disposeGuard}_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
-					`const _s=tee(_r,2)\n` +
+					`const _s=tee(_r)\n` +
 					`_sv=_r=_s[0]\n` +
 					(traceHandleOn ? `_trs=_s[1]\n` : `_stl=_s[1]\n`) +
 					`}else if(${disposeGuard}_r instanceof ReadableStream){const _o=obs(_r)\nif(_o){_r=_o[0];_stl=_o[1];_sv=_o[2]}}\n`
@@ -1141,7 +1170,7 @@ export function compileHandlerJit(
 				`function _fin(c,_r){\n` +
 				rethrow('_r') +
 				`if(_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
-				`const _s=tee(_r,2)\n` +
+				`const _s=tee(_r)\n` +
 				`return _fin2(c,_s[0],_s[1],_s[0])\n` +
 				`}\n` +
 				`if(_r instanceof ReadableStream){const _o=obs(_r)\nif(_o)return _fin2(c,_o[0],_o[1],_o[2])}\n` +
@@ -1151,7 +1180,7 @@ export function compileHandlerJit(
 				`c.responseValue=_r\n` +
 				signPrefix +
 				streamSign +
-				`const _m=${mapValue('_r')}\n` +
+				`const _m=${signMap(mapValue('_r'))}\n` +
 				mapThenSchedule(
 					syncScheduleDecl ? `_scf(c,_stl)\n` : scheduleAfterResponse,
 					`(_e)=>{_sv?.return()\n${freThenSchedule('_e')}}`
@@ -1237,16 +1266,31 @@ export function compileHandlerJit(
 					? `(_vr.mayReturnPromise?_vr.From(_r,'response',true):_vr.EncodeFrom(_r,'response'))`
 					: `_vr.EncodeFrom(_r,'response')`
 
+				// a generator's chunks are cleaned by the stream handler, once
+				// the status it sends them with is known
+				const streamClean = `c.set['~chunk']=_st=>${pick}\n`
+
 				code += plain(
 					`if(_r instanceof es){\n` +
 						`const _st=_r.status,_vr=${pick}\n` +
-						`if(_vr)_r.response=${responseValiAsync ? awaitValue(encodeStatus, arm) : encodeStatus}\n` +
-						`}else if(!(_r instanceof Response)` +
-						`&&!(_r instanceof ReadableStream)` +
-						`&&typeof _r?.next!=='function'){\n` +
+						// form() with a file is a promise off Bun
+						(isAsync && !tail
+							? `if(_vr&&_r.response instanceof Promise)_r.response=${awaitValue('_r.response', arm)}\n`
+							: '') +
+						`if(typeof _r.response?.next==='function')${streamClean}` +
+						`else if(_vr){\n` +
+						`c['~validated']=_st\n` +
+						`_r.response=${responseValiAsync ? awaitValue(encodeStatus, arm) : encodeStatus}\n` +
+						`}\n` +
+						`}else if(typeof _r?.next==='function')${streamClean}` +
+						`else if(!(_r instanceof Response)` +
+						`&&!(_r instanceof ReadableStream)){\n` +
 						// a named status ('Created') validates as the code it is sent with
 						`const _sr=c.set.status??200,_st=typeof _sr==='string'?(sm[_sr]??_sr):_sr,_vr=${pick}\n` +
-						`if(_vr)_r=${responseValiAsync ? awaitValue(encodeBody, arm) : encodeBody}\n` +
+						`if(_vr){\n` +
+						`c['~validated']=_st\n` +
+						`_r=${responseValiAsync ? awaitValue(encodeBody, arm) : encodeBody}\n` +
+						`}\n` +
 						`}\n`
 				)
 				code += abortCheck()
@@ -1254,8 +1298,14 @@ export function compileHandlerJit(
 
 			const deferSchedule = !!schedule
 
-			code += plain(signPrefix + streamSign)
-			const finalMap = mapValue('_r')
+			// signing rewrites each value to its wire form: a pending value
+			// signs only once it settles, or a continuation that reads a
+			// cookie back would extend the signed string
+			code += plain((settleSign ? '' : signPrefix) + streamSign)
+			const mapped = mapValue('_r')
+			const finalMap = settleSign
+				? `(typeof _r?.then==='function'?_sgt(c,_r,(_r)=>${mapped}):(${signPrefix.trim()},${mapped}))`
+				: signMap(mapped)
 			const onMapReject = syncErrorHook
 				? `(_e)=>_ce(_e,c)`
 				: dedupSchedule
@@ -1329,9 +1379,23 @@ export function compileHandlerJit(
 				`function _fbm(_r,_s,_c){return ${map}(_r,_s,_c.request,true)}\n` +
 				`${asyncCookieSign ? 'async ' : ''}function _efb(e,c){\n` +
 				(asyncCookieSign ? `let _sg${arm ? ',_as' : ''}\n` : ``) +
-				signPrefix +
+				(asyncCookieSign ? awaitSign : signPrefix) +
 				`return _em(c,fbr(c,e,_fbm))\n` +
 				`}\n`
+
+			let errorJar = ''
+			if (cookieConfig && needsCookie) {
+				const [parseRaw, key, jarArgs] = !hasCookieSign
+					? [parseCookieRawDeferred, 'pcrd', ',undefined,1']
+					: syncCookieSign
+						? [parseCookieRawLazy, 'pcrl', ',1']
+						: [parseCookieRaw, 'pcr', '']
+
+				link(parseRaw, key)
+
+				const raw = `${key}(c.request.headers.get('cookie'),cc${asyncCookieSign ? ',1' : ''})`
+				errorJar = `c.cookie??=bcj(c.set,${asyncCookieSign ? awaitValue(raw, arm) : raw},cc${jarArgs})\n`
+			}
 
 			const errorHead = plain(
 				`c.error=e\n` +
@@ -1339,7 +1403,8 @@ export function compileHandlerJit(
 						? `if(e instanceof verr)e.allowUnsafeValidationDetails=true\n`
 						: ``) +
 					`if(e?.status)c.set.status=e.status\n` +
-					`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n`
+					`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
+					errorJar
 			)
 			if (typeof asyncMode === 'object') {
 				// `e` is live; the catch's own `_r` is only ever an await target
@@ -1357,6 +1422,9 @@ export function compileHandlerJit(
 
 			body +=
 				errorHead +
+				(abortOn && asyncCookieSign
+					? `if(${abortPeek}){${declined}return _efb(e,c)}\n`
+					: '') +
 				`let _r${hasMapResponse ? ',tmp' : ''}\n` +
 				mapError(
 					hook!.error!,
@@ -1375,7 +1443,8 @@ export function compileHandlerJit(
 									arm
 								)
 							: '') + declined,
-						signPrefix,
+						(response) =>
+							`${signPrefix}return _em(c,${signMap(response)})\n`,
 						asyncMode,
 						arm,
 						declined

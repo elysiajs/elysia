@@ -12,6 +12,7 @@ import {
 	HasCodec,
 	Clone,
 	Check,
+	Errors,
 	injectTypebox,
 	warmTypebox,
 	preloadTypebox,
@@ -90,6 +91,7 @@ export function setupTypebox(options?: {
 		Ref,
 		Clone,
 		Check,
+		Errors,
 		warmTypebox,
 		preloadTypebox
 	})

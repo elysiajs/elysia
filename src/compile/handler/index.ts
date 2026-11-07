@@ -6,9 +6,15 @@ import { mapResponse } from '../../adapter/web-standard/handler'
 import { ElysiaFile } from '../../universal/file'
 import { ElysiaStatus } from '../../error'
 
-import { Compiled, aotDriftMessage, inAotBuild, warnAotDrift } from '../aot'
+import {
+	Compiled,
+	aotDriftMessage,
+	inAotBuild,
+	isResponseParam,
+	replayHandlerParams,
+	warnAotDrift
+} from '../aot'
 import { frozenRootOf } from '../../generation'
-import { isResponseParam, resolveHandlerParams } from './params'
 import {
 	compactBeforeHandleLane,
 	compileHandlerJit,
@@ -25,7 +31,14 @@ import type { Context } from '../../context'
 import {
 	cloneHook,
 	flattenChain,
+	deriveEntryFn,
+	hookOrigin,
+	macroSource,
+	pathOf,
+	topPath,
 	flattenChainInfo,
+	installsOverlap,
+	type Installs,
 	flattenChainMemo,
 	flattenChainMemoReadonly,
 	isNotEmpty,
@@ -215,15 +228,6 @@ export function resolveWSLocalHook(
 // is shared by reference across every app that reuses the plugin it lives in
 const chainNodeMemos: ResolutionMemo = new WeakMap()
 
-/**
- * Drop this root's resolved-hook memos.
- * (JIT or rebuild) compile repopulates them anyway, just uncached
- */
-export function clearHandlerAnalysisCaches(root: AnyElysia) {
-	localHookMemos.delete(root)
-	chainNodeMemos.delete(root)
-}
-
 function resolveChainNode(
 	root: AnyElysia,
 	node: ChainNode
@@ -253,7 +257,6 @@ function resolveChainNode(
 			applyMacros(resolved, scope, frozenRoot, scopeMacro, rootMacro)
 
 		promoteDerive(resolved)
-		runIntrospect(resolved)
 		perScope.set(added, resolved)
 	}
 
@@ -276,6 +279,111 @@ export const localMacroRoot = (
 	frozenRootOf(instance)['~ext']?.macro
 		? instance
 		: root
+
+const macroKeyOf = (instance: AnyElysia, root: AnyElysia) => {
+	const scope = frozenRootOf(localMacroRoot(instance, root))['~ext']?.macro
+	const top = frozenRootOf(root)['~ext']?.macro
+
+	return (key: string) => (!!scope && key in scope) || (!!top && key in top)
+}
+
+export interface HookSource {
+	readonly from: 'route' | 'guard' | 'call'
+	readonly role: string
+	readonly path: readonly string[]
+}
+
+export function attachSource(
+	hooks: any,
+	root: AnyElysia,
+	[, , , instance, local, appHook, inheritedChain, macroScope]: InternalRoute,
+	written: Partial<AnyLocalHook> | undefined
+) {
+	const source = new Map<unknown, HookSource[]>()
+	const add = (
+		fn: unknown,
+		from: HookSource['from'],
+		role: string,
+		path: readonly string[]
+	) => {
+		const list = source.get(fn)
+
+		if (list) list.push({ from, role, path })
+		else source.set(fn, [{ from, role, path }])
+	}
+
+	const listed = (list: unknown[] | undefined, from: HookSource['from']) => {
+		if (list)
+			for (let i = 0; i < list.length; i += 3)
+				add(list[i], from, list[i + 1] as string, list[i + 2] as any)
+	}
+
+	const wrote = (
+		hook: object,
+		from: HookSource['from'],
+		owner: AnyElysia
+	) => {
+		const isMacro = macroKeyOf(owner, root)
+		for (const key in hook)
+			if (!isMacro(key) || (from === 'guard' && key === 'derive'))
+				for (const fn of [(hook as any)[key]].flat())
+					if (typeof fn === 'function')
+						add(fn, from, key, pathOf(topPath, key))
+	}
+
+	listed(local && macroSource.get(local), 'route')
+
+	const compiled =
+		local &&
+		resolveLocalHook(
+			localMacroRoot((macroScope ?? instance) as AnyElysia, root),
+			local,
+			root
+		)
+
+	if (compiled !== local) listed(macroSource.get(compiled!), 'route')
+	if (written) wrote(written, 'route', (macroScope ?? instance) as AnyElysia)
+
+	const resolve = chainResolver(root)
+	const seen = new Set<object>()
+	const collect = (node: ChainNode) => {
+		const stored = (node as { added: Partial<AppHook> }).added
+		const added = resolve ? resolve(node) : stored
+		if (!added || seen.has(added)) return added
+		seen.add(added)
+
+		listed(macroSource.get(added), 'guard')
+		const origin = hookOrigin.get(
+			(
+				(node as { registration?: { added: object } }).registration ??
+				(node as { added: object })
+			).added
+		)
+
+		if (origin === true) {
+			const derives = (stored as any)['~deriveEntries']
+			if (derives)
+				for (const entry of derives)
+					add(deriveEntryFn(entry), 'call', 'derive', topPath)
+			else
+				for (const key in stored)
+					for (const fn of [(stored as any)[key]].flat())
+						if (typeof fn === 'function')
+							add(fn, 'call', key, topPath)
+		} else if (origin)
+			wrote(
+				origin,
+				'guard',
+				((node as { owner?: AnyElysia }).owner ?? root) as AnyElysia
+			)
+
+		return added
+	}
+	flattenChain(appHook as ChainNode, collect)
+	if (instance !== root) flattenChain(inheritedChain as ChainNode, collect)
+
+	hooks['~source'] = source
+}
 
 /** Whether a hook can be skipped by a native static response. */
 function isEmptyPipelineHook(hook: AnyLocalHook | undefined) {
@@ -420,11 +528,23 @@ export function composeRouteHook(
 		promoteDerive(localHook)
 	}
 
-	const own = flattenChainInfo(root, appHook as ChainNode, resolve)
-	let skip: ReadonlySet<number> | undefined
-	if (own?.installs && instance !== root) {
+	const own =
+		instance !== root
+			? flattenChainInfo(root, appHook as ChainNode, resolve)
+			: undefined
+
+	let skip: Installs | undefined
+	if (own?.installs) {
 		const outer = flattenChainInfo(root, inheritedChain, resolve)?.installs
-		if (outer && !outer.isDisjointFrom(own.installs)) skip = outer
+		if (outer) {
+			if (own.outer !== outer) {
+				own.outer = outer
+				// own chains hold fewer registrations: walk them
+				own.overlap = installsOverlap(own.installs, outer)
+			}
+
+			if (own.overlap) skip = outer
+		}
 	}
 
 	const flatAppHook = flattenChainMemo(
@@ -506,7 +626,7 @@ function callbackErrors(
 ) {
 	let out: Function[] | undefined
 	// a callback's copy of a named plugin the route already has stays out
-	let outer: ReadonlySet<number> | undefined | null = null
+	let outer: Installs | undefined | null = null
 
 	for (let node = start; node && 'combine' in node; node = node.combine)
 		if (node.callback) {
@@ -522,9 +642,9 @@ function callbackErrors(
 			// every registration the route has inside the callback, a
 			// propagated copy as its original; the callback's own chain is not
 			// the route's
-			const has = new Set<ChainNode>()
+			const has = new Set<unknown>()
 			const collect = (n: ChainNode) => {
-				has.add((n as { registration?: ChainNode }).registration ?? n)
+				has.add(registrationOf(n))
 				return undefined
 			}
 			flattenChain(node.inner, collect)
@@ -533,9 +653,7 @@ function callbackErrors(
 			const error = flattenChain(
 				node.callback,
 				(n) =>
-					has.has(
-						(n as { registration?: ChainNode }).registration ?? n
-					)
+					has.has(registrationOf(n))
 						? undefined
 						: resolve
 							? resolve(n)
@@ -547,6 +665,12 @@ function callbackErrors(
 
 	return out
 }
+
+// a registration: its key, else the node it copies
+const registrationOf = (n: ChainNode) =>
+	(n as { key?: string }).key ??
+	(n as { registration?: ChainNode }).registration ??
+	n
 
 const withCallbackErrors = (
 	own: Function | Function[] | undefined,
@@ -726,7 +850,7 @@ export function compileHandler(
 	if (reconstructed)
 		return reconstructed.f!(
 			handler,
-			...resolveHandlerParams(reconstructed.a!, {
+			...replayHandlerParams(reconstructed.a!, {
 				root,
 				parse: adapter.parse as any,
 				res: adapter.response as any,

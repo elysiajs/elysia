@@ -58,7 +58,7 @@ const cases: [
 		},
 		fn,
 		plain,
-		1498400034
+		2313843027
 	],
 	[
 		'numbers and bigint',
@@ -83,7 +83,7 @@ const cases: [
 		{ headers: t.Object({ x: t.Optional(t.String()) }) },
 		fn,
 		plain,
-		2287876387
+		2170772188
 	],
 	['hidden key', { params: hidden }, fn, plain, 942068681],
 	[
@@ -96,7 +96,7 @@ const cases: [
 		},
 		fn,
 		modeled,
-		2307811573
+		2783877688
 	],
 	[
 		'cookie config',
@@ -108,9 +108,9 @@ const cases: [
 		},
 		fn,
 		modeled,
-		2112391736
+		845260887
 	],
-	['cookie model', { cookie: 'Session' }, fn, modeled, 1123203985],
+	['cookie model', { cookie: 'Session' }, fn, modeled, 2360031308],
 	[
 		'repeated function aliases',
 		{ beforeHandle: [fn, fn, async () => {}], afterHandle: fn },
@@ -124,7 +124,7 @@ const cases: [
 		{ body: t.Object({ message: t.String() }), beforeHandle: fn },
 		undefined,
 		plain,
-		1706092772
+		1111679961
 	],
 	[
 		'null and Standard Schema',

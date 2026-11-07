@@ -5,13 +5,14 @@ setTimeout(() => {
 	process.exit(1)
 }, 5000)
 
-const { Elysia, ElysiaFile, file, status, t } = require('elysia')
+const { Elysia, ElysiaFile, file, form, status, t } = require('elysia')
 const adapterUtils = require('elysia/adapter/utils')
 const compiled = require('elysia/compiled')
 const { trace } = require('elysia/trace')
 const assertListenError = require('../assert-listen-error.cjs')
 const assertTrace = require('../assert-trace.cjs')
 const assertNullBodyStatus = require('../assert-null-body-status.cjs')
+const assertFormFile = require('../assert-form-file.cjs')
 const { mkdtemp, readFile, rm, writeFile } = require('node:fs/promises')
 const { tmpdir } = require('node:os')
 const { join, resolve } = require('node:path')
@@ -219,6 +220,7 @@ const main = async () => {
 		)
 
 	const temp = await mkdtemp(join(tmpdir(), 'elysia-file-'))
+	await assertFormFile(Elysia, file, form, status, t, temp, 'CommonJS')
 	let unhandled
 	const onUnhandled = (error) => (unhandled = error)
 	try {

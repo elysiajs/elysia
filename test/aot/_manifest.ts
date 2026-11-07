@@ -8,18 +8,20 @@ import {
 	type HandlerManifest,
 	type CompiledProgramRegistration
 } from '../../src/compile/aot'
-import { Source } from '../../src/compile/aot-emit'
-import { Reconstruct } from '../../src/compile/aot-reconstruct'
+import { Source, installReconstructImpl } from '../../src/compile/aot-emit'
 
 // Reconstruct in-process manifests through the same table as generated modules.
-Compiled.reconstruct = Reconstruct
-Compiled.routeShape = routeShape
+installReconstructImpl()
 
 import { expect } from 'bun:test'
 import type { AnyElysia } from '../../src'
 import { CheckContext } from 'typebox/schema'
 import { buildCoercedFromPlan } from '../../src/type/coerce-plan'
-import { routeShape } from '../../src/compile/handler/route-shape'
+import {
+	buildFrozenRouteValidator,
+	resolveHandlerParams,
+	routeShape
+} from '../../src/compile/handler/route-shape'
 import { Guard } from 'typebox/guard'
 import { Format } from 'typebox/format'
 import { Hashing } from 'typebox/system'
@@ -85,6 +87,9 @@ export const evalRegistration = (
 		'Reconstruct',
 		'buildCoercedFromPlan',
 		'routeShape',
+		'installReplay',
+		'resolveHandlerParams',
+		'buildFrozenRouteValidator',
 		'CheckContext',
 		'Guard',
 		'Format',
@@ -102,6 +107,10 @@ export const evalRegistration = (
 		undefined,
 		buildCoercedFromPlan,
 		routeShape,
+		// the `Compiled` stub is no copy to check, installed above already
+		() => {},
+		resolveHandlerParams,
+		buildFrozenRouteValidator,
 		CheckContext,
 		Guard,
 		Format,

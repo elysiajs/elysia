@@ -1,9 +1,6 @@
 import type { TObject, TObjectOptions, TProperties } from 'typebox'
 
-import { isEmpty } from '../../utils'
-
 const objectKind = { value: 'Object', enumerable: false } as const
-let objectProto: { '~kind': 'Object' }
 export function ObjectType<T extends TProperties>(
 	properties: T,
 	options?: TObjectOptions
@@ -28,20 +25,9 @@ export function ObjectType<T extends TProperties>(
 		}
 	}
 
-	if (!options || isEmpty(options)) {
-		objectProto ??= Object.defineProperty({}, '~kind', objectKind) as {
-			'~kind': 'Object'
-		}
-
-		const schema = Object.create(objectProto) as TObject<T>
-		;(schema as any).type = 'object'
-		;(schema as any).properties = properties
-		;(schema as any).required = required
-		return schema
-	}
-
-	const schema: any = { ...options, type: 'object', properties, required }
-	Object.defineProperty(schema, '~kind', objectKind)
-
-	return schema
+	return Object.defineProperty(
+		{ ...options, type: 'object', properties, required },
+		'~kind',
+		objectKind
+	) as any
 }

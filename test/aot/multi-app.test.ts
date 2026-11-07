@@ -463,7 +463,10 @@ describe('AOT multi-app manifest module', () => {
 				'import { Compiled } from "elysia"',
 				'import { buildCoercedFromPlan } from "elysia/coerce-plan"',
 				'import { Reconstruct } from "elysia/reconstruct"',
-				'import { routeShape } from "elysia/route-shape"'
+				'import { routeShape } from "elysia/route-shape"',
+				'import { installReplay } from "elysia/route-shape"',
+				'import { resolveHandlerParams } from "elysia/route-shape"',
+				'import { buildFrozenRouteValidator } from "elysia/route-shape"'
 			])
 
 			const registrationA = evalRegistration(source, 'a')

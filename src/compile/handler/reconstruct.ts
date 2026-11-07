@@ -6,10 +6,7 @@ import {
 	traceCapabilityRequired
 } from '../../generation'
 import { isBridgeLive } from '../../type/bridge'
-import {
-	buildFrozenRouteValidator,
-	isBridgeNotInitialized
-} from './frozen-validator'
+import { frozenRouteValidator, isBridgeNotInitialized } from '../aot'
 
 import type { AnyLocalHook, HTTPMethod } from '../../types'
 import type { AnyElysia } from '../../base'
@@ -25,7 +22,7 @@ export abstract class Reconstruct {
 		const frozenRoot = frozenRootOf(root)
 
 		if (!liveOnly && !isBridgeLive()) {
-			const frozen = buildFrozenRouteValidator(hook, root, method, path)
+			const frozen = frozenRouteValidator(hook, root, method, path)
 			if (frozen) return frozen as any
 			// fall through to RouteValidator so the error surfaces as today
 		}
@@ -50,7 +47,7 @@ export abstract class Reconstruct {
 					{ cause: error }
 				)
 
-			const frozen = buildFrozenRouteValidator(hook, root, method, path)
+			const frozen = frozenRouteValidator(hook, root, method, path)
 			if (frozen) return frozen as any
 
 			throw error

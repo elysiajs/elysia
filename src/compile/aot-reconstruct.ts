@@ -22,6 +22,7 @@ import {
 	type ReconstructImpl,
 	type StringCodecNode
 } from './aot'
+import type { ValidatorOptions } from '../validator'
 
 const isValueLikeExternal = (v: unknown) =>
 	v === null || (typeof v !== 'object' && typeof v !== 'function')
@@ -136,45 +137,63 @@ function buildUnions(u: FrozenCheckFactory[][], schema: unknown) {
 	)
 }
 
+function mirrorDeps(
+	u: FrozenMirror['u'],
+	schema: unknown,
+	sanitize: ValidatorOptions['sanitize']
+) {
+	let d: Record<string, unknown> | undefined
+	if (u) d = { unions: buildUnions(u, schema) }
+
+	const hof = typeof sanitize === 'function' ? [sanitize] : sanitize
+	if (hof?.length) {
+		d ??= {}
+
+		for (let i = 0; i < hof.length; i++) d[`h${i}`] = hof[i]
+	}
+
+	return d
+}
+
 export function instantiateFrozenMirror(
 	frozen: FrozenMirror,
-	schema: unknown
+	schema: unknown,
+	sanitize?: ValidatorOptions['sanitize']
 ): (value: unknown) => unknown {
-	// Plain mirror: `s` is the cleaner itself (no factory wrapper to call).
-	if (!frozen.u) return frozen.s as (value: unknown) => unknown
+	const d = mirrorDeps(frozen.u, schema, sanitize)
 
-	return (frozen.s as FrozenMirrorFactory)({
-		unions: buildUnions(frozen.u, schema)
-	})
+	// Plain mirror: `s` is the cleaner itself (no factory wrapper to call).
+	return d
+		? (frozen.s as FrozenMirrorFactory)(d)
+		: (frozen.s as (value: unknown) => unknown)
 }
 
 // Codec mirror: `d.codecs` are the live schema's `~codec.decode` (request) or
-// `~codec.encode` (response) leaves; `d.unions` when the schema has unions.
+// `~codec.encode` (response) leaves, plus `mirrorDeps`.
 export function instantiateFrozenDecodeMirror(
 	frozen: FrozenMirror,
 	schema: unknown,
+	sanitize?: ValidatorOptions['sanitize'],
 	dir: 'decode' | 'encode' = 'decode'
 ): (value: unknown) => unknown {
-	const d: { codecs: Function[]; unions?: unknown } = {
+	return (frozen.s as FrozenMirrorFactory)({
+		...mirrorDeps(frozen.u, schema, sanitize),
 		codecs: collectMirrorCodecs(schema, [], dir)
-	}
-
-	if (frozen.u) d.unions = buildUnions(frozen.u, schema)
-
-	return (frozen.s as FrozenMirrorFactory)(d)
+	})
 }
 
 export function instantiateFrozenBoth(
 	frozen: FrozenValidator,
 	checkSchema: unknown,
-	mirrorSchema: unknown
+	mirrorSchema: unknown,
+	sanitize?: ValidatorOptions['sanitize']
 ): {
 	check?: (value: unknown) => boolean
 	clean?: (value: unknown) => unknown
 } {
 	return frozen.cm!(
 		frozen.e ? collectExternals(checkSchema) : EMPTY_EXTERNALS,
-		frozen.u ? { unions: buildUnions(frozen.u, mirrorSchema) } : undefined
+		mirrorDeps(frozen.u, mirrorSchema, sanitize)
 	)
 }
 

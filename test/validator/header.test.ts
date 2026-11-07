@@ -489,3 +489,23 @@ describe('Header Validator', () => {
 		expect(err instanceof ValidationError).toBe(true)
 	})
 })
+
+// incoming header names arrive lowercased whatever case the client sent, so a
+// lowercase schema key matches a mixed-case header
+describe('Header Validator header name case', () => {
+	it('validates a mixed-case incoming header against a lowercase key', async () => {
+		const app = new Elysia().get(
+			'/',
+			{ headers: t.Object({ 'x-token': t.String() }) },
+			({ headers }) => headers['x-token']
+		)
+
+		const response = await app.handle(
+			new Request('http://localhost/', { headers: { 'X-Token': 'a' } })
+		)
+		expect(await response.text()).toBe('a')
+		expect(
+			(await app.handle(new Request('http://localhost/'))).status
+		).toBe(422)
+	})
+})

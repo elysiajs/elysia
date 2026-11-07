@@ -47,8 +47,10 @@ function pickMerge<K extends keyof RouteSchema>(
 
 const FILE_TYPES = [ELYSIA_TYPES.File, ELYSIA_TYPES.Files]
 
+// a t.Form body is multipart: its fields arrive as strings like a query's
 const coerceFile = (schema: AnySchema) =>
-	mayHaveFileType(schema) && hasTypes(FILE_TYPES, schema)
+	(schema as any)['~elyTyp'] === ELYSIA_TYPES.Form ||
+	(mayHaveFileType(schema) && hasTypes(FILE_TYPES, schema))
 		? coerceFormData()
 		: coerceBody()
 

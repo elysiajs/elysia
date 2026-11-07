@@ -4,8 +4,8 @@ import { applyHoc, createFetchHandler } from './handler/fetch'
 import type { RouteErrorHooks } from './handler/utils'
 import {
 	chainResolver,
-	clearHandlerAnalysisCaches,
 	compileHandler,
+	attachSource,
 	composeRouteHook,
 	localMacroRoot,
 	releaseAnalysisCaches,
@@ -35,6 +35,7 @@ import type {
 
 import { ListenCallback, Serve, Server } from './universal'
 import { isBun } from './universal/constants'
+import { dangerousKeys } from './constants'
 
 import {
 	buildRouteTable,
@@ -56,6 +57,10 @@ import {
 	getLoosePath,
 	guardNonPlainLeaves,
 	hookToGuard,
+	hookOrigin,
+	topPath,
+	macroSource,
+	pathOf,
 	isHTMLBundle,
 	isNotEmpty,
 	isPlainObject,
@@ -113,7 +118,7 @@ import type {
 	ResolveUsedRouteErrors,
 	AfterHandler,
 	BodyHandler,
-	TransformHandler,
+	PreValidationTransform,
 	MapResponse,
 	AfterResponseHandler,
 	PreHandler,
@@ -122,10 +127,14 @@ import type {
 	GuardLocalHook,
 	JoinPath,
 	UnwrapRoute,
+	UnwrapSchema,
+	HeadersKeyCheck,
 	AnyWSLocalHook,
 	CreateEden,
+	UsedRoutesUnder,
 	UnionResponseStatus,
 	ParentResponse,
+	ParentInput,
 	IntersectIfObjectSchema,
 	MergeScopedSchemas,
 	InlineHandlerNonMacro,
@@ -150,6 +159,7 @@ import type {
 	HookContextSchema,
 	HookContextSingleton,
 	LocalHookReturn,
+	InstanceHookReturn,
 	CatchAllHookReturn,
 	CatchAllEntries,
 	ErrorHookStatus,
@@ -161,8 +171,7 @@ import type {
 	ScopedHookReturn,
 	ScopedMapDeriveReturn,
 	LegacyScope,
-	GuardHookSingleton,
-	StaticMapAliases
+	GuardHookSingleton
 } from './types'
 import type { ElysiaStatus } from './error'
 import {
@@ -248,13 +257,16 @@ type UnknownHookKey<Key extends PropertyKey> = [Key] extends [never]
 	: { [K in NoInfer<Key>]: never }
 
 const useNodesBuffer: ChainNode[] = []
-// instance -> registration -> named plugins it was propagated through
-const propagatedRegistrations = new WeakMap<
-	object,
-	WeakMap<ChainNode, number[]>
->()
-// instance -> named plugins whose `request` hooks a callback lifted into it
-const liftedRequests = new WeakMap<object, Set<number>>()
+// instance -> key of each registration on its chain, own and propagated ->
+// the registration node it came from (a same-name twin's is another one).
+// Made by the first keyed copy the instance receives (`#keysOf`): a plugin
+// no one `.use()`s into never needs one
+const chainKeys = new WeakMap<object, Map<string, ChainNode>>()
+// named instance -> its key prefix and the registrations it has named, see
+// `ChainNode.key`
+const keyCounters = new WeakMap<object, { p: string; n: number }>()
+// instance -> named plugins whose `request` hooks it holds: once per app
+const requestOrigins = new WeakMap<object, Set<number>>()
 
 // a `hoc` entry's plugin: its registrant's hash, or an unnamed registration
 // whose plugin is set once, by the first named plugin it passes through
@@ -262,11 +274,41 @@ type HocOrigin = number | { origin?: number } | undefined
 const hocOriginOf = (o: HocOrigin) => (typeof o === 'object' ? o.origin : o)
 const emptyHistory = Object.freeze([]) as readonly HistoryEntry[]
 
+type CookieConfig = NonNullable<ElysiaConfig<any, any>['cookie']>
+
+const mergeCookieConfig = (
+	outer: CookieConfig | undefined,
+	inner: CookieConfig | undefined
+) => (outer || inner ? { ...outer, ...inner } : undefined)
+
+const routeCookieConfigs = new WeakMap<object, (CookieConfig | undefined)[]>()
+
 let mutationEpoch = 0
 const extCallbackIndexes = new WeakMap<
 	unknown[],
 	{ indexedLength: number; seen: Set<unknown> }
 >()
+
+// registers nothing: every value is nullish or an empty array. A hollow node
+// takes no key, so it shifts no ordinal and installs nothing
+const hasHook = (v: unknown) => v != null && (!Array.isArray(v) || v.length > 0)
+
+const hollow = (added: object) => {
+	for (const key in added)
+		if (key !== 'schema' && hasHook((added as any)[key])) return false
+
+	return true
+}
+
+const assignTable = <T extends object>(
+	target: T | undefined,
+	source: T,
+	append: boolean | undefined
+): T => {
+	if (!target || !append) return Object.assign(target ?? nullObject(), source)
+	for (const key in source) if (!(key in target)) target[key] = source[key]
+	return target
+}
 
 const mergeExtCallbacks = <T>(target: T[] | undefined, incoming: T[]) => {
 	if (!target) return incoming.slice()
@@ -475,10 +517,9 @@ export class Elysia<
 	private _error?: { error: unknown }
 
 	private hash?: number
-	private childrenHash?: Set<number>
+	private childrenHash?: Map<number, boolean>
 
 	private scopeParent?: AnyElysia
-	// Macro defs a scope-child absorbed via a nested plugin `.use()` (name → def)
 	private pluginMacros?: Map<string, unknown>
 	private macroBaseline?: Set<string>
 	private macroSnapshots?: Set<Map<string, unknown>>
@@ -600,8 +641,14 @@ export class Elysia<
 		})
 	}
 
-	['~addRoute'](route: InternalRoute) {
-		this.#registerRoute(route)
+	['~addRoute'](route: InternalRoute, sourceIndex?: number) {
+		this.#registerRoute(
+			route,
+			undefined,
+			sourceIndex === undefined
+				? undefined
+				: routeCookieConfigs.get(this)?.[sourceIndex]
+		)
 
 		return this
 	}
@@ -611,7 +658,6 @@ export class Elysia<
 	private jitColdRemaining?: number
 	private jitTable?: RouteTable
 	private jitRoute?: (InternalRoute | undefined)[]
-	private jitAliases?: (StaticMapAliases | undefined)[]
 
 	// a number is a lazy route's index, see `~dispatch`
 	declare '~router'?: Memoirist<CompiledHandler | number>
@@ -639,7 +685,7 @@ export class Elysia<
 		route?: RouteErrorHooks
 	) => MaybePromise<Response>
 	get ['~programId'](): ProgramId {
-		return this as unknown as ProgramId
+		return this
 	}
 	declare '~aotFingerprint'?: AotFingerprint
 	declare '~compilerSession'?: CompilerSession
@@ -745,16 +791,19 @@ export class Elysia<
 		if (!declared.length) return []
 
 		const routes = declared.map(
-			([
-				method,
-				path,
-				handler,
-				instance,
-				hook,
-				appHook,
-				inheritedChain,
-				macroScope
-			]) => {
+			(
+				[
+					method,
+					path,
+					handler,
+					instance,
+					hook,
+					appHook,
+					inheritedChain,
+					macroScope
+				],
+				index
+			) => {
 				const merged: any = composeRouteHook(
 					instance as any,
 					hook as any,
@@ -764,6 +813,13 @@ export class Elysia<
 					macroScope as any
 				)
 				runIntrospect(merged)
+				if (merged)
+					attachSource(
+						merged,
+						this as any,
+						declared[index]!,
+						this.declaredRoutes?.[index]?.[4]
+					)
 
 				if (merged?.schemas?.length)
 					for (const entry of merged.schemas as any[]) {
@@ -993,6 +1049,10 @@ export class Elysia<
 		}
 
 		this.#assertTableMutable(field === 'store' ? 'state' : 'decorate')
+		// the keys `mergeDeep` skips: an own `__proto__` in either table turns
+		// a spread or assign copy of it, or the context prototype, into a swap
+		if (dangerousKeys.has(name)) return this
+
 		const ext = this.#ext
 		// whether #table starts the table, rather than share a parent's
 		let fresh = true
@@ -1035,8 +1095,12 @@ export class Elysia<
 					return this
 				}
 
-				if (fresh) Object.assign(target, value)
-				else
+				if (fresh) {
+					Object.assign(target, value)
+					// the keys `mergeDeep` skips on a later call: an own
+					// `__proto__` here would reach the context prototype
+					for (const key of dangerousKeys) delete target[key]
+				} else
 					ext[field] = mergeDeep(
 						target,
 						value as any,
@@ -1056,7 +1120,12 @@ export class Elysia<
 						markSingletons(value)
 					}
 				} else {
-					ext[field] = (value as Function)(target)
+					const table = (value as Function)(target)
+					// the result becomes the table, held to the same rule
+					if (table && typeof table === 'object')
+						for (const key of dangerousKeys) delete table[key]
+
+					ext[field] = table
 
 					markStoredSingletons(ext[field], ext[field] as object)
 				}
@@ -1250,6 +1319,7 @@ export class Elysia<
 
 		const added: Partial<AppHook> = nullObject()
 		;(added as any)[type] = fn
+		hookOrigin.set(added, true)
 
 		if (type === 'trace') this['~hasTrace'] = true
 
@@ -1264,14 +1334,28 @@ export class Elysia<
 		// set for a propagated copy of `registration`, from `owner`'s chain
 		registration?: ChainNode,
 		origin?: number,
-		owner?: object
+		owner?: object,
+		key?: string,
+		// a copy whose key is on this chain already, see `#propagateHooks`
+		dup?: true
 	) {
 		const parent = this['~hookChain']
 		const refs =
 			(parent !== undefined && parent.refs) ||
 			Elysia.#hookHasString(added as Record<string, unknown>)
 
-		this['~hookChain'] = registration
+		// an own exported registration is named here; a `local` one once
+		// `.as()` exports it, a copy by `#propagateHooks`
+		if (
+			!registration &&
+			(scope === 'plugin' || scope === 'global') &&
+			!hollow(added)
+		)
+			key = this.#nameRegistration()
+		// set on the shadowing node and every later one, like `refs`
+		if ((parent as { dup?: true } | undefined)?.dup) dup = true
+
+		const node: ChainNode = registration
 			? {
 					added,
 					parent,
@@ -1280,7 +1364,8 @@ export class Elysia<
 					propagated: true,
 					owner,
 					origin,
-					registration
+					registration,
+					key
 				}
 			: {
 					added,
@@ -1288,8 +1373,79 @@ export class Elysia<
 					refs,
 					scope,
 					owner: this['~scopeChild'] ? this : undefined,
-					origin: this.hash
+					origin: this.hash,
+					key
 				}
+
+		// on this chain already: the earlier occurrence is shadowed (see
+		// `flattenChain`), and the compact lane can't tell, so it opts out.
+		// Set only then: most nodes never carry the slot
+		if (
+			dup ||
+			(!registration && key !== undefined && this.#holdKey(key, node))
+		)
+			(node as { dup?: true }).dup = true
+
+		this['~hookChain'] = node
+	}
+
+	/**
+	 * Record `key` on this chain; true if it already was. Without a map no
+	 * copy is here yet, and an own key is always new
+	 */
+	#holdKey(key: string, registration: ChainNode): true | undefined {
+		const keys = chainKeys.get(this)
+		if (!keys) return
+		if (keys.has(key)) return true
+		keys.set(key, registration)
+	}
+
+	/** This chain's keys, from its own registrations the first time */
+	#keysOf() {
+		let keys = chainKeys.get(this)
+		if (keys) return keys
+
+		chainKeys.set(this, (keys = new Map()))
+		const held: ChainNode[] = []
+		for (
+			let n = this['~hookChain'];
+			n;
+			n = (n as { parent?: ChainNode }).parent
+		)
+			// a lifted `request` copy is not its whole registration
+			if (
+				(n as { key?: string }).key !== undefined &&
+				!(
+					(n as { registration?: ChainNode }).registration &&
+					(n as { owner?: object }).owner
+				)
+			)
+				held.push(n)
+		for (let i = held.length - 1; i >= 0; i--) {
+			const n = held[i] as Extract<ChainNode, { added: unknown }>
+			if (!keys.has(n.key!)) keys.set(n.key!, n.registration ?? n)
+		}
+
+		return keys
+	}
+
+	/**
+	 * Key of the next registration this named instance exports first: its
+	 * n-th one, so same-name instances built alike agree, whoever consumes
+	 * them and when (see `ChainNode.key`)
+	 */
+	#nameRegistration() {
+		if (this.hash === undefined) return
+
+		let counter = keyCounters.get(this)
+		if (!counter)
+			keyCounters.set(
+				this,
+				(counter = { p: this.hash.toString(36) + ':', n: 0 })
+			)
+
+		// joined, not `+`: a flat string, not a rope resolved on first lookup
+		return [counter.p, counter.n++].join('')
 	}
 
 	#onBranch(
@@ -1417,7 +1573,7 @@ export class Elysia<
 
 	onTransform(
 		fn: MaybeArray<
-			TransformHandler<
+			PreValidationTransform<
 				MergeSchema<{}, {}, BasePath>,
 				HookContextSingleton<Singleton, Ephemeral, Volatile>
 			>
@@ -1427,7 +1583,7 @@ export class Elysia<
 	onTransform<const As extends 'local' | 'scoped' | 'global'>(
 		options: { as: As },
 		fn: MaybeArray<
-			TransformHandler<
+			PreValidationTransform<
 				MergeSchema<{}, {}, BasePath>,
 				HookContextSingleton<Singleton, Ephemeral, Volatile>,
 				undefined,
@@ -1438,7 +1594,7 @@ export class Elysia<
 	onTransform<const HookScope extends EventScope>(
 		scope: HookScope,
 		fn: MaybeArray<
-			TransformHandler<
+			PreValidationTransform<
 				MergeSchema<{}, {}, BasePath>,
 				HookContextSingleton<Singleton, Ephemeral, Volatile>,
 				undefined,
@@ -1454,14 +1610,16 @@ export class Elysia<
 		const Handler extends MaybeArray<
 			OptionalHandler<
 				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>
+				HookContextSingleton<Singleton, Ephemeral, Volatile>,
+				undefined,
+				Scope
 			>
 		>
 	>(
 		fn: Handler
-	): LocalHookReturn<
-		BasePath,
+	): InstanceHookReturn<
 		Scope,
+		BasePath,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -1606,14 +1764,31 @@ export class Elysia<
 			| void
 	>(
 		transform: (
-			context: Context<
-				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>
-			>
+			context: [Scope] extends ['local']
+				? Context<
+						HookContextSchema<
+							Metadata,
+							Ephemeral,
+							Volatile,
+							BasePath
+						>,
+						HookContextSingleton<Singleton, Ephemeral, Volatile>
+					>
+				: LifecycleContext<
+						HookContextSchema<
+							Metadata,
+							Ephemeral,
+							Volatile,
+							BasePath
+						>,
+						HookContextSingleton<Singleton, Ephemeral, Volatile>,
+						undefined,
+						Scope
+					>
 		) => MaybePromise<Derivative>
-	): LocalHookReturn<
-		BasePath,
+	): InstanceHookReturn<
 		Scope,
+		BasePath,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -2016,14 +2191,16 @@ export class Elysia<
 		const Handler extends MaybeArray<
 			AfterHandler<
 				HookContextSchema<Metadata, Ephemeral, Volatile, BasePath>,
-				HookContextSingleton<Singleton, Ephemeral, Volatile>
+				HookContextSingleton<Singleton, Ephemeral, Volatile>,
+				undefined,
+				Scope
 			>
 		>
 	>(
 		fn: Handler
-	): LocalHookReturn<
-		BasePath,
+	): InstanceHookReturn<
 		Scope,
+		BasePath,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -2239,7 +2416,8 @@ export class Elysia<
 	>(
 		fn: Handler
 	): CatchAllHookReturn<
-		'local',
+		// the instance's default scope, as the runtime registers it
+		Scope,
 		BasePath,
 		Scope,
 		Singleton,
@@ -2797,6 +2975,10 @@ export class Elysia<
 	}
 
 	#as(node: ChainNode | undefined, scope: EventScope) {
+		const tail = node
+		// a promoted key a D1 twin already put on this chain
+		let collided = false
+
 		while (node) {
 			node = node as Extract<ChainNode, { added: unknown }>
 
@@ -2806,6 +2988,14 @@ export class Elysia<
 			) {
 				node.scope = scope
 				node.propagated = false
+				if (node.key === undefined && !hollow(node.added)) {
+					node.key = this.#nameRegistration()
+					if (
+						node.key !== undefined &&
+						this.#holdKey(node.key, node.registration ?? node)
+					)
+						collided = true
+				}
 				// scope decides which hooks count as a plugin's installation,
 				// see `flattenChain`; drop every memo built on the old one
 				invalidateMacroEpoch()
@@ -2813,6 +3003,12 @@ export class Elysia<
 
 			node = node.parent
 		}
+
+		// rare: the whole chain shadows (exact either way, see `shadowed`;
+		// its compact lane stays off)
+		if (collided)
+			for (let n = tail; n; n = (n as { parent?: ChainNode }).parent)
+				(n as { dup?: true }).dup = true
 	}
 
 	/**
@@ -3919,11 +4115,7 @@ export class Elysia<
 			maybeHook.as !== undefined
 		)
 			throw new Error(
-				`[elysia] guard({ as: '${maybeHook.as}' }) was removed in 2.0. ` +
-					`Pass the scope as the first argument instead: ` +
-					`guard('${maybeHook.as === 'scoped' ? 'plugin' : maybeHook.as}', { ... }). ` +
-					`To combine a guard schema with a route's own schema for the ` +
-					`same slot, add schema: 'merge'.`
+				`[elysia] guard({ as: '${maybeHook.as}' }) was removed in 2.0, use guard('${maybeHook.as === 'scoped' ? 'plugin' : maybeHook.as}', { ... })`
 			)
 
 		if (arguments.length === 1)
@@ -3940,7 +4132,9 @@ export class Elysia<
 			)
 		}
 
-		return this
+		throw new Error(
+			'[Elysia] use guard(hook), guard(hook, callback) or guard(scope, hook)'
+		)
 	}
 
 	#guard(scope: EventScope, hook: Partial<AnyLocalHook>): this {
@@ -4392,6 +4586,9 @@ export class Elysia<
 			}
 		}
 
+		// what was written, before `derive` folded into `beforeHandle`
+		hookOrigin.set(hook, _hook)
+
 		if (hook.trace) this['~hasTrace'] = true
 
 		this.#pushChainNode(hook, scope)
@@ -4459,14 +4656,12 @@ export class Elysia<
 
 	macro(macro: Macro, definition?: unknown) {
 		this.#assertMutable('macro')
-		if (typeof macro === 'function')
-			throw new Error(
-				'use `.macro({ name: fn })` instead of `.macro(fn)`'
-			)
-		if (definition != null || typeof macro === 'string')
-			throw new Error(
-				'[Elysia] .macro(name, definition) was removed in 2.0 — use .macro({ [name]: definition })'
-			)
+		if (
+			definition != null ||
+			typeof macro === 'function' ||
+			typeof macro === 'string'
+		)
+			throw new Error('[Elysia] use .macro({ name: definition })')
 
 		const m = this.#ensureMacroTable() as any
 
@@ -4508,16 +4703,38 @@ export class Elysia<
 		input: Partial<AnyLocalHook>,
 		toApply: Partial<AnyLocalHook> = input,
 		iteration = 0,
-		seen = new Set<string | Partial<AnyLocalHook>>(),
-		insertions = new Map<string, number>()
+		// seed: [fn, role, path below the seed, ...] its expansion installed
+		seen = new Map<string | Partial<AnyLocalHook>, unknown[]>(),
+		insertions = new Map<string, number>(),
+		path: readonly string[] = topPath,
+		// the seeds being expanded, with the length of their key path
+		installs: [unknown[], number][] = []
 	): Partial<AnyLocalHook> {
 		if (iteration >= 16) return input
 		const macro = this['~ext']?.macro
 
 		if (!macro) return input
 
+		const record = (
+			fn: unknown,
+			role: string,
+			keys: readonly string[],
+			seeds: [unknown[], number][]
+		) => {
+			if (typeof fn !== 'function') return
+
+			let source = macroSource.get(input)
+			if (!source) macroSource.set(input, (source = []))
+
+			source.push(fn, role, keys)
+			for (const [installed, depth] of seeds)
+				installed.push(fn, role, keys.slice(depth))
+		}
+
 		for (const [key, value] of Object.entries(toApply)) {
 			if (key in macro === false) continue
+
+			const keys = pathOf(path, key)
 
 			const isFunction: boolean = typeof macro[key] === 'function'
 			const hook: Partial<AppHook & Macro> = isFunction
@@ -4531,6 +4748,7 @@ export class Elysia<
 				continue
 			}
 
+			let seed: string | Partial<AnyLocalHook>
 			if (isFunction) {
 				const seedSource = hook.seed ?? value
 				const seedType = typeof seedSource
@@ -4538,26 +4756,40 @@ export class Elysia<
 				if (seedSource === null || seedType !== 'object')
 					seedKey = `${key}\0${seedType}\0${serializeMacroSeed('', seedSource)}`
 				else
-					try {
-						seedKey =
-							key +
-							'\0object\0' +
-							JSON.stringify(seedSource, serializeMacroSeed)
-					} catch {
-						throw new Error(
-							`[Elysia] macro "${key}" received a circular seed value; pass a primitive \`seed\` to dedup it.`
-						)
-					}
+					seedKey =
+						key +
+						'\0object\0' +
+						JSON.stringify(seedSource, serializeMacroSeed)
 
-				if (seen.has(seedKey)) continue
+				seed = seedKey
+			} else seed = hook
 
-				seen.add(seedKey)
-				hookToGuard(hook)
-			} else {
-				if (seen.has(hook)) continue
+			const installed = seen.get(seed)
+			if (installed) {
+				// a copy: a macro that nests itself is among `installs`
+				const repeated = installed.slice()
+				for (let i = 0; i < repeated.length; i += 3) {
+					let full = keys
+					for (const below of repeated[i + 2] as string[])
+						full = pathOf(full, below)
+					record(
+						repeated[i],
+						repeated[i + 1] as string,
+						full,
+						installs
+					)
+				}
 
-				seen.add(hook)
+				continue
 			}
+
+			if (isFunction) hookToGuard(hook)
+			const own: unknown[] = []
+			seen.set(seed, own)
+			const nested: [unknown[], number][] = [
+				...installs,
+				[own, keys.length]
+			]
 
 			for (const k in hook) {
 				const v = (hook as any)[k]
@@ -4594,32 +4826,26 @@ export class Elysia<
 						{ [k]: v },
 						iteration + 1,
 						seen,
-						insertions
+						insertions,
+						keys,
+						nested
 					)
 
 					delete input[key]
 					continue
 				}
 
-				if (k === 'schema') {
-					const incoming: any[] = Array.isArray(v) ? v : [v]
-					if (!input.schemas) (input as any).schemas = []
+				if (k === 'schema' || schemaProperties.has(k)) {
+					if (k === 'schema' || v != null)
+						coalesceSchemas(
+							((input as any).schemas ||= []),
+							k === 'schema'
+								? Array.isArray(v)
+									? v
+									: [v]
+								: [{ [k]: v }]
+						)
 
-					coalesceSchemas((input as any).schemas as any[], incoming)
-
-					delete input[key]
-					continue
-				}
-
-				if (schemaProperties.has(k)) {
-					if (v === undefined || v === null) {
-						delete input[key]
-						continue
-					}
-					;(input as any).schemas ??= []
-					coalesceSchemas((input as any).schemas as any[], [
-						{ [k]: v }
-					])
 					delete input[key]
 					continue
 				}
@@ -4644,6 +4870,7 @@ export class Elysia<
 					} else if (input[k] !== v) input[k] = [v, input[k]]
 				} else input[k] = Array.isArray(v) ? v.slice() : v
 
+				for (const fn of [v].flat()) record(fn, k, keys, nested)
 				delete input[key]
 			}
 		}
@@ -4685,10 +4912,11 @@ export class Elysia<
 							...Ephemeral['error'],
 							...Volatile['error']
 						],
-						ParentResponse<Metadata, Ephemeral, Volatile>
+						ParentResponse<Metadata, Ephemeral, Volatile>,
+						ParentInput<Metadata, Ephemeral, Volatile>
 					>
 			: Routes &
-					CreateEden<
+					UsedRoutesUnder<
 						BasePath,
 						ResolveUsedRouteErrors<
 							NewElysia['~Routes'],
@@ -4697,7 +4925,8 @@ export class Elysia<
 								...Ephemeral['error'],
 								...Volatile['error']
 							],
-							ParentResponse<Metadata, Ephemeral, Volatile>
+							ParentResponse<Metadata, Ephemeral, Volatile>,
+							ParentInput<Metadata, Ephemeral, Volatile>
 						>
 					>,
 		Ephemeral,
@@ -4783,10 +5012,11 @@ export class Elysia<
 									...Ephemeral['error'],
 									...Volatile['error']
 								],
-								ParentResponse<Metadata, Ephemeral, Volatile>
+								ParentResponse<Metadata, Ephemeral, Volatile>,
+								ParentInput<Metadata, Ephemeral, Volatile>
 							>
 					: Routes &
-							CreateEden<
+							UsedRoutesUnder<
 								BasePath,
 								ResolveUsedRouteErrors<
 									NewElysia['~Routes'],
@@ -4799,7 +5029,8 @@ export class Elysia<
 										Metadata,
 										Ephemeral,
 										Volatile
-									>
+									>,
+									ParentInput<Metadata, Ephemeral, Volatile>
 								>
 							>,
 				Ephemeral,
@@ -4917,10 +5148,11 @@ export class Elysia<
 							...Ephemeral['error'],
 							...Volatile['error']
 						],
-						ParentResponse<Metadata, Ephemeral, Volatile>
+						ParentResponse<Metadata, Ephemeral, Volatile>,
+						ParentInput<Metadata, Ephemeral, Volatile>
 					>
 			: Routes &
-					CreateEden<
+					UsedRoutesUnder<
 						BasePath,
 						ResolveUsedRouteErrors<
 							NewElysia['~Routes'],
@@ -4929,7 +5161,8 @@ export class Elysia<
 								...Ephemeral['error'],
 								...Volatile['error']
 							],
-							ParentResponse<Metadata, Ephemeral, Volatile>
+							ParentResponse<Metadata, Ephemeral, Volatile>,
+							ParentInput<Metadata, Ephemeral, Volatile>
 						>
 					>,
 		Ephemeral,
@@ -5117,17 +5350,24 @@ export class Elysia<
 
 	#use(app: AnyElysia) {
 		let addedByThisCall: Set<number> | undefined
+		// installed by a child already: its routes and tables are here, only
+		// the hooks the child didn't pass on are missing
+		let below = false
 
 		const config = app['~config']
 
 		const name = config?.name
 		if (name) {
 			const hash = app.hash!
-			if (this.childrenHash?.has(hash)) return
+			const installed = this.childrenHash?.get(hash)
+			if (installed) return
 
-			this.childrenHash ??= new Set()
-			this.childrenHash.add(hash)
-			;(addedByThisCall ??= new Set()).add(hash)
+			if (installed === false) below = true
+			else {
+				// set before `#assertMacroUnique`, which rolls back what it added
+				;(this.childrenHash ??= new Map()).set(hash, true)
+				;(addedByThisCall ??= new Set()).add(hash)
+			}
 		}
 
 		// a `.group()`/`.guard()` callback is a sandbox (Elysia 1): what it
@@ -5135,40 +5375,45 @@ export class Elysia<
 		if (app.childrenHash && !app['~scopeChild'])
 			addedByThisCall = this.#absorbChildrenHash(app, addedByThisCall)
 
+		// seen below too: a macro this instance redefined since still conflicts
 		if (app['~ext']) this.#assertMacroUnique(app, addedByThisCall)
+		// after the check: a conflict leaves it seen below only
+		if (below) this.childrenHash!.set(app.hash!, true)
 		if (app['~hasTrace']) this['~hasTrace'] = true
 
-		if (app.declaredRoutes === undefined && app['~routeTable']?.length)
-			app.#materializeDeclaredRoutes()
+		if (!below) {
+			if (app.declaredRoutes === undefined && app['~routeTable']?.length)
+				app.#materializeDeclaredRoutes()
 
-		if (app.declaredRoutes?.length) {
-			if (app['~hasWS']) this['~hasWS'] = true
+			if (app.declaredRoutes?.length) {
+				if (app['~hasWS']) this['~hasWS'] = true
 
-			this.#emitChildRoutes(app, this['~hookChain'], name)
-		}
+				this.#emitChildRoutes(app, this['~hookChain'], name)
+			}
 
-		if (app['~scopeChildren']) {
-			const children = (this['~scopeChildren'] ??= [])
-			for (const child of app['~scopeChildren']) children.push(child)
+			if (app['~scopeChildren']) {
+				const children = (this['~scopeChildren'] ??= [])
+				for (const child of app['~scopeChildren']) children.push(child)
+			}
 		}
 
 		const hookChain = app['~hookChain']
 
-		if (app['~ext']) this.#absorbExt(app, addedByThisCall)
+		if (app['~ext']) this.#absorbExt(app, addedByThisCall, below)
 
-		if (hookChain) this.#propagateHooks(app, hookChain, addedByThisCall)
+		if (hookChain) this.#propagateHooks(app, hookChain)
 	}
 
 	#absorbChildrenHash(
 		app: AnyElysia,
 		addedByThisCall: Set<number> | undefined
 	) {
-		const childrenHash = (this.childrenHash ??= new Set())
+		const childrenHash = (this.childrenHash ??= new Map())
 
-		for (const h of app.childrenHash!) {
+		for (const h of app.childrenHash!.keys()) {
 			if (childrenHash.has(h)) continue
 
-			childrenHash.add(h)
+			childrenHash.set(h, false)
 			;(addedByThisCall ??= new Set()).add(h)
 		}
 
@@ -5223,7 +5468,12 @@ export class Elysia<
 	 *
 	 * Keep the cold blocks in their own frames.
 	 */
-	#absorbExt(app: AnyElysia, addedByThisCall: Set<number> | undefined) {
+	#absorbExt(
+		app: AnyElysia,
+		addedByThisCall: Set<number> | undefined,
+		// what this instance has already wins: only missing entries are added
+		append?: boolean
+	) {
 		const source = app['~ext']!
 		const {
 			decorator,
@@ -5252,7 +5502,7 @@ export class Elysia<
 					ext.decorator,
 					decorator,
 					undefined,
-					true,
+					!append,
 					false,
 					undefined,
 					{ map: undefined }
@@ -5263,20 +5513,24 @@ export class Elysia<
 		}
 
 		if (store && store !== ext.store) {
-			if (ext.store) mergeDeep(ext.store, store)
+			if (ext.store) mergeDeep(ext.store, store, undefined, !append)
 			else ext.store = Object.assign(nullObject(), store)
 		}
 
 		if (headers && headers !== ext.headers)
-			ext.headers = Object.assign(ext.headers ?? nullObject(), headers)
+			ext.headers = assignTable(ext.headers, headers, append)
 		if (models && models !== ext.models)
-			ext.models = Object.assign(ext.models ?? nullObject(), models)
+			ext.models = assignTable(ext.models, models, append)
 		if (parser && parser !== ext.parser)
-			ext.parser = Object.assign(ext.parser ?? nullObject(), parser)
+			ext.parser = assignTable(ext.parser, parser, append)
 
 		if (macro) {
-			if (app['~scopeChild']) {
-				const pluginMacros = app.pluginMacros
+			// a plugin seen below adds only what this instance lacks, as a
+			// scope child's plugin macros do
+			if (app['~scopeChild'] || append) {
+				const pluginMacros = append
+					? new Map(Object.entries(macro))
+					: app.pluginMacros
 				let changed = false
 
 				if (pluginMacros?.size) {
@@ -5377,11 +5631,7 @@ export class Elysia<
 	 * Republish the absorbed app's plugin/global hooks onto this instance's chain.
 	 * Split out from #use, see #absorbExt
 	 */
-	#propagateHooks(
-		app: AnyElysia,
-		hookChain: ChainNode | undefined,
-		addedByThisCall: Set<number> | undefined
-	) {
+	#propagateHooks(app: AnyElysia, hookChain: ChainNode | undefined) {
 		const nodes = useNodesBuffer
 		nodes.length = 0
 		let current: ChainNode | undefined = hookChain
@@ -5391,11 +5641,16 @@ export class Elysia<
 			current = (current as Extract<ChainNode, { added: unknown }>).parent
 		}
 
-		const childrenHash = this.childrenHash
 		const scopeChild = app['~scopeChild']
-		let held = propagatedRegistrations.get(this)
-		const lifted = liftedRequests.get(this)
-		let lifting: Set<number> | undefined
+		const requests = requestOrigins.get(this)
+		let installing: Set<number> | undefined
+		let keys = chainKeys.get(this)
+		// named plugins with a registration new to this chain: their
+		// registrations that follow are copied again, so the chain ends in
+		// each plugin's own order
+		// (one without allocating: most `.use()` calls admit one plugin)
+		let admitted: number | undefined
+		let admittedMore: Set<number> | undefined
 
 		// one node per registration, in order, each keeping its plugin
 		for (let i = nodes.length - 1; i >= 0; i--) {
@@ -5415,49 +5670,58 @@ export class Elysia<
 				;(source as Partial<AppHook>).request = request
 			}
 
+			// a key is only given to a registration with hooks
+			if ((node.key === undefined || scopeChild) && hollow(source))
+				continue
+
 			// a registration without a named plugin takes the first one it
 			// passes through (Elysia 1 `injectChecksum`)
 			const origin = node.origin ?? app.hash
-			const registration = node.registration ?? node
 			let added = source
+			const registration = node.registration ?? node
+			let key = node.key
+			let dup: true | undefined
 
-			let repeated = false
+			const held =
+				key === undefined
+					? undefined
+					: (keys ??= this.#keysOf()).get(key)
+			if (held) {
+				// on this chain already: only its standalone schemas validate
+				// again, unless it follows a new one of its plugin (a keyed
+				// copy's `origin` is the plugin that named it): then it is
+				// copied again, see above. Only the same registration is: a
+				// same-name twin's order is not the plugin's (D1 variants), and
+				// re-copying them is what made repeated variant uses quadratic.
+				// Ceiling: per receiver and plugin instance, one copy per
+				// registration per admitting `.use()`; a call admits only when
+				// `.as()` exported a registration older than one already here
+				if (
+					scopeChild ||
+					held !== registration ||
+					(origin !== admitted && !admittedMore?.has(origin!))
+				) {
+					const schemas = (source as { schemas?: unknown }).schemas
+					if (!schemas) continue
 
-			if (origin !== undefined) {
-				if (!held)
-					propagatedRegistrations.set(this, (held = new WeakMap()))
-				const through = held.get(registration)
+					added = nullObject()
+					;(added as { schemas?: unknown }).schemas = schemas
+					key = undefined
+				} else dup = true
+			} else if (key !== undefined && origin !== admitted)
+				if (admitted === undefined) admitted = origin
+				else (admittedMore ??= new Set()).add(origin!)
 
-				if (!through) held.set(registration, [origin])
-				else if (through.includes(origin)) repeated = true
-				else through.push(origin)
-			}
-
-			const registrant = (registration as { origin?: number }).origin
-
-			if (repeated) {
-				const schemas = (source as { schemas?: unknown }).schemas
-				if (!schemas) continue
-
-				added = nullObject()
-				;(added as { schemas?: unknown }).schemas = schemas
-			} else if (
-				registrant !== undefined &&
-				childrenHash?.has(registrant) &&
-				!addedByThisCall?.has(registrant)
-			) {
-				added = nullObject()
-				for (const key in source)
-					if (key !== '~deriveEntries' && !eventProperties.has(key))
-						(added as any)[key] = (source as any)[key]
-			}
-
-			// a named plugin's `request` runs once per app: one a callback
-			// lifted here is not installed again by a later `.use()`
+			// a named plugin's `request` hooks are installed once per app, by
+			// the first `.use()` that brings any (a later one adds none)
 			let dropRequest = false
-			if (origin !== undefined && 'request' in added)
-				if (lifted?.has(origin)) dropRequest = true
-				else if (scopeChild) (lifting ??= new Set(lifted)).add(origin)
+			if (
+				origin !== undefined &&
+				hasHook((added as Partial<AppHook>).request)
+			)
+				if (requests?.has(origin) && !installing?.has(origin))
+					dropRequest = true
+				else (installing ??= new Set()).add(origin)
 
 			if ('schema' in added || dropRequest) {
 				if (added === source)
@@ -5466,17 +5730,31 @@ export class Elysia<
 				if (dropRequest) delete (added as any).request
 			}
 
-			if (isNotEmpty(added))
-				this.#pushChainNode(
-					added,
-					scope,
-					registration,
-					origin,
-					scopeChild ? app : undefined
-				)
+			if (added !== source && hollow(added)) continue
+
+			// an unnamed plugin's registration is named by the first named
+			// instance it reaches
+			if (key === undefined && !held) key = this.#nameRegistration()
+
+			// a lifted `request` is not the whole registration: a later
+			// `.use()` still installs the rest
+			if (key !== undefined && !dup && !scopeChild)
+				(keys ??= this.#keysOf()).set(key, registration)
+
+			this.#pushChainNode(
+				added,
+				scope,
+				registration,
+				origin,
+				scopeChild ? app : undefined,
+				key,
+				dup
+			)
 		}
 
-		if (lifting) liftedRequests.set(this, lifting)
+		if (installing)
+			if (requests) for (const origin of installing) requests.add(origin)
+			else requestOrigins.set(this, installing)
 
 		nodes.length = 0
 	}
@@ -5498,6 +5776,10 @@ export class Elysia<
 		for (let i = 0; i < limit; i++) {
 			const route = declared[i]
 			const childChain = route[6]
+			const cookieConfig = mergeCookieConfig(
+				app['~config']?.cookie,
+				routeCookieConfigs.get(app)?.[i]
+			)
 			let inheritedChain: ChainNode | undefined
 
 			if (childChain === undefined) inheritedChain = preChain
@@ -5533,7 +5815,8 @@ export class Elysia<
 				this['~scopeChild'] ? this : undefined,
 				this['~Prefix'],
 				inheritedChain,
-				name
+				name,
+				cookieConfig
 			)
 		}
 	}
@@ -5543,7 +5826,8 @@ export class Elysia<
 		macroScope: AnyElysia | undefined,
 		prefix: string | undefined,
 		inheritedChain: ChainNode | undefined,
-		source: string | undefined
+		source: string | undefined,
+		cookieConfig: CookieConfig | undefined
 	) {
 		const path = prefix ? joinPath(prefix, route[1]) : route[1]
 		macroScope =
@@ -5566,7 +5850,8 @@ export class Elysia<
 						inheritedChain,
 						macroScope
 					] as unknown as InternalRoute),
-			source
+			source,
+			cookieConfig
 		)
 	}
 
@@ -5694,7 +5979,7 @@ export class Elysia<
 
 			if (isHook)
 				throw new Error(
-					`[Elysia] .${method === '*' ? 'all' : method.toLowerCase()}('${path}', handler, hook) is the 1.x order; Elysia 2 takes (path, hook, handler) — see the 2.0 migration guide`
+					`[Elysia] .${method === '*' ? 'all' : method.toLowerCase()}('${path}', handler, hook) is a legacy order, use (path, hook, handler) instead`
 				)
 		}
 
@@ -5711,14 +5996,13 @@ export class Elysia<
 
 		const appHook = this['~hookChain']
 
-		// The name is only read by the sealed error; toLowerCase + `in` on every
-		// route doubles registration time
 		const verb =
 			this['~generation'] === undefined
 				? 'route'
 				: method === '*'
 					? 'all'
 					: method.toLowerCase()
+
 		this.#assertMutable(verb in this ? verb : 'route')
 		;(this.declaredRoutes ?? this.#materializeDeclaredRoutes()).push(
 			(appHook
@@ -5793,7 +6077,11 @@ export class Elysia<
 		return (this.declaredRoutes = routes)
 	}
 
-	#registerRoute(route: InternalRoute, source?: string) {
+	#registerRoute(
+		route: InternalRoute,
+		source?: string,
+		cookieConfig?: CookieConfig
+	) {
 		this.#assertMutable('route')
 
 		const routes = this.declaredRoutes ?? this.#materializeDeclaredRoutes()
@@ -5801,6 +6089,11 @@ export class Elysia<
 		routes.push(route)
 
 		if (source) (this.routeSources ??= [])[sequence] = source
+		if (cookieConfig) {
+			let configs = routeCookieConfigs.get(this)
+			if (!configs) routeCookieConfigs.set(this, (configs = []))
+			configs[sequence] = cookieConfig
+		}
 
 		if (this.#routerBuilt || this.compiled !== undefined)
 			this.#invalidateRouter()
@@ -5811,7 +6104,6 @@ export class Elysia<
 		this.jitColdRemaining = undefined
 		this.jitTable = undefined
 		this.jitRoute = undefined
-		this.jitAliases = undefined
 		this.fetchFn = undefined
 		this.#routerBuilt = false
 	}
@@ -6003,7 +6295,14 @@ export class Elysia<
 			keyof Metadata['parser']
 		> &
 			MacroOptionContext<Metadata['macroFn'], Schema, Decorator> &
-			UnknownHookKey<UnknownKey>,
+			UnknownHookKey<UnknownKey> &
+			// the headers schema's static, as the route computes it (cached)
+			NoInfer<
+				HeadersKeyCheck<
+					Input,
+					UnwrapSchema<Input['headers'], Definitions['typebox']>
+				>
+			>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -6144,7 +6443,14 @@ export class Elysia<
 			keyof Metadata['parser']
 		> &
 			MacroOptionContext<Metadata['macroFn'], Schema, Decorator> &
-			UnknownHookKey<UnknownKey>,
+			UnknownHookKey<UnknownKey> &
+			// the headers schema's static, as the route computes it (cached)
+			NoInfer<
+				HeadersKeyCheck<
+					Input,
+					UnwrapSchema<Input['headers'], Definitions['typebox']>
+				>
+			>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -6285,7 +6591,14 @@ export class Elysia<
 			keyof Metadata['parser']
 		> &
 			MacroOptionContext<Metadata['macroFn'], Schema, Decorator> &
-			UnknownHookKey<UnknownKey>,
+			UnknownHookKey<UnknownKey> &
+			// the headers schema's static, as the route computes it (cached)
+			NoInfer<
+				HeadersKeyCheck<
+					Input,
+					UnwrapSchema<Input['headers'], Definitions['typebox']>
+				>
+			>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -6426,7 +6739,14 @@ export class Elysia<
 			keyof Metadata['parser']
 		> &
 			MacroOptionContext<Metadata['macroFn'], Schema, Decorator> &
-			UnknownHookKey<UnknownKey>,
+			UnknownHookKey<UnknownKey> &
+			// the headers schema's static, as the route computes it (cached)
+			NoInfer<
+				HeadersKeyCheck<
+					Input,
+					UnwrapSchema<Input['headers'], Definitions['typebox']>
+				>
+			>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -6567,7 +6887,14 @@ export class Elysia<
 			keyof Metadata['parser']
 		> &
 			MacroOptionContext<Metadata['macroFn'], Schema, Decorator> &
-			UnknownHookKey<UnknownKey>,
+			UnknownHookKey<UnknownKey> &
+			// the headers schema's static, as the route computes it (cached)
+			NoInfer<
+				HeadersKeyCheck<
+					Input,
+					UnwrapSchema<Input['headers'], Definitions['typebox']>
+				>
+			>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -6708,7 +7035,14 @@ export class Elysia<
 			keyof Metadata['parser']
 		> &
 			MacroOptionContext<Metadata['macroFn'], Schema, Decorator> &
-			UnknownHookKey<UnknownKey>,
+			UnknownHookKey<UnknownKey> &
+			// the headers schema's static, as the route computes it (cached)
+			NoInfer<
+				HeadersKeyCheck<
+					Input,
+					UnwrapSchema<Input['headers'], Definitions['typebox']>
+				>
+			>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -6849,7 +7183,14 @@ export class Elysia<
 			keyof Metadata['parser']
 		> &
 			MacroOptionContext<Metadata['macroFn'], Schema, Decorator> &
-			UnknownHookKey<UnknownKey>,
+			UnknownHookKey<UnknownKey> &
+			// the headers schema's static, as the route computes it (cached)
+			NoInfer<
+				HeadersKeyCheck<
+					Input,
+					UnwrapSchema<Input['headers'], Definitions['typebox']>
+				>
+			>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -6990,7 +7331,14 @@ export class Elysia<
 			keyof Metadata['parser']
 		> &
 			MacroOptionContext<Metadata['macroFn'], Schema, Decorator> &
-			UnknownHookKey<UnknownKey>,
+			UnknownHookKey<UnknownKey> &
+			// the headers schema's static, as the route computes it (cached)
+			NoInfer<
+				HeadersKeyCheck<
+					Input,
+					UnwrapSchema<Input['headers'], Definitions['typebox']>
+				>
+			>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -7132,7 +7480,14 @@ export class Elysia<
 			keyof Metadata['parser']
 		> &
 			MacroOptionContext<Metadata['macroFn'], Schema, Decorator> &
-			UnknownHookKey<UnknownKey>,
+			UnknownHookKey<UnknownKey> &
+			// the headers schema's static, as the route computes it (cached)
+			NoInfer<
+				HeadersKeyCheck<
+					Input,
+					UnwrapSchema<Input['headers'], Definitions['typebox']>
+				>
+			>,
 		fn: Handle
 	): AddRoute<
 		BasePath,
@@ -7143,7 +7498,8 @@ export class Elysia<
 		Routes,
 		Ephemeral,
 		Volatile,
-		Method,
+		// the router uppercases the method: `.route('GET')` is `.get()`
+		Lowercase<Method>,
 		Path,
 		Schema,
 		MacroContext,
@@ -7193,7 +7549,8 @@ export class Elysia<
 		Routes,
 		Ephemeral,
 		Volatile,
-		Method,
+		// the router uppercases the method: `.route('GET')` is `.get()`
+		Lowercase<Method>,
 		Path,
 		Schema,
 		{},
@@ -7270,7 +7627,14 @@ export class Elysia<
 			keyof Metadata['parser']
 		> &
 			MacroOptionContext<Metadata['macroFn'], Schema, Decorator> &
-			UnknownHookKey<UnknownKey>,
+			UnknownHookKey<UnknownKey> &
+			// the headers schema's static, as the route computes it (cached)
+			NoInfer<
+				HeadersKeyCheck<
+					Input,
+					UnwrapSchema<Input['headers'], Definitions['typebox']>
+				>
+			>,
 		fn: Handle
 	): this
 	all<
@@ -7314,6 +7678,63 @@ export class Elysia<
 	 * Register a WebSocket route as `(path, options)`, `(path, handler)`, or `(path, options, handler)`.
 	 * Requires `.use(websocket())` from `elysia/websocket`.
 	 */
+	ws<
+		const Path extends string,
+		const Input extends Metadata['macro'] &
+			InputSchema<keyof Definitions['typebox'] & string>,
+		const Schema extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				'',
+				undefined extends Input['params'] ? true : false
+			>,
+			MergeScopedSchemas<
+				Metadata['schemas'],
+				Ephemeral['schemas'],
+				Volatile['schemas']
+			>
+		>,
+		const MacroContext extends {} extends Metadata['macroFn']
+			? {}
+			: MacroToContext<
+					Metadata['macroFn'],
+					Input,
+					Definitions['typebox']
+				>,
+		const Handler extends WSMessageHandler<
+			Schema & MacroContext,
+			Singleton & {
+				derive: Ephemeral['derive'] &
+					Volatile['derive'] &
+					// @ts-ignore
+					MacroContext['derive']
+			}
+		>
+	>(
+		path: Path,
+		handler: Handler
+	): AddWSRoute<
+		BasePath,
+		Scope,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile,
+		Path,
+		Schema,
+		MacroContext,
+		WSHandlerResponse<Handler>
+	>
 	ws<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
@@ -7379,63 +7800,6 @@ export class Elysia<
 		void,
 		Input['error'],
 		Input['beforeHandle']
-	>
-	ws<
-		const Path extends string,
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					Input,
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>,
-				'',
-				undefined extends Input['params'] ? true : false
-			>,
-			MergeScopedSchemas<
-				Metadata['schemas'],
-				Ephemeral['schemas'],
-				Volatile['schemas']
-			>
-		>,
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Input,
-					Definitions['typebox']
-				>,
-		const Handler extends WSMessageHandler<
-			Schema & MacroContext,
-			Singleton & {
-				derive: Ephemeral['derive'] &
-					Volatile['derive'] &
-					// @ts-ignore
-					MacroContext['derive']
-			}
-		>
-	>(
-		path: Path,
-		handler: Handler
-	): AddWSRoute<
-		BasePath,
-		Scope,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile,
-		Path,
-		Schema,
-		MacroContext,
-		WSHandlerResponse<Handler>
 	>
 	ws<
 		const Path extends string,
@@ -7631,12 +7995,39 @@ export class Elysia<
 		return this
 	}
 
+	/** @internal Run a route build under the cookie config of route `index` */
+	['~withRouteCookie']<Args extends unknown[], Result>(
+		index: number,
+		build: (...args: Args) => Result,
+		...args: Args
+	): Result {
+		const routeCookieConfig = routeCookieConfigs.get(this)?.[index]
+		if (!routeCookieConfig) return build(...args)
+
+		const config = this['~config']
+		const generation = this['~generation']
+		const generationConfig = generation?.['~config']
+		const effectiveConfig = {
+			...config,
+			cookie: mergeCookieConfig(config?.cookie, routeCookieConfig)
+		} as ElysiaConfig<BasePath, Scope>
+
+		this['~config'] = effectiveConfig
+		if (generation) (generation as any)['~config'] = effectiveConfig
+
+		try {
+			return build(...args)
+		} finally {
+			this['~config'] = config
+			if (generation) (generation as any)['~config'] = generationConfig
+		}
+	}
+
 	/** @internal */
 	handler(
 		index: number,
 		immediate?: boolean,
 		route?: InternalRoute,
-		aliases?: StaticMapAliases,
 		table?: RouteTable
 	): CompiledHandler {
 		if (this.compiled?.[index]) return this.compiled![index]
@@ -7658,7 +8049,9 @@ export class Elysia<
 
 			let handler: CompiledHandler
 			try {
-				handler = compileHandler(
+				handler = this['~withRouteCookie'](
+					index,
+					compileHandler,
 					row,
 					this,
 					exactDuplicate && Compiled.hasProgram(this['~programId'])
@@ -7681,43 +8074,8 @@ export class Elysia<
 
 		if (indexedTable !== undefined) this.jitTable = indexedTable
 		if (jitRoute !== undefined) (this.jitRoute ??= [])[index] = jitRoute
-		if (aliases !== undefined) (this.jitAliases ??= [])[index] = aliases
 
 		return (context) => this['~dispatch'](index, context)
-	}
-
-	#staticAliases(
-		table: RouteTable,
-		index: number
-	): StaticMapAliases | undefined {
-		const flags = table.flags[index]
-		if ((flags & (RouteFlag.WS | RouteFlag.Dynamic)) !== 0) return
-
-		const path = table.path[index]
-		const method = table.method[index]
-		const needsEncode = (flags & RouteFlag.Encode) !== 0
-		const registerLoose =
-			this['~config']?.strictPath !== true &&
-			canRegisterLoose(path, false)
-		if (!needsEncode && !registerLoose) return
-
-		let explicit: Set<string> | undefined
-		if (registerLoose) {
-			explicit = new Set()
-			for (let i = 0; i < table.length; i++) {
-				if (table.method[i] !== method) continue
-
-				const declared = table.path[i]
-				explicit.add(declared)
-				if ((table.flags[i] & RouteFlag.Encode) !== 0)
-					explicit.add(encodeURI(declared))
-			}
-		}
-
-		return {
-			method,
-			paths: expandPaths(path, needsEncode, registerLoose, explicit)
-		}
 	}
 
 	#releaseJit() {
@@ -7726,24 +8084,13 @@ export class Elysia<
 		Compiled.release(this['~programId'])
 		this.jitColdRemaining = undefined
 		this.jitRoute = undefined
-		this.jitAliases = undefined
 		this.jitTable = undefined
 	}
 
 	#satisfyJit(table: RouteTable, index: number) {
 		if ((table.flags[index] & RouteFlag.ExactDuplicate) !== 0) return false
 
-		if (this.jitColdRemaining === undefined) {
-			if (
-				this['~generation'] === undefined &&
-				this['~config']?.precompile !== true &&
-				isProduction() &&
-				!Capture.isAotBuildEnv()
-			)
-				table.flags[index] |= RouteFlag.JITSatisfied
-
-			return false
-		}
+		if (this.jitColdRemaining === undefined) return false
 		if ((table.flags[index] & RouteFlag.JITCold) === 0) return false
 
 		table.flags[index] &= ~RouteFlag.JITCold
@@ -7764,7 +8111,9 @@ export class Elysia<
 
 		let handler: CompiledHandler
 		try {
-			handler = compileHandler(
+			handler = this['~withRouteCookie'](
+				index,
+				compileHandler,
 				materialized,
 				this,
 				exactDuplicate && Compiled.hasProgram(this['~programId'])
@@ -7783,27 +8132,12 @@ export class Elysia<
 
 		this.compiled![index] = handler
 
-		if (!exactDuplicate) {
-			const aliases =
-				this.jitAliases?.[index] ??
-				(table ? this.#staticAliases(table, index) : undefined)
-			if (aliases) {
-				this.#initMap()
-
-				const map = (this['~map']![aliases.method] ??=
-					nullObject() as any)
-
-				for (let p = 0; p < aliases.paths.length; p++)
-					map[aliases.paths[p]] = handler
-			} else this.#saveHandler(materialized[0], materialized[1], handler)
-		}
+		if (!exactDuplicate)
+			this.#saveHandler(materialized[0], materialized[1], handler)
 
 		const releasedNow = table ? this.#satisfyJit(table, index) : false
 
-		if (!releasedNow) {
-			if (this.jitRoute) this.jitRoute[index] = undefined
-			if (this.jitAliases) this.jitAliases[index] = undefined
-		}
+		if (!releasedNow && this.jitRoute) this.jitRoute[index] = undefined
 
 		return handler(context)
 	}
@@ -7992,7 +8326,6 @@ export class Elysia<
 		const previousCompiled = this.compiled
 		const previousJitTable = this.jitTable
 		const previousJitRoute = this.jitRoute
-		const previousJitAliases = this.jitAliases
 		const previousHasDynamicWS = this['~hasDynamicWS']
 
 		const previousGeneration = this['~generation']
@@ -8003,7 +8336,6 @@ export class Elysia<
 		this.jitColdRemaining = undefined
 		this.jitTable = undefined
 		this.jitRoute = undefined
-		this.jitAliases = undefined
 		this['~hasDynamicWS'] = undefined
 		this['~generation'] = undefined
 		let buildSucceeded = false
@@ -8011,13 +8343,13 @@ export class Elysia<
 		try {
 			this.#buildRouterUnsafe()
 
-			const nextMap = this['~map']
+			const nextMap = this['~map'] as typeof previousMap
 			if (previousMap && nextMap !== previousMap) {
 				Object.assign(previousMap, nextMap)
 				this['~map'] = previousMap
 			}
 
-			const nextRouter = this['~router']
+			const nextRouter = this['~router'] as typeof previousRouter
 			if (previousRouter && nextRouter && nextRouter !== previousRouter) {
 				Object.assign(previousRouter, nextRouter)
 				this['~router'] = previousRouter
@@ -8034,7 +8366,6 @@ export class Elysia<
 			this.jitColdRemaining = undefined
 			this.jitTable = previousJitTable
 			this.jitRoute = previousJitRoute
-			this.jitAliases = previousJitAliases
 			this['~hasDynamicWS'] = previousHasDynamicWS
 			this['~generation'] = previousGeneration
 
@@ -8068,15 +8399,10 @@ export class Elysia<
 				let cold = 0
 
 				for (let i = 0; i < routeCount; i++) {
-					const satisfied =
-						(table.flags[i] & RouteFlag.JITSatisfied) !== 0
-					table.flags[i] &= ~(
-						RouteFlag.JITCold | RouteFlag.JITSatisfied
-					)
+					table.flags[i] &= ~RouteFlag.JITCold
 					const flags = table.flags[i]
 					// Bun serves an HTML bundle natively, it never reaches `~dispatch`
 					if (
-						satisfied ||
 						(flags & (RouteFlag.WS | RouteFlag.ExactDuplicate)) !==
 							0 ||
 						compiled?.[i] !== undefined ||
@@ -8092,7 +8418,8 @@ export class Elysia<
 				else this.jitColdRemaining = cold
 			}
 
-			clearHandlerAnalysisCaches(this)
+			// the resolved hooks stay: a cold route or `.routes` expanding a
+			// macro again would get another hook than its compiled siblings
 			clearFlattenChainMemo(this)
 		}
 
@@ -8278,9 +8605,8 @@ export class Elysia<
 			const routeFlags = flags[i]
 
 			if ((routeFlags & RouteFlag.WS) !== 0) {
-				const ws = wsCap!.provider.buildWSRoute(
-					routeRow(table, i),
-					this
+				const ws = this['~withRouteCookie'](i, () =>
+					wsCap!.provider.buildWSRoute(routeRow(table, i), this)
 				)
 				const handler = ws[0] as unknown as CompiledHandler
 				const options = ws[1]
@@ -8352,7 +8678,7 @@ export class Elysia<
 
 				map[routePath] = lazy
 					? ~i
-					: this.handler(i, true, undefined, undefined, table)
+					: this.handler(i, true, undefined, table)
 
 				continue
 			}
@@ -8371,21 +8697,16 @@ export class Elysia<
 					loosePath: isLoose
 				}))
 
-				const store = lazy
-					? i
-					: this.handler(i, true, undefined, undefined, table)
+				const store = lazy ? i : this.handler(i, true, undefined, table)
 
 				for (let p = 0; p < paths.length; p++)
 					router.add(routeMethod, paths[p], store)
 			} else {
 				const map = (methods[routeMethod] ??= nullObject() as any)
 
-				if (lazy)
-					(this.jitAliases ??= [])[i] = { method: routeMethod, paths }
-
 				const handler = lazy
 					? ~i
-					: this.handler(i, true, undefined, undefined, table)
+					: this.handler(i, true, undefined, table)
 
 				for (let p = 0; p < paths.length; p++) map[paths[p]] = handler
 			}
@@ -8453,14 +8774,10 @@ export class Elysia<
 			this['~config']?.adapter ?? (isBun ? BunAdapter : undefined)
 		)?.listen
 
-		if (!listen) {
-			// @ts-ignore
-			const deno = typeof Deno !== 'undefined'
-
+		if (!listen)
 			throw new Error(
-				`[Elysia] listen() requires an adapter on ${deno ? 'Deno' : typeof process === 'undefined' ? 'this runtime' : 'Node.js'} — https://elysiajs.com/integrations/${deno ? 'deno' : 'node'}`
+				'[Elysia] listen() requires an adapter on this runtime, see https://elysiajs.com/integrations/node'
 			)
-		}
 
 		if (!Capture.isAotBuildEnv()) listen(this, options, callback)
 

@@ -5,7 +5,7 @@ import { defaultAdapter } from '../../adapter/constants'
 import { frozenRootOf } from '../../generation'
 import { returnedErrorClasses } from '../../handler/utils'
 import { originalFunction } from '../../type/shared'
-import { isAsyncFunction } from '../utils'
+import { isAsyncFunction, mayReturnPromise } from '../utils'
 import { deriveModes } from './utils'
 import { isResponseMap } from './frozen-validator'
 import {
@@ -15,6 +15,25 @@ import {
 	isNotEmpty,
 	refTargets
 } from '../../utils'
+
+import { Compiled, type ReplayImpl } from '../aot'
+
+// `Compiled.replay`: same entry as the walker, so also off the plain graph
+export { resolveHandlerParams } from './params'
+export { buildFrozenRouteValidator } from './frozen-validator'
+
+/**
+ * The replay members read this copy's `Compiled` registry and error classes:
+ * installed into another copy's `Compiled`, a frozen route answers 500
+ */
+export function installReplay(compiled: typeof Compiled, impl: ReplayImpl) {
+	if (compiled !== Compiled)
+		throw new Error(
+			'[elysia-aot] `elysia` and `elysia/route-shape` resolve to different copies of elysia: check aliases and duplicate installs, or the `registerFrom` / `routeShapeFrom` options'
+		)
+
+	compiled.replay = impl
+}
 
 /**
  * `k` of a captured route: the manifest stores it, replay compares it.
@@ -216,7 +235,12 @@ export function routeShape(
 		feed('|')
 
 		const fns = (hook as any)?.[event]
-		if (fns) for (const fn of Array.isArray(fns) ? fns : [fns]) shape(fn)
+		if (fns)
+			for (const fn of Array.isArray(fns) ? fns : [fns]) {
+				if (event === 'transform')
+					feed(mayReturnPromise(fn) ? 'p' : 's')
+				shape(fn)
+			}
 	}
 
 	// fetch-level, not in the route hook, see `compileHandler`

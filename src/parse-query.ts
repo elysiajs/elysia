@@ -1,4 +1,5 @@
 import decodeComponent from 'deuri'
+import { EmptyObject } from './utils'
 
 // bit flags
 const KEY_HAS_PLUS = 1
@@ -22,7 +23,7 @@ export function parseQueryFromURL(
 	array?: { [key: string]: 1 },
 	object?: { [key: string]: 1 }
 ): Record<string, string> {
-	const result = Object.create(null)
+	const result = new EmptyObject()
 	if (startIndex === -1) return result
 
 	let flags = 0
@@ -216,7 +217,7 @@ function processKeyValuePairFromURL(
  * @param {string} input
  */
 export function parseQuery(input: string) {
-	const result = Object.create(null) as Record<string, string | string[]>
+	const result = new EmptyObject() as Record<string, string | string[]>
 
 	let flags = 0
 

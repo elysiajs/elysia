@@ -14,7 +14,6 @@ import {
 	captureMirrorCodecs,
 	captureMirrorUnions
 } from '../../compile/aot-emit'
-import type { ValidatorOptions } from '../../validator'
 import { getExactMirror } from './exact-mirror'
 
 // TypeBox >= 1.3.24 dropped `Validator.buildResult` (sinclairzx81/typebox#1680),
@@ -28,8 +27,7 @@ export function compileWithBuild(schema: TSchema) {
 
 function captureInnerCodec(
 	inner: any,
-	open: number,
-	sanitize: ValidatorOptions['sanitize']
+	open: number
 ): NonNullable<CapturedValidator['innerCodecs']>[number] | undefined {
 	if (schemaHasDangerousProperties(inner)) return
 	// inner defaults aren't reconstructed under seal → refuse this slot so the
@@ -49,9 +47,10 @@ function captureInnerCodec(
 
 	let decode: CapturedMirror
 	try {
+		// no sanitize: this runs inside the outer mirror, which sanitizes what
+		// it decodes. Doing it here too would escape every string twice
 		const emitted = createMirror(inner, {
 			Compile: compileWithBuild,
-			sanitize,
 			decode: true,
 			emit: true
 		}) as { source?: string; externals?: any }
@@ -59,7 +58,6 @@ function captureInnerCodec(
 		if (typeof emitted?.source !== 'string') return
 		const ext = emitted.externals
 
-		if (ext?.hof) return
 		if (ext?.codecs && !captureMirrorCodecs(inner, ext.codecs)) return
 
 		let u: { identifier: string; code: string }[][] | undefined
@@ -81,8 +79,7 @@ function captureInnerCodec(
 }
 
 export function captureStringCodecEntries(
-	schema: TSchema,
-	sanitize: ValidatorOptions['sanitize']
+	schema: TSchema
 ): CapturedValidator['innerCodecs'] | undefined {
 	const stringCodecs = collectStringCodecNodes(schema)
 	if (!stringCodecs.length) return
@@ -90,7 +87,7 @@ export function captureStringCodecEntries(
 	const entries: NonNullable<CapturedValidator['innerCodecs']> = []
 
 	for (const { inner, open } of stringCodecs) {
-		const entry = captureInnerCodec(inner, open, sanitize)
+		const entry = captureInnerCodec(inner, open)
 		if (!entry) break
 		entries.push(entry)
 	}

@@ -7,6 +7,7 @@ import { Compiled } from '../../src/compile/aot'
 import { Validator } from '../../src/validator'
 import { captureArtifacts } from '../../src/plugin/aot/source'
 import { evalRegistration } from '../aot/_manifest'
+import typeboxPackage from '../../node_modules/typebox/package.json'
 
 /**
  * a signing `t.Cookie` must behave like the inline form however it reaches a
@@ -740,7 +741,7 @@ describe('cookie signing config reached through a schema reference', () => {
 		)
 	})
 
-	// a `$ref` resolved by pointer, anchor, URL or dynamic scope reaches the
+	// a `$ref` resolved by pointer, anchor or dynamic scope reaches the
 	// signed schema only in the validator: compiling fails, not unsigned
 	const cyclic = (patch: (schema: any) => void) => () => {
 		const schema: any = t.Cyclic({ Target: kinds[0]![1]() }, 'Target')
@@ -763,7 +764,6 @@ describe('cookie signing config reached through a schema reference', () => {
 				s.$ref = '#signed'
 			})
 		],
-		['an absolute URL', cyclic((s) => (s.$ref = 'http://unknown/Target'))],
 		[
 			'a $dynamicRef',
 			cyclic((s) => {
@@ -793,19 +793,114 @@ describe('cookie signing config reached through a schema reference', () => {
 		expectUnfollowable(app)
 	})
 
-	// TypeBox matches a name against the `$id` path: `Target` reaches `http://unknown/Target` too
-	it('signs through a name matching a URL $id', () =>
-		expectSigning(
-			new Elysia().get(
+	// TypeBox matches a `$ref` against the `$id` by URL path: `Target` and
+	// `http://unknown/Target` meet up to 1.3.28, not from 1.3.29 (base
+	// `urn:typebox:root`), so every request fails validation there
+	for (const [name, patch] of [
+		[
+			'a name matching a URL $id',
+			(s: any) => (s.$defs.Target.$id = 'http://unknown/Target')
+		],
+		['an absolute URL', (s: any) => (s.$ref = 'http://unknown/Target')]
+	] as const)
+		it(`signs through ${name}`, async () => {
+			const app = new Elysia().get(
 				'/',
-				{
-					cookie: cyclic(
-						(s) => (s.$defs.Target.$id = 'http://unknown/Target')
-					)() as any
-				},
+				{ cookie: cyclic(patch)() as any },
 				handler
 			)
+			if (!Bun.semver.satisfies(typeboxPackage.version, '>=1.3.29'))
+				return expectSigning(app)
+
+			const forged = await app.handle('/', withCookie('session=admin'))
+			expect(forged.status).toBe(400)
+			await expect(forged.text()).resolves.not.toBe('admin')
+
+			const genuine = await app.handle(
+				'/',
+				withCookie(`session=${await signedAs('admin')}`)
+			)
+			expect(genuine.status).toBe(422)
+		})
+
+	// TypeBox reaches these on every version: `Target?x` is the path
+	// `Target`, `$id: ''` matches any name
+	for (const [name, patch] of [
+		[
+			'a $ref with a query',
+			(s: any) => {
+				s.$defs.Target.$id = 'Target?x'
+				s.$ref = 'Target?x'
+			}
+		],
+		['an empty $id', (s: any) => (s.$defs.Target.$id = '')]
+	] as const)
+		it(`signs through ${name}`, () =>
+			expectSigning(
+				new Elysia().get(
+					'/',
+					{ cookie: cyclic(patch)() as any },
+					handler
+				)
+			))
+
+	// every model is searched for an `$id`, data included: one that isn't a
+	// URL must not break an unrelated cookie
+	it('signs past an $id that is not a URL', () =>
+		expectSigning(
+			new Elysia()
+				.model({ Data: { const: { $id: 'http://[' } } as any })
+				.get('/', { cookie: cyclic(() => {})() as any }, handler)
 		))
+
+	// from 1.3.29 TypeBox reaches it by its text, before it throws on it
+	it('signs through a $ref naming an $id that is not a URL', () => {
+		const app = new Elysia().get(
+			'/',
+			{
+				cookie: cyclic((s) => {
+					s.$defs.Target.$id = 'http://[ x'
+					s.$ref = 'http://[ x'
+				})() as any
+			},
+			handler
+		)
+		if (Bun.semver.satisfies(typeboxPackage.version, '>=1.3.29'))
+			return expectSigning(app)
+
+		expect(() => app.compile()).toThrow('Invalid URL')
+	})
+
+	// the signed `$id`, last, is the one TypeBox picks, an unsigned one Elysia
+	// must not settle for: compiling fails, whichever TypeBox is installed
+	for (const [name, id, decoy, ref] of [
+		// `urn:typebox:root:Target` from 1.3.29, `http://x/Target` before:
+		// both are taken, even where TypeBox only follows the URL one
+		['a URN', 'urn:typebox:root:Target', 'http://x/Target', 'Target'],
+		['a query', 'Target?x', 'Target', 'Target'],
+		['an empty $id', '', 'Target', 'Target'],
+		// `a b` is `/a%20b` in a URL path, kept as is in a URN
+		['an encoded path', 'http://x/a%20b', 'urn:x:a b', 'a b'],
+		// TypeBox matches `#x` itself, not the `Target` path
+		['a fragment', '#x', 'Target', 'Target#x'],
+		// `..` is a segment of the URL path, not a name
+		['a dot segment', 'http://y/a:..', '', 'http://x/a:..']
+	])
+		it(`throws on compile for a signed $id behind ${name}`, () => {
+			const schema: any = cyclic((s) => {
+				const signed = s.$defs.Target
+				delete s.$defs.Target
+				s.$defs.Decoy = t.Object({ session: t.Optional(t.String()) })
+				s.$defs.Decoy.$id = decoy
+				s.$defs.Target = signed
+				signed.$id = id
+				s.$ref = ref
+			})()
+
+			expectUnfollowable(
+				new Elysia().get('/', { cookie: schema }, handler)
+			)
+		})
 
 	// a model is snapshotted at registration: editing it later must not turn signing off
 	it('keeps the policy a model had when it was registered', async () => {

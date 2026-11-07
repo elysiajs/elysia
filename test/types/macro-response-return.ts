@@ -193,3 +193,68 @@ new Elysia().get(
 	>()
 	expectTypeOf<Route['error']>().toEqualTypeOf<never>()
 }
+
+// One `status()` with a union code from a macro hook serves its body at each
+// code (runtime sends "nope" at 401 or 403), as a route or instance hook does
+{
+	const pick = ({ request }: { request: Request }) =>
+		request.headers.has('a')
+			? status(request.headers.has('b') ? 401 : 403, 'nope' as const)
+			: undefined
+	const ok = () => 'ok' as const
+
+	const app = new Elysia()
+		.macro({
+			before: { beforeHandle: pick },
+			derived: {
+				derive: (c: { request: Request }) => pick(c) ?? { u: 1 }
+			},
+			caught: {
+				error: ({ request }: { request: Request }) =>
+					status(request.headers.has('a') ? 401 : 403, 'err' as const)
+			}
+		})
+		.get('/b', { before: true }, ok)
+		.get('/d', { derived: true }, ok)
+		.get('/e', { caught: true }, ok)
+	const route = new Elysia().get('/', { beforeHandle: pick }, ok)
+
+	type Routes = (typeof app)['~Routes']
+	type Expected = { 200: 'ok'; 401: 'nope'; 403: 'nope' }
+
+	expectTypeOf<Routes['b']['get']['response']>().toEqualTypeOf<Expected>()
+	expectTypeOf<Routes['d']['get']['response']>().toEqualTypeOf<Expected>()
+	expectTypeOf<Routes['e']['get']['response']>().toEqualTypeOf<{
+		200: 'ok'
+		401: 'err'
+		403: 'err'
+	}>()
+	expectTypeOf<
+		(typeof route)['~Routes']['get']['response']
+	>().toEqualTypeOf<Expected>()
+}
+
+// A macro hook returning `null` answers (the handler doesn't run, 200 with an
+// empty body), as a route or instance hook does: the `null` stays at 200.
+// Only `undefined` passes on
+{
+	const deny = ({ request }: { request: Request }) =>
+		request.headers.has('a') ? status(401, 'no' as const) : null
+
+	const macro = new Elysia()
+		.macro({ m: { beforeHandle: deny } })
+		.get('/', { m: true }, () => 'ok' as const)
+	const route = new Elysia().get(
+		'/',
+		{ beforeHandle: deny },
+		() => 'ok' as const
+	)
+
+	expectTypeOf<(typeof macro)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'ok' | null
+		401: 'no'
+	}>()
+	expectTypeOf<(typeof macro)['~Routes']['get']['response']>().toEqualTypeOf<
+		(typeof route)['~Routes']['get']['response']
+	>()
+}

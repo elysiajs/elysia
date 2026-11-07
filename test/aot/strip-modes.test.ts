@@ -1,12 +1,14 @@
 import { describe, it, expect, afterEach } from 'bun:test'
 import { resolve } from 'node:path'
 import { rm } from 'node:fs/promises'
+import * as esbuild from 'esbuild'
 
 import { Elysia } from '../../src'
 import { Validator } from '../../src/validator'
 import { Compiled } from '../../src/compile/aot'
 import { generateCompiledArtifacts } from '../../src/plugin/aot/core'
 import { aot as bunAot } from '../../src/plugin/aot/bun'
+import { aot as esbuildAot } from '../../src/plugin/aot/esbuild'
 import { json } from '../utils'
 
 /**
@@ -121,6 +123,53 @@ describe('forced AOT stripping', () => {
 		expect(text).toContain('class ElysiaWS')
 	})
 
+	// `plugin/websocket` imports every ws/route export at load, a `.use(websocket())`
+	// without a `.ws()` route still gets the stub: a missing export fails the build
+	it('strips the WS route builder when the websocket plugin has no WS route', async () => {
+		const entry = 'test/aot/fixtures/strip-websocket-plugin-app.ts'
+		const text = await build(entry, true)
+		expect(text).toContain('WebSocket route builder was stripped')
+
+		const app = await load(text)
+		await expect(
+			app.handle(new Request('http://localhost/')).then((r) => r.text())
+		).resolves.toBe('hi')
+
+		const result = await esbuild.build({
+			entryPoints: [entry],
+			bundle: true,
+			write: false,
+			format: 'esm',
+			platform: 'node',
+			logLevel: 'silent',
+			plugins: [
+				esbuildAot(entry, {
+					registerFrom: REGISTER_FROM,
+					routeShapeFrom: ROUTE_SHAPE_FROM,
+					strip: true
+				})
+			]
+		})
+		expect(result.outputFiles[0]!.text).toContain(
+			'WebSocket route builder was stripped'
+		)
+	})
+
+	// `plugin/trace` imports every trace export at load, a `.use(trace())`
+	// without a `.trace()` handler still gets the stub: a missing export fails the build
+	it('strips the trace runtime when the trace plugin has no trace handler', async () => {
+		const text = await build(
+			'test/aot/fixtures/strip-trace-plugin-app.ts',
+			true
+		)
+		expect(text).toContain('trace support was stripped')
+
+		const app = await load(text)
+		await expect(
+			app.handle(new Request('http://localhost/')).then((r) => r.text())
+		).resolves.toBe('hi')
+	})
+
 	it('builds and serves a fully precompiled app', async () => {
 		const text = await build('test/aot/fixtures/strip-forced-app.ts', true)
 
@@ -225,6 +274,46 @@ describe('automatic AOT stripping', () => {
 		await expect(present.text()).resolves.toContain(
 			'WebSocket upgrade requires a running server'
 		)
+	})
+
+	// `ws/route` also needs cookies when a WS hook only READS `cookie` (its
+	// own sucrose pass), with no schema the build could see. Stubbed, the
+	// bundle threw at listen() while the same app served live
+	it('keeps cookie support when a WS hook reads cookie without a schema', async () => {
+		const entry = 'test/aot/fixtures/strip-auto-ws-cookie-read-app.ts'
+		const { stub } = await generateCompiledArtifacts(entry, {
+			strip: 'auto'
+		})
+		expect(stub.jit).toBe(true)
+		expect(stub.cookie).toBe(false)
+
+		const upgrade = async (app: Elysia<any, any>) => {
+			app.listen(0)
+			try {
+				const status = (cookie?: string) =>
+					fetch(`http://localhost:${app.server!.port}/ws`, {
+						headers: {
+							upgrade: 'websocket',
+							connection: 'Upgrade',
+							'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
+							'sec-websocket-version': '13',
+							...(cookie ? { cookie } : {})
+						}
+					}).then((r) => r.status)
+
+				return [await status('session=ok'), await status()]
+			} finally {
+				await app.stop(true)
+			}
+		}
+
+		const { app: live } =
+			await import('./fixtures/strip-auto-ws-cookie-read-app')
+		const expected = await upgrade(live)
+		expect(expected).toEqual([101, 401])
+
+		const bundled = await load(await build(entry, 'auto'))
+		expect(await upgrade(bundled)).toEqual(expected)
 	})
 
 	it('keeps cookie reconstruction when a route reads the cookie jar', async () => {

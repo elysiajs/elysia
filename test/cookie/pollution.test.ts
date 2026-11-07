@@ -16,8 +16,9 @@ describe('Cookie prototype pollution', () => {
 				`${name}=${enc(JSON.stringify({ injected: 'polluted' }))}`
 			)
 
-			const proto = Object.getPrototypeOf(cookie)
-			expect(proto === null || proto === Object.prototype).toBe(true)
+			expect(Object.prototype.isPrototypeOf(cookie)).toBe(false)
+			expect('injected' in cookie).toBe(false)
+			expect('constructor' in cookie).toBe(false)
 			expect('value' in cookie).toBe(false)
 			expect(({} as any).injected).toBeUndefined()
 

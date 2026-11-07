@@ -4,7 +4,7 @@ import { rm } from 'node:fs/promises'
 import { Elysia, t } from '../../src'
 import { websocket } from '../../src/plugin/websocket'
 import { Validator } from '../../src/validator'
-import { Compiled } from '../../src/compile/aot'
+import { Compiled, type CapturedHandler } from '../../src/compile/aot'
 import type { AnyElysia } from '../../src/base'
 import {
 	captureArtifacts,
@@ -14,7 +14,9 @@ import {
 import {
 	generateCompiledArtifacts,
 	planFromReport,
-	STUB_SOURCES
+	wsNeedsCookie,
+	STUB_SOURCES,
+	type StubEvidence
 } from '../../src/plugin/aot/core'
 import { aot as bunAot } from '../../src/plugin/aot/bun'
 import {
@@ -49,6 +51,42 @@ afterEach(() => {
 
 /** Handler JIT may be stubbed only when every frozen route can serve without it. */
 describe('AOT strip detection (analyzeStubbability)', () => {
+	it('replays a plugin cookie route like the same route on the root', async () => {
+		const cookie = { secrets: 'secret', sign: ['session'] }
+		const route = (app: AnyElysia) =>
+			(app as any).get(
+				'/',
+				({ cookie: { session } }: any) => session.value
+			)
+
+		const onRoot = await analyzeStubbability(
+			route(new Elysia({ cookie })) as any
+		)
+		const onPlugin = await analyzeStubbability(
+			new Elysia().use(route(new Elysia({ cookie }))) as any
+		)
+
+		expect(onRoot).toEqual({ jit: true, reasons: [] })
+		expect(onPlugin).toEqual(onRoot)
+	})
+
+	it('replays by route position past a WS row', async () => {
+		const cookie = { secrets: 'secret', sign: ['session'] }
+		const plugin = new Elysia({ cookie }).get(
+			'/',
+			({ cookie: { session } }) => session.value
+		)
+
+		const r = await analyzeStubbability(
+			new Elysia()
+				.use(websocket())
+				.ws('/ws', { message() {} })
+				.use(plugin) as any
+		)
+
+		expect(r).toEqual({ jit: true, reasons: [] })
+	})
+
 	it('handler-stubbable: body schema + non-inline handler', async () => {
 		const app = new Elysia().post(
 			'/',
@@ -613,6 +651,156 @@ describe('trace stub gate — live-JIT relaxation (planFromReport)', () => {
 		// inconsistent state (a handler traces but no registrar was detected)
 		// must fail SAFE: keep the runtime
 		expect(plan(false, new Set(['tr'])).trace).toBe(false)
+	})
+})
+
+const evidence = (over: Partial<StubEvidence> = {}): StubEvidence => ({
+	staticPaths: true,
+	schemaFree: true,
+	allCompact: true,
+	hasMount: false,
+	rootReads: { query: false, set: false, cookie: false },
+	rootTrace: false,
+	wsCookie: false,
+	...over
+})
+
+describe('trace stub gate — handler JIT stubbed (planFromReport)', () => {
+	const plan = (mayTrace: boolean, rootTrace?: boolean, hasMount?: boolean) =>
+		planFromReport(
+			'auto',
+			{ jit: true, reasons: [] },
+			false,
+			mayTrace,
+			new Set(),
+			false,
+			false,
+			false,
+			true,
+			false,
+			false,
+			'',
+			rootTrace === undefined
+				? undefined
+				: evidence({ rootTrace, hasMount: !!hasMount })
+		).plan
+
+	// no route links `tr` (WS-only or no routes), yet the fetch handler
+	// builds a tracer per root trace handler: a stub threw at listen
+	it('root trace handlers keep the runtime with no `tr` alias', () => {
+		expect(plan(true, true).trace).toBe(false)
+	})
+
+	// a mount sets `mayTrace` but adds no trace handler: keep the bytes off
+	it('a mount without root trace still stubs it', () => {
+		expect(plan(true, false, true).trace).toBe(true)
+	})
+
+	it('no evidence stubs it as before', () => {
+		expect(plan(true).trace).toBe(true)
+	})
+})
+
+// a WS route emits no `cc` alias: `ws/route` records whether it built a
+// cookie config, a stub of a module it calls throws at listen()
+describe('cookie stub gate — WS routes', () => {
+	const plan = (hasWS: boolean, wsCookie?: boolean) =>
+		planFromReport(
+			'auto',
+			{ jit: true, reasons: [] },
+			hasWS,
+			false,
+			new Set(),
+			false,
+			false,
+			false,
+			true,
+			false,
+			false,
+			'',
+			wsCookie === undefined ? undefined : evidence({ wsCookie })
+		).plan.cookie
+
+	it('stubs cookies when no WS route built a cookie config', () => {
+		expect(plan(true, false)).toBe(true)
+	})
+
+	it('keeps cookies when a WS route built one', () => {
+		expect(plan(true, true)).toBe(false)
+	})
+
+	it('keeps cookies for a WS app with no evidence', () => {
+		expect(plan(true)).toBe(false)
+		expect(plan(false)).toBe(true)
+	})
+
+	const entry = (path: string, cookie: boolean): CapturedHandler => ({
+		method: 'WS',
+		path,
+		alias: '',
+		code: '',
+		k: 1,
+		cookie
+	})
+
+	// the fail-safe direction: unknown keeps the modules a route may call
+	it.each([
+		['no entry for the path', ['/a'], [], true],
+		['entry built no config', ['/a'], [entry('/a', false)], false],
+		['entry built a config', ['/a'], [entry('/a', true)], true],
+		['duplicate path', ['/a', '/a'], [entry('/a', false)], true],
+		['one of two paths unknown', ['/a', '/b'], [entry('/a', false)], true]
+	])('%s', (_, paths, handlers, expected) => {
+		expect(wsNeedsCookie(paths, handlers)).toBe(expected)
+	})
+
+	const wsCookie = async (app: AnyElysia) =>
+		(await captureArtifacts(app)).handlers
+			.filter((handler) => handler.method === 'WS')
+			.map((handler) => handler.cookie)
+
+	it('records the cookie decision of each WS route at capture', async () => {
+		expect(
+			await wsCookie(
+				new Elysia()
+					.use(websocket())
+					.ws('/a', { message() {} })
+					.ws('/b', {
+						beforeHandle({ cookie }) {
+							if (!cookie.session?.value) return 'no'
+						},
+						message() {}
+					}) as any
+			)
+		).toEqual([false, true])
+	})
+
+	// a plugin's own signing config builds a cookie config for a WS route
+	// that only writes `set.cookie`, with no read and no root config
+	it('records a route-level signing config', async () => {
+		const child = new Elysia({
+			cookie: { secrets: 'S', sign: ['session'] }
+		}).ws('/ws', {
+			beforeHandle({ set }) {
+				set.cookie = { session: { value: 'x' } }
+			},
+			message() {}
+		})
+
+		expect(
+			await wsCookie(new Elysia().use(websocket()).use(child) as any)
+		).toEqual([true])
+	})
+
+	// both routes under one path build, the capture keeps the last one's
+	// entry: the first reads cookie, the stub threw at listen()
+	it('keeps cookies for a duplicate WS path', async () => {
+		const { stub } = await generateCompiledArtifacts(
+			'test/aot/fixtures/strip-ws-duplicate-cookie-app.ts',
+			{ strip: 'auto' }
+		)
+		expect(stub.jit).toBe(true)
+		expect(stub.cookie).toBe(false)
 	})
 })
 
