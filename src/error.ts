@@ -1,43 +1,1162 @@
-import type { TSchema } from '@sinclair/typebox'
-import { Value } from '@sinclair/typebox/value'
-import type {
-	TypeCheck,
-	ValueError,
-	ValueErrorIterator
-} from '@sinclair/typebox/compiler'
+import { Create } from './type/bridge'
 
-import { StatusMap, InvertedStatusMap } from './utils'
-import type { ElysiaTypeCheck } from './schema'
-import { StandardSchemaV1Like } from './types'
+import type { MaybePromise } from './types'
+import { isProduction } from './universal/is-production'
+import { StatusMap, StatusMapBack, PROBLEM_JSON } from './constants'
+import { primitiveElysiaTypes } from './type/constants'
+import { skipClone } from './adapter/skip-clone'
 
-// ? Cloudflare worker support
-const env =
-	typeof Bun !== 'undefined'
-		? Bun.env
-		: typeof process !== 'undefined'
-			? process?.env
-			: undefined
+export { isProduction } from './universal/is-production'
+export { PROBLEM_JSON } from './constants'
 
-export const ERROR_CODE = Symbol('ElysiaErrorCode')
-export type ERROR_CODE = typeof ERROR_CODE
+const expectedCache = new WeakMap<object, unknown>()
 
-export const isProduction = (env?.NODE_ENV ?? env?.ENV) === 'production'
+function freezeExpected(value: unknown) {
+	if (!value || typeof value !== 'object') return typeof value !== 'function'
+	if (!Array.isArray(value) && (value as any).constructor !== Object) return
 
-export type ElysiaErrors =
-	| InternalServerError
-	| NotFoundError
-	| ParseError
-	| ValidationError
-	| InvalidCookieSignature
+	for (const key in value as any)
+		if (!freezeExpected((value as any)[key])) return
 
-const emptyHttpStatus = {
-	101: undefined,
-	204: undefined,
-	205: undefined,
-	304: undefined,
-	307: undefined,
-	308: undefined
-} as const
+	return Object.freeze(value)
+}
+
+function isCacheableExpected(value: unknown, visited = new Set<object>()) {
+	if (value === null || value === undefined) return true
+
+	const t = typeof value
+	if (t === 'string' || t === 'number' || t === 'boolean' || t === 'bigint')
+		return true
+
+	if (t !== 'object') return false
+	const obj = value as object
+
+	if (visited.has(obj)) return true
+
+	const proto = Object.getPrototypeOf(obj)
+	if (proto !== Object.prototype && proto !== null && !Array.isArray(obj))
+		return false
+
+	visited.add(obj)
+
+	for (const key in obj)
+		if (!isCacheableExpected((obj as any)[key], visited)) return false
+
+	return true
+}
+
+export class ElysiaError<
+	Status extends number = number,
+	Response extends string = string
+> extends Error {
+	status?: Status
+	response?: Response
+
+	/**
+	 * Stable machine-readable token served in the `code` member, the same
+	 * contract a {@link HTTPError.id} class speaks (set per subclass)
+	 */
+	declare readonly code?: string
+
+	/**
+	 * RFC 9457 problem type served in the `type` member. Mirrors `code`, or
+	 * resolves to `<typeBase>/<code>` once {@link HTTPError.typeBase} is set.
+	 * Defined on the prototype below
+	 */
+	declare type?: string
+
+	constructor(message: string, cause?: Error) {
+		super(message)
+		this.name = this.constructor.name
+		if (cause) this.cause = cause
+	}
+
+	toResponse(headers?: Record<string, any>) {
+		return problemResponse(elysiaErrorProblem(this), headers)
+	}
+}
+
+/**
+ * `type` an error slug resolves to: the slug verbatim, or `<typeBase>/<slug>`
+ * once {@link HTTPError.typeBase} is set. Shared by `ElysiaError` and every
+ * class {@link HTTPError.id} makes, so both lanes derive `type` identically
+ */
+export function problemTypeOf(code: string | undefined) {
+	if (code === undefined) return
+
+	const base = HTTPError.typeBase
+	if (!base) return code
+
+	return (base.endsWith('/') ? base : base + '/') + code
+}
+
+/**
+ * Problem members an `ElysiaError` serves. `title` is left to `problemBody`,
+ * which derives it from the status — so `response` is only worth serving as
+ * `detail` when it says something the title doesn't
+ */
+export function elysiaErrorProblem(error: ElysiaError): Problem {
+	const status = error.status ?? 500
+
+	return {
+		type: error.type ?? 'about:blank',
+		code: error.code,
+		status,
+		detail:
+			error.response !== undefined &&
+			error.response !== (StatusMapBack as Record<number, string>)[status]
+				? error.response
+				: undefined
+	}
+}
+
+function defineData(
+	target: object,
+	key: PropertyKey,
+	value: unknown,
+	enumerable = true
+) {
+	Object.defineProperty(target, key, {
+		value,
+		writable: true,
+		enumerable,
+		configurable: true
+	})
+}
+
+function defineProblemType(prototype: object) {
+	Object.defineProperty(prototype, 'type', {
+		get(this: { code?: string }) {
+			return problemTypeOf(this.code)
+		},
+		set(this: object, value: string) {
+			defineData(this, 'type', value)
+		},
+		enumerable: true,
+		configurable: true
+	})
+}
+
+defineProblemType(ElysiaError.prototype)
+
+/**
+ * Wrap a string into a TypeBox `error` callback that overrides the default
+ * validation message. Use as `t.Number({ error: validationDetail('x must be a number') })`.
+ */
+export const validationDetail =
+	<T>(message: T) =>
+	(error: any) => {
+		error.message = message
+		return error
+	}
+
+export class InternalServerError extends ElysiaError {
+	status = 500 as const
+	readonly code = 'internal-server-error'
+
+	constructor(
+		public response = 'Internal Server Error',
+		cause?: Error
+	) {
+		super(response, cause)
+	}
+}
+
+export class NotFound extends ElysiaError {
+	status = 404 as const
+	readonly code = 'not-found'
+
+	constructor(public response = 'Not Found') {
+		super(response)
+	}
+}
+
+// Defined beside `ElysiaError`, not in `cookie/error`: an AOT wired build
+// statically links `error -> type/bridge-live -> validator -> ... ->
+// cookie/*`, so a subclass module in that cycle evaluates before its base
+// class exists (#2024). `cookie/error` re-exports it
+export class InvalidCookie extends ElysiaError {
+	status = 400 as const
+	readonly code = 'invalid-cookie'
+
+	constructor(
+		public key?: string,
+		public response = key
+			? `"${key}" is an invalid cookie`
+			: 'Invalid Cookie',
+		status?: number
+	) {
+		super(response)
+
+		if (status) this.status = status as any
+	}
+
+	static signature(key: string) {
+		return new InvalidCookie(key, `"${key}" has invalid cookie signature`)
+	}
+
+	static secret(
+		key?: string
+	): Omit<InvalidCookie, 'status'> & { status: 500 } {
+		const advice = `${key ? `Cookie "${key}"` : 'A cookie'} is signed but \`cookie.secrets\` is missing or empty`
+
+		const error = new InvalidCookie(
+			key,
+			isProduction() ? 'Internal Server Error' : advice,
+			500
+		)
+		error.message = advice
+
+		return error as any
+	}
+}
+
+export class ParseError extends ElysiaError {
+	status = 400 as const
+	response = 'Bad Request'
+	readonly code = 'parse'
+
+	constructor(cause?: Error) {
+		super('Bad Request', cause)
+	}
+
+	toResponse(headers?: Record<string, any>) {
+		const cause = this.cause as Error | undefined
+
+		// the parse cause is the detail, replacing the `response` the base
+		// would have served
+		return problemResponse(
+			{
+				...elysiaErrorProblem(this),
+				detail:
+					!isProduction() && cause?.message != null
+						? String(cause.message)
+						: undefined
+			},
+			headers
+		)
+	}
+}
+
+const segmentString = (part: unknown) =>
+	typeof part === 'object' && part !== null
+		? (part as { key: unknown }).key + ''
+		: part + ''
+
+const propertyAccessor = (path: unknown) => {
+	if (Array.isArray(path))
+		return path.length ? '/' + path.map(segmentString).join('/') : 'root'
+
+	if (typeof path === 'string') return path || 'root'
+
+	return 'root'
+}
+
+function walkComposition(
+	schema: any,
+	parts: string[],
+	seen: WeakSet<object> = new WeakSet()
+): unknown {
+	if (parts.length === 0) return schema
+	if (!schema || typeof schema !== 'object' || seen.has(schema)) return
+
+	seen.add(schema)
+
+	try {
+		const branches: any[] | undefined =
+			schema.anyOf ?? schema.oneOf ?? schema.allOf
+
+		if (Array.isArray(branches)) {
+			for (let i = 0; i < branches.length; i++) {
+				const result = walkComposition(branches[i], parts, seen)
+				if (result !== undefined) return result
+			}
+		}
+
+		const [head, ...rest] = parts
+		if (schema.properties?.[head])
+			return walkComposition(schema.properties[head], rest, seen)
+
+		if (
+			schema.additionalProperties &&
+			typeof schema.additionalProperties === 'object'
+		)
+			return walkComposition(schema.additionalProperties, rest, seen)
+
+		if (schema.items) return walkComposition(schema.items, rest, seen)
+	} finally {
+		seen.delete(schema)
+	}
+}
+
+// RFC 6901: TypeBox >= 1.3.35 escapes keys in `instancePath` ('~' as '~0',
+// '/' as '~1'). Older versions pass keys raw, so there a key holding '/' or
+// a literal '~0'/'~1' cannot be told apart and decodes wrong
+const decodePointer = (pointer: string) =>
+	pointer.replace(/~1/g, '/').replace(/~0/g, '~')
+
+const walkSubSchema = (schema: any, instancePath: string | undefined) =>
+	!schema || !instancePath
+		? schema
+		: walkComposition(
+				schema,
+				instancePath.split('/').filter(Boolean).map(decodePointer)
+			)
+
+const FOUND_ECHO_LIMIT = 8192
+const FOUND_ECHO_OMITTED = `[value exceeds ${FOUND_ECHO_LIMIT} byte echo limit]`
+export const MAX_ERRORS = 64
+
+function jsonStringLengthWithin(value: string, budget: number) {
+	budget -= 2
+
+	for (let i = 0; i < value.length && budget >= 0; i++) {
+		const code = value.charCodeAt(i)
+
+		if (code === 34 || code === 92) budget -= 2
+		else if (code < 32)
+			budget -=
+				code === 8 ||
+				code === 9 ||
+				code === 10 ||
+				code === 12 ||
+				code === 13
+					? 2
+					: 6
+		else if (code < 128) budget--
+		else if (code < 2048) budget -= 2
+		else if (code >= 0xd800 && code <= 0xdbff) {
+			const low = value.charCodeAt(i + 1)
+			if (low >= 0xdc00 && low <= 0xdfff) {
+				budget -= 4
+				i++
+			} else budget -= 6
+		} else if (code >= 0xdc00 && code <= 0xdfff) budget -= 6
+		else budget -= 3
+	}
+
+	return budget
+}
+
+const jsonLengthWithin = (value: unknown, budget: number): number => {
+	if (budget < 0) return -1
+
+	switch (typeof value) {
+		case 'object':
+			break
+
+		case 'string':
+			return jsonStringLengthWithin(value, budget)
+
+		case 'number':
+			return budget - (Number.isFinite(value) ? String(value).length : 4)
+
+		case 'boolean':
+			return budget - (value ? 4 : 5)
+
+		default:
+			return budget - 4
+	}
+
+	if (value === null) return budget - 4
+
+	if (Array.isArray(value)) {
+		budget -= 2
+		for (let i = 0; i < value.length; i++) {
+			budget = jsonLengthWithin(value[i], budget - (i ? 1 : 0))
+			if (budget < 0) return -1
+		}
+
+		return budget
+	}
+
+	budget -= 2
+	let first = true
+	for (const key in value) {
+		budget = jsonStringLengthWithin(key, budget - (first ? 0 : 1)) - 1
+		if (budget < 0) return -1
+
+		budget = jsonLengthWithin(
+			(value as Record<string, unknown>)[key],
+			budget
+		)
+		if (budget < 0) return -1
+		first = false
+	}
+
+	return budget
+}
+
+// empty parts resolve to `value` itself (root-level errors); an unrecognized
+// path shape resolves to undefined
+export function subValueAt(value: unknown, path: unknown) {
+	let parts: any[] | undefined
+
+	if (typeof path === 'string')
+		parts = path.split('/').filter(Boolean).map(decodePointer)
+	else if (Array.isArray(path)) parts = path
+
+	if (!parts) return
+
+	let current: any = value
+	for (let i = 0; i < parts.length; i++) {
+		if (current === null || typeof current !== 'object') return
+
+		const part = parts[i]
+		current =
+			current[typeof part === 'object' && part !== null ? part.key : part]
+	}
+
+	return current
+}
+
+const issueLocator = new Set(['keyword', 'schemaPath', 'instancePath', 'path'])
+
+function scopeIssues(errors: any[]) {
+	let budget = FOUND_ECHO_LIMIT
+	let out: any[] | undefined
+
+	for (let i = 0; i < errors.length; i++) {
+		const issue = errors[i]
+
+		if (!issue || typeof issue !== 'object') {
+			out?.push(issue)
+			continue
+		}
+
+		let scoped: any
+
+		for (const key in issue) {
+			if (issueLocator.has(key)) continue
+
+			const member = issue[key]
+			const remaining = jsonLengthWithin(member, budget)
+
+			if (remaining >= 0) {
+				budget = remaining
+				continue
+			}
+
+			scoped ??= { ...issue }
+
+			if (
+				member === null ||
+				typeof member !== 'object' ||
+				Array.isArray(member)
+			) {
+				scoped[key] = FOUND_ECHO_OMITTED
+				continue
+			}
+
+			const narrowed: Record<string, unknown> = {}
+
+			for (const name in member) {
+				const value = member[name]
+				const rest = jsonLengthWithin(value, budget)
+
+				if (rest >= 0) {
+					narrowed[name] = value
+					budget = rest
+				} else narrowed[name] = FOUND_ECHO_OMITTED
+			}
+
+			scoped[key] = narrowed
+		}
+
+		if (!scoped) {
+			out?.push(issue)
+			continue
+		}
+
+		out ??= errors.slice(0, i)
+		out.push(scoped)
+	}
+
+	return out ?? errors
+}
+
+// one accessor pair for every instance: fresh closures per error drop V8
+// objects to dictionary mode
+const lazyErrors = {
+	get(this: ValidationError) {
+		return this['~resolve']().errors
+	},
+	set(this: ValidationError, v: unknown) {
+		defineData(this, 'errors', v)
+	},
+	enumerable: true,
+	configurable: true
+}
+
+export class ValidationError extends ElysiaError {
+	/** Response validation is a server error; other validation is a client error. */
+	status: 422 | 500 = 422
+	readonly code = 'validation'
+
+	schema?: unknown
+
+	allowUnsafeValidationDetails = false
+
+	#thunk: () => any[]
+	#findCustomError?: (
+		value: unknown
+	) => { instancePath: string; error: unknown } | undefined
+	#state?: { errors: any[]; custom: unknown; message: string }
+
+	constructor(
+		public type: string | undefined,
+		public value: unknown,
+		errors: any[] | (() => any[]),
+		schema?: unknown,
+		findCustomError?: (
+			value: unknown
+		) => { instancePath: string; error: unknown } | undefined
+	) {
+		super(undefined as any)
+
+		if (type === 'response') this.status = 500
+
+		this.schema = schema
+		this.#thunk =
+			typeof errors === 'function'
+				? (errors as () => any[])
+				: () => errors as any[]
+
+		this.#findCustomError = findCustomError
+
+		Object.defineProperty(this, 'errors', lazyErrors)
+	}
+
+	/** @internal lazily resolve and memoize errors/customError/message */
+	'~resolve'() {
+		if (this.#state) return this.#state
+
+		const { type, value } = this
+		const production = isProduction()
+		const allowUnsafe = this.allowUnsafeValidationDetails
+		const findCustomError = this.#findCustomError
+
+		let resolved: any[]
+		let custom: unknown
+
+		if (production && !allowUnsafe && findCustomError) {
+			const hit = findCustomError(value)
+			resolved = hit ? [{ instancePath: hit.instancePath }] : []
+
+			if (hit && hit.error !== undefined)
+				custom =
+					typeof hit.error === 'function'
+						? hit.error({
+								type: 'validation',
+								on: type,
+								found: undefined
+							})
+						: hit.error
+		} else {
+			resolved = this.#thunk() ?? []
+			if (resolved.length > MAX_ERRORS)
+				resolved = resolved.slice(0, MAX_ERRORS)
+			resolved = scopeIssues(resolved)
+
+			let sub: any = walkSubSchema(this.schema, resolved[0]?.instancePath)
+
+			// TypeBox reports a missing required key at its object: use the
+			// first missing key that has its own error (only on a plain
+			// object, a union's branch keys stay with the union). Not always
+			// an array: `scopeIssues` swaps an oversized list for a string
+			const missing =
+				resolved[0]?.keyword === 'required' && sub?.properties
+					? resolved[0].params?.requiredProperties
+					: undefined
+
+			if (Array.isArray(missing))
+				for (const key of missing)
+					if (sub.properties[key]?.error !== undefined) {
+						sub = sub.properties[key]
+						break
+					}
+
+			if (sub?.error !== undefined)
+				custom =
+					typeof sub.error === 'function'
+						? sub.error(
+								production && !allowUnsafe
+									? {
+											type: 'validation',
+											on: type,
+											found: undefined
+										}
+									: {
+											type: 'validation',
+											on: type,
+											value,
+											errors: resolved
+										}
+							)
+						: sub.error
+		}
+
+		const message =
+			custom !== undefined
+				? typeof custom === 'string'
+					? custom
+					: JSON.stringify(custom)
+				: resolved[0]?.message
+					? resolved[0].message
+					: `Validation error on ${type ?? 'unknown'}`
+
+		return (this.#state = { errors: resolved, custom, message })
+	}
+
+	declare errors: any[]
+
+	// in the class body, not a top-level `defineProperty`: a bundler then
+	// drops the unused class from an app that never validates
+	get message(): string {
+		return this['~resolve']().message
+	}
+
+	set message(v: string) {
+		defineData(this, 'message', v, false)
+	}
+
+	/** @internal brand checked instead of `instanceof`, which would keep the class */
+	get '~verr'(): true {
+		return true
+	}
+
+	get customError(): unknown {
+		return this['~resolve']().custom
+	}
+
+	set customError(v: unknown) {
+		defineData(this, 'customError', v)
+	}
+
+	get all() {
+		if (!this.errors) return []
+
+		// need arrow function to preserve `this`
+		return this.#collapseCoercionErrors(this.errors.filter(Boolean)).map(
+			(e) => {
+				if (!e) return e
+
+				const raw = e.path ?? e.instancePath
+				const path =
+					Array.isArray(raw) && raw.length
+						? raw.map(segmentString).join('.')
+						: typeof raw === 'string' && raw
+							? decodePointer(
+									raw.replace(/^\//, '').replace(/\//g, '.')
+								)
+							: 'root'
+
+				const issue = {
+					path,
+					message: e.message ?? '',
+					schemaPath: e.schemaPath,
+					params: e.params
+				}
+
+				defineData(issue, 'value', this.value, false)
+
+				return issue
+			}
+		)
+	}
+
+	#collapseCoercionErrors(errors: any[]) {
+		if (!this.schema || !errors.length) return errors
+
+		let coercionPaths: Map<string, boolean> | undefined
+		let seen: Set<string> | undefined
+		let out: any[] | undefined
+
+		for (let i = 0; i < errors.length; i++) {
+			const e = errors[i]
+			const path = e?.instancePath
+
+			if (
+				typeof path !== 'string' ||
+				typeof e?.schemaPath !== 'string' ||
+				(e.keyword !== 'anyOf' && !e.schemaPath.includes('/anyOf'))
+			) {
+				out?.push(e)
+				continue
+			}
+
+			coercionPaths ??= new Map()
+			let isCoercion = coercionPaths.get(path)
+			if (isCoercion === undefined) {
+				const sub: any = walkSubSchema(this.schema, path)
+				isCoercion =
+					!!sub?.['~elyTyp'] &&
+					primitiveElysiaTypes.has(sub['~elyTyp'])
+				coercionPaths.set(path, isCoercion)
+			}
+
+			if (!isCoercion) {
+				out?.push(e)
+				continue
+			}
+
+			out ??= errors.slice(0, i)
+			seen ??= new Set()
+
+			if (seen.has(path)) continue
+			seen.add(path)
+
+			const internal = e.keyword === '~refine' || e.keyword === 'anyOf'
+			out.push({
+				...e,
+				keyword: internal ? 'type' : e.keyword,
+				schemaPath: e.schemaPath.replace(/\/anyOf(\/\d+)?$/, ''),
+				params: internal ? {} : e.params,
+				message: internal ? (e.params?.message ?? e.message) : e.message
+			})
+		}
+
+		return out ?? errors
+	}
+
+	get #productionDetail() {
+		return isProduction() && !this.allowUnsafeValidationDetails
+	}
+
+	detail(message: unknown) {
+		if (!this.#productionDetail)
+			return {
+				type: 'validation',
+				on: this.type,
+				message,
+				errors: this.all
+			}
+
+		return {
+			type:
+				this.type === 'response'
+					? 'internal-server-error'
+					: 'validation',
+			on: this.type,
+			message
+		}
+	}
+
+	get payload() {
+		const server = this.type === 'response'
+
+		if (this.#productionDetail) {
+			// Keep response validation identical to other 500 errors.
+			if (server) return internalServerErrorProblem()
+
+			const first = (this.errors ?? []).find(Boolean)
+
+			return {
+				type: 'validation',
+				code: 'validation',
+				title: 'Validation Error',
+				status: 422,
+				on: this.type,
+				property: first
+					? propertyAccessor(
+							first.instancePath ??
+								(Array.isArray(first.path)
+									? first.path
+									: undefined)
+						)
+					: 'root'
+			}
+		}
+
+		const errors = this.#collapseCoercionErrors(
+			(this.errors ?? []).filter(Boolean)
+		)
+
+		const first = errors[0] as any
+
+		const property = first
+			? propertyAccessor(first.instancePath ?? first.path)
+			: 'root'
+
+		const detail = first?.message ?? this.message
+
+		let expected: unknown
+		const schemaForExpected = first?.schema ?? this.schema
+
+		if (schemaForExpected)
+			if (expectedCache.has(schemaForExpected as object))
+				expected = expectedCache.get(schemaForExpected as object)
+			else {
+				try {
+					const created = Create(schemaForExpected as any)
+
+					if (isCacheableExpected(created))
+						try {
+							const snapshot = structuredClone(created)
+							expected = snapshot
+							if (freezeExpected(snapshot)) {
+								expectedCache.set(
+									schemaForExpected as object,
+									snapshot
+								)
+							}
+						} catch {
+							expected = created
+						}
+					else
+						// just recreate exotic value (class instance, Date, etc.)
+						expected = created
+				} catch {}
+			}
+
+		const value = this.value
+		let found: unknown
+		if (jsonLengthWithin(value, FOUND_ECHO_LIMIT) >= 0) found = value
+		else {
+			const sub = subValueAt(value, first?.instancePath ?? first?.path)
+			if (
+				sub !== undefined &&
+				jsonLengthWithin(sub, FOUND_ECHO_LIMIT) >= 0
+			)
+				found = sub
+			else found = FOUND_ECHO_OMITTED
+		}
+
+		return {
+			...(server
+				? internalServerErrorProblem()
+				: {
+						type: 'validation',
+						code: 'validation',
+						title: 'Validation Error',
+						status: 422 as const
+					}),
+			detail,
+			on: this.type,
+			property,
+			found,
+			expected,
+			errors
+		}
+	}
+
+	toResponse(headers?: Record<string, any>) {
+		if (this.type === 'response' && this.#productionDetail)
+			return problemResponse(this.payload, headers)
+
+		// validateDetail
+		if (this.customError !== undefined) {
+			const isString = typeof this.customError === 'string'
+			const response = new Response(
+				isString
+					? (this.customError as string)
+					: JSON.stringify(this.customError),
+				{
+					status:
+						this.type === 'response' ? 500 : (this.status ?? 422),
+					headers: {
+						...headers,
+						'content-type': isString
+							? 'text/plain'
+							: 'application/json'
+					}
+				}
+			)
+			skipClone.add(response)
+			return response
+		}
+
+		return problemResponse(this.payload, headers)
+	}
+}
+
+const emptyHttpStatus = new Set([101, 204, 205, 304, 307, 308])
+
+/** Default body for a status with no response. Named to keep emitted types small. */
+export type StatusResponse<Code extends number | keyof StatusMap> =
+	Code extends keyof StatusMapBack ? StatusMapBack[Code] : Code
+
+export class ElysiaStatus<
+	const in out Code extends number | keyof StatusMap,
+	// no in out here so the response can be sub type of return type
+	T = StatusResponse<Code>,
+	const in out Status extends NumericStatus<Code> = NumericStatus<Code>
+> {
+	/**
+	 * Type-only brand, erased at runtime.
+	 *
+	 * `status` + `response` is a shape a handler may write by hand, so without
+	 * a nominal marker a plain `{ status, response }` literal would be
+	 * absorbed as a status box by response inference
+	 */
+	declare readonly ['~status']: true
+
+	status: Status
+	response!: T
+	headers?: Record<string, string>
+
+	constructor(code: Code, res: T, headers?: Record<string, string>) {
+		const response =
+			res ??
+			(code in StatusMapBack
+				? StatusMapBack[code as keyof StatusMapBack]
+				: code)
+
+		this.status = (StatusMap[code as keyof StatusMap] as Status) ?? code
+
+		if (!emptyHttpStatus.has(this.status as number))
+			this.response = response as T
+		// No body left for a `content-type` to describe, in any casing.
+		// Copied, the caller's object may be shared or frozen
+		else if (headers) {
+			const kept: Record<string, string> = {}
+
+			for (const key of Object.keys(headers))
+				if (key.toLowerCase() !== 'content-type')
+					kept[key] = headers[key]
+
+			headers = kept
+		}
+
+		this.headers = headers
+	}
+}
+
+Object.defineProperty(ElysiaStatus, 'name', { value: 'ElysiaStatus' })
+
+export const status = <
+	const Code extends number | keyof StatusMap,
+	const T = StatusResponse<Code>
+>(
+	code: Code,
+	response?: T
+) => new ElysiaStatus<Code, T>(code, response as T)
+
+/**
+ * RFC 9457 Problem Details shape.
+ *
+ * @see https://www.rfc-editor.org/info/rfc9457/
+ */
+export type Problem<
+	Code extends number | keyof StatusMap = number | keyof StatusMap,
+	Extension extends Record<string, unknown> = {}
+> = {
+	/** URI (or slug) identifying the problem type. @default 'about:blank' */
+	type?: string
+
+	/**
+	 * Extension member carrying a stable machine-readable token.
+	 *
+	 * `type` may be widened to a URI by {@link HTTPError.typeBase}, `code`
+	 * never is
+	 */
+	code?: string
+
+	/** Short, human-readable summary of the problem type */
+	title?: string
+
+	/** HTTP status. A number or a `StatusMap` name (e.g. `'Conflict'`) */
+	status?: Code
+
+	/** Human-readable explanation specific to this occurrence */
+	detail?: string
+
+	/** URI identifying the specific occurrence of the problem */
+	instance?: string
+} & Extension
+
+/** Numeric form of a status name or code. */
+export type NumericStatus<Code extends number | keyof StatusMap> =
+	Code extends keyof StatusMap ? StatusMap[Code] : Code
+
+type ProblemStatus<P> = P extends {
+	status: infer S extends number | keyof StatusMap
+}
+	? NumericStatus<S>
+	: 500
+
+/** Request validation problem. Diagnostic fields are development-only. */
+export type ValidationErrorResponse = {
+	type: 'validation'
+	code: 'validation'
+	title: 'Validation Error'
+	status: 422
+	detail?: string
+	on: string
+	found?: unknown
+	property?: string
+	// a value the schema accepts (its example), of the schema's type
+	expected?: unknown
+	// every issue, outside production
+	errors?: { message?: string; [key: string]: unknown }[]
+}
+
+export type ProblemResponseBody<Status extends number, P> = Omit<
+	{
+		type: string
+		title: string
+		detail?: string
+		instance?: string
+	},
+	keyof P
+> &
+	Omit<P, 'status'> & { status: Status }
+
+/** Title of a status, as `problemBody` fills it */
+export const titleOf = (status: number) =>
+	(StatusMapBack as Record<number, string>)[status] ?? 'Error'
+
+export function problemBody(
+	p: Problem
+): Record<string, unknown> & { status: number } {
+	const status =
+		typeof p.status === 'string'
+			? (StatusMap[p.status] ?? 500)
+			: (p.status ?? 500)
+
+	const body: any = { type: 'about:blank', ...p, status }
+	body.title ??= titleOf(status)
+
+	return body
+}
+
+export function problemResponse(p: Problem, headers?: Record<string, any>) {
+	const body = problemBody(p)
+
+	let json: string | null = null
+	// A bigint (a `10n` limit in a validation `expected` or error params) has
+	// no JSON form: only then retry with its decimal string, lossless. A cycle
+	// still throws
+	if (!emptyHttpStatus.has(body.status))
+		try {
+			json = JSON.stringify(body)
+		} catch {
+			json = JSON.stringify(body, (_, value) =>
+				typeof value === 'bigint' ? value + '' : value
+			)
+		}
+
+	const response = new Response(json, {
+		status: body.status,
+		headers: { ...headers, 'content-type': PROBLEM_JSON }
+	})
+
+	skipClone.add(response)
+
+	return response
+}
+
+// Read typeBase on every call because it can change.
+const internalServerErrorProblem = () => ({
+	type: problemTypeOf('internal-server-error'),
+	code: 'internal-server-error',
+	title: 'Internal Server Error',
+	status: 500
+})
+
+export function internalServerErrorBody(error: any) {
+	const body: Record<string, unknown> = internalServerErrorProblem()
+
+	if (!isProduction()) {
+		if (error?.message != null) body.detail = error.message
+		if (error?.name) body.name = error.name
+		// Development is the default when NODE_ENV is unset, so a served
+		// cause is public: an HTTP client's Error carries the upstream
+		// response, request config and Authorization header. Serve only what
+		// names it; `Error.isError` covers an Error from another realm
+		const cause = error?.cause
+		if (cause instanceof Error || Error.isError?.(cause))
+			body.cause = {
+				name: String((cause as Error).name),
+				message: String((cause as Error).message)
+			}
+		else if (
+			typeof cause === 'string' ||
+			typeof cause === 'number' ||
+			typeof cause === 'boolean'
+		)
+			body.cause = cause
+	}
+
+	return body
+}
+
+export function internalServerErrorBodyString(error: any): string {
+	try {
+		return JSON.stringify(internalServerErrorBody(error))
+	} catch {
+		// A circular `error.cause` (DB client, Request, stream, looping chain)
+		try {
+			const safe = internalServerErrorBody(error)
+			delete safe.cause
+			return JSON.stringify(safe)
+		} catch {
+			return JSON.stringify(internalServerErrorProblem())
+		}
+	}
+}
+
+export function internalServerErrorResponse(error: any) {
+	const body = internalServerErrorBodyString(error)
+
+	const response = new Response(body, {
+		status: 500,
+		headers: { 'content-type': PROBLEM_JSON }
+	})
+
+	skipClone.add(response)
+
+	return response
+}
+
+/**
+ * RFC 9457 Problem Details function
+ *
+ * @example
+ * ```ts
+ * problem(400, { detail: 'Something went wrong' })
+ * ```
+ *
+ * @see https://www.rfc-editor.org/info/rfc9457
+ */
+export function problem<
+	const Code extends number | keyof StatusMap,
+	const P extends Record<string, unknown> & { status?: never } = {}
+>(
+	status: Code,
+	detail?: P & Omit<Problem<Code>, 'status'>
+): ElysiaStatus<
+	NumericStatus<Code>,
+	ProblemResponseBody<NumericStatus<Code>, P>
+>
+
+/**
+ * RFC 9457 Problem Details function
+ *
+ * @example
+ * ```ts
+ * problem({ status: 400, detail: 'Something went wrong' })
+ * ```
+ *
+ * @see https://www.rfc-editor.org/info/rfc9457
+ */
+export function problem<const P extends Problem>(
+	detail: P
+): ElysiaStatus<ProblemStatus<P>, ProblemResponseBody<ProblemStatus<P>, P>>
+
+export function problem(
+	statusOrDetail: number | keyof StatusMap | Problem,
+	detail?: Omit<Problem, 'status'>
+): ElysiaStatus<any, any> {
+	const body =
+		typeof statusOrDetail === 'object'
+			? statusOrDetail
+			: { ...detail, status: statusOrDetail }
+
+	return new ElysiaStatus((body.status ?? 500) as any, problemBody(body), {
+		'content-type': PROBLEM_JSON
+	})
+}
 
 type CheckExcessProps<T, U> = 0 extends 1 & T
 	? T // T is any
@@ -52,981 +1171,276 @@ type CheckExcessProps<T, U> = 0 extends 1 & T
 export type SelectiveStatus<in out Res> = <
 	const Code extends
 		| keyof Res
-		| InvertedStatusMap[Extract<keyof InvertedStatusMap, keyof Res>],
-	T extends Code extends keyof Res
-		? Res[Code]
-		: Code extends keyof StatusMap
-			? // @ts-ignore StatusMap[Code] always valid because Code generic check
-				Res[StatusMap[Code]]
-			: never
+		| StatusMapBack[Extract<keyof StatusMapBack, keyof Res>],
+	T extends ResponseOf<Res, Code>
 >(
 	code: Code,
-	response: CheckExcessProps<
-		T,
-		Code extends keyof Res
-			? Res[Code]
-			: Code extends keyof StatusMap
-				? // @ts-ignore StatusMap[Code] always valid because Code generic check
-					Res[StatusMap[Code]]
-				: never
-	>
-) => ElysiaCustomStatusResponse<
+	response: CheckExcessProps<T, ResponseOf<Res, Code>>
+) => ElysiaStatus<
 	// @ts-ignore trust me bro
 	Code,
 	T
 >
 
-export class ElysiaCustomStatusResponse<
-	const in out Code extends number | keyof StatusMap,
-	// no in out here so the response can be sub type of return type
-	T = Code extends keyof InvertedStatusMap ? InvertedStatusMap[Code] : Code,
-	const in out Status extends Code extends keyof StatusMap
-		? StatusMap[Code]
-		: Code = Code extends keyof StatusMap ? StatusMap[Code] : Code
-> {
-	code: Status
-	response: T
+type ProblemInput<T> = T extends object
+	? Omit<T, 'type' | 'title' | 'status'> & {
+			[K in keyof T as K extends 'type' | 'title' ? K : never]?: T[K]
+		}
+	: never
 
-	constructor(code: Code, response: T) {
-		const res =
-			response ??
-			(code in InvertedStatusMap
-				? // @ts-expect-error Always correct
-					InvertedStatusMap[code]
-				: code)
+type ResponseOf<Res, Code> = Code extends keyof Res
+	? Res[Code]
+	: Code extends keyof StatusMap
+		? // @ts-ignore StatusMap[Code] always valid because Code generic check
+			Res[StatusMap[Code]]
+		: never
 
-		// @ts-ignore Trust me bro
-		this.code = StatusMap[code] ?? code
-
-		if (code in emptyHttpStatus) this.response = undefined as any
-		else
-			// @ts-ignore Trust me bro
-			this.response = res
-	}
-}
-
-export const ElysiaStatus = ElysiaCustomStatusResponse
-
-export const status = <
-	const Code extends number | keyof StatusMap,
-	const T = Code extends keyof InvertedStatusMap
-		? InvertedStatusMap[Code]
-		: Code
+export type SelectiveProblem<in out Res> = <
+	const Code extends
+		| keyof Res
+		| StatusMapBack[Extract<keyof StatusMapBack, keyof Res>],
+	T extends ProblemInput<ResponseOf<Res, Code>> = ProblemInput<
+		ResponseOf<Res, Code>
+	>
 >(
 	code: Code,
-	response?: T
-) => new ElysiaCustomStatusResponse<Code, T>(code, response as T)
+	// A rest tuple so the argument is only optional when every remaining
+	// member is: `problemBody` cannot invent a required extension member
+	...detail: {} extends ProblemInput<ResponseOf<Res, Code>>
+		? [detail?: CheckExcessProps<T, ProblemInput<ResponseOf<Res, Code>>>]
+		: [detail: CheckExcessProps<T, ProblemInput<ResponseOf<Res, Code>>>]
+) => ElysiaStatus<
+	// @ts-ignore trust me bro
+	NumericStatus<Code>,
+	ResponseOf<Res, Code>
+>
 
-export class InternalServerError extends Error {
-	code = 'INTERNAL_SERVER_ERROR'
-	status = 500
-
-	constructor(message?: string) {
-		super(message ?? 'INTERNAL_SERVER_ERROR')
-	}
-}
-
-export class NotFoundError extends Error {
-	code = 'NOT_FOUND'
-	status = 404
-
-	constructor(message?: string) {
-		super(message ?? 'NOT_FOUND')
-	}
-}
-
-export class ParseError extends Error {
-	code = 'PARSE'
-	status = 400
-
-	constructor(cause?: Error) {
-		super('Bad Request', {
-			cause
-		})
-	}
-}
-
-export class InvalidCookieSignature extends Error {
-	code = 'INVALID_COOKIE_SIGNATURE'
-	status = 400
-
-	constructor(
-		public key: string,
-		message?: string
-	) {
-		super(message ?? `"${key}" has invalid cookie signature`)
-	}
-}
-
-interface ValueErrorWithSummary extends ValueError {
-	summary?: string
-}
-
-export const mapValueError = (
-	error: ValueError | undefined
-): ValueErrorWithSummary | undefined => {
-	if (!error) return error
-
-	let { message, path, value, type } = error
-	if (Array.isArray(path)) path = path[0]
-
-	const property =
-		typeof path === 'string'
-			? path.slice(1).replaceAll('/', '.')
-			: 'unknown'
-
-	const isRoot = path === ''
-
-	switch (type) {
-		case 42:
-			return {
-				...error,
-				summary: isRoot
-					? `Value should not be provided`
-					: `Property '${property}' should not be provided`
-			}
-
-		case 45:
-			return {
-				...error,
-				summary: isRoot
-					? `Value is missing`
-					: `Property '${property}' is missing`
-			}
-
-		case 50:
-			// Expected string to match 'email' format
-			const quoteIndex = message.indexOf("'")!
-			const format = message.slice(
-				quoteIndex + 1,
-				message.indexOf("'", quoteIndex + 1)
-			)
-
-			return {
-				...error,
-				summary: isRoot
-					? `Value should be an email`
-					: `Property '${property}' should be ${format}`
-			}
-
-		case 54:
-			const found = formatValidationSummaryValue(value)
-
-			return {
-				...error,
-				summary: `${message
-					.slice(0, 9)
-					.trim()} property '${property}' to be ${message
-					.slice(8)
-					.trim()} but found: ${found}`
-			}
-
-		case 62:
-			const union = error.schema.anyOf
-				.map((x: Record<string, unknown>) => `'${x?.format ?? x.type}'`)
-				.join(', ')
-
-			return {
-				...error,
-				summary: isRoot
-					? `Value should be one of ${union}`
-					: `Property '${property}' should be one of: ${union}`
-			}
-
-		default:
-			return { summary: message, ...error }
-	}
+/**
+ * Class returned by {@link HTTPError.id}
+ */
+export type TaggedHTTPError<Type extends string, Annotation = {}> = {
+	new (
+		message?: string,
+		options?: ErrorOptions
+	): HTTPError<Type> & { type: Type; readonly code: Type } & Annotation
+	prototype: HTTPError<Type>
 }
 
 /**
- * Maximum amount of validation error
+ * Self-describing HTTP error
+ *
+ * Set `status`, `headers`, `detail`, `extension` and `value` to map to response
+ *
+ * Send RFC 9457 problem document by default that can be overridden by `value()`
+ *
+ * - `detail` - add `detail` field to the problem document
+ * - `extension()` - add extension members to the problem document
+ * - `value()` - override the whole response, return `problem()` to keep the shape
+ *
+ * `value` wins over `detail`, `detail` over an `extension()` string `detail`,
+ * that over message. A `value` returning `undefined` falls
+ * through to the next one. A response that depends on the request belongs in
+ * `.onError(Class, handler)`
+ *
+ * `headers` is served only from a class that extends `HTTPError`, not from
+ * one that implements it
+ *
+ * @example
+ * ```ts
+ * class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT') {
+ * 	   readonly status = 402
+ * 	   readonly detail = 'Top up to continue'
+ * }
+ *
+ * class Overdrawn extends Error implements HTTPError {
+ *     readonly type = 'OVERDRAWN'
+ * 	   readonly status = 402
+ *
+ *     value() {
+ *         return problem(402, {
+ * 	           type: 'OVERDRAWN',
+ * 	            detail: await describeBalance()
+ * 	       })
+ *     }
+ * }
+ * ```
+ *
+ * @see https://www.rfc-editor.org/info/rfc9457
+ * @since 2.0.0
  */
-export const MAX_ERRORS = 64
-
-export const MAX_VALIDATION_ERROR_DEPTH = 16
-export const MAX_VALIDATION_ERROR_NODES = 8192
-export const MAX_VALIDATION_ERROR_ENTRIES = 4096
-export const MAX_VALIDATION_ERROR_CONTAINER_ENTRIES = 512
-export const MAX_VALIDATION_ERROR_STRING_LENGTH = 4096
-export const MAX_VALIDATION_ERROR_OUTPUT_LENGTH = 65536
-
-const VALIDATION_TRUNCATED = '[Truncated]'
-const VALIDATION_UNSERIALIZABLE = '[Unserializable]'
-const OMIT_VALIDATION_VALUE = Symbol('omitValidationValue')
-
-type ValidationProjectionState = {
-	depth: WeakSet<object>
-	nodes: number
-	entries: number
-	strings: number
-	preservePrototype: boolean
-}
-
-const boundValidationString = (
-	value: string,
-	state?: ValidationProjectionState
-) => {
-	const remaining = state
-		? MAX_VALIDATION_ERROR_OUTPUT_LENGTH - state.strings
-		: MAX_VALIDATION_ERROR_STRING_LENGTH
-	const limit = Math.min(MAX_VALIDATION_ERROR_STRING_LENGTH, remaining)
-
-	if (value.length <= limit) {
-		if (state) state.strings += value.length
-		return value
-	}
-
-	if (state) state.strings += Math.max(limit, 0)
-	if (limit <= 0) return ''
-	if (limit <= VALIDATION_TRUNCATED.length)
-		return VALIDATION_TRUNCATED.slice(0, limit)
-
-	return (
-		value.slice(0, limit - VALIDATION_TRUNCATED.length) +
-		VALIDATION_TRUNCATED
-	)
-}
-
-const formatValidationSummaryValue = (value: unknown) => {
-	if (typeof value === 'string') return boundValidationString(value)
-	if (
-		value === null ||
-		typeof value === 'number' ||
-		typeof value === 'boolean' ||
-		typeof value === 'bigint' ||
-		typeof value === 'undefined'
-	)
-		return String(value)
-
-	try {
-		if (Array.isArray(value)) {
-			const length = Object.getOwnPropertyDescriptor(
-				value,
-				'length'
-			)?.value
-			if (
-				typeof length !== 'number' ||
-				length > MAX_VALIDATION_ERROR_CONTAINER_ENTRIES
-			)
-				return '[object Object]'
-
-			const output: string[] = []
-			let size = 0
-			for (let index = 0; index < length; index++) {
-				const descriptor = Object.getOwnPropertyDescriptor(
-					value,
-					`${index}`
-				)
-				if (!descriptor || !('value' in descriptor)) {
-					output.push('')
-					continue
-				}
-
-				const item = descriptor.value
-				if (item === null || item === undefined) output.push('')
-				else if (
-					typeof item === 'string' ||
-					typeof item === 'number' ||
-					typeof item === 'boolean' ||
-					typeof item === 'bigint'
-				) {
-					const part = String(item)
-					size += part.length + 1
-					if (size > MAX_VALIDATION_ERROR_STRING_LENGTH)
-						return boundValidationString(output.join(','))
-					output.push(part)
-				} else return '[object Object]'
-			}
-
-			return boundValidationString(output.join(','))
-		}
-	} catch {}
-
-	return '[object Object]'
-}
-
-const validationOutputFits = (value: string) => {
-	let bytes = 0
-
-	for (let index = 0; index < value.length; index++) {
-		const code = value.charCodeAt(index)
-		if (code < 0x80) bytes++
-		else if (code < 0x800) bytes += 2
-		else if (
-			code >= 0xd800 &&
-			code <= 0xdbff &&
-			value.charCodeAt(index + 1) >= 0xdc00 &&
-			value.charCodeAt(index + 1) <= 0xdfff
-		) {
-			bytes += 4
-			index++
-		} else bytes += 3
-
-		if (bytes > MAX_VALIDATION_ERROR_OUTPUT_LENGTH) return false
-	}
-
-	return true
-}
-
-const projectValidationValue = (
-	value: unknown,
-	state: ValidationProjectionState,
-	depth = 0
-): unknown | typeof OMIT_VALIDATION_VALUE => {
-	if (state.nodes++ >= MAX_VALIDATION_ERROR_NODES) return VALIDATION_TRUNCATED
-
-	switch (typeof value) {
-		case 'string':
-			return boundValidationString(value, state)
-
-		case 'number':
-			return Number.isFinite(value) ? value : null
-
-		case 'boolean':
-			return value
-
-		case 'bigint':
-			return '[BigInt]'
-
-		case 'undefined':
-		case 'function':
-		case 'symbol':
-			return OMIT_VALIDATION_VALUE
-	}
-
-	if (typeof value !== 'object' || value === null) return null
-	if (depth >= MAX_VALIDATION_ERROR_DEPTH) return VALIDATION_TRUNCATED
-	if (state.depth.has(value)) return '[Circular]'
-
-	try {
-		if (value instanceof Date) {
-			const timestamp = Date.prototype.getTime.call(value)
-			return Number.isFinite(timestamp)
-				? boundValidationString(
-						Date.prototype.toISOString.call(value),
-						state
-					)
-				: null
-		}
-	} catch {}
-
-	state.depth.add(value)
-
-	try {
-		if (Array.isArray(value)) {
-			const output: unknown[] = []
-			const lengthDescriptor = Object.getOwnPropertyDescriptor(
-				value,
-				'length'
-			)
-			const length =
-				typeof lengthDescriptor?.value === 'number'
-					? lengthDescriptor.value
-					: 0
-
-			let index = 0
-			for (
-				;
-				index < length &&
-				index < MAX_VALIDATION_ERROR_CONTAINER_ENTRIES &&
-				state.entries < MAX_VALIDATION_ERROR_ENTRIES &&
-				state.nodes < MAX_VALIDATION_ERROR_NODES;
-				index++
-			) {
-				state.entries++
-				const descriptor = Object.getOwnPropertyDescriptor(
-					value,
-					`${index}`
-				)
-				const projected = descriptor
-					? 'value' in descriptor
-						? projectValidationValue(
-								descriptor.value,
-								state,
-								depth + 1
-							)
-						: VALIDATION_UNSERIALIZABLE
-					: OMIT_VALIDATION_VALUE
-
-				output.push(
-					projected === OMIT_VALIDATION_VALUE ? null : projected
-				)
-			}
-
-			if (index < length) output.push(VALIDATION_TRUNCATED)
-			if (!state.preservePrototype) Object.setPrototypeOf(output, null)
-			return output
-		}
-
-		const output = (
-			state.preservePrototype ? {} : Object.create(null)
-		) as Record<string, unknown>
-		let truncated = false
-		let entries = 0
-		let inspected = 0
-
-		for (const key in value) {
-			if (inspected++ >= MAX_VALIDATION_ERROR_CONTAINER_ENTRIES) {
-				truncated = true
-				break
-			}
-
-			const descriptor = Object.getOwnPropertyDescriptor(value, key)
-			if (!descriptor?.enumerable) continue
-			if (
-				entries >= MAX_VALIDATION_ERROR_CONTAINER_ENTRIES ||
-				state.entries >= MAX_VALIDATION_ERROR_ENTRIES ||
-				state.nodes >= MAX_VALIDATION_ERROR_NODES
-			) {
-				truncated = true
-				break
-			}
-
-			entries++
-			state.entries++
-			const projected =
-				'value' in descriptor
-					? projectValidationValue(descriptor.value, state, depth + 1)
-					: VALIDATION_UNSERIALIZABLE
-			if (projected === OMIT_VALIDATION_VALUE) continue
-
-			Object.defineProperty(output, boundValidationString(key, state), {
-				value: projected,
-				enumerable: true,
-				configurable: true,
-				writable: true
-			})
-		}
-
-		if (truncated)
-			Object.defineProperty(output, VALIDATION_TRUNCATED, {
-				value: true,
-				enumerable: true
-			})
-
-		return output
-	} catch {
-		return VALIDATION_UNSERIALIZABLE
-	} finally {
-		state.depth.delete(value)
-	}
-}
-
-const validationSerializationFallback = () => {
-	const fallback = Object.create(null) as Record<string, unknown>
-	fallback.type = 'validation'
-	fallback.message = 'Validation details exceeded serialization limit'
-
-	return fallback
-}
-
-const projectValidationDetails = (
-	value: unknown,
-	preservePrototype = false
-) => {
-	const projected = projectValidationValue(value, {
-		depth: new WeakSet(),
-		nodes: 0,
-		entries: 0,
-		strings: 0,
-		preservePrototype
-	})
-	const result =
-		projected === OMIT_VALIDATION_VALUE ? null : (projected as unknown)
-
-	try {
-		const serialized = JSON.stringify(result)
-		if (typeof serialized === 'string' && validationOutputFits(serialized))
-			return result
-	} catch {}
-
-	return validationSerializationFallback()
-}
-
-const stringifyValidationDetails = (value: unknown, space?: number) => {
-	const projected = projectValidationDetails(value)
-
-	try {
-		const serialized = JSON.stringify(projected, null, space)
-		if (validationOutputFits(serialized)) return serialized
-	} catch {}
-
-	return JSON.stringify(validationSerializationFallback(), null, space)
-}
-
-const stringifyCustomValidationError = (value: unknown) => {
-	if (value !== null && typeof value === 'object')
-		return stringifyValidationDetails(value)
-
-	try {
-		return boundValidationString(String(value))
-	} catch {
-		return VALIDATION_UNSERIALIZABLE
-	}
-}
-
-const tryMapValueError = (error: ValueError | undefined) => {
-	try {
-		return mapValueError(error)
-	} catch {
-		return undefined
-	}
-}
-
-const readValidationDataProperty = (value: unknown, key: PropertyKey) => {
-	if (value === null || typeof value !== 'object') return
-
-	try {
-		const descriptor = Object.getOwnPropertyDescriptor(value, key)
-		if (descriptor && 'value' in descriptor) return descriptor.value
-	} catch {}
-}
-
-const formatStandardValidationPath = (value: unknown) => {
-	try {
-		if (!Array.isArray(value)) return 'root'
-
-		const length = Object.getOwnPropertyDescriptor(value, 'length')?.value
-		if (typeof length !== 'number') return 'root'
-
-		const output: string[] = []
-		let size = 0
-		const limit = Math.min(length, MAX_VALIDATION_ERROR_CONTAINER_ENTRIES)
-		for (let index = 0; index < limit; index++) {
-			const descriptor = Object.getOwnPropertyDescriptor(
-				value,
-				`${index}`
-			)
-			if (!descriptor || !('value' in descriptor)) continue
-
-			const part = descriptor.value
-			if (
-				typeof part === 'string' ||
-				typeof part === 'number' ||
-				typeof part === 'boolean' ||
-				typeof part === 'bigint'
-			) {
-				const formatted = boundValidationString(String(part))
-				size += formatted.length + 1
-				if (size > MAX_VALIDATION_ERROR_STRING_LENGTH) {
-					output.push(VALIDATION_TRUNCATED)
-					break
-				}
-				output.push(formatted)
-			} else output.push(VALIDATION_UNSERIALIZABLE)
-		}
-
-		if (limit < length) output.push(VALIDATION_TRUNCATED)
-		return boundValidationString(output.join('.')) || 'root'
-	} catch {
-		return 'root'
-	}
-}
-
-const takeErrors = (
-	iterator: ValueErrorIterator,
-	limit = MAX_ERRORS
-): ValueErrorWithSummary[] => {
-	const errors: ValueErrorWithSummary[] = []
-
-	for (const error of iterator) {
-		if (!error) continue
-
-		const mapped = tryMapValueError(error)
-		if (mapped) errors.push(mapped)
-
-		if (errors.length >= limit) break
-	}
-
-	return errors
-}
-
-export class InvalidFileType extends Error {
-	code = 'INVALID_FILE_TYPE'
-	status = 422
-
-	constructor(
-		public property: string,
-		public expected: string | string[],
-		public message = `"${property}" has invalid file type`
-	) {
-		super(message)
-
-		Object.setPrototypeOf(this, InvalidFileType.prototype)
-	}
-
-	toResponse(headers?: Record<string, any>) {
-		if (isProduction)
-			return new Response(
-				JSON.stringify({
-					type: 'validation',
-					on: 'body'
-				}),
-				{
-					status: 422,
-					headers: {
-						...headers,
-						'content-type': 'application/json'
-					}
-				}
-			)
-
-		return new Response(
-			JSON.stringify({
-				type: 'validation',
-				on: 'body',
-				summary: 'Invalid file type',
-				message: this.message,
-				property: this.property,
-				expected: this.expected
-			}),
-			{
-				status: 422,
-				headers: {
-					...headers,
-					'content-type': 'application/json'
-				}
-			}
-		)
-	}
-}
-
-export class ValidationError extends Error {
-	code = 'VALIDATION'
-	status = 422
-
+export abstract class HTTPError<
+	const in out T extends string = string
+> extends Error {
 	/**
-	 * An actual value of `message`
+	 * RFC 9457 problem type served in the `type` member, a URI or a slug.
+	 * Doubles as the tag that discriminates one error class from another
 	 *
-	 * Since `message` is string
-	 * use this instead of message
+	 * On a {@link HTTPError.id} class this mirrors `code`, or resolves to
+	 * `<typeBase>/<code>` once {@link HTTPError.typeBase} is set
 	 */
-	valueError?: ValueError
+	abstract type: T
 
 	/**
-	 * Alias of `valueError`
-	 */
-	get messageValue() {
-		return this.valueError
-	}
-
-	/**
-	 * Expected value of the schema
-	 */
-	expected?: unknown
-
-	/**
-	 * Custom error if provided
-	 */
-	customError?: unknown
-
-	constructor(
-		public type: string,
-		public validator:
-			| TSchema
-			| TypeCheck<any>
-			| ElysiaTypeCheck<any>
-			| StandardSchemaV1Like,
-		/**
-		 * Input value
-		 */
-		public value: unknown,
-		private allowUnsafeValidationDetails = false,
-		errors?: ValueErrorIterator
-	) {
-		let message = ''
-		let error
-		let expected
-		let customError
-
-		if (
-			// @ts-ignore
-			validator?.provider === 'standard' ||
-			'~standard' in validator ||
-			// @ts-ignore
-			(validator.schema && '~standard' in validator.schema)
-		) {
-			const standard = // @ts-ignore
-				('~standard' in validator ? validator : validator.schema)[
-					'~standard'
-				]
-
-			const _errors = errors ?? standard.validate(value).issues
-
-			error = readValidationDataProperty(_errors, 0)
-			const standardErrorPath = readValidationDataProperty(error, 'path')
-			const standardErrorMessage = readValidationDataProperty(
-				error,
-				'message'
-			)
-			const standardErrorProblem = readValidationDataProperty(
-				error,
-				'problem'
-			)
-
-			if (isProduction && !allowUnsafeValidationDetails)
-				message = stringifyValidationDetails({
-					type: 'validation',
-					on: type,
-					found: value
-				})
-			else
-				message = stringifyValidationDetails(
-					{
-						type: 'validation',
-						on: type,
-						property:
-							readValidationDataProperty(standardErrorPath, 0) ||
-							'root',
-						message: standardErrorMessage,
-						summary: standardErrorProblem,
-						expected,
-						found: value,
-						errors
-					},
-					2
-				)
-
-			customError = standardErrorMessage
-		} else {
-			if (value && typeof value === 'object')
-				try {
-					if (value instanceof ElysiaCustomStatusResponse)
-						value = value.response
-				} catch {}
-
-			error =
-				errors?.First() ??
-				('Errors' in validator
-					? validator.Errors(value).First()
-					: Value.Errors(validator, value).First())
-
-			const accessor = error?.path || 'root'
-
-			// @ts-ignore private field
-			const schema = validator?.schema ?? validator
-
-			if (!isProduction && !allowUnsafeValidationDetails)
-				try {
-					expected = Value.Create(schema)
-				} catch (error) {
-					expected = {
-						type: 'Could not create expected value',
-						// @ts-expect-error
-						message: error?.message,
-						error
-					}
-				}
-
-			customError =
-				error?.schema?.message || error?.schema?.error !== undefined
-					? typeof error.schema.error === 'function'
-						? error.schema.error(
-								isProduction && !allowUnsafeValidationDetails
-									? {
-											type: 'validation',
-											on: type,
-											found: value
-										}
-									: {
-											type: 'validation',
-											on: type,
-											value,
-											property: accessor,
-											message: error?.message,
-											summary:
-												tryMapValueError(error)
-													?.summary,
-											found: value,
-											expected,
-											errors:
-												'Errors' in validator
-													? takeErrors(
-															validator.Errors(
-																value
-															)
-														)
-													: takeErrors(
-															Value.Errors(
-																validator,
-																value
-															)
-														)
-										},
-								validator
-							)
-						: error.schema.error
-					: undefined
-
-			if (customError !== undefined) {
-				message = stringifyCustomValidationError(customError)
-			} else if (isProduction && !allowUnsafeValidationDetails) {
-				message = stringifyValidationDetails({
-					type: 'validation',
-					on: type,
-					found: value
-				})
-			} else {
-				message = stringifyValidationDetails(
-					{
-						type: 'validation',
-						on: type,
-						property: accessor,
-						message: error?.message,
-						summary: tryMapValueError(error)?.summary,
-						expected,
-						found: value,
-						errors:
-							'Errors' in validator
-								? takeErrors(validator.Errors(value))
-								: takeErrors(Value.Errors(validator, value))
-					},
-					2
-				)
-			}
-		}
-
-		super(message)
-		this.valueError = error
-		this.expected = expected
-		this.customError = customError
-
-		Object.setPrototypeOf(this, ValidationError.prototype)
-	}
-
-	get all(): ValueErrorWithSummary[] {
-		// Handle standard schema validators (Zod, Valibot, etc.)
-		if (
-			// @ts-ignore
-			this.validator?.provider === 'standard' ||
-			'~standard' in this.validator ||
-			// @ts-ignore
-			('schema' in this.validator &&
-				// @ts-ignore
-				this.validator.schema &&
-				// @ts-ignore
-				'~standard' in this.validator.schema)
-		) {
-			const standard = // @ts-ignore
-				(
-					'~standard' in this.validator
-						? this.validator
-						: // @ts-ignore
-							this.validator.schema
-				)['~standard']
-
-			const issues = standard.validate(this.value).issues
-
-			// Map standard schema issues to the expected format
-			return (
-				issues?.slice(0, MAX_ERRORS).map((issue: any) => {
-					const message = readValidationDataProperty(issue, 'message')
-
-					return {
-						summary: message,
-						path: formatStandardValidationPath(
-							readValidationDataProperty(issue, 'path')
-						),
-						message,
-						value: this.value
-					}
-				}) || []
-			)
-		}
-
-		// Handle TypeBox validators
-		return 'Errors' in this.validator
-			? takeErrors(this.validator.Errors(this.value))
-			: // @ts-ignore
-				takeErrors(Value.Errors(this.validator, this.value))
-	}
-
-	static simplifyModel(
-		validator: TSchema | TypeCheck<any> | ElysiaTypeCheck<any>
-	) {
-		// @ts-ignore
-		const model = 'schema' in validator ? validator.schema : validator
-
-		try {
-			return Value.Create(model)
-		} catch {
-			return model
-		}
-	}
-
-	get model() {
-		if ('~standard' in this.validator) return this.validator
-
-		return ValidationError.simplifyModel(this.validator)
-	}
-
-	toResponse(headers?: Record<string, any>) {
-		return new Response(this.message, {
-			status: 400,
-			headers: {
-				...headers,
-				'content-type': 'application/json'
-			}
-		})
-	}
-
-	/**
-	 * Utility function to inherit add custom error and keep the original Validation error
+	 * Stable machine-readable token served in the `code` member, set by
+	 * {@link HTTPError.id} to its first argument
 	 *
-	 * @since 1.3.14
+	 * Unlike `type` it is never widened to a URI, so it stays the value to
+	 * dispatch on
+	 */
+	declare readonly code?: string
+
+	/**
+	 * Absolute base for the RFC 9457 `type` URI, applied to every class made
+	 * by {@link HTTPError.id} and to the built-in `ElysiaError`s (`NotFound`,
+	 * `ParseError`, `InvalidCookie`, `InternalServerError`) both derive `type`
+	 * from the same slug. Request validation is the exception, it keeps
+	 * `type: 'validation'` unprefixed
 	 *
 	 * @example
 	 * ```ts
-	 * new Elysia()
-	 *		.onError(({ error, code }) => {
-	 *			if (code === 'VALIDATION') return error.detail(error.message)
-	 *		})
-	 *		.post('/', () => 'Hello World!', {
-	 *			body: t.Object({
-	 *				x: t.Number({
-	 *					error: 'x must be a number'
-	 *				})
-	 *			})
-	 *		})
+	 * HTTPError.typeBase = 'https://example.com/errors'
+	 *
+	 * class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {}
+	 * // → { type: 'https://example.com/errors/OUT_OF_CREDIT',
+	 * //     code: 'OUT_OF_CREDIT', … }
 	 * ```
 	 */
-	detail(
-		message: unknown,
-		allowUnsafeValidatorDetails = this.allowUnsafeValidationDetails
-	) {
-		if (!this.customError) return this.message
+	// eslint-disable-next-line sonarjs/public-static-readonly -- the knob is set by the app at boot
+	static typeBase?: string
 
-		const value = this.value
-		const expected = this.expected
-		let errors: ValueErrorWithSummary[] = []
-		let property: unknown = 'root'
-		let summary: string | undefined
+	/**
+	 * HTTP status served when the error reaches the error pipeline,
+	 * as a number or a status name (`'Payment Required'`)
+	 */
+	declare readonly status?: number | keyof StatusMap
 
-		try {
-			errors = this.all
-			property = this.valueError?.path || 'root'
-			summary = tryMapValueError(this.valueError)?.summary
-		} catch {}
+	/**
+	 * Headers merged into `set.headers` when the error is served
+	 *
+	 * Only from a class that extends this module's `HTTPError`: on an error
+	 * that only implements the contract, or extends the `HTTPError` of
+	 * another loaded copy of Elysia (a duplicate install, a bundled plugin),
+	 * they are ignored
+	 */
+	declare readonly headers?: Record<string, string>
 
-		return projectValidationDetails(
-			isProduction && !allowUnsafeValidatorDetails
-				? {
-						type: 'validation',
-						on: this.type,
-						found: value,
-						message
-					}
-				: {
-						type: 'validation',
-						on: this.type,
-						property,
-						message,
-						summary,
-						found: value,
-						expected,
-						errors
-					},
-			true
-		)
+	/**
+	 * Return a value to serve as the whole response, may be `async`
+	 *
+	 * Supports `status()`/`problem()` for status-based Eden response
+	 */
+	value?(): MaybePromise<unknown>
+
+	/**
+	 * `detail` member of the RFC 9457 problem document, served in place of
+	 * the error message
+	 *
+	 * Use `value()` for anything computed asynchronously
+	 */
+	declare readonly detail?: string
+
+	/**
+	 * Return RFC 9457 extension members added to the problem document,
+	 * synchronously
+	 *
+	 * `type`, `code` and `status` stay the error's own. A string `detail` is
+	 * served when the error has no `detail` of its own, in place of the
+	 * message. `title` and `instance` may be overridden. Not served when
+	 * `value()` answers
+	 *
+	 * Only a plain object's own data members are served, which types can't
+	 * check: return an object literal, not a class instance
+	 *
+	 * @example
+	 * ```ts
+	 * class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {
+	 *     constructor(readonly balance: number) {
+	 *         super()
+	 *     }
+	 *
+	 *     extension() {
+	 *         return { balance: this.balance, accounts: ['/account/12345'] }
+	 *     }
+	 * }
+	 * ```
+	 */
+	extension?(): Record<string, unknown>
+
+	/**
+	 * Create a concrete `HTTPError` subclass carrying `code`, mirrored into
+	 * `type` unless {@link HTTPError.typeBase} is set
+	 *
+	 * `code` carries no status annotation, annotate `status` in the subclass
+	 * body as a number or a status name
+	 *
+	 * @example
+	 * ```ts
+	 * class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT') {
+	 *     override readonly status = 402
+	 *     headers = {
+	 *         'x-powered-by': 'Elysia'
+	 *     }
+	 * }
+	 * ```
+	 */
+	static id<const Type extends string>(code: Type): TaggedHTTPError<Type>
+
+	/**
+	 * Create a concrete `HTTPError` subclass carrying `code`, annotated with
+	 * `status` as a number or a status name
+	 *
+	 * Annotate what is served with `detail` (problem `detail` member) or
+	 * `value()` (whole-response override, may be `async`)
+	 *
+	 * @example
+	 * ```ts
+	 * class OutOfCredit extends HTTPError.id('OUT_OF_CREDIT', 402) {}
+	 * class Denied extends HTTPError.id('DENIED', 'Payment Required') {
+	 *     override readonly detail = 'Top up to continue'
+	 * }
+	 * ```
+	 */
+	static id<
+		const Type extends string,
+		const S extends number | keyof StatusMap
+	>(
+		code: Type,
+		status: S
+	): TaggedHTTPError<
+		Type,
+		{ readonly status: S extends keyof StatusMap ? StatusMap[S] : S }
+	>
+
+	static id<const Type extends string>(
+		code: Type,
+		status?: number | keyof StatusMap
+	): TaggedHTTPError<Type> {
+		const Tagged = class extends HTTPError<string> {
+			declare type: Type
+			declare status?: number
+			declare readonly headers?: Record<string, string>
+
+			// own + enumerable, so `code` survives plain enumeration and
+			// `JSON.stringify` of the instance the way `err.code` is expected to
+			readonly code = code
+		}
+
+		defineProblemType(Tagged.prototype)
+
+		Tagged.prototype.name = code
+
+		Object.defineProperty(Tagged, 'name', {
+			value: code,
+			configurable: true
+		})
+
+		const resolved =
+			typeof status === 'string'
+				? StatusMap[status as keyof StatusMap]
+				: status
+
+		if (typeof resolved === 'number') Tagged.prototype.status = resolved
+
+		return Tagged
 	}
 }

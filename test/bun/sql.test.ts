@@ -2,7 +2,6 @@ import { SQL } from 'bun'
 import { describe, it, expect } from 'bun:test'
 
 import Elysia from '../../src'
-import { req } from '../utils'
 
 describe('Bun.SQL', () => {
 	it('serialize custom array-like custom class with array sub class', async () => {
@@ -22,7 +21,7 @@ describe('Bun.SQL', () => {
 			() => sql`SELECT * FROM elysia_repro_users`
 		)
 
-		const value = await app.handle(req('/')).then((x) => x.json())
+		const value = await app.handle('/').then((x) => x.json())
 
 		expect(value).toEqual([
 			{

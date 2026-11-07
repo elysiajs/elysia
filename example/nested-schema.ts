@@ -9,12 +9,16 @@ new Elysia()
 		},
 		(app) =>
 			app
-				.get('/', ({ query }) => 'A', {
-					beforeHandle: ({ query }) => {},
-					query: t.Object({
-						a: t.String()
-					})
-				})
+				.get(
+					'/',
+					{
+						beforeHandle: ({ query }) => {},
+						query: t.Object({
+							a: t.String()
+						})
+					},
+					({ query }) => 'A'
+				)
 				.guard(
 					{
 						headers: t.Object({
@@ -22,12 +26,16 @@ new Elysia()
 						})
 					},
 					(app) =>
-						app.get('/a', () => 'A', {
-							beforeHandle: ({ query }) => {},
-							body: t.Object({
-								username: t.String()
-							})
-						})
+						app.get(
+							'/a',
+							{
+								beforeHandle: ({ query }) => {},
+								body: t.Object({
+									username: t.String()
+								})
+							},
+							() => 'A'
+						)
 				)
 	)
 	.get('*', () => 'Star now work')

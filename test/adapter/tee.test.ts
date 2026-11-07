@@ -1,178 +1,271 @@
-import { describe, expect, it } from 'bun:test'
-
+import { describe, it, expect } from 'bun:test'
 import { tee } from '../../src/adapter/utils'
+import { Elysia } from '../../src'
 
-describe('tee', () => {
-	it('waits for every branch before pulling another value', async () => {
+describe('tee() bounded drain-ahead', () => {
+	it('caps how far the producer races ahead of the slowest branch', async () => {
 		let produced = 0
-
-		async function* source() {
-			for (let i = 0; i < 50; i++) {
+		async function* src() {
+			while (true) {
 				produced++
-				yield i
+				yield produced
 			}
 		}
 
-		const [response, trace, afterResponse] = await tee(source(), 3)
+		const cap = 4
+		const [client, listener] = await tee(src(), cap)
 
-		expect(await response.next()).toEqual({ done: false, value: 0 })
+		const drained = (async () => {
+			for await (const _ of listener) {
+			}
+		})()
 
-		const next = response.next()
-		await Bun.sleep(10)
-		expect(produced).toBe(1)
+		for (let i = 0; i < 3; i++) await client.next()
+		await new Promise((r) => setTimeout(r, 20))
 
-		expect(await trace.next()).toEqual({ done: false, value: 0 })
-		expect(await afterResponse.next()).toEqual({ done: false, value: 0 })
-		expect(await next).toEqual({ done: false, value: 1 })
-		expect(produced).toBe(2)
+		// One source read may already be in flight.
+		expect(produced).toBeLessThanOrEqual(3 + cap + 1)
 
-		await Promise.all([
-			response.return?.(),
-			trace.return?.(),
-			afterResponse.return?.()
-		])
+		await client.return?.()
+		await drained
 	})
 
-	it('delivers every value to all three branches', async () => {
-		async function* source() {
-			yield 'a'
-			yield 'b'
-			yield 'c'
+	it('drains streams shorter than the cap eagerly (server-timing preserved)', async () => {
+		async function* src() {
+			for (let i = 0; i < 3; i++) yield i
 		}
 
-		const collect = async (iterator: AsyncIterableIterator<string>) => {
-			const values: string[] = []
-			for await (const value of iterator) values.push(value)
+		const [response, listener] = await tee(src(), 64)
 
-			return values
-		}
+		// the listener only waits for the end, values go to the response
+		const seen: number[] = []
+		for await (const v of listener) seen.push(v)
+		expect(seen).toEqual([])
 
-		const result = await Promise.all((await tee(source(), 3)).map(collect))
-
-		expect(result).toEqual([
-			['a', 'b', 'c'],
-			['a', 'b', 'c'],
-			['a', 'b', 'c']
-		])
+		const got: number[] = []
+		for await (const v of response) got.push(v)
+		expect(got).toEqual([0, 1, 2])
 	})
 
-	it('releases a pending value when a branch cancels', async () => {
-		async function* source() {
-			yield 1
-			yield 2
+	it('caps the window in bytes, not just entries', async () => {
+		let produced = 0
+		async function* megachunks() {
+			while (true) {
+				produced++
+				yield new Uint8Array(1024 * 1024)
+			}
 		}
 
-		const [response, trace, afterResponse] = await tee(source(), 3)
+		const [client, listener] = await tee(megachunks())
 
-		expect(await response.next()).toEqual({ done: false, value: 1 })
-		const next = response.next()
+		const drained = (async () => {
+			for await (const _ of listener) {
+			}
+		})()
 
-		await trace.return?.()
-		expect(await afterResponse.next()).toEqual({ done: false, value: 1 })
-		expect(await next).toEqual({ done: false, value: 2 })
+		await client.next()
+		await new Promise((r) => setTimeout(r, 30))
 
-		await response.return?.()
-		await afterResponse.return?.()
+		expect(produced).toBeLessThanOrEqual(8)
+
+		await client.return?.()
+		await drained
 	})
 
-	it('returns the source after every branch cancels', async () => {
-		let returned = 0
-		const source = {
-			[Symbol.asyncIterator]() {
-				return {
-					next: async () => ({
-						done: false as const,
-						value: 'value'
-					}),
-					return: async () => {
-						returned++
-						return { done: true as const, value: undefined }
-					}
+	it('does not wedge when consumers exceed the default byte cap', async () => {
+		async function* megachunks() {
+			for (let i = 0; i < 30; i++) yield new Uint8Array(1024 * 1024)
+		}
+
+		const [a, b] = await tee(megachunks())
+
+		const count = (branch: AsyncIterableIterator<unknown>) =>
+			(async () => {
+				let n = 0
+				for await (const _ of branch) n++
+				return n
+			})()
+
+		const counts = (await Promise.race([
+			Promise.all([count(a), count(b)]),
+			new Promise((_, reject) =>
+				setTimeout(() => reject(new Error('tee wedged')), 1000)
+			)
+		])) as number[]
+
+		// the second branch is a completion signal, it yields no values
+		expect(counts).toEqual([30, 0])
+	})
+
+	it('streams every chunk of a large-chunk response and fires afterResponse once (end to end)', async () => {
+		let afterResponse = 0
+
+		const app = new Elysia()
+			.onAfterResponse(() => {
+				afterResponse++
+			})
+			.get('/big', async function* () {
+				for (let i = 0; i < 30; i++) yield new Uint8Array(1024 * 1024)
+			})
+
+		const res = await app.handle(new Request('http://localhost/big'))
+		const reader = res.body!.getReader()
+
+		const received = (await Promise.race([
+			(async () => {
+				let n = 0
+				while (true) {
+					const { done } = await reader.read()
+					if (done) break
+					n++
 				}
-			}
-		}
+				return n
+			})(),
+			new Promise((_, reject) =>
+				setTimeout(() => reject(new Error('response wedged')), 2000)
+			)
+		])) as number
 
-		const [response, first, second] = await tee(source, 3)
-
-		await first.return?.()
-		await second.return?.()
-		expect(returned).toBe(0)
-
-		await response.return?.()
-		expect(returned).toBe(1)
+		await new Promise((r) => setTimeout(r, 20))
+		expect(received).toBe(30)
+		expect(afterResponse).toBe(1)
 	})
 
-	it('ends observer branches when the response branch cancels', async () => {
-		let release!: () => void
-		async function* source() {
+	it('unwinds on branch-0 return while the source is stalled', async () => {
+		let observerDone = false
+		let hang!: () => void
+
+		async function* stalled() {
 			yield 'first'
 			await new Promise<void>((resolve) => {
-				release = resolve
+				hang = resolve
 			})
-			yield 'second'
+			yield 'never'
 		}
 
-		const [response, observer] = await tee(source(), 2)
-		expect(await Promise.all([response.next(), observer.next()])).toEqual([
-			{ done: false, value: 'first' },
-			{ done: false, value: 'first' }
+		const [client, listener] = await tee(stalled())
+
+		const drained = (async () => {
+			for await (const _ of listener) {
+			}
+			observerDone = true
+		})()
+
+		await client.next()
+		await client.return?.()
+
+		await Promise.race([
+			drained,
+			new Promise((_, reject) =>
+				setTimeout(() => reject(new Error('observer wedged')), 500)
+			)
 		])
+		expect(observerDone).toBe(true)
+		hang()
+	})
 
-		const observing = observer.next()
-		await Promise.resolve()
-		await response.return?.()
+	it('fires afterResponse when the client aborts a stalled stream (end to end)', async () => {
+		let afterResponse = 0
+		let hang!: () => void
 
-		expect(await observing).toEqual({ done: true, value: undefined })
-		release()
+		const app = new Elysia()
+			.onAfterResponse(() => {
+				afterResponse++
+			})
+			.get('/sse', async function* () {
+				yield 'first'
+				await new Promise<void>((resolve) => {
+					hang = resolve
+				})
+				yield 'never'
+			})
+
+		const controller = new AbortController()
+		const res = await app.handle(
+			new Request('http://localhost/sse', { signal: controller.signal })
+		)
+		const reader = res.body!.getReader()
+		await reader.read()
+		controller.abort()
+		try {
+			await reader.cancel()
+		} catch {}
+
+		await new Promise((r) => setTimeout(r, 200))
+		expect(afterResponse).toBe(1)
+		hang()
 	})
 
 	it('propagates a source error to every branch', async () => {
-		const failure = new Error('source failed')
-		async function* source() {
-			yield 'value'
-			throw failure
+		async function* failing() {
+			yield 1
+			throw new Error('boom')
 		}
 
-		const branches = await tee(source(), 3)
-		expect(
-			await Promise.all(branches.map((branch) => branch.next()))
-		).toEqual([
-			{ done: false, value: 'value' },
-			{ done: false, value: 'value' },
-			{ done: false, value: 'value' }
-		])
+		const [a, b] = await tee(failing())
 
-		const errors = await Promise.all(
-			branches.map(async (branch) => {
-				try {
-					await branch.next()
-				} catch (error) {
-					return error
-				}
-			})
-		)
+		expect((await a.next()).value).toBe(1)
+		await expect(a.next()).rejects.toThrow('boom')
 
-		expect(errors).toEqual([failure, failure, failure])
-		expect(
-			await Promise.all(branches.map((branch) => branch.next()))
-		).toEqual([
-			{ done: true, value: undefined },
-			{ done: true, value: undefined },
-			{ done: true, value: undefined }
-		])
+		const drain = async () => {
+			for await (const _ of b) {
+			}
+		}
+		await expect(drain()).rejects.toThrow('boom')
 	})
 
-	it('completes every branch when the source is empty', async () => {
-		async function* source() {}
+	// afterResponse and dispose wait on the second branch: it must not settle
+	// while the source can still produce, and must settle once it ends
+	it('settles the completion branch exactly when the source ends', async () => {
+		let release!: () => void
+		async function* gated() {
+			yield 1
+			await new Promise<void>((resolve) => {
+				release = resolve
+			})
+			yield 2
+		}
 
-		const branches = await tee(source(), 3)
+		const [value, completion] = tee(gated())
+		let settled = false
+		const end = completion.next().then((r) => {
+			settled = true
+			return r
+		})
 
-		expect(
-			await Promise.all(branches.map((branch) => branch.next()))
-		).toEqual([
-			{ done: true, value: undefined },
-			{ done: true, value: undefined },
-			{ done: true, value: undefined }
-		])
+		expect((await value.next()).value).toBe(1)
+		await new Promise((r) => setTimeout(r, 10))
+		expect(settled).toBe(false)
+
+		release()
+		expect(await end).toEqual({ done: true, value: undefined })
+		expect((await value.next()).value).toBe(2)
+		expect((await value.next()).done).toBe(true)
+	})
+
+	it('charges Blob chunks against the byte cap by size', async () => {
+		let produced = 0
+		async function* megabyteBlobs() {
+			while (true) {
+				produced++
+				yield new Blob([
+					new Uint8Array(1 << 20)
+				]) as unknown as Uint8Array
+			}
+		}
+
+		const [client, listener] = tee(megabyteBlobs(), 1 << 20, 1 << 22)
+		const drained = (async () => {
+			for await (const _ of listener) {
+			}
+		})()
+
+		await client.next()
+		await Promise.resolve()
+
+		expect(produced).toBeLessThanOrEqual(6)
+
+		await client.return?.()
+		await drained
 	})
 })

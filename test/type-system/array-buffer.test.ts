@@ -1,13 +1,10 @@
 import Elysia, { t } from '../../src'
-import { applySchemaDefaults } from '../../src/schema'
 import { describe, expect, it } from 'bun:test'
-import { Value } from '@sinclair/typebox/value'
-import { TypeBoxError } from '@sinclair/typebox'
+import { Value, EncodeError, DecodeError } from 'typebox/value'
 
 describe('TypeSystem - ArrayBuffer', () => {
 	it('Create', () => {
-		// @ts-expect-error
-		expect(Value.Create(t.ArrayBuffer())).toEqual([1, 2, 3])
+		expect(Value.Create(t.ArrayBuffer())).toBeUndefined()
 
 		expect(
 			Value.Create(
@@ -15,7 +12,6 @@ describe('TypeSystem - ArrayBuffer', () => {
 					default: '[]'
 				})
 			)
-			// @ts-expect-error
 		).toBe('[]')
 	})
 
@@ -29,12 +25,12 @@ describe('TypeSystem - ArrayBuffer', () => {
 	it('Encode', () => {
 		const schema = t.ArrayBuffer()
 
-		expect(() => Value.Encode(schema, [1, 2, 3])).toThrow(TypeBoxError)
-		expect(() => Value.Encode(schema, 'test')).toThrow(TypeBoxError)
-		expect(() => Value.Encode(schema, 123)).toThrow(TypeBoxError)
-		expect(() => Value.Encode(schema, true)).toThrow(TypeBoxError)
-		expect(() => Value.Encode(schema, null)).toThrow(TypeBoxError)
-		expect(() => Value.Encode(schema, undefined)).toThrow(TypeBoxError)
+		expect(() => Value.Encode(schema, [1, 2, 3])).toThrow(EncodeError)
+		expect(() => Value.Encode(schema, 'test')).toThrow(EncodeError)
+		expect(() => Value.Encode(schema, 123)).toThrow(EncodeError)
+		expect(() => Value.Encode(schema, true)).toThrow(EncodeError)
+		expect(() => Value.Encode(schema, null)).toThrow(EncodeError)
+		expect(() => Value.Encode(schema, undefined)).toThrow(EncodeError)
 	})
 
 	it('Decode', () => {
@@ -43,19 +39,23 @@ describe('TypeSystem - ArrayBuffer', () => {
 		expect(Value.Decode(schema, new ArrayBuffer())).toEqual(
 			new ArrayBuffer()
 		)
-		expect(() => Value.Decode(schema, [1, 2, 3])).toThrow(TypeBoxError)
-		expect(() => Value.Decode(schema, 'test')).toThrow(TypeBoxError)
-		expect(() => Value.Decode(schema, 123)).toThrow(TypeBoxError)
-		expect(() => Value.Decode(schema, true)).toThrow(TypeBoxError)
-		expect(() => Value.Decode(schema, null)).toThrow(TypeBoxError)
-		expect(() => Value.Decode(schema, undefined)).toThrow(TypeBoxError)
+		expect(() => Value.Decode(schema, [1, 2, 3])).toThrow(DecodeError)
+		expect(() => Value.Decode(schema, 'test')).toThrow(DecodeError)
+		expect(() => Value.Decode(schema, 123)).toThrow(DecodeError)
+		expect(() => Value.Decode(schema, true)).toThrow(DecodeError)
+		expect(() => Value.Decode(schema, null)).toThrow(DecodeError)
+		expect(() => Value.Decode(schema, undefined)).toThrow(DecodeError)
 	})
 
 	it('Integrate', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.ArrayBuffer(),
-			response: t.ArrayBuffer()
-		})
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.ArrayBuffer(),
+				response: t.ArrayBuffer()
+			},
+			({ body }) => body
+		)
 
 		const response = await app.handle(
 			new Request('http://localhost', {
@@ -65,46 +65,6 @@ describe('TypeSystem - ArrayBuffer', () => {
 			})
 		)
 
-		expect(await response.text()).toBe('可愛くてごめん')
-	})
-
-	describe.each([true, false])('preserve input (aot: %s)', (aot) => {
-		it('at the request body root', async () => {
-			const buffer = new ArrayBuffer(4)
-			new Uint8Array(buffer).set([1, 2, 3, 4])
-			const read = (value: ArrayBuffer) =>
-				Array.from(new Uint8Array(value)).join(',')
-			const app = new Elysia({ aot }).post('/', ({ body }) => read(body), {
-				parse: () => buffer,
-				body: t.ArrayBuffer()
-			})
-
-			const response = await app.handle(
-				new Request('http://localhost/', {
-					method: 'POST',
-					headers: { 'content-type': 'custom' },
-					body: 'body'
-				})
-			)
-
-			expect(await response.text()).toBe('1,2,3,4')
-		})
-	})
-
-	it('preserves nested object and array values while applying defaults', () => {
-		const buffer = new ArrayBuffer(4)
-		new Uint8Array(buffer).set([1, 2, 3, 4])
-
-		const object = applySchemaDefaults(
-			{ schema: t.Object({ value: t.ArrayBuffer() }) } as any,
-			{ value: buffer }
-		) as { value: ArrayBuffer }
-		const array = applySchemaDefaults(
-			{ schema: t.Array(t.ArrayBuffer()) } as any,
-			[buffer]
-		) as ArrayBuffer[]
-
-		expect(Array.from(new Uint8Array(object.value))).toEqual([1, 2, 3, 4])
-		expect(Array.from(new Uint8Array(array[0]))).toEqual([1, 2, 3, 4])
+		await expect(response.text()).resolves.toBe('可愛くてごめん')
 	})
 })

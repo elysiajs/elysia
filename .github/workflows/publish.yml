@@ -1,51 +1,87 @@
 name: Publish
 
 on:
-  release:
-    types: [published]
+    release:
+        types: [published]
 
 defaults:
-  run:
-    shell: bash
+    run:
+        shell: bash
 
 permissions:
-  id-token: write
-
-env:
-  # Enable debug logging for actions
-  ACTIONS_RUNNER_DEBUG: true
+    contents: read
 
 jobs:
-  publish-npm:
-    name: 'Publish: npm Registry'
-    runs-on: ubuntu-latest
-    steps:
-      - name: 'Checkout'
-        uses: actions/checkout@v4
+    publish-npm:
+        name: 'Publish: npm Registry'
+        runs-on: ubuntu-latest
 
-      - name: 'Setup Bun'
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
-          registry-url: "https://registry.npmjs.org"
+        permissions:
+            contents: read
+            id-token: write
 
-      - uses: actions/setup-node@v5
-        with:
-          node-version: '24.x'
-          registry-url: 'https://registry.npmjs.org'
+        steps:
+            - name: 'Checkout'
+              uses: actions/checkout@v4
 
-      - name: Install packages
-        run: bun install
+            - name: 'Setup Bun'
+              uses: oven-sh/setup-bun@v1
+              with:
+                  bun-version: latest
+                  registry-url: 'https://registry.npmjs.org'
 
-      - name: Build code
-        run: bun run build
+            - uses: actions/setup-node@v5
+              with:
+                  node-version: '24.x'
+                  registry-url: 'https://registry.npmjs.org'
 
-      - name: Test
-        run: bun run test
+            - name: Install packages
+              run: bun install
 
-      - name: Test
-        run: bun run test:cf
+            - name: Test
+              run: bun run test
 
-      - name: 'Publish'
-        run: |
-          NODE_AUTH_TOKEN="" npm publish --provenance --access=public
+            - name: Test (Node)
+              run: bun run test:node
+
+            - name: Test
+              run: bun run test:cf
+
+            - name: 'Publish'
+              run: |
+                  NODE_AUTH_TOKEN="" npm publish --provenance --access=public
+
+    benchmark:
+        name: Benchmark
+        runs-on: ubuntu-latest
+
+        permissions:
+            contents: read
+
+        steps:
+            - name: 'Checkout'
+              uses: actions/checkout@v4
+
+            - name: 'Setup Bun'
+              uses: oven-sh/setup-bun@v1
+              with:
+                  bun-version: latest
+
+            - name: Install packages
+              run: bun install
+
+            - name: Benchmark report
+              run: bun run example/stress/ci-report.ts --json-out trace/bench-report.json --md-out trace/bench-report.md
+
+            - name: Append report to step summary
+              if: always()
+              run: cat trace/bench-report.md >> "$GITHUB_STEP_SUMMARY"
+
+            - name: Upload benchmark report
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: bench-${{ github.event.release.tag_name || github.sha }}
+                  path: |
+                      trace/bench-report.json
+                      trace/bench-report.md

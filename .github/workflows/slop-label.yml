@@ -1,0 +1,47 @@
+name: Label slop
+
+on:
+    issues:
+        types: [opened]
+    pull_request_target:
+        types: [opened]
+
+permissions:
+    contents: read
+    issues: write
+
+env:
+    PHRASE: I have nothing but my burger and I want nothing more
+
+jobs:
+    issue:
+        if: github.event_name == 'issues'
+        runs-on: ubuntu-latest
+        steps:
+            - name: Add label
+              if: contains(github.event.issue.body, env.PHRASE)
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  NUMBER: ${{ github.event.issue.number }}
+              run: gh api --silent "repos/$GITHUB_REPOSITORY/issues/$NUMBER/labels" -f 'labels[]=slop'
+
+    pull-request:
+        if: github.event_name == 'pull_request_target'
+        runs-on: ubuntu-latest
+        steps:
+            # This checkout is untrusted data. Inspect it only; never execute it.
+            - name: Checkout pull request
+              uses: actions/checkout@v4
+              with:
+                  ref: refs/pull/${{ github.event.pull_request.number }}/head
+                  persist-credentials: false
+
+            - name: Add label
+              env:
+                  BODY: ${{ github.event.pull_request.body }}
+                  GH_TOKEN: ${{ github.token }}
+                  NUMBER: ${{ github.event.pull_request.number }}
+              run: |
+                  if [[ "$BODY" == *"$PHRASE"* ]] || git grep -Fq "$PHRASE" -- src test example; then
+                      gh api --silent "repos/$GITHUB_REPOSITORY/issues/$NUMBER/labels" -f 'labels[]=slop'
+                  fi
