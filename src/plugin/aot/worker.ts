@@ -5,16 +5,22 @@ import type { AotModuleCondition } from './source'
 
 const port = parentPort
 
-if (!port) throw new Error('[elysia-aot] worker requires a parent port')
+if (!port && !process.send)
+	throw new Error('[elysia-aot] capture requires a parent channel')
 
-const { file, options, moduleCondition } = workerData as {
+const { file, options, moduleCondition } = (
+	port ? workerData : JSON.parse(process.argv[2])
+) as {
 	file: string
 	options?: ElysiaAotOptions
 	moduleCondition: AotModuleCondition
 }
 
+const send = (message: unknown) =>
+	port ? port.postMessage(message) : process.send!(message)
+
 generateCompiledArtifacts(file, options, moduleCondition).then(
-	(artifacts) => port.postMessage({ ok: true, artifacts }),
+	(artifacts) => send({ ok: true, artifacts }),
 	(error: unknown) => {
 		const failure =
 			error instanceof Error
@@ -25,6 +31,6 @@ generateCompiledArtifacts(file, options, moduleCondition).then(
 					}
 				: { name: 'Error', message: String(error) }
 
-		port.postMessage({ ok: false, error: failure })
+		send({ ok: false, error: failure })
 	}
 )
