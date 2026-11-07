@@ -1,10 +1,6 @@
+import { isResponseParam } from '../aot'
 import { handlerParams } from './param-table'
 import type { HandlerParamContext } from './param-resolvers'
-
-/**
- * `vs<i>` / `vr<i>`: status and validator of the route's i-th declared response
- */
-export const isResponseParam = (name: string) => /^v[rs]\d+$/.test(name)
 
 export function resolveHandlerParams(names: string[], c: HandlerParamContext) {
 	const length = names.length

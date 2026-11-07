@@ -17,7 +17,11 @@ import { expect } from 'bun:test'
 import type { AnyElysia } from '../../src'
 import { CheckContext } from 'typebox/schema'
 import { buildCoercedFromPlan } from '../../src/type/coerce-plan'
-import { routeShape } from '../../src/compile/handler/route-shape'
+import {
+	buildFrozenRouteValidator,
+	resolveHandlerParams,
+	routeShape
+} from '../../src/compile/handler/route-shape'
 import { Guard } from 'typebox/guard'
 import { Format } from 'typebox/format'
 import { Hashing } from 'typebox/system'
@@ -83,6 +87,9 @@ export const evalRegistration = (
 		'Reconstruct',
 		'buildCoercedFromPlan',
 		'routeShape',
+		'installReplay',
+		'resolveHandlerParams',
+		'buildFrozenRouteValidator',
 		'CheckContext',
 		'Guard',
 		'Format',
@@ -100,6 +107,10 @@ export const evalRegistration = (
 		undefined,
 		buildCoercedFromPlan,
 		routeShape,
+		// the `Compiled` stub is no copy to check, installed above already
+		() => {},
+		resolveHandlerParams,
+		buildFrozenRouteValidator,
 		CheckContext,
 		Guard,
 		Format,

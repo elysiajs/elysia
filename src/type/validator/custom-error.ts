@@ -1,13 +1,10 @@
-import { SchemaCompile as Compile, Build } from '../typebox-value'
+import { SchemaCompile as Compile } from '../typebox-value'
 
 import {
 	reconstruct,
 	EMPTY_EXTERNALS,
-	type CheckBuildResult,
-	type CapturedValidator,
 	type FrozenValidator
 } from '../../compile/aot'
-import { buildFrozenCheck } from './frozen-check'
 import { nullObject } from '../../utils'
 import { escapePointerSegment } from '../shared'
 
@@ -47,7 +44,7 @@ function encodePointer(segments: Segment[]): string {
 	return out
 }
 
-function collectCustomErrorNodes(
+export function collectCustomErrorNodes(
 	schema: any,
 	segments: Segment[],
 	out: CustomErrorNode[],
@@ -338,32 +335,4 @@ export function buildFindCustomError(
 				return { instancePath: c.path, error: c.error }
 		}
 	}
-}
-
-export function captureCustomErrors(
-	schema: unknown
-): CapturedValidator['customErrors'] | undefined {
-	const ceNodes = collectCustomErrorNodes(
-		schema as any,
-		[],
-		[],
-		new WeakSet()
-	)
-	if (!ceNodes.length) return
-
-	const entries: NonNullable<CapturedValidator['customErrors']> = []
-	for (const { path, node, union, segments } of ceNodes) {
-		// union-branch and array-item nodes are handled at runtime only
-		if (union || segments.some((s) => typeof s === 'object')) continue
-
-		try {
-			const cf = buildFrozenCheck(
-				Build(node) as unknown as CheckBuildResult,
-				node
-			)
-			if (cf) entries.push({ path, ...cf })
-		} catch {}
-	}
-
-	return entries.length ? entries : undefined
 }

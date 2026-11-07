@@ -18,10 +18,6 @@ import {
 import type { AnyLocalHook, HTTPMethod } from '../../types'
 import type { AnyElysia } from '../../base'
 
-export const isBridgeNotInitialized = (error: unknown) =>
-	error instanceof Error &&
-	error.message.startsWith("Typebox module isn't initialized")
-
 function mirrorUnionsAligned(
 	// `u` may be the runtime factory table (`FrozenCheckFactory[][]`) or the
 	// captured source table (`{identifier, code}[][]`), only the dims matter

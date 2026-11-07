@@ -710,9 +710,20 @@ export function emitModule(
 			options?.reconstructFrom ?? 'elysia/reconstruct'
 		)
 
-	if (hasHandlers)
+	// a route compiled live on a cold bridge still reads its frozen validator,
+	// so the builder follows the captured validators, not the handlers
+	const replayMembers = [
+		hasHandlers && 'resolveHandlerParams',
+		hasCaptured && 'buildFrozenRouteValidator'
+	].filter(Boolean) as string[]
+
+	for (const name of [
+		hasHandlers && 'routeShape',
+		replayMembers.length && 'installReplay',
+		...replayMembers
+	].filter(Boolean) as string[])
 		body += importNamed(
-			'routeShape',
+			name,
 			options?.routeShapeFrom ?? 'elysia/route-shape'
 		)
 
@@ -735,6 +746,10 @@ export function emitModule(
 	// replay compares each route's `k` against this walker: without it the
 	// runtime compiles every route live
 	if (hasHandlers) body += 'Compiled.routeShape = routeShape\n'
+	// before `register`: a frozen route claimed without it fails closed.
+	// Throws when `Compiled` is another copy's, see `installReplay`
+	if (replayMembers.length)
+		body += `installReplay(Compiled, { ${replayMembers.join(', ')} })\n`
 
 	body += `export const fingerprint = ${JSON.stringify(fingerprint)}\n`
 	for (let i = 0; i < parts.length; i++)

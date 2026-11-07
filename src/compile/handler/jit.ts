@@ -1122,7 +1122,7 @@ export function compileHandlerJit(
 			(hasAfterResponse || traceHandleOn || hasDeriveDispose) &&
 			!syncAfterResponse
 				? `if(${disposeGuard}_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
-					`const _s=tee(_r,2)\n` +
+					`const _s=tee(_r)\n` +
 					`_sv=_r=_s[0]\n` +
 					(traceHandleOn ? `_trs=_s[1]\n` : `_stl=_s[1]\n`) +
 					`}else if(${disposeGuard}_r instanceof ReadableStream){const _o=obs(_r)\nif(_o){_r=_o[0];_stl=_o[1];_sv=_o[2]}}\n`
@@ -1170,7 +1170,7 @@ export function compileHandlerJit(
 				`function _fin(c,_r){\n` +
 				rethrow('_r') +
 				`if(_r&&(_r[Symbol.iterator]||_r[Symbol.asyncIterator])&&typeof _r.next==='function'){\n` +
-				`const _s=tee(_r,2)\n` +
+				`const _s=tee(_r)\n` +
 				`return _fin2(c,_s[0],_s[1],_s[0])\n` +
 				`}\n` +
 				`if(_r instanceof ReadableStream){const _o=obs(_r)\nif(_o)return _fin2(c,_o[0],_o[1],_o[2])}\n` +

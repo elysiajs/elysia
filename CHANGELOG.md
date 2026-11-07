@@ -54,7 +54,7 @@ Breaking Change:
 - AOT plugin `transform` hook and the rspack loader are now synchronous
 - AOT: `compileToSource` / `captureArtifacts` drop the `register` option and always emit the self-registering manifest (the `export const validators` / `handlers` / `groups` / `groupOf` / default-export form is gone)
 - AOT: remove `CompiledProgramRegistration.bf` and the `Compiled.reconstruct` getter (the setter stays)
-- AOT manifest format is now 7: an artifact built before this change is rejected at startup with `[elysia-aot] Mismatch fingerprint`; rebuild it
+- AOT manifest format is now 9: an artifact built before this change is rejected at startup with `[elysia-aot] Mismatch fingerprint`, which now names the version and format of both sides; rebuild it
 - remove `ElysiaConfig.handler` (`handler.standardHostname` was ignored; the path is taken from the request URL)
 - `.mount()` no longer takes a `{ detail }` argument; a mounted route is always `detail: { hide: true }`
 - remove the `NonResolvableMacroKey` type
@@ -62,7 +62,7 @@ Breaking Change:
 - `WSCapability.accumulateOptions(target, routeOptions)` drops its unused `path` parameter
 - `WSResponseValidator` (`elysia/ws/types`) is now a `Map<number, WSValidatorLike>` keyed by numeric status instead of an object indexed by status
 - `elysia/trace`: `TraceStream.id` is now typed `string`, matching the runtime request id (UUID); it was never a number in v2
-- `app.handler()` drops its unused 4th `precomputedStatic` parameter: `handler(index, immediate?, route?, aliases?, table?)`
+- `app.handler()` drops its unused 4th `precomputedStatic` parameter and its `aliases` parameter: `handler(index, immediate?, route?, table?)`; remove the `StaticMapAliases` type from `elysia/types`
 - remove the `ElysiaFile#length` getter (never read); read `value.size` on Bun (`value` is the `BunFile`) or `(await stats).size` elsewhere
 - remove `pushField` from `elysia/utils`
 - adapter `parse.default(context, contentType)` drops its 3rd `normalized` parameter: `contentType` must already be normalized (the framework always passes it normalized), `WebStandardAdapter.parse.default` no longer normalizes it
@@ -70,6 +70,8 @@ Breaking Change:
 - remove the protected `Cookie#setCookie` setter (the getter stays)
 - AOT: an entry whose default export is not an Elysia 2 app now throws instead of emitting an empty manifest with `strip: false`
 - remove the `introspect` config option: nothing read the route descriptors it kept, and it disabled the bare-route fast path. The macro `introspect` hook is unchanged
+- `tee(source)` from `elysia/adapter/utils` no longer fans a source out to `n` value branches: it returns one value iterator and one completion iterator that yields nothing and settles when the source ends; the 2nd `branches` argument is ignored
+- AOT: `routeShapeFrom` must resolve to the same copy of elysia as `registerFrom`; the generated manifest now throws at load when `elysia` and `elysia/route-shape` are different copies (duplicate install, a `paths` alias for bare `elysia` only) instead of answering `500` on every frozen route
 
 Behavior Change:
 
@@ -159,6 +161,7 @@ Behavior Change:
 - the raw `query`, urlencoded and multipart `body`, cookie records and per-request `set.headers` are `EmptyObject` instances (exported from `elysia/utils`) instead of `Object.create(null)`, so V8 keeps them in fast mode. There is still no `Object.prototype` on the chain and request keys like `__proto__` stay plain data, but `Object.getPrototypeOf(x)` is now a frozen key-less object instead of `null`: `isPlainObject(x)` is `false`, and code that accepts only a `null` or `Object.prototype` prototype must also accept a key-less null-prototype one
 - `ValidationError#errors` and the lazy `query` an error hook sees are shared accessors that read from their receiver, so every error stays in V8's fast mode (about 2.8 KB less per 422 on Node). Reading `errors` through a `Proxy`, an `Object.create(error)` child or a detached getter now throws; read it from the error itself
 - a cookie entry clears its internal `~unsign` and `~raw` markers by setting them to `undefined` instead of deleting them, so the entry stays in V8's fast mode (about 300–450 B less per request on Node for a signed cookie read or a JSON cookie write). `Object.keys(cookie.x.cookie)` and the copy an updater receives can now list those keys with an `undefined` value
+- an async generator with a synchronous `finally`, cancelled by the client before its first chunk is read, now runs `afterResponse` before the generator's `finally` (already the order for a generator that awaits between yields or has an async `finally`)
 
 Improvement:
 
@@ -183,6 +186,9 @@ Improvement:
 - a generator / ReadableStream response makes its pull callbacks once per stream instead of per chunk, and a tee'd stream (afterResponse, trace) trims its buffer in place: about 120–180 B less per chunk, 500 B with afterResponse (Bun and Node)
 - a WebSocket message no longer allocates a closure scope for promise branches it doesn't take (about 48 B less per message)
 - an app with `onRequest()` hooks runs one request lane that turns async only when a hook returns a thenable, instead of a separate async lane for any hook that _may_ return a Promise: a hook that returns a value early or has an expression body answers synchronously from `fetch` (early return 228 ns to 166 ns on Bun), and an async hook allocates about 80 B less per request
+- a bundle without the AOT plugin no longer carries the AOT replay code (frozen validator builder, handler param resolvers): about 7 KB less minified for a hello world, and the CommonJS entry loads 9 fewer modules (about 18 KB minified)
+- a generator / ReadableStream response with `afterResponse` or `trace` streams 18–25% faster (Bun and Node): the completion side no longer buffers values
+- a static route's trailing-slash and percent-encoded spellings are no longer rewritten in the static map on first request (about 0.8 KB less minified)
 
 Bug fix:
 
@@ -275,6 +281,10 @@ Bug fix:
 - [Type] an error hook's answer is typed at its status even where the route's response schema declares that status (it is not validated), for route, guard, macro and `.onError()` hooks; a route or macro `error` hook returning an `Error` is typed at the error's status, like a guard's
 - [Type] routes of a `.use()`d plugin carry the parent's guard schemas and prefix params, as they are validated with them
 - [Type] the `422` validation body's `expected` is typed `unknown` (the schema's example value, not a string) and its `errors` list is typed
+- AOT strip mode: an app with a WebSocket route failed to bundle from the published package (`No matching export ... hasSyncHmac`), and a WebSocket hook that reads `cookie` without a cookie schema threw `cookie support was stripped` at `listen()`
+- AOT strip mode: a traced app with no HTTP route (WebSocket-only, or no routes) threw `trace support was stripped`
+- a WebSocket route with `response: { 200: undefined }` threw at `listen()` once TypeBox was loaded
+- a static route's percent-encoded or trailing-slash alias could replace another static route registered at that exact spelling (`/caf%C3%A9/` next to `/café/`) after the first request
 
 Chore:
 

@@ -19,8 +19,10 @@ import {
 } from './aot'
 
 import { buildCoercedFromPlan, captureCoercePlan } from '../type/coerce'
-import { buildFrozenCheck } from '../type/validator/frozen-check'
-import { captureCustomErrors } from '../type/validator/custom-error'
+import {
+	buildFrozenCheck,
+	captureCustomErrors
+} from '../type/validator/frozen-check'
 import {
 	captureStringCodecEntries,
 	compileWithBuild

@@ -117,11 +117,12 @@ const thisFreeMembers = new Set(
 
 /**
  * @internal Which `channelOf`-mapped members of a function's first parameter
- * the function may read, or `null` when any member may be read
+ * the function may read, or `null` when any member may be read. A `call`
+ * member the mapper leaves out is a method that may read the context via `this`
  */
 export function inferParameterReads<K extends string>(
 	source: string,
-	channelOf: (value: string) => K | undefined,
+	channelOf: (value: string, call?: boolean) => K | undefined,
 	// bail on any alias made by `=`: the scan does not follow it through a
 	// member store, a forward use or an assignment inside an expression
 	strict = false
@@ -143,6 +144,15 @@ export function inferParameterReads<K extends string>(
 	if (!tokens?.length) return null
 
 	const keys = new Set<K>()
+	const isCall = (at: number) =>
+		tokens[at]?.value === '(' ||
+		(tokens[at]?.value === '?.' && tokens[at + 1]?.value === '(')
+
+	// a quoted key, or a number, which the scan drops: `{ 0: a }` is `{ : a }`
+	const isOpaqueKey = (at: number) =>
+		tokens[at].value === ':' &&
+		tokens[at - 1]?.k !== 'i' &&
+		tokens[at - 1]?.value !== ']'
 
 	let arrow = -1
 	const callableStart = tokens[0].value === 'async' ? 1 : 0
@@ -240,7 +250,8 @@ export function inferParameterReads<K extends string>(
 			} else if (token.value === '...' && depth === 1) {
 				const rest = tokens[i + 1]
 				if (rest?.k === 'i') aliases.add(rest.value)
-			} else if (token.k === 'i' && depth === 1) {
+			} else if (depth === 1 && isOpaqueKey(i)) return null
+			else if (token.k === 'i' && depth === 1) {
 				// `ws` is the WS context's self-reference: `({ ws })` binds
 				// the whole context, so channels read through it must count
 				if (
@@ -256,11 +267,32 @@ export function inferParameterReads<K extends string>(
 					continue
 				}
 
+				if (tokens[i - 1]?.value === ':') continue
+
 				const key = channelOf(token.value)
 				if (key) keys.add(key)
 			}
 		}
 	} else return null
+
+	// later default reaches the first through its binding
+	let nesting = 0
+	let later = false
+	for (let i = parameterStart; i < parameterEnd; i++) {
+		const { k, value } = tokens[i]
+		if (k === 's') continue
+
+		if (value === '(' || value === '[' || value === '{') nesting++
+		else if (value === ')' || value === ']' || value === '}') nesting--
+		else if (value === ',' && nesting === 0) later = true
+		else if (
+			k === 'i' &&
+			(value === 'arguments' ||
+				value === 'eval' ||
+				(later && aliases.has(value)))
+		)
+			return null
+	}
 
 	type Pattern = [channels: Set<false | K>, rest?: string]
 
@@ -294,7 +326,8 @@ export function inferParameterReads<K extends string>(
 				current[0].add(computed)
 			} else if (token.value === '...' && tokens[i + 1]?.k === 'i')
 				current[1] = tokens[i + 1].value
-			else if (token.k === 'i') {
+			else if (isOpaqueKey(i)) current[0].add(false)
+			else if (token.k === 'i' && tokens[i - 1]?.value !== ':') {
 				const key = channelOf(token.value)
 				if (key) current[0].add(key)
 			}
@@ -344,22 +377,20 @@ export function inferParameterReads<K extends string>(
 		if (tokens[next]?.value === '.') next++
 
 		if (tokens[next]?.k === 'i' && next > i + 1) {
-			const key = channelOf(tokens[next].value)
-			const call = tokens[next + 1]?.value
+			const member = tokens[next].value
+			const call = isCall(next + 1)
+			const key = channelOf(member, call)
 
 			if (key) keys.add(key)
-			else if (
-				!thisFreeMembers.has(tokens[next].value) &&
-				(call === '(' ||
-					(call === '?.' && tokens[next + 2]?.value === '('))
-			)
-				return null
+			else if (call && !thisFreeMembers.has(member)) return null
 			continue
 		}
 
 		if (tokens[next]?.value === '[') {
 			const property = tokens[next + 1]
-			const key = property?.k === 's' && channelOf(property.value)
+			const key =
+				property?.k === 's' &&
+				channelOf(property.value, isCall(next + 3))
 			if (!key || tokens[next + 2]?.value !== ']') return null
 
 			keys.add(key)

@@ -914,26 +914,20 @@ export function observeStream(
 }
 
 /**
- * Split async source into `branches` independent iterators
+ * Split async source into a value iterator and a completion iterator
  *
- * A producer drains the source ahead of consumers
+ * A producer drains the source ahead of the value consumer (response/client)
  *
  * To prevent long/infinite stream, the unconsumed window is capped:
- * Consumed-by-every-branch entries are trimmed off the front
  * Producer backpressures whenever the window hits `cap` ENTRIES or
  * `capBytes` bytes, whichever comes first
  *
- * Streams below both caps buffer eagerly
- * Only streams exceeding one gate on the slowest consumer
- *
- * Branch 0 is the value consumer (response/client)
- * When `return()` (client abort / early exit), source is stopped
- * so the observer branches can still reach completion instead of spinning
- * an infinite source
+ * The second iterator yields nothing: it settles once the source ends
+ * (rejects with its error) or the value iterator returns, which stops
+ * the source so an infinite one can't keep afterResponse waiting
  */
 export function tee<T>(
 	source: AsyncIterable<T>,
-	branches = 2,
 	// backpressure
 	cap = 64,
 	capBytes = 1 << 22 // 4MiB
@@ -944,18 +938,20 @@ export function tee<T>(
 
 	const buffer: T[] = []
 	const sizes: number[] = []
-	let base = 0
 	let windowBytes = 0
 	let done = false
 	let stopped = false
 	let failed = false
 	let sourceError: unknown
 	let drainResume: (() => void) | null = null
+	let pending: Pending<T> | null = null
 
-	const cursors: number[] = new Array(branches).fill(0)
-	let active = branches
-
-	const pending: (Pending<T> | null)[] = new Array(branches).fill(null)
+	let finish!: Pending<T>
+	const completed = new Promise<IteratorResult<T>>(
+		(resolve, reject) => (finish = { resolve, reject })
+	)
+	// nobody may await the completion iterator
+	completed.catch(() => {})
 
 	const resumeProducer = () => {
 		if (drainResume) {
@@ -965,83 +961,22 @@ export function tee<T>(
 		}
 	}
 
-	const trim = () => {
-		if (active > 0) {
-			let min = Infinity
-			for (const c of cursors) if (c < min) min = c
+	const stop = (p?: Pending<T> | null) => {
+		pending = null
+		p?.resolve(doneResult)
 
-			// Producer is parked when the window is full,
-			// window is trimmed when the slowest consumer has consumed some entries
-			const consumed = min - base
-			if (min !== Infinity && consumed > 0) {
-				for (let i = 0; i < consumed; i++) windowBytes -= sizes[i]
-				// in place: `splice` allocates an array of the removed entries
-				buffer.copyWithin(0, consumed)
-				buffer.length -= consumed
-				sizes.copyWithin(0, consumed)
-				sizes.length -= consumed
-				base = min
-			}
-		}
+		if (stopped) return
+		stopped = done = true
+		buffer.length = sizes.length = windowBytes = 0
+		resumeProducer()
 
-		if (buffer.length < cap && windowBytes < capBytes) resumeProducer()
-	}
+		try {
+			const r = iterator.return?.()
+			if (r && typeof (r as Promise<unknown>).then === 'function')
+				(r as Promise<unknown>).catch(() => {})
+		} catch {}
 
-	const closeBranch = (me: number) => {
-		if (cursors[me] === Infinity) return
-		cursors[me] = Infinity
-		active--
-
-		if (me === 0 && !stopped) {
-			stopped = true
-			done = true
-			resumeProducer()
-
-			try {
-				const r = iterator.return?.()
-				if (r && typeof (r as Promise<unknown>).then === 'function')
-					(r as Promise<unknown>).catch(() => {})
-			} catch {}
-
-			wakeAll()
-		}
-
-		if (active === 0) {
-			buffer.length = 0
-			sizes.length = 0
-			windowBytes = 0
-		} else trim()
-	}
-
-	const serve = (me: number, p: Pending<T>) => {
-		const i = cursors[me]
-
-		if (i === Infinity) return p.resolve(doneResult)
-
-		if (i < base + buffer.length) {
-			const value = buffer[i - base]
-			cursors[me] = i + 1
-			trim()
-			return p.resolve({ done: false, value })
-		}
-
-		if (failed) return p.reject(sourceError)
-
-		if (done) {
-			closeBranch(me)
-			return p.resolve(doneResult)
-		}
-
-		pending[me] = p
-	}
-
-	const wakeAll = () => {
-		for (let b = 0; b < branches; b++) {
-			const p = pending[b]
-			if (!p) continue
-			pending[b] = null
-			serve(b, p)
-		}
+		finish.resolve(doneResult)
 	}
 
 	;(async () => {
@@ -1050,14 +985,20 @@ export function tee<T>(
 				const result = await iterator.next()
 				if (result.done || stopped) break
 
+				// a waiting consumer takes the value directly
+				const p = pending as Pending<T> | null
+				if (p) {
+					pending = null
+					p.resolve({ done: false, value: result.value })
+					continue
+				}
+
 				buffer.push(result.value)
 				sizes.push(teeChunkCost(result.value))
 				windowBytes += sizes[sizes.length - 1]
-				wakeAll()
 
 				if (
 					(buffer.length >= cap || windowBytes >= capBytes) &&
-					active > 0 &&
 					!stopped
 				)
 					await new Promise<void>((resolve) => {
@@ -1065,68 +1006,82 @@ export function tee<T>(
 					})
 			}
 		} catch (error) {
-			failed = true
+			// a stopped source has nobody left to fail
+			failed = !stopped
 			sourceError = error
 		} finally {
 			done = true
-			wakeAll()
+
+			const p = pending as Pending<T> | null
+			pending = null
+			if (failed) {
+				p?.reject(sourceError)
+				finish.reject(sourceError)
+			} else {
+				p?.resolve(doneResult)
+				finish.resolve(doneResult)
+			}
 		}
 	})()
 
-	const makeBranch = (me: number): AsyncIterableIterator<T> =>
-		Object.assign(Object.create(null) as AsyncIterableIterator<T>, {
+	const value = Object.assign(
+		Object.create(null) as AsyncIterableIterator<T>,
+		{
 			[Symbol.asyncIterator]() {
 				return this
 			},
 
 			next: () => {
-				// a buffered entry needs no pending resolver
-				const i = cursors[me]
-				if (i < base + buffer.length) {
-					const value = buffer[i - base]
-					cursors[me] = i + 1
-					trim()
+				if (buffer.length) {
+					const value = buffer.shift()!
+					windowBytes -= sizes.shift()!
+					if (buffer.length < cap && windowBytes < capBytes)
+						resumeProducer()
+
 					return Promise.resolve({ done: false, value })
 				}
 
-				return new Promise<IteratorResult<T>>((resolve, reject) =>
-					serve(me, { resolve, reject })
+				if (failed) return Promise.reject(sourceError)
+				if (done) return Promise.resolve(doneResult)
+
+				return new Promise<IteratorResult<T>>(
+					(resolve, reject) => (pending = { resolve, reject })
 				)
 			},
 
 			// Synchronous-effect return, see the tee() doc comment
-			return: (value?: unknown) => {
-				const p = pending[me]
-				if (p) {
-					pending[me] = null
-					p.resolve(doneResult)
-				}
-
-				closeBranch(me)
+			return: (result?: unknown) => {
+				stop(pending)
 
 				return Promise.resolve({
 					done: true as const,
-					value: value as T
+					value: result as T
 				})
 			},
 
 			throw: (error?: unknown) => {
-				const p = pending[me]
-				if (p) {
-					pending[me] = null
-					p.resolve(doneResult)
-				}
-
-				closeBranch(me)
+				stop(pending)
 
 				return Promise.reject(error)
 			}
-		})
+		}
+	)
 
-	const out = Array.from({ length: branches }, (_, b) => makeBranch(b))
+	const observer = Object.assign(
+		Object.create(null) as AsyncIterableIterator<T>,
+		{
+			[Symbol.asyncIterator]() {
+				return this
+			},
+			next: () => completed,
+			return: (result?: unknown) =>
+				Promise.resolve({ done: true as const, value: result as T }),
+			throw: (error?: unknown) => Promise.reject(error)
+		}
+	)
 
 	// the value branch is what the stream handler frames
-	if ((source as any).sse === true) (out[0] as any).sse = true
+	if ((source as any).sse === true) (value as any).sse = true
 
-	return out
+	return [value, observer]
 }

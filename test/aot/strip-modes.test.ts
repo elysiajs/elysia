@@ -276,6 +276,46 @@ describe('automatic AOT stripping', () => {
 		)
 	})
 
+	// `ws/route` also needs cookies when a WS hook only READS `cookie` (its
+	// own sucrose pass), with no schema the build could see. Stubbed, the
+	// bundle threw at listen() while the same app served live
+	it('keeps cookie support when a WS hook reads cookie without a schema', async () => {
+		const entry = 'test/aot/fixtures/strip-auto-ws-cookie-read-app.ts'
+		const { stub } = await generateCompiledArtifacts(entry, {
+			strip: 'auto'
+		})
+		expect(stub.jit).toBe(true)
+		expect(stub.cookie).toBe(false)
+
+		const upgrade = async (app: Elysia<any, any>) => {
+			app.listen(0)
+			try {
+				const status = (cookie?: string) =>
+					fetch(`http://localhost:${app.server!.port}/ws`, {
+						headers: {
+							upgrade: 'websocket',
+							connection: 'Upgrade',
+							'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
+							'sec-websocket-version': '13',
+							...(cookie ? { cookie } : {})
+						}
+					}).then((r) => r.status)
+
+				return [await status('session=ok'), await status()]
+			} finally {
+				await app.stop(true)
+			}
+		}
+
+		const { app: live } =
+			await import('./fixtures/strip-auto-ws-cookie-read-app')
+		const expected = await upgrade(live)
+		expect(expected).toEqual([101, 401])
+
+		const bundled = await load(await build(entry, 'auto'))
+		expect(await upgrade(bundled)).toEqual(expected)
+	})
+
 	it('keeps cookie reconstruction when a route reads the cookie jar', async () => {
 		const { stub } = await generateCompiledArtifacts(
 			'test/aot/fixtures/strip-auto-cookie-app.ts',

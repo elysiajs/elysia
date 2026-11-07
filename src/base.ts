@@ -171,8 +171,7 @@ import type {
 	ScopedHookReturn,
 	ScopedMapDeriveReturn,
 	LegacyScope,
-	GuardHookSingleton,
-	StaticMapAliases
+	GuardHookSingleton
 } from './types'
 import type { ElysiaStatus } from './error'
 import {
@@ -659,7 +658,6 @@ export class Elysia<
 	private jitColdRemaining?: number
 	private jitTable?: RouteTable
 	private jitRoute?: (InternalRoute | undefined)[]
-	private jitAliases?: (StaticMapAliases | undefined)[]
 
 	// a number is a lazy route's index, see `~dispatch`
 	declare '~router'?: Memoirist<CompiledHandler | number>
@@ -6106,7 +6104,6 @@ export class Elysia<
 		this.jitColdRemaining = undefined
 		this.jitTable = undefined
 		this.jitRoute = undefined
-		this.jitAliases = undefined
 		this.fetchFn = undefined
 		this.#routerBuilt = false
 	}
@@ -8031,7 +8028,6 @@ export class Elysia<
 		index: number,
 		immediate?: boolean,
 		route?: InternalRoute,
-		aliases?: StaticMapAliases,
 		table?: RouteTable
 	): CompiledHandler {
 		if (this.compiled?.[index]) return this.compiled![index]
@@ -8078,43 +8074,8 @@ export class Elysia<
 
 		if (indexedTable !== undefined) this.jitTable = indexedTable
 		if (jitRoute !== undefined) (this.jitRoute ??= [])[index] = jitRoute
-		if (aliases !== undefined) (this.jitAliases ??= [])[index] = aliases
 
 		return (context) => this['~dispatch'](index, context)
-	}
-
-	#staticAliases(
-		table: RouteTable,
-		index: number
-	): StaticMapAliases | undefined {
-		const flags = table.flags[index]
-		if ((flags & (RouteFlag.WS | RouteFlag.Dynamic)) !== 0) return
-
-		const path = table.path[index]
-		const method = table.method[index]
-		const needsEncode = (flags & RouteFlag.Encode) !== 0
-		const registerLoose =
-			this['~config']?.strictPath !== true &&
-			canRegisterLoose(path, false)
-		if (!needsEncode && !registerLoose) return
-
-		let explicit: Set<string> | undefined
-		if (registerLoose) {
-			explicit = new Set()
-			for (let i = 0; i < table.length; i++) {
-				if (table.method[i] !== method) continue
-
-				const declared = table.path[i]
-				explicit.add(declared)
-				if ((table.flags[i] & RouteFlag.Encode) !== 0)
-					explicit.add(encodeURI(declared))
-			}
-		}
-
-		return {
-			method,
-			paths: expandPaths(path, needsEncode, registerLoose, explicit)
-		}
 	}
 
 	#releaseJit() {
@@ -8123,7 +8084,6 @@ export class Elysia<
 		Compiled.release(this['~programId'])
 		this.jitColdRemaining = undefined
 		this.jitRoute = undefined
-		this.jitAliases = undefined
 		this.jitTable = undefined
 	}
 
@@ -8172,27 +8132,12 @@ export class Elysia<
 
 		this.compiled![index] = handler
 
-		if (!exactDuplicate) {
-			const aliases =
-				this.jitAliases?.[index] ??
-				(table ? this.#staticAliases(table, index) : undefined)
-			if (aliases) {
-				this.#initMap()
-
-				const map = (this['~map']![aliases.method] ??=
-					nullObject() as any)
-
-				for (let p = 0; p < aliases.paths.length; p++)
-					map[aliases.paths[p]] = handler
-			} else this.#saveHandler(materialized[0], materialized[1], handler)
-		}
+		if (!exactDuplicate)
+			this.#saveHandler(materialized[0], materialized[1], handler)
 
 		const releasedNow = table ? this.#satisfyJit(table, index) : false
 
-		if (!releasedNow) {
-			if (this.jitRoute) this.jitRoute[index] = undefined
-			if (this.jitAliases) this.jitAliases[index] = undefined
-		}
+		if (!releasedNow && this.jitRoute) this.jitRoute[index] = undefined
 
 		return handler(context)
 	}
@@ -8381,7 +8326,6 @@ export class Elysia<
 		const previousCompiled = this.compiled
 		const previousJitTable = this.jitTable
 		const previousJitRoute = this.jitRoute
-		const previousJitAliases = this.jitAliases
 		const previousHasDynamicWS = this['~hasDynamicWS']
 
 		const previousGeneration = this['~generation']
@@ -8392,7 +8336,6 @@ export class Elysia<
 		this.jitColdRemaining = undefined
 		this.jitTable = undefined
 		this.jitRoute = undefined
-		this.jitAliases = undefined
 		this['~hasDynamicWS'] = undefined
 		this['~generation'] = undefined
 		let buildSucceeded = false
@@ -8423,7 +8366,6 @@ export class Elysia<
 			this.jitColdRemaining = undefined
 			this.jitTable = previousJitTable
 			this.jitRoute = previousJitRoute
-			this.jitAliases = previousJitAliases
 			this['~hasDynamicWS'] = previousHasDynamicWS
 			this['~generation'] = previousGeneration
 
@@ -8736,7 +8678,7 @@ export class Elysia<
 
 				map[routePath] = lazy
 					? ~i
-					: this.handler(i, true, undefined, undefined, table)
+					: this.handler(i, true, undefined, table)
 
 				continue
 			}
@@ -8755,21 +8697,16 @@ export class Elysia<
 					loosePath: isLoose
 				}))
 
-				const store = lazy
-					? i
-					: this.handler(i, true, undefined, undefined, table)
+				const store = lazy ? i : this.handler(i, true, undefined, table)
 
 				for (let p = 0; p < paths.length; p++)
 					router.add(routeMethod, paths[p], store)
 			} else {
 				const map = (methods[routeMethod] ??= nullObject() as any)
 
-				if (lazy)
-					(this.jitAliases ??= [])[i] = { method: routeMethod, paths }
-
 				const handler = lazy
 					? ~i
-					: this.handler(i, true, undefined, undefined, table)
+					: this.handler(i, true, undefined, table)
 
 				for (let p = 0; p < paths.length; p++) map[paths[p]] = handler
 			}

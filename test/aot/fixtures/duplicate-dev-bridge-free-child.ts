@@ -2,6 +2,14 @@ import { Elysia } from '../../../src/base'
 import { Compiled } from '../../../src/compile/aot'
 import { createContext } from '../../../src/context'
 import { isBridgeLive } from '../../../src/type/bridge'
+import {
+	buildFrozenRouteValidator,
+	resolveHandlerParams
+} from '../../../src/compile/handler/route-shape'
+
+// as a loaded manifest does: without it no route reaches a frozen lookup,
+// and the counts below could not tell the ordinary fallback from `liveOnly`
+Compiled.replay = { resolveHandlerParams, buildFrozenRouteValidator }
 
 const query = {
 	'~kind': 'Object',

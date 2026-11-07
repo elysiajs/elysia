@@ -14,7 +14,6 @@ import {
 } from './source'
 import type { JITProbeResult } from '../../compile/jit-probe'
 import { composeRouteHook, runIntrospect } from '../../compile/handler'
-import { isResponseParam } from '../../compile/handler/params'
 import {
 	isStandardSchema,
 	isResponseMap,
@@ -22,7 +21,12 @@ import {
 	resolveModelRef,
 	REQUEST_SLOTS
 } from '../../compile/handler/frozen-validator'
-import type { CapturedValidator, ValidatorSlot } from '../../compile/aot'
+import {
+	isResponseParam,
+	type CapturedHandler,
+	type CapturedValidator,
+	type ValidatorSlot
+} from '../../compile/aot'
 import { abortCapture } from '../../compile/aot-capture'
 import { snapshotCalls } from '../../schema-snapshot'
 import { sucrose } from '../../sucrose'
@@ -51,7 +55,10 @@ export interface ElysiaAotOptions {
 	reconstructFrom?: string
 
 	/**
-	 * Module the generated manifest imports `routeShape` from
+	 * Module the generated manifest imports `routeShape` and the replay
+	 * helpers from. Unlike `reconstructFrom` it must be the `registerFrom` copy:
+	 * the helpers read that copy's registry and link its error classes into
+	 * the handlers, so the manifest throws at load when the two differ
 	 *
 	 * @default 'elysia/route-shape'
 	 */
@@ -220,8 +227,9 @@ export interface StubPlan {
 
 	/**
 	 * Stub the trace runtime (`trace.ts` `createTracer` + recorder machinery)
-	 * when no replayed handler aliases trace (`tr`), or even under live
-	 * handler JIT when the app registers no trace handler at all (`~hasTrace`
+	 * when no replayed handler aliases trace (`tr`) and the root hook chain
+	 * holds no trace handler (the fetch handler's own tracers), or even
+	 * under live handler JIT when the app registers no trace handler at all (`~hasTrace`
 	 * + history sweep; a mount forbids it). Every call site (fetch, JIT
 	 * codegen, frozen reconstruct) only calls in when trace handlers exist, so
 	 * a throwing stub is unreachable once detection proves trace is unused
@@ -414,11 +422,10 @@ export function planFromReport(
 	adapterStub: 'bun' | 'web-standard' | false = false,
 	productionStub: boolean = true,
 	/**
-	 * A WS route declares a `cookie` schema. Its upgrade path handles cookies
-	 * outside the handler JIT, so it emits no `cc` alias — stubbing on that
-	 * alias alone would hand `src/ws/route.ts` a throwing `parseCookieRaw`
+	 * The root cookie config signs: the fetch handler signs a 404 or
+	 * onRequest answer outside the handler JIT, which emits no `cc` alias
 	 */
-	wsCookie: boolean = false,
+	rootSign: boolean = false,
 	/** `exact-mirror` resolves from the elysia package at build time. */
 	exactMirror: boolean = false,
 	/** Manifest key, names the app in a multi-app build's errors */
@@ -436,7 +443,12 @@ export function planFromReport(
 				` Use strip: 'auto' to skip stubbing when the app is not fully precompiled.`
 		)
 
-	const cookie = jit && !aliases.has('cc') && !wsCookie
+	// a WS route emits no `cc` alias: without its recorded decision keep them
+	const cookie =
+		jit &&
+		!aliases.has('cc') &&
+		!rootSign &&
+		!(evidence ? evidence.wsCookie : hasWS)
 	// The module stubs below also need `jit`: a route the build never saw then
 	// fails at compile anyway, so a stub can't break an app that serves today.
 	// `quiet`: nothing outside a frozen route program reaches the request
@@ -461,7 +473,10 @@ export function planFromReport(
 				!aliases.has('cc') &&
 				!aliases.has('tr'),
 			cookie,
-			trace: !aliases.has('tr') && (jit || !mayTrace),
+			// the fetch handler builds a tracer per root trace handler, even
+			// when no route links `tr` (WS-only, no routes)
+			trace:
+				!aliases.has('tr') && (jit ? !evidence?.rootTrace : !mayTrace),
 			sucrose: jit,
 			query:
 				quiet &&
@@ -488,6 +503,24 @@ export function planFromReport(
 	}
 }
 
+/**
+ * A WS route emits no `cc` alias, so the stub plan follows what each route
+ * recorded at capture (`CapturedHandler.cookie`). Fail safe: a path with no
+ * entry marked `false` keeps the cookie modules. The capture keeps one entry
+ * per path, yet every WS route under a duplicate path builds
+ */
+export const wsNeedsCookie = (paths: string[], handlers: CapturedHandler[]) =>
+	paths.some(
+		(path, i) =>
+			paths.indexOf(path) !== i ||
+			!handlers.some(
+				(handler) =>
+					handler.method === 'WS' &&
+					handler.path === path &&
+					handler.cookie === false
+			)
+	)
+
 /** What the build-time replay saw beyond handler aliases, see `planFromReport` */
 export interface StubEvidence {
 	/** no route path contains `:` or `*` */
@@ -500,6 +533,10 @@ export interface StubEvidence {
 	hasMount: boolean
 	/** sucrose over the root hook chain, the hooks a 404 / error runs */
 	rootReads: { query: boolean; set: boolean; cookie: boolean }
+	/** the root hook chain holds a trace handler, see `createFetchHandler` */
+	rootTrace: boolean
+	/** a WS route built a cookie config, or the capture has no record of it */
+	wsCookie: boolean
 }
 
 const SCHEMA_SLOTS = [...REQUEST_SLOTS, 'response'] as const
@@ -795,7 +832,10 @@ export const STUB_SOURCES: Record<
 	cookie: [
 		{
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]crypto\.(m?js|ts)$/,
-			source: `export function resolvePendingCookie(){throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a signed cookie was read. Rebuild with strip:false.")}\n`
+			source:
+				// dist imports `hasSyncHmac` from here, src through `cookie/utils`
+				`export const hasSyncHmac=false\n` +
+				`export function resolvePendingCookie(){throw new Error("[elysia-aot] cookie support was stripped (strip mode) but a signed cookie was read. Rebuild with strip:false.")}\n`
 		},
 		{
 			filter: /[\\/]elysia[\\/](dist|src)[\\/]cookie[\\/]utils\.(m?js|ts)$/,
@@ -1427,8 +1467,6 @@ export async function generateCompiledArtifacts(
 			const declaredTypeBoxSlots = new Set<string>()
 
 			let routesForbidSeal = false
-			// WS cookies emit no `cc` alias, see `planFromReport`
-			let wsCookie = false
 			const hasModels = (instance: unknown) =>
 				isNotEmpty(
 					(instance as App | undefined)?.['~ext']?.models ?? {}
@@ -1486,12 +1524,6 @@ export async function generateCompiledArtifacts(
 						hasSchemaSlot(hooks))
 				)
 					schemaFree = false
-
-				if (
-					method === 'WS' &&
-					(hook?.cookie !== undefined || hooks?.cookie !== undefined)
-				)
-					wsCookie = true
 
 				if (!hooks) continue
 
@@ -1559,6 +1591,9 @@ export async function generateCompiledArtifacts(
 				validatorSlotsMatch &&
 				artifacts.validators.every((v) => v.bridgeFree === true)
 
+			const rootHook = flattenChain(typedApp['~hookChain'])
+			const wsRoutes = history.filter((route) => route[0] === 'WS')
+
 			const plan = planFromReport(
 				strip,
 				report,
@@ -1569,9 +1604,7 @@ export async function generateCompiledArtifacts(
 				!hasReplayableCapture,
 				adapterStub,
 				productionStub,
-				// the fetch handler signs a 404 or onRequest answer by the
-				// root cookie config, outside the handler JIT too
-				wsCookie || !!typedApp['~config']?.cookie?.sign,
+				!!typedApp['~config']?.cookie?.sign,
 				exactMirror,
 				artifacts.key,
 				{
@@ -1583,9 +1616,11 @@ export async function generateCompiledArtifacts(
 							handler.alias.split(',').includes('rc')
 					),
 					hasMount,
-					rootReads: sucrose(
-						undefined,
-						flattenChain(typedApp['~hookChain'])
+					rootReads: sucrose(undefined, rootHook),
+					rootTrace: !!rootHook?.trace?.length,
+					wsCookie: wsNeedsCookie(
+						wsRoutes.map((route) => route[1]),
+						artifacts.handlers
 					)
 				}
 			)

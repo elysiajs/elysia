@@ -4747,9 +4747,4 @@ export type GuardHookSingleton<
 		MacroContext['derive']
 }
 
-export interface StaticMapAliases {
-	method: string
-	paths: string[]
-}
-
 export type { TypeBoxSchema, AnySchema, StandardSchemaV1Like } from './type'

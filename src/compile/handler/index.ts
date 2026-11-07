@@ -6,9 +6,15 @@ import { mapResponse } from '../../adapter/web-standard/handler'
 import { ElysiaFile } from '../../universal/file'
 import { ElysiaStatus } from '../../error'
 
-import { Compiled, aotDriftMessage, inAotBuild, warnAotDrift } from '../aot'
+import {
+	Compiled,
+	aotDriftMessage,
+	inAotBuild,
+	isResponseParam,
+	replayHandlerParams,
+	warnAotDrift
+} from '../aot'
 import { frozenRootOf } from '../../generation'
-import { isResponseParam, resolveHandlerParams } from './params'
 import {
 	compactBeforeHandleLane,
 	compileHandlerJit,
@@ -844,7 +850,7 @@ export function compileHandler(
 	if (reconstructed)
 		return reconstructed.f!(
 			handler,
-			...resolveHandlerParams(reconstructed.a!, {
+			...replayHandlerParams(reconstructed.a!, {
 				root,
 				parse: adapter.parse as any,
 				res: adapter.response as any,

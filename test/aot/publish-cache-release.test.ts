@@ -151,16 +151,19 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 				200
 			)
 			expect(app.jitTable).toBeUndefined()
-			expect(app.jitAliases).toBeUndefined()
 
-			for (const method of ['GET', '*'])
-				for (const path in app['~map'][method])
-					expect(typeof app['~map'][method][path]).toBe('function')
+			expect(typeof app['~map'].GET['/']).toBe('function')
+			expect(typeof app['~map'].GET['/dir/']).toBe('function')
+			expect(typeof app['~map']['*']['/any']).toBe('function')
+			// the loose alias keeps its index past the release: `~dispatch`
+			// resolves it through `compiled`, not the released table
+			expect(typeof app['~map'].GET['/dir']).toBe('number')
 
 			await expect((await app.handle('/')).text()).resolves.toBe('root')
 			await expect((await app.handle('/dir/')).text()).resolves.toBe(
 				'dir'
 			)
+			await expect((await app.handle('/dir')).text()).resolves.toBe('dir')
 			await expect((await app.handle('/any')).text()).resolves.toBe('any')
 		})
 	})
@@ -494,7 +497,6 @@ describe('publish-time authoring-cache release (004-P5)', () => {
 		const tableResponse = await fromTable.handler(
 			0,
 			false,
-			undefined,
 			undefined,
 			table
 		)(new TableContext(new Request('http://localhost/table')))

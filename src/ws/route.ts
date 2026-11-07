@@ -1,8 +1,4 @@
 import { RouteValidator } from '../validator/route'
-import {
-	buildFrozenRouteValidator,
-	isBridgeNotInitialized
-} from '../compile/handler/frozen-validator'
 import { isBridgeLive } from '../type/bridge'
 import { ELYSIA_TYPES } from '../type/constants'
 import { assignOwn, EmptyObject, isSocketQuiet, nullObject } from '../utils'
@@ -35,7 +31,10 @@ import {
 	inAotBuild,
 	Compiled,
 	aotDriftMessage,
-	warnAotDrift
+	frozenRouteValidator,
+	isBridgeNotInitialized,
+	warnAotDrift,
+	type CapturedHandler
 } from '../compile/aot'
 
 import {
@@ -395,14 +394,17 @@ export function buildWSRoute(
 	const programId = frozenRootOf(app)['~programId']
 	const captured = Compiled.getHandler(programId, 'WS', route[1])
 	let live = false
+	let entry: CapturedHandler | undefined
 	if (inAotBuild())
-		Capture.handler({
-			method: 'WS',
-			path: route[1],
-			alias: '',
-			code: '',
-			k: Compiled.routeShape?.(composed, undefined, app)
-		})
+		Capture.handler(
+			(entry = {
+				method: 'WS',
+				path: route[1],
+				alias: '',
+				code: '',
+				k: Compiled.routeShape?.(composed, undefined, app)
+			})
+		)
 	else if (Compiled.hasProgram(programId)) {
 		const shape = Compiled.routeShape?.(composed, undefined, app)
 		live = shape === undefined || captured?.k !== shape
@@ -411,7 +413,7 @@ export function buildWSRoute(
 	const frozenEager =
 		isBridgeLive() || live
 			? undefined
-			: buildFrozenRouteValidator(
+			: frozenRouteValidator(
 					composed as any,
 					app,
 					'WS',
@@ -437,7 +439,7 @@ export function buildWSRoute(
 					cause: error
 				})
 
-			const frozen = buildFrozenRouteValidator(
+			const frozen = frozenRouteValidator(
 				composed as any,
 				app,
 				'WS',
@@ -456,7 +458,8 @@ export function buildWSRoute(
 		responseValidator?.get(200) ?? responseValidator?.values().next().value
 	const responseMayReturnPromise = responseValidator
 		? Array.from(responseValidator.values()).some(
-				(validator: any) => validator.mayReturnPromise
+				// `{ 200: undefined }` declares a status without a schema
+				(validator: any) => validator?.mayReturnPromise
 			)
 		: false
 
@@ -574,6 +577,9 @@ export function buildWSRoute(
 					(composed as { schemas?: any }).schemas
 				)
 			: undefined
+
+	// strip mode stubs the cookie modules only when no WS route built a config
+	if (entry) entry.cookie = !!cookieConfig
 
 	// sign like an HTTP route when a hook or error answers with HTTP
 	const signCookies = cookieConfig?.hasSign

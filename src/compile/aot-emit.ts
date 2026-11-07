@@ -11,7 +11,11 @@ import {
 	collectMirrorUnions,
 	Reconstruct
 } from './aot-reconstruct'
-import { routeShape } from './handler/route-shape'
+import {
+	buildFrozenRouteValidator,
+	resolveHandlerParams,
+	routeShape
+} from './handler/route-shape'
 
 export function reconstructCheck(build: CheckBuildResult): {
 	defs: string
@@ -187,4 +191,5 @@ export function captureMirrorCodecs(
 export function installReconstructImpl() {
 	Compiled.reconstruct = Reconstruct
 	Compiled.routeShape = routeShape
+	Compiled.replay = { resolveHandlerParams, buildFrozenRouteValidator }
 }

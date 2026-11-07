@@ -70,7 +70,6 @@ describe('Elysia instance footprint', () => {
 			'jitColdRemaining',
 			'jitTable',
 			'jitRoute',
-			'jitAliases',
 			'fetchFn',
 			'_handle',
 			'~config',

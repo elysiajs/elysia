@@ -13,7 +13,7 @@ describe('tee() bounded drain-ahead', () => {
 		}
 
 		const cap = 4
-		const [client, listener] = await tee(src(), 2, cap)
+		const [client, listener] = await tee(src(), cap)
 
 		const drained = (async () => {
 			for await (const _ of listener) {
@@ -35,11 +35,12 @@ describe('tee() bounded drain-ahead', () => {
 			for (let i = 0; i < 3; i++) yield i
 		}
 
-		const [response, listener] = await tee(src(), 2, 64)
+		const [response, listener] = await tee(src(), 64)
 
+		// the listener only waits for the end, values go to the response
 		const seen: number[] = []
 		for await (const v of listener) seen.push(v)
-		expect(seen).toEqual([0, 1, 2])
+		expect(seen).toEqual([])
 
 		const got: number[] = []
 		for await (const v of response) got.push(v)
@@ -55,7 +56,7 @@ describe('tee() bounded drain-ahead', () => {
 			}
 		}
 
-		const [client, listener] = await tee(megachunks(), 2)
+		const [client, listener] = await tee(megachunks())
 
 		const drained = (async () => {
 			for await (const _ of listener) {
@@ -76,7 +77,7 @@ describe('tee() bounded drain-ahead', () => {
 			for (let i = 0; i < 30; i++) yield new Uint8Array(1024 * 1024)
 		}
 
-		const [a, b] = await tee(megachunks(), 2)
+		const [a, b] = await tee(megachunks())
 
 		const count = (branch: AsyncIterableIterator<unknown>) =>
 			(async () => {
@@ -92,7 +93,8 @@ describe('tee() bounded drain-ahead', () => {
 			)
 		])) as number[]
 
-		expect(counts).toEqual([30, 30])
+		// the second branch is a completion signal, it yields no values
+		expect(counts).toEqual([30, 0])
 	})
 
 	it('streams every chunk of a large-chunk response and fires afterResponse once (end to end)', async () => {
@@ -141,7 +143,7 @@ describe('tee() bounded drain-ahead', () => {
 			yield 'never'
 		}
 
-		const [client, listener] = await tee(stalled(), 2)
+		const [client, listener] = await tee(stalled())
 
 		const drained = (async () => {
 			for await (const _ of listener) {
@@ -200,7 +202,7 @@ describe('tee() bounded drain-ahead', () => {
 			throw new Error('boom')
 		}
 
-		const [a, b] = await tee(failing(), 2)
+		const [a, b] = await tee(failing())
 
 		expect((await a.next()).value).toBe(1)
 		await expect(a.next()).rejects.toThrow('boom')
@@ -210,6 +212,35 @@ describe('tee() bounded drain-ahead', () => {
 			}
 		}
 		await expect(drain()).rejects.toThrow('boom')
+	})
+
+	// afterResponse and dispose wait on the second branch: it must not settle
+	// while the source can still produce, and must settle once it ends
+	it('settles the completion branch exactly when the source ends', async () => {
+		let release!: () => void
+		async function* gated() {
+			yield 1
+			await new Promise<void>((resolve) => {
+				release = resolve
+			})
+			yield 2
+		}
+
+		const [value, completion] = tee(gated())
+		let settled = false
+		const end = completion.next().then((r) => {
+			settled = true
+			return r
+		})
+
+		expect((await value.next()).value).toBe(1)
+		await new Promise((r) => setTimeout(r, 10))
+		expect(settled).toBe(false)
+
+		release()
+		expect(await end).toEqual({ done: true, value: undefined })
+		expect((await value.next()).value).toBe(2)
+		expect((await value.next()).done).toBe(true)
 	})
 
 	it('charges Blob chunks against the byte cap by size', async () => {
@@ -223,7 +254,7 @@ describe('tee() bounded drain-ahead', () => {
 			}
 		}
 
-		const [client, listener] = tee(megabyteBlobs(), 2, 1 << 20, 1 << 22)
+		const [client, listener] = tee(megabyteBlobs(), 1 << 20, 1 << 22)
 		const drained = (async () => {
 			for await (const _ of listener) {
 			}

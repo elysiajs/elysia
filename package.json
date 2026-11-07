@@ -145,6 +145,12 @@
 			"import": "./dist/plugin/auto-head.mjs",
 			"require": "./dist/plugin/auto-head.js"
 		},
+		"./sucrose": {
+			"aot": "./src/sucrose.ts",
+			"types": "./dist/sucrose.d.ts",
+			"import": "./dist/sucrose.mjs",
+			"require": "./dist/sucrose.js"
+		},
 		"./trace": {
 			"aot": "./src/plugin/trace.ts",
 			"types": "./dist/plugin/trace.d.ts",
