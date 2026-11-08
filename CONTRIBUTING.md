@@ -18,7 +18,7 @@ To run Elysia locally:
 
 ### Unit Testing
 
-All of the test files are located inside the [`test/`](test/) directory. Unit testing are powered by [bun's test](https://github.com/oven-sh/bun/tree/main/packages/bun-internal-test).
+All of the test files are located inside the [`test/`](test/) directory. Unit testing are powered by [bun's test](https://bun.com/docs/test).
 
 - `bun test` to run all the test inside the [`test/`](test/) directory
 - `bun test test/<test-file>.ts` to run a specific test
