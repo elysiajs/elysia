@@ -33,6 +33,7 @@ import {
 	getQueryParseChannels,
 	hasRequestBody,
 	replaceDeriveContext,
+	mergeDerive,
 	armEntryAbort
 } from './utils'
 
@@ -80,6 +81,7 @@ export const es: Resolver = () => ElysiaStatus
 export const sm: Resolver = () => StatusMap
 export const rdc: Resolver = () => replaceDeriveContext
 export const dsp: Resolver = () => registerDeriveDisposable
+export const mdr: Resolver = () => mergeDerive
 export const dds: Resolver = () => drainDisposables
 export const emp: Resolver = () => emptyResponse
 // route-entry abort probe

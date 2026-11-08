@@ -67,7 +67,11 @@ import {
 import { ELYSIA_TYPES } from '../../type/constants'
 import type { TraceEvent } from '../../trace'
 import { Reconstruct } from './reconstruct'
-import { Capture, inAotBuild } from '../aot'
+import { Capture, inAotBuild, warnAotDrift as warnDrift } from '../aot'
+// through here: a live HTTP recompile reaches it only after the JIT compiled,
+// so the strip-mode JIT stub drops it with the compiler. A binding, not a
+// re-export, which the build would resolve past this module
+export const warnAotDrift = warnDrift
 import { JITProbe } from '../jit-probe'
 
 import {
@@ -1519,7 +1523,14 @@ export function compileHandlerJit(
 
 	const alias = aliasKeys.join(',')
 	const fullAlias = alias ? `rt,fre,${alias}` : 'rt,fre'
-	Capture.handler({ method, path, alias: fullAlias, code, k: shape })
+	Capture.handler({
+		method,
+		path,
+		alias: fullAlias,
+		code,
+		k: shape,
+		setCookie: state.canSetCookie
+	})
 	onEmit?.(code)
 	const isGeneratorHandler =
 		isHandleFunction &&

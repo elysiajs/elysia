@@ -1,8 +1,15 @@
 import { isPureRefinement, pureRefine } from './type/shared'
 import { env } from './universal'
-import { evictOldestHalf } from './utils'
+import { assignOwn, evictOldestHalf } from './utils'
 
 const modelSnapshots = new WeakMap<object, object>()
+// `.model()` clone -> its source and name, identity only: each app's model
+// table owns its clones, so a `$id` it stamps never reaches another app
+const modelSources = new WeakMap<object, object>()
+// `.model()` clone -> a private copy of its source as registered: what other
+// tables and nested uses validate, unmoved by later edits to the source
+const modelPristine = new WeakMap<object, object>()
+const modelNames = new WeakMap<object, string>()
 const hookSnapshots = new WeakMap<object, object>()
 
 // structural fingerprint -> shared frozen snapshot
@@ -115,6 +122,23 @@ function deepCloneSchema(
 		return freeze ? Object.freeze(out) : out
 	}
 
+	// a nested `.model()` clone is copied from its source as registered: the
+	// `$id` it was given belongs to its own app's table
+	const source = modelPristine.get(value)
+	if (source) {
+		seen ??= new Map()
+		const copy: any = deepCloneSchema(
+			source,
+			freeze,
+			seen,
+			copies,
+			canShare
+		)
+		seen.set(value, copy)
+
+		return copy
+	}
+
 	if (canShare && isImmutableNode(value)) return value
 
 	const proto = Object.getPrototypeOf(value)
@@ -157,13 +181,7 @@ function deepCloneSchema(
 
 		const cloned = deepCloneSchema(property, freeze, seen, copies)
 
-		if (key === '__proto__')
-			Object.defineProperty(out, key, {
-				value: cloned,
-				enumerable: true,
-				writable: true,
-				configurable: true
-			})
+		if (key === '__proto__') assignOwn(out, { [key]: cloned })
 		else out[key] = cloned
 	}
 
@@ -309,13 +327,34 @@ function cloneOrWarn(object: object, freeze: boolean): object | undefined {
 	}
 }
 
-export function snapshotSchema<T>(schema: T): T {
+/**
+ * `name`: a new `.model()` clone of the source, never shared: a source used
+ * by other names or apps (a bare `t.String()` is a singleton) or another
+ * model's clone must not pass on its `$id`
+ */
+export function snapshotSchema<T>(schema: T, name?: string): T {
 	if (schema === null || typeof schema !== 'object') return schema
 
 	const object = schema as unknown as object
 
 	if ('~standard' in object) return schema
 	snapshotCalls++
+
+	if (name !== undefined) {
+		const pristine = modelPristine.get(object) ?? cloneOrWarn(object, false)
+		if (pristine === undefined) return schema
+
+		const cloned = cloneOrWarn(pristine, false)
+		if (cloned === undefined) return schema
+
+		modelSources.set(cloned, modelSources.get(object) ?? object)
+		modelPristine.set(cloned, pristine)
+		modelNames.set(cloned, name)
+		produced.add(cloned)
+
+		return cloned as T
+	}
+
 	if (produced.has(object) && !Object.isFrozen(object)) return schema
 
 	const existing = modelSnapshots.get(object)
@@ -333,7 +372,7 @@ export function snapshotSchema<T>(schema: T): T {
 const refineMemo = new WeakMap<object, boolean>()
 
 // any keyword, like `collectRefinements` reaches `$defs` or `prefixItems`
-function hasRefine(schema: any, seen = new WeakSet<object>()): boolean {
+function hasRefine(schema: any, seen = new WeakSet<object>()) {
 	if (!schema || typeof schema !== 'object' || seen.has(schema)) return false
 	seen.add(schema)
 
@@ -359,15 +398,30 @@ export function ownSchema<T>(schema: T): T {
  * The route/guard hook snapshot: deep-frozen, and shared with every
  * structurally identical schema in the process.
  */
-function internSchema<T>(schema: T, intern: boolean): T {
+function internSchema<T>(
+	schema: T,
+	intern: boolean,
+	models: ModelScope | undefined
+): T {
 	if (schema === null || typeof schema !== 'object') return schema
 
 	const object = schema as unknown as object
-
 	if ('~standard' in object) return schema
+
+	const source = modelSources.get(object)
+	if (source) {
+		if (models?.table[modelNames.get(object)!] === object) return schema
+
+		const model = models && modelIndex(models).get(source)
+		if (model) return model as T
+
+		return internSchema(modelPristine.get(object) as T, intern, models)
+	}
+
 	if (produced.has(object)) return schema
 
-	const model = modelSnapshots.get(object)
+	// this app's own `.model()` clone of the source, carrying its `$id`
+	const model = models && modelIndex(models).get(object)
 	if (model) return model as T
 
 	const existing = hookSnapshots.get(object)
@@ -413,10 +467,35 @@ function internSchema<T>(schema: T, intern: boolean): T {
 	return cloned as T
 }
 
-function snapshotSlots(target: Record<string, any>, intern: boolean) {
+// a model table and, once a schema asks, its source -> first clone index
+type ModelScope = {
+	table: Record<string, unknown>
+	index?: Map<object, object>
+}
+
+function modelIndex(models: ModelScope) {
+	if (models.index) return models.index
+
+	// ponytail: rebuilt per route registration, O(models); cache per table if a large-model app shows it
+	const index = (models.index = new Map())
+	for (const name in models.table) {
+		const model = models.table[name] as object
+		const source = modelSources.get(model)
+
+		if (source && !index.has(source)) index.set(source, model)
+	}
+
+	return index
+}
+
+function snapshotSlots(
+	target: Record<string, any>,
+	intern: boolean,
+	models: ModelScope | undefined
+) {
 	for (const slot of schemaSlots)
 		if (target[slot] != null)
-			target[slot] = internSchema(target[slot], intern)
+			target[slot] = internSchema(target[slot], intern, models)
 
 	const response = target.response
 	if (response != null) {
@@ -430,7 +509,7 @@ function snapshotSlots(target: Record<string, any>, intern: boolean) {
 			let key = 'M'
 
 			for (const status in response) {
-				const schema = internSchema(response[status], intern)
+				const schema = internSchema(response[status], intern, models)
 
 				Object.defineProperty(next, status, {
 					value: schema,
@@ -461,7 +540,7 @@ function snapshotSlots(target: Record<string, any>, intern: boolean) {
 
 				target.response = Object.freeze(next)
 			}
-		} else target.response = internSchema(response, intern)
+		} else target.response = internSchema(response, intern, models)
 	}
 }
 
@@ -480,7 +559,8 @@ const hasSlot = (target: Record<string, any>) =>
 	schemaSlots.some((slot) => target[slot] != null) || target.response != null
 
 export function snapshotHookSchemas<T extends Record<string, any> | undefined>(
-	hook: T
+	hook: T,
+	models?: Record<string, unknown>
 ): T {
 	if (!hook) return hook
 
@@ -496,13 +576,14 @@ export function snapshotHookSchemas<T extends Record<string, any> | undefined>(
 
 	snapshotCalls++
 	const intern = !env.ELYSIA_AOT_BUILD
+	const scope = models && { table: models }
 
 	const copy: Record<string, any> = Object.assign(
 		Object.create(Object.getPrototypeOf(hook)),
 		hook
 	)
 
-	snapshotSlots(copy, intern)
+	snapshotSlots(copy, intern, scope)
 
 	if (Array.isArray(schemas)) {
 		copy.schemas = schemas.map((entry) => {
@@ -512,7 +593,7 @@ export function snapshotHookSchemas<T extends Record<string, any> | undefined>(
 				Object.create(Object.getPrototypeOf(entry)),
 				entry
 			)
-			snapshotSlots(entryCopy, intern)
+			snapshotSlots(entryCopy, intern, scope)
 
 			return entryCopy
 		})

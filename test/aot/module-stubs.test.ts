@@ -196,6 +196,41 @@ describe('AOT module stubs', () => {
 		expect((await app.handle(req('/', json({ name: 1 })))).status).toBe(422)
 	})
 
+	// a response validator moves a route off the compact mapper, but only a
+	// `set` / cookie / hook effect can put a cookie on the response
+	it('stubs the cookie jar and serializer for a response-schema route', async () => {
+		const text = await build('response')
+		expect(stubbed(text).cookieJar).toBe(true)
+
+		const app = await load(text)
+		const ok = await app.handle(req('/'))
+		await expect(ok.text()).resolves.toBe('ok')
+		expect(ok.headers.getAll('set-cookie')).toEqual([])
+		// a failed response check is a server fault, not a cookie path
+		expect((await app.handle(req('/bad'))).status).toBe(500)
+		expect((await app.handle(req('/nope'))).status).toBe(404)
+	})
+
+	// each writes `set.cookie` from a different place on a response-schema
+	// route; a stubbed serializer would throw on the response instead
+	for (const [name, body] of [
+		['response-set', 'ok'],
+		['response-hook', 'ok'],
+		['response-derive', 'ok'],
+		['response-error', 'handled'],
+		['response-derive-return', 'ok'],
+		['response-adapter', 'ok']
+	] as const)
+		it(`keeps the cookie serializer when a response-schema route can write set.cookie (${name})`, async () => {
+			const text = await build(name)
+			expect(stubbed(text).cookieJar).toBe(false)
+
+			const app = await load(text)
+			const res = await app.handle(req('/'))
+			await expect(res.text()).resolves.toBe(body)
+			expect(res.headers.getAll('set-cookie')).toEqual(['seen=1'])
+		})
+
 	// the stub throws on every schema it is handed, so the build-time strip
 	// decision must match every runtime snapshot call, not only the schemas
 	// a route can reach: a trailing guard or an unused app's model counts

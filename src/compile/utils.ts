@@ -1,5 +1,9 @@
 import type { MaybeArray } from '../types'
 
+/** a schema value (TypeBox, Elysia ACL or Standard Schema), not a status map */
+export const isSingleSchema = (schema: object) =>
+	'~kind' in schema || '~elyAcl' in schema || '~standard' in schema
+
 export function isAsyncFunction(fn: Function) {
 	return (
 		fn.constructor.name === 'AsyncFunction' ||

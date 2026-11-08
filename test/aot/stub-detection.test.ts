@@ -657,7 +657,7 @@ describe('trace stub gate — live-JIT relaxation (planFromReport)', () => {
 const evidence = (over: Partial<StubEvidence> = {}): StubEvidence => ({
 	staticPaths: true,
 	schemaFree: true,
-	allCompact: true,
+	noSetCookie: true,
 	hasMount: false,
 	rootReads: { query: false, set: false, cookie: false },
 	rootTrace: false,

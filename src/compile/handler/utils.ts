@@ -236,6 +236,20 @@ function returnedObjectKeys(src: string): string[] | null {
 		: null
 }
 
+export function mergeDerive(context: any, derivative: any) {
+	if (Object.hasOwn(derivative, '__proto__')) {
+		for (const key of Object.keys(derivative))
+			registerDeriveDisposable(context, derivative[key])
+		assignOwn(context, derivative)
+	} else {
+		const own: any = Object.assign({}, derivative)
+		for (const key of Reflect.ownKeys(own)) {
+			registerDeriveDisposable(context, own[key])
+			context[key] = own[key]
+		}
+	}
+}
+
 export function replaceDeriveContext(context: any, derivative: any) {
 	const next = Object.create(Object.getPrototypeOf(context))
 	// an own `__proto__` would reach the inherited setter and reparent the
@@ -387,10 +401,10 @@ export function mapBeforeHandle(
 		code += awaitSite(`bf${at(i)}(c)`, fn, mode, 'tmp', arm)
 		if (modes?.[i] !== undefined) {
 			needsEs = true
-			link(registerDeriveDisposable, 'dsp')
 
 			if (modes[i]) {
 				link(replaceDeriveContext, 'rdc')
+				link(registerDeriveDisposable, 'dsp')
 				// the pre-swap context is the reference for "already there"
 				code +=
 					early +
@@ -408,7 +422,9 @@ export function mapBeforeHandle(
 									`_v=tmp[${JSON.stringify(k)}];dsp(c,_v);c[${JSON.stringify(k)}]=_v`
 							)
 							.join(';')
-					: "if(Object.hasOwn(tmp,'__proto__')){for(const _k of Object.keys(tmp))dsp(c,tmp[_k]);Object.defineProperties(c,Object.getOwnPropertyDescriptors(tmp))}else{_v=Object.assign({},tmp);for(const _k of Reflect.ownKeys(_v)){dsp(c,_v[_k]);c[_k]=_v[_k]}}"
+					: 'mdr(c,tmp)'
+				if (keyed) link(registerDeriveDisposable, 'dsp')
+				else link(mergeDerive, 'mdr')
 				code += early + `else if(tmp){${merge};tmp=undefined}\n`
 			}
 		} else code += 'if(tmp!==undefined)_r=tmp\n'

@@ -788,6 +788,32 @@ const unprovable: Row[] = [
 // replay reads these at runtime, so the build's route is kept
 const benign: Row[] = [
 	{
+		// a bare `t.String()` is a process-wide singleton: another app's
+		// `.model()` of it must not stamp its `$id` on this route
+		why: 'another app models the same bare t.String()',
+		build: () =>
+			new Elysia().post('/s', { body: t.String() }, ({ body }) => body),
+		runtime: () => {
+			new Elysia().model({ elsewhere: t.String() })
+
+			return new Elysia().post(
+				'/s',
+				{ body: t.String() },
+				({ body }) => body
+			)
+		},
+		requests: [
+			[
+				'/s',
+				{
+					method: 'POST',
+					headers: { 'content-type': 'text/plain' },
+					body: 'hi'
+				}
+			]
+		]
+	},
+	{
 		why: 'a refinement function rewritten at runtime',
 		build: () =>
 			new Elysia().post(

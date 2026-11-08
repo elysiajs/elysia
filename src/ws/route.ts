@@ -1,7 +1,7 @@
 import { RouteValidator } from '../validator/route'
 import { isBridgeLive } from '../type/bridge'
 import { ELYSIA_TYPES } from '../type/constants'
-import { assignOwn, EmptyObject, isSocketQuiet, nullObject } from '../utils'
+import { EmptyObject, isSocketQuiet, nullObject } from '../utils'
 import { frozenRootOf } from '../generation'
 import { sucrose } from '../sucrose'
 import { parseQueryFromURL } from '../parse-query'
@@ -18,7 +18,8 @@ import {
 	deriveModes,
 	getQueryParseChannels,
 	joinDeriveEntries,
-	replaceDeriveContext
+	replaceDeriveContext,
+	mergeDerive
 } from '../compile/handler/utils'
 import {
 	composeRouteHook,
@@ -1025,22 +1026,7 @@ export function buildWSRoute(
 									(context as any)[key],
 									previous
 								)
-						} else if (Object.hasOwn(r, '__proto__')) {
-							for (const key of Object.keys(r))
-								registerDeriveDisposable(
-									context,
-									(r as any)[key]
-								)
-							assignOwn(context as any, r)
-						} else {
-							// read once, as on HTTP: the instance registered
-							// is the one the context exposes, each once
-							const own: any = Object.assign({}, r)
-							for (const key of Reflect.ownKeys(own)) {
-								registerDeriveDisposable(context, own[key])
-								;(context as any)[key] = own[key]
-							}
-						}
+						} else mergeDerive(context, r)
 					}
 				} else if (r !== undefined) {
 					return finalizeUpgradeResponse(

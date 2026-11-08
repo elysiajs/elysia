@@ -28,6 +28,7 @@ import {
 	traceCapabilityRequired
 } from '../../generation'
 import { JITProbe } from '../jit-probe'
+import { defaultAdapter } from '../../adapter/constants'
 import { Reconstruct } from './reconstruct'
 
 import { isNotEmpty, type CompactBeforeHandlePrefix } from '../../utils'
@@ -90,6 +91,9 @@ export interface RouteCompileState {
 	cookieConfig: CompiledCookieConfig | undefined
 	// the route reads or validates cookie: it gets a jar, not only a signer
 	needsCookie: boolean
+	// a handler or hook can write `set.cookie`: `set` effects without the
+	// response validator, recorded at AOT capture for the jar stub
+	canSetCookie: boolean
 
 	beforeHandlePrefix: CompactBeforeHandlePrefix | undefined
 	traceHandlers: Function[] | undefined
@@ -403,17 +407,26 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 				? 'promise'
 				: 'static-value'
 
-	const hasSetEffects =
+	const writesSet =
 		inference.cookie ||
 		inference.set ||
 		needsCookie ||
 		hasAfterResponse ||
 		hasErrorHook ||
-		hasResponseValidator ||
 		hasTrace
+
+	const hasSetEffects = writesSet || hasResponseValidator
+	const canSetCookie =
+		writesSet ||
+		hasBeforeHandle ||
+		!!hook?.transform?.length ||
+		!!(hook as any)?.['~deriveEntries']?.length ||
+		adapter !== defaultAdapter
+
 	const hasDefaultHeaders = isNotEmpty(frozenRootOf(root)['~ext']?.headers)
 	const hasDefaultHeaderSink =
 		hasDefaultHeaders && !!adapter.response.supportsDefaultHeaderSink
+
 	const responseMode: RouteDescriptor['responseMode'] = hasDefaultHeaderSink
 		? hasSetEffects
 			? 'set-with-default-headers'
@@ -465,6 +478,7 @@ export function describeRoute(input: DescribeRouteInput): RouteCompileState {
 		inference,
 		cookieConfig,
 		needsCookie,
+		canSetCookie,
 
 		beforeHandlePrefix,
 		traceHandlers,

@@ -120,7 +120,7 @@ describe('derive key codegen', () => {
 					return `_v=tmp[${k}];dsp(c,_v);c[${k}]=_v`
 				})
 			)
-			expect(source).not.toContain('_v=Object.assign({},tmp)')
+			expect(source).not.toContain('mdr(c,tmp)')
 		})
 
 	const bails: [Function, string][] = [
@@ -182,9 +182,9 @@ describe('derive key codegen', () => {
 
 	for (const [fn, label] of bails)
 		it(`falls back for ${label}`, () => {
-			// the keyless merge materializes one copy into `_v`, then registers
-			// and assigns per key
-			expect(compileDerive(fn)).toContain('_v=Object.assign({},tmp)')
+			// the keyless merge (`mergeDerive`) materializes one copy, then
+			// registers and assigns per key
+			expect(compileDerive(fn)).toContain('mdr(c,tmp)')
 		})
 })
 

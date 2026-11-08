@@ -8,7 +8,8 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test'
 import { Elysia, HTTPError, status } from '../../src'
 import { Compiled } from '../../src/compile/aot'
-import * as aot from '../../src/compile/aot'
+// the HTTP live recompile warns through the JIT module, see `compileHandler`
+import * as jit from '../../src/compile/handler/jit'
 import { websocket } from '../../src/plugin/websocket'
 import {
 	aotReconstructHandle,
@@ -223,7 +224,7 @@ for (const production of [false, true])
 			for (const c of cases)
 				it(c.name, async () => {
 					const getHandler = spyOn(Compiled, 'getHandler')
-					const drift = spyOn(aot, 'warnAotDrift')
+					const drift = spyOn(jit, 'warnAotDrift')
 					const instance = await lane.make(c.define)
 
 					try {

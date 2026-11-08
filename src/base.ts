@@ -23,6 +23,7 @@ import {
 	type CompilerSession,
 	type ProgramId
 } from './compile/aot'
+import { isSingleSchema } from './compile/utils'
 import { isProduction } from './universal/is-production'
 import type {
 	WSLocalHook,
@@ -259,8 +260,7 @@ type UnknownHookKey<Key extends PropertyKey> = [Key] extends [never]
 const useNodesBuffer: ChainNode[] = []
 // instance -> key of each registration on its chain, own and propagated ->
 // the registration node it came from (a same-name twin's is another one).
-// Made by the first keyed copy the instance receives (`#keysOf`): a plugin
-// no one `.use()`s into never needs one
+// Made by the first key the instance holds: an instance with none has no map
 const chainKeys = new WeakMap<object, Map<string, ChainNode>>()
 // named instance -> its key prefix and the registrations it has named, see
 // `ChainNode.key`
@@ -284,10 +284,7 @@ const mergeCookieConfig = (
 const routeCookieConfigs = new WeakMap<object, (CookieConfig | undefined)[]>()
 
 let mutationEpoch = 0
-const extCallbackIndexes = new WeakMap<
-	unknown[],
-	{ indexedLength: number; seen: Set<unknown> }
->()
+const extCallbackIndexes = new WeakMap<unknown[], Set<unknown>>()
 
 // registers nothing: every value is nullish or an empty array. A hollow node
 // takes no key, so it shifts no ordinal and installs nothing
@@ -300,39 +297,21 @@ const hollow = (added: object) => {
 	return true
 }
 
-const assignTable = <T extends object>(
-	target: T | undefined,
-	source: T,
-	append: boolean | undefined
-): T => {
-	if (!target || !append) return Object.assign(target ?? nullObject(), source)
-	for (const key in source) if (!(key in target)) target[key] = source[key]
-	return target
-}
-
 const mergeExtCallbacks = <T>(target: T[] | undefined, incoming: T[]) => {
 	if (!target) return incoming.slice()
 
-	let index = extCallbackIndexes.get(target)
+	let seen = extCallbackIndexes.get(target)
+	if (!seen) extCallbackIndexes.set(target, (seen = new Set()))
 
-	if (!index) {
-		index = {
-			indexedLength: target.length,
-			seen: new Set(target)
+	// `seen` holds only entries of `target`, so never more than its indexed
+	// prefix: from `seen.size` on covers every entry pushed since
+	for (let i = seen.size; i < target.length; i++) seen.add(target[i])
+
+	for (const fn of incoming)
+		if (!seen.has(fn)) {
+			target.push(fn)
+			seen.add(fn)
 		}
-		extCallbackIndexes.set(target, index)
-	} else
-		for (let i = index.indexedLength; i < target.length; i++)
-			index.seen.add(target[i])
-
-	for (const fn of incoming) {
-		if (index.seen.has(fn)) continue
-
-		target.push(fn)
-		index.seen.add(fn)
-	}
-
-	index.indexedLength = target.length
 
 	return target
 }
@@ -356,9 +335,6 @@ const sharedTables = [
 const canRegisterLoose = (path: string, isDynamic: boolean) =>
 	!isDynamic && (path.length === 0 || path.charCodeAt(path.length - 1) === 47)
 
-const isSingleSchema = (value: object) =>
-	'~kind' in value || '~elyAcl' in value || '~standard' in value
-
 const isSchemaValue = (value: unknown) => {
 	if (value == null || typeof value === 'string') return true
 	// A Standard Schema can also be a function.
@@ -373,7 +349,7 @@ const isSchemaValue = (value: unknown) => {
 const toModel = (key: string, value: AnySchema) => {
 	if ('~standard' in value) return value
 
-	value = snapshotSchema(value)
+	value = snapshotSchema(value, key)
 	;(value as any).$id ??= key
 
 	return value
@@ -1389,44 +1365,12 @@ export class Elysia<
 		this['~hookChain'] = node
 	}
 
-	/**
-	 * Record `key` on this chain; true if it already was. Without a map no
-	 * copy is here yet, and an own key is always new
-	 */
+	/** Record `key` on this chain; true if it already was */
 	#holdKey(key: string, registration: ChainNode): true | undefined {
-		const keys = chainKeys.get(this)
-		if (!keys) return
+		let keys = chainKeys.get(this)
+		if (!keys) chainKeys.set(this, (keys = new Map()))
 		if (keys.has(key)) return true
 		keys.set(key, registration)
-	}
-
-	/** This chain's keys, from its own registrations the first time */
-	#keysOf() {
-		let keys = chainKeys.get(this)
-		if (keys) return keys
-
-		chainKeys.set(this, (keys = new Map()))
-		const held: ChainNode[] = []
-		for (
-			let n = this['~hookChain'];
-			n;
-			n = (n as { parent?: ChainNode }).parent
-		)
-			// a lifted `request` copy is not its whole registration
-			if (
-				(n as { key?: string }).key !== undefined &&
-				!(
-					(n as { registration?: ChainNode }).registration &&
-					(n as { owner?: object }).owner
-				)
-			)
-				held.push(n)
-		for (let i = held.length - 1; i >= 0; i--) {
-			const n = held[i] as Extract<ChainNode, { added: unknown }>
-			if (!keys.has(n.key!)) keys.set(n.key!, n.registration ?? n)
-		}
-
-		return keys
 	}
 
 	/**
@@ -4143,7 +4087,7 @@ export class Elysia<
 		// Invalid guard schemas would disable every nested route.
 		if (hook) assertSchemaShape(hook as Record<string, unknown>, '.guard()')
 
-		hook = snapshotHookSchemas(hook)
+		hook = snapshotHookSchemas(hook, this.models)
 		hookToGuard(hook as any)
 
 		this.#pushHook(hook as Partial<AppHook>, scope)
@@ -5282,7 +5226,13 @@ export class Elysia<
 		return this.childrenHash?.has(plugin.hash!) ?? false
 	}
 
-	#useFn(app: (app: any) => unknown): any {
+	#macroEntries() {
+		return new Map<string, unknown>(
+			Object.entries(this['~ext']?.macro ?? nullObject())
+		)
+	}
+
+	#useFn(app: (app: any) => unknown) {
 		const prevBaseline = this.macroBaseline
 		const baseline = new Set<string>()
 		const existingMacro = this['~ext']?.macro
@@ -5290,18 +5240,13 @@ export class Elysia<
 		if (existingMacro) for (const k in existingMacro) baseline.add(k)
 		this.macroBaseline = baseline
 
-		// Snapshot the macro table at the end of the current synchronous run,
-		// not at return: sibling `.macro()` / sync `.use()` calls later in the
-		// chain are legitimate, while an async plugin's post-await registrations
-		// run in continuations queued during `app(this)` — after this microtask
 		let wantSnapshot = false
 		let settled = false
 		let beforeMacro: Map<string, unknown> | undefined
+
 		queueMicrotask(() => {
 			if (wantSnapshot && !settled) {
-				beforeMacro = new Map(
-					Object.entries(this['~ext']?.macro ?? nullObject())
-				)
+				beforeMacro = this.#macroEntries()
 				;(this.macroSnapshots ??= new Set()).add(beforeMacro)
 			}
 		})
@@ -5341,8 +5286,6 @@ export class Elysia<
 			)
 		}
 
-		// What it returns is used as a plugin, the same as what an async one
-		// resolves to. Returning `app` itself merges nothing
 		if (!result || result === this) return this
 
 		return this.use(result as any)
@@ -5350,8 +5293,6 @@ export class Elysia<
 
 	#use(app: AnyElysia) {
 		let addedByThisCall: Set<number> | undefined
-		// installed by a child already: its routes and tables are here, only
-		// the hooks the child didn't pass on are missing
 		let below = false
 
 		const config = app['~config']
@@ -5370,14 +5311,18 @@ export class Elysia<
 			}
 		}
 
-		// a `.group()`/`.guard()` callback is a sandbox (Elysia 1): what it
-		// installed stays inside, a later `.use()` here installs it again
-		if (app.childrenHash && !app['~scopeChild'])
-			addedByThisCall = this.#absorbChildrenHash(app, addedByThisCall)
+		if (app.childrenHash && !app['~scopeChild']) {
+			const childrenHash = (this.childrenHash ??= new Map())
 
-		// seen below too: a macro this instance redefined since still conflicts
+			for (const h of app.childrenHash.keys()) {
+				if (childrenHash.has(h)) continue
+
+				childrenHash.set(h, false)
+				;(addedByThisCall ??= new Set()).add(h)
+			}
+		}
+
 		if (app['~ext']) this.#assertMacroUnique(app, addedByThisCall)
-		// after the check: a conflict leaves it seen below only
 		if (below) this.childrenHash!.set(app.hash!, true)
 		if (app['~hasTrace']) this['~hasTrace'] = true
 
@@ -5398,26 +5343,8 @@ export class Elysia<
 		}
 
 		const hookChain = app['~hookChain']
-
 		if (app['~ext']) this.#absorbExt(app, addedByThisCall, below)
-
 		if (hookChain) this.#propagateHooks(app, hookChain)
-	}
-
-	#absorbChildrenHash(
-		app: AnyElysia,
-		addedByThisCall: Set<number> | undefined
-	) {
-		const childrenHash = (this.childrenHash ??= new Map())
-
-		for (const h of app.childrenHash!.keys()) {
-			if (childrenHash.has(h)) continue
-
-			childrenHash.set(h, false)
-			;(addedByThisCall ??= new Set()).add(h)
-		}
-
-		return addedByThisCall
 	}
 
 	/**
@@ -5475,18 +5402,8 @@ export class Elysia<
 		append?: boolean
 	) {
 		const source = app['~ext']!
-		const {
-			decorator,
-			store,
-			headers,
-			models,
-			parser,
-			macro,
-			hoc,
-			setup,
-			cleanup,
-			capability
-		} = source
+		const { decorator, store, macro, hoc, setup, cleanup, capability } =
+			source
 
 		const ext: NonNullable<(typeof this)['~ext']> = (this['~ext'] ??=
 			nullObject())
@@ -5516,47 +5433,45 @@ export class Elysia<
 			if (ext.store) mergeDeep(ext.store, store, undefined, !append)
 			else ext.store = Object.assign(nullObject(), store)
 		}
+		// an older copy's table, or a group mapper writing the shared table in
+		// place, can hand over an own `__proto__`
+		if (ext.store) for (const key of dangerousKeys) delete ext.store[key]
 
-		if (headers && headers !== ext.headers)
-			ext.headers = assignTable(ext.headers, headers, append)
-		if (models && models !== ext.models)
-			ext.models = assignTable(ext.models, models, append)
-		if (parser && parser !== ext.parser)
-			ext.parser = assignTable(ext.parser, parser, append)
+		for (const field of ['headers', 'models', 'parser'] as const) {
+			const table: any = source[field]
+			const target: any = ext[field]
+
+			if (table && table !== target)
+				if (target && append) {
+					for (const key in table)
+						if (!(key in target)) target[key] = table[key]
+				} else ext[field] = Object.assign(target ?? nullObject(), table)
+		}
 
 		if (macro) {
 			// a plugin seen below adds only what this instance lacks, as a
 			// scope child's plugin macros do
-			if (app['~scopeChild'] || append) {
-				const pluginMacros = append
-					? new Map(Object.entries(macro))
-					: app.pluginMacros
-				let changed = false
+			const fill = app['~scopeChild'] || append
+			const incoming =
+				fill && !append
+					? app.pluginMacros
+					: new Map(Object.entries(macro))
+			let changed = !fill
 
-				if (pluginMacros?.size) {
-					const target = this.#ensureMacroTable() as any
-					for (const [name, def] of pluginMacros)
-						if (!(name in target)) {
-							;(target as any)[name] = def
-							changed = true
+			if (changed || incoming?.size) {
+				const target = this.#ensureMacroTable() as any
 
-							if (this['~scopeChild'])
-								(this.pluginMacros ??= new Map()).set(name, def)
-						}
-				}
-				if (changed) invalidateMacroEpoch()
-			} else {
-				Object.assign(this.#ensureMacroTable(), macro)
+				for (const [name, def] of incoming!)
+					if (!fill || !(name in target)) {
+						target[name] = def
+						changed = true
 
-				if (this['~scopeChild']) {
-					const pluginMacros = (this.pluginMacros ??= new Map())
-
-					for (const name in macro)
-						pluginMacros.set(name, (macro as any)[name])
-				}
-
-				invalidateMacroEpoch()
+						if (this['~scopeChild'])
+							(this.pluginMacros ??= new Map()).set(name, def)
+					}
 			}
+
+			if (changed) invalidateMacroEpoch()
 		}
 
 		if (hoc) {
@@ -5682,10 +5597,7 @@ export class Elysia<
 			let key = node.key
 			let dup: true | undefined
 
-			const held =
-				key === undefined
-					? undefined
-					: (keys ??= this.#keysOf()).get(key)
+			const held = key === undefined ? undefined : keys?.get(key)
 			if (held) {
 				// on this chain already: only its standalone schemas validate
 				// again, unless it follows a new one of its plugin (a keyed
@@ -5738,8 +5650,10 @@ export class Elysia<
 
 			// a lifted `request` is not the whole registration: a later
 			// `.use()` still installs the rest
-			if (key !== undefined && !dup && !scopeChild)
-				(keys ??= this.#keysOf()).set(key, registration)
+			if (key !== undefined && !dup && !scopeChild) {
+				if (!keys) chainKeys.set(this, (keys = new Map()))
+				keys.set(key, registration)
+			}
 
 			this.#pushChainNode(
 				added,
@@ -5810,49 +5724,33 @@ export class Elysia<
 				inheritedChain = lastCovered
 			}
 
-			this.#emitRoute(
-				route,
-				this['~scopeChild'] ? this : undefined,
-				this['~Prefix'],
-				inheritedChain,
+			const prefix = this['~Prefix']
+			const macroScope =
+				route[7] ??
+				(this['~scopeChild'] &&
+				(route[3] as AnyElysia | undefined)?.['~scopeChild'] !== true
+					? this
+					: undefined)
+
+			this.#registerRoute(
+				inheritedChain === route[6] &&
+					!prefix &&
+					macroScope === route[7]
+					? route
+					: ([
+							route[0],
+							prefix ? joinPath(prefix, route[1]) : route[1],
+							route[2],
+							route[3],
+							route[4],
+							route[5],
+							inheritedChain,
+							macroScope
+						] as unknown as InternalRoute),
 				name,
 				cookieConfig
 			)
 		}
-	}
-
-	#emitRoute(
-		route: InternalRoute,
-		macroScope: AnyElysia | undefined,
-		prefix: string | undefined,
-		inheritedChain: ChainNode | undefined,
-		source: string | undefined,
-		cookieConfig: CookieConfig | undefined
-	) {
-		const path = prefix ? joinPath(prefix, route[1]) : route[1]
-		macroScope =
-			route[7] ??
-			(macroScope &&
-			(route[3] as AnyElysia | undefined)?.['~scopeChild'] !== true
-				? macroScope
-				: undefined)
-
-		this.#registerRoute(
-			inheritedChain === route[6] && !prefix && macroScope === route[7]
-				? route
-				: ([
-						route[0],
-						path,
-						route[2],
-						route[3],
-						route[4],
-						route[5],
-						inheritedChain,
-						macroScope
-					] as unknown as InternalRoute),
-			source,
-			cookieConfig
-		)
 	}
 
 	get modules(): Promise<void> {
@@ -5890,10 +5788,7 @@ export class Elysia<
 
 				const snapshots = this.macroSnapshots
 				let before: Map<string, unknown> | undefined
-				if (snapshots?.size) {
-					const macro = this['~ext']?.macro
-					before = macro ? new Map(Object.entries(macro)) : new Map()
-				}
+				if (snapshots?.size) before = this.#macroEntries()
 
 				if (plugin)
 					try {
@@ -5991,7 +5886,10 @@ export class Elysia<
 
 		const handler = hasHook ? fn : hookOrFn
 		const hook = hasHook
-			? snapshotHookSchemas(hookOrFn as Partial<AnyLocalHook>)
+			? snapshotHookSchemas(
+					hookOrFn as Partial<AnyLocalHook>,
+					this.models
+				)
 			: undefined
 
 		const appHook = this['~hookChain']
@@ -6189,14 +6087,20 @@ export class Elysia<
 				return this
 
 			case 'function': {
+				// a mapper may edit the table in place
+				const before = Object.assign(nullObject(), models)
 				const remapped = name(models) as Record<string, AnySchema>
 				// The same table back stays the table a group child shares
 				const next =
 					remapped === models
 						? models
 						: (nullObject() as Record<string, AnySchema>)
+				// an entry kept under its own name stays the table's clone
 				for (const key in remapped)
-					next[key] = toModel(key, remapped[key])
+					next[key] =
+						remapped[key] === before[key]
+							? before[key]
+							: toModel(key, remapped[key])
 
 				this.#ext.models = next
 

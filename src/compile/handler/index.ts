@@ -11,15 +11,15 @@ import {
 	aotDriftMessage,
 	inAotBuild,
 	isResponseParam,
-	replayHandlerParams,
-	warnAotDrift
+	replayHandlerParams
 } from '../aot'
 import { frozenRootOf } from '../../generation'
 import {
 	compactBeforeHandleLane,
 	compileHandlerJit,
 	inlineBareRoute,
-	targetsBun
+	targetsBun,
+	warnAotDrift
 } from './jit'
 export { setCaptureHeaderShorthand } from './jit'
 export { releaseAnalysisCaches } from './descriptor'

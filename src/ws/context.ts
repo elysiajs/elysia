@@ -10,7 +10,7 @@ import type {
 
 import { ValidationError, ElysiaStatus } from '../error'
 import type { RouteSchema } from '../types'
-import { requestId } from '../utils'
+import { assignOwn, requestId } from '../utils'
 
 export const isBufferSource = (value: unknown): value is BufferSource =>
 	ArrayBuffer.isView(value) ||
@@ -125,17 +125,9 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 			for (const key in context) {
 				if (key === 'ws' || key === 'body') continue
 
-				if (key === '__proto__') {
-					Object.defineProperty(this, key, {
-						value: context[key],
-						writable: true,
-						enumerable: true,
-						configurable: true
-					})
-					continue
-				}
-
-				;(this as any)[key] = context[key]
+				if (key === '__proto__')
+					assignOwn(this, { [key]: context[key] })
+				else (this as any)[key] = context[key]
 			}
 
 			// `for..in` skips symbol keys, which a derive may return

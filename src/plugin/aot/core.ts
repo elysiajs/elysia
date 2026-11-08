@@ -288,10 +288,11 @@ export interface StubPlan {
 
 	/**
 	 * With `cookie`, also stub the jar class (`cookie/cookie`) and the
-	 * serializer (`cookie/serialize` + `cookie/lib`) when every replayed
-	 * handler is compact (`rc`: no set, cookie, error, afterResponse or trace
-	 * effect), there is no WS route, trace or mount, and no root hook reads
-	 * `set` or `cookie` (the 404 path serializes `set.cookie` hooks wrote)
+	 * serializer (`cookie/serialize` + `cookie/lib`) when no replayed handler
+	 * can write `set.cookie` (no set, cookie, error, afterResponse or trace
+	 * effect; a response validator alone does not count), there is no WS
+	 * route, trace or mount, and no root hook reads `set` or `cookie` (the
+	 * 404 path serializes `set.cookie` hooks wrote)
 	 */
 	cookieJar: boolean
 
@@ -491,7 +492,7 @@ export function planFromReport(
 			cookieJar:
 				cookie &&
 				quiet &&
-				evidence!.allCompact &&
+				evidence!.noSetCookie &&
 				!evidence!.rootReads.set &&
 				!evidence!.rootReads.cookie,
 			params: [...aliases].sort(),
@@ -503,12 +504,6 @@ export function planFromReport(
 	}
 }
 
-/**
- * A WS route emits no `cc` alias, so the stub plan follows what each route
- * recorded at capture (`CapturedHandler.cookie`). Fail safe: a path with no
- * entry marked `false` keeps the cookie modules. The capture keeps one entry
- * per path, yet every WS route under a duplicate path builds
- */
 export const wsNeedsCookie = (paths: string[], handlers: CapturedHandler[]) =>
 	paths.some(
 		(path, i) =>
@@ -525,16 +520,25 @@ export const wsNeedsCookie = (paths: string[], handlers: CapturedHandler[]) =>
 export interface StubEvidence {
 	/** no route path contains `:` or `*` */
 	staticPaths: boolean
+
 	/** no schema reached a snapshot call, no route schema slot, no model */
 	schemaFree: boolean
-	/** every captured HTTP handler aliases the compact response mapper `rc` */
-	allCompact: boolean
+
+	/**
+	 * no captured HTTP handler can write `set.cookie`: it aliases the compact
+	 * mapper `rc`, or recorded `setCookie: false` at capture
+	 */
+	noSetCookie: boolean
+
 	/** a route forwards to a mounted handler */
 	hasMount: boolean
+
 	/** sucrose over the root hook chain, the hooks a 404 / error runs */
 	rootReads: { query: boolean; set: boolean; cookie: boolean }
+
 	/** the root hook chain holds a trace handler, see `createFetchHandler` */
 	rootTrace: boolean
+
 	/** a WS route built a cookie config, or the capture has no record of it */
 	wsCookie: boolean
 }
@@ -788,6 +792,8 @@ export const STUB_SOURCES: Record<
 				// no lane: the live compile that follows throws
 				`export function compactBeforeHandleLane(){}\n` +
 				`export function setCaptureHeaderShorthand(){}\n` +
+				// the live recompile before it throws, see `compileHandler`
+				`export function warnAotDrift(){return e()}\n` +
 				// a stripped bundle never captures, so it targets the runtime
 				`export const targetsBun=()=>typeof Bun!=="undefined"\n`
 		},
@@ -1610,9 +1616,10 @@ export async function generateCompiledArtifacts(
 				{
 					staticPaths,
 					schemaFree: schemaFree && !hasMount,
-					allCompact: artifacts.handlers.every(
+					noSetCookie: artifacts.handlers.every(
 						(handler) =>
 							!handler.code ||
+							handler.setCookie === false ||
 							handler.alias.split(',').includes('rc')
 					),
 					hasMount,

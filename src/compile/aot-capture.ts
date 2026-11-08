@@ -518,11 +518,36 @@ export function restoreCompiled(snapshot: CompiledSnapshot) {
 	CompilerState.registry = snapshot
 }
 
+function captureHandler(v: CapturedHandler) {
+	const session = CompilerState.session
+	if (!session) return
+	;(session.handlerCapture ??= new Map()).set(`${v.method}\0${v.path}`, v)
+}
+
+function captureSet(
+	loc: { method: string; path: string; slot: ValidatorSlot },
+	partial: Partial<CapturedValidator>
+) {
+	const capture = CompilerState.session?.capture
+	if (!capture) return
+
+	const { method, path, slot } = loc
+	const k = `${method}_${path}_${slot}`
+
+	let e = capture.get(k)
+	if (!e) capture.set(k, (e = { method, path, slot }))
+
+	Object.assign(e, partial)
+}
+
 setCaptureImpl({
+	handler: captureHandler,
+	set: captureSet,
 	sourceOnlyValidator,
 	maybeCapture,
 	captureMirror,
 	captureCodecMirror,
 	captureBridgeFree
 } satisfies CaptureImpl)
+
 installReconstructImpl()

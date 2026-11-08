@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia'
 
-// #2024: a union-literal response needs the wired TypeBox bridge and keeps
-// the cookie jar (response mapping), so `cookie/*` sits in the bundle
+// #2024: a union-literal response needs the wired TypeBox bridge; nothing
+// can set a cookie, so `cookie/*` is stubbed (see wired-cookie-app.ts)
 export const app = new Elysia().get(
 	'/',
 	{

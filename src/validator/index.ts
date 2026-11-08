@@ -29,7 +29,7 @@ import {
 	HasCodec
 } from '../type/bridge'
 import { assignOwn } from '../utils'
-import { isAsyncFunction } from '../compile/utils'
+import { isAsyncFunction, isSingleSchema } from '../compile/utils'
 import { hasProperty } from '../type/utils'
 
 export interface ValidatorOptions {
@@ -280,9 +280,6 @@ export abstract class Validator {
 }
 
 // a single TypeBox / Standard / Acl schema vs a `Record<status, schema>` map
-const isSingleSchema = (schema: any) =>
-	'~kind' in schema || '~elyAcl' in schema || '~standard' in schema
-
 const toStatusBased = (
 	schema:
 		| TSchema

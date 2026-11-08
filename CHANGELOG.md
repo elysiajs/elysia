@@ -54,7 +54,7 @@ Breaking Change:
 - AOT plugin `transform` hook and the rspack loader are now synchronous
 - AOT: `compileToSource` / `captureArtifacts` drop the `register` option and always emit the self-registering manifest (the `export const validators` / `handlers` / `groups` / `groupOf` / default-export form is gone)
 - AOT: remove `CompiledProgramRegistration.bf` and the `Compiled.reconstruct` getter (the setter stays)
-- AOT manifest format is now 9: an artifact built before this change is rejected at startup with `[elysia-aot] Mismatch fingerprint`, which now names the version and format of both sides; rebuild it
+- AOT manifest format is now 10: an artifact built before this change is rejected at startup with `[elysia-aot] Mismatch fingerprint`, which now names the version and format of both sides; rebuild it
 - remove `ElysiaConfig.handler` (`handler.standardHostname` was ignored; the path is taken from the request URL)
 - `.mount()` no longer takes a `{ detail }` argument; a mounted route is always `detail: { hide: true }`
 - remove the `NonResolvableMacroKey` type

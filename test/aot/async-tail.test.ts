@@ -184,7 +184,7 @@ const scenarios: Scenario[] = [
 	},
 	{
 		name: 'derive, beforeHandle, handler, response schema, error hook',
-		emits: ['dsp(c,', '_vr.EncodeFrom', 'if(_rk>=4)throw _le'],
+		emits: ['mdr(c,tmp)', '_vr.EncodeFrom', 'if(_rk>=4)throw _le'],
 		sites: ['derive', 'bh', 'handler', 'error'],
 		headers: { 'x-user': 'a' },
 		build: (site) =>

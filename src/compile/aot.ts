@@ -7,7 +7,7 @@ import type { resolveHandlerParams } from './handler/params'
 import type { buildFrozenRouteValidator } from './handler/frozen-validator'
 import type { ValidatorOptions } from '../validator'
 
-export const AOT_MANIFEST_FORMAT = 9
+export const AOT_MANIFEST_FORMAT = 10
 const AOT_ABI = `${packageJson.version}:${AOT_MANIFEST_FORMAT}`
 
 export interface AotFingerprint {
@@ -571,33 +571,8 @@ export interface CapturedHandler {
 	k: number | undefined
 	// WS only: the route built a cookie config, see `planFromReport`
 	cookie?: boolean
-}
-
-function captureHandler(v: CapturedHandler) {
-	if (!inAotBuild()) return
-
-	const session = activeSession
-	if (!session) return
-	;(session.handlerCapture ??= new Map()).set(`${v.method}\0${v.path}`, v)
-}
-
-function captureSet(
-	loc: { method: string; path: string; slot: ValidatorSlot },
-	partial: Partial<CapturedValidator>
-) {
-	const { method, path, slot } = loc
-
-	if (!inAotBuild()) return
-
-	const capture = activeSession?.capture
-	if (!capture) return
-
-	const k = `${method}_${path}_${slot}`
-
-	let e = capture.get(k)
-	if (!e) capture.set(k, (e = { method, path, slot }))
-
-	Object.assign(e, partial)
+	// HTTP only: a handler or hook can write `set.cookie`, see `StubPlan.cookieJar`
+	setCookie?: boolean
 }
 
 const captureGet = (loc: {
@@ -625,14 +600,31 @@ export function inAotBuild() {
 }
 
 export const Capture = {
-	set: captureSet,
+	// the bodies live in the capture module: `inAotBuild()` throws without it
+	set(
+		loc: { method: string; path: string; slot: ValidatorSlot },
+		partial: Partial<CapturedValidator>
+	) {
+		if (inAotBuild()) captureImpl!.set(loc, partial)
+	},
 	get: captureGet,
-	handler: captureHandler,
+	handler(v: CapturedHandler) {
+		if (inAotBuild()) captureImpl!.handler(v)
+	},
 	isAotBuildEnv: isAotBuildEnv
 } as const
 
 // build-only capture logic
 export interface CaptureImpl {
+	/** `Capture.handler` once `inAotBuild()` holds */
+	handler(v: CapturedHandler): void
+
+	/** `Capture.set` once `inAotBuild()` holds */
+	set(
+		loc: { method: string; path: string; slot: ValidatorSlot },
+		partial: Partial<CapturedValidator>
+	): void
+
 	/** Source-only TypeBox validator (retains codegen source for the manifest). */
 	sourceOnlyValidator(schema: any): any
 

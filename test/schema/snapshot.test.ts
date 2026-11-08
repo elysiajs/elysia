@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test'
 
 import { Elysia, status, t } from '../../src'
 import { snapshotSchema, snapshotHookSchemas } from '../../src/schema-snapshot'
+import { routeShape } from '../../src/compile/handler/route-shape'
 import { json } from '../utils'
 
 describe('routes keep the schema registered at definition time', () => {
@@ -398,13 +399,272 @@ describe('schema snapshot helpers', () => {
 		expect((app.routes[0] as any).hooks.body.$id).toBe('user')
 	})
 
-	it('keeps the .model() dedup quirk: one source, one $id', () => {
+	it('gives each name of one source its own $id', async () => {
+		// `$id` is how a `t.Ref` and OpenAPI name a model: one shared clone
+		// would name `b` after `a`
 		const source = t.Object({ v: t.String() })
+		const app = new Elysia()
+			.model({ a: source, b: source })
+			.post('/', { body: t.Object({ x: t.Ref('b') }) }, () => 'ok')
+
+		expect((app.models as any).a.$id).toBe('a')
+		expect((app.models as any).b.$id).toBe('b')
+		expect(source).not.toHaveProperty('$id')
+
+		const valid = await app.handle('/', json({ x: { v: 'v' } }))
+		const invalid = await app.handle('/', json({ x: { v: 1 } }))
+		expect(valid.status).toBe(200)
+		expect(invalid.status).toBe(422)
+	})
+
+	it('gives apps modelling one shared schema their own $id', () => {
+		// a bare `t.String()` is a process-wide frozen singleton
+		const shared = t.String()
+		const first = new Elysia().model({ first: shared })
+		const second = new Elysia().model({ second: shared })
+
+		expect((first.models as any).first.$id).toBe('first')
+		expect((second.models as any).second.$id).toBe('second')
+		expect((second.models as any).second).not.toBe(
+			(first.models as any).first
+		)
+	})
+
+	it("keeps another app's model $id out of a route", () => {
+		// a route body is only its own app's model, else every `t.String()`
+		// body in the process carries whichever name modelled it first, and
+		// an AOT build of it drifts when the model registers after the capture
+		new Elysia().model({ elsewhere: t.String() })
+		const app = new Elysia().post('/', { body: t.String() }, () => '')
+
+		expect((app.routes[0] as any).hooks.body.$id).toBeUndefined()
+	})
+
+	it("picks a route's model from its own table, not process history", () => {
+		// another app registering `b` first must not change which name this
+		// app's route carries: route identity feeds the AOT replay checksum
+		const shape = (app: any) =>
+			routeShape(app.routes[0].hooks, app.routes[0].handler, app)
+		const build = (source: any) =>
+			new Elysia()
+				.model({ a: source, b: source })
+				.post('/', { body: source }, () => '')
+
+		const cold = build(t.Object({ v: t.String() }))
+		const warmSource = t.Object({ v: t.String() })
+		new Elysia().model('b', warmSource)
+		const warm = build(warmSource)
+
+		expect((cold.routes[0] as any).hooks.body.$id).toBe('a')
+		expect((warm.routes[0] as any).hooks.body.$id).toBe('a')
+		expect(shape(warm)).toBe(shape(cold))
+	})
+
+	it('renames a model clone passed back to .model()', () => {
+		// a generated `$id` belongs to its name: re-registered elsewhere it
+		// must not travel along
+		const owner = new Elysia().model('a', t.Object({ v: t.String() }))
+		const renamed = new Elysia().model('b', owner.models.a)
+		const mapped = new Elysia()
+			.model('a', owner.models.a)
+			.model(({ a }) => ({ a, c: a }))
+		const foreign = new Elysia().post(
+			'/',
+			{ body: owner.models.a },
+			() => ''
+		)
+
+		expect((renamed.models as any).b.$id).toBe('b')
+		expect((mapped.models as any).a.$id).toBe('a')
+		expect((mapped.models as any).c.$id).toBe('c')
+		expect((foreign.routes[0] as any).hooks.body.$id).toBeUndefined()
+	})
+
+	it('keeps an app model its own when another app uses the same name', async () => {
+		// a write to one app's model must not change another app's validation
+		const shared = t.String()
+		const first = new Elysia()
+			.model('same', shared)
+			.post('/', { body: 'same' }, ({ body }) => body)
+		const second = new Elysia().model('same', shared)
+
+		expect(second.models.same).not.toBe(first.models.same)
+		;(second.models.same as any).type = 'number'
+
+		const response = await first.handle('/', {
+			method: 'POST',
+			headers: { 'content-type': 'text/plain' },
+			body: 'hello'
+		})
+		expect(response.status).toBe(200)
+	})
+
+	it('lets a model clone die with its app', async () => {
+		// a long-lived source (the `t.String()` singleton) must not keep
+		// every app's clone, nor make a route scan every name in the process
+		const singleton = t.String()
+		const clones: WeakRef<object>[] = []
+		;(() => {
+			for (let i = 0; i < 200; i++) {
+				const app = new Elysia().model('m' + i, singleton)
+				clones.push(new WeakRef(app.models['m' + i] as object))
+			}
+		})()
+		await Bun.sleep(0)
+		Bun.gc(true)
+		await Bun.sleep(0)
+		Bun.gc(true)
+
+		expect(clones.filter((ref) => ref.deref()).length).toBeLessThan(100)
+
+		let reads = 0
+		const models = new Proxy(Object.create(null), {
+			get: () => void reads++
+		})
+		snapshotHookSchemas({ body: singleton }, models)
+		expect(reads).toBe(0)
+	})
+
+	it('owns models a mapper edits in place', async () => {
+		// a mapper returning the same table still names and clones each
+		// entry, else a moved model keeps its old `$id` and a raw schema
+		// stays the caller's object, open to later writes
+		const moved = new Elysia().model(
+			'Original',
+			t.Object({ v: t.String() })
+		)
+		moved.model((models: any) => {
+			models.Renamed = models.Original
+			delete models.Original
+
+			return models
+		})
+
+		const raw = t.Object({ v: t.String() })
+		const replaced = new Elysia().model('M', t.Number())
+		replaced.model((models: any) => {
+			models.M = raw
+
+			return models
+		})
+		replaced.post('/', { body: 'M' }, () => 'ok')
+
+		expect((moved.models as any).Renamed.$id).toBe('Renamed')
+		expect(replaced.models.M).not.toBe(raw)
+		expect((replaced.models as any).M.$id).toBe('M')
+		;(raw.properties.v as any) = t.Number()
+
+		const response = await replaced.handle('/', json({ v: 'ok' }))
+		expect(response.status).toBe(200)
+	})
+
+	it("keeps a nested foreign model's $id out of a route", async () => {
+		// two apps' `Same` nested in one route would form a `$ref` registry
+		// the route's app never declared: `t.Ref('Same')` picks either
+		const one = new Elysia().model('Same', t.Object({ v: t.String() }))
+		const two = new Elysia().model('Same', t.Object({ v: t.Number() }))
+		const app = new Elysia().post(
+			'/',
+			{
+				body: t.Object({
+					one: one.models.Same,
+					two: two.models.Same
+				})
+			},
+			() => 'ok'
+		)
+
+		const body = (app.routes[0] as any).hooks.body
+		expect(body.properties.one.$id).toBeUndefined()
+		expect(body.properties.two.$id).toBeUndefined()
+
+		const valid = await app.handle(
+			'/',
+			json({ one: { v: 'a' }, two: { v: 1 } })
+		)
+		const invalid = await app.handle(
+			'/',
+			json({ one: { v: 1 }, two: { v: 'a' } })
+		)
+		expect(valid.status).toBe(200)
+		expect(invalid.status).toBe(422)
+	})
+
+	it('keeps a user $id on a nested model clone', () => {
+		const owner = new Elysia().model(
+			'A',
+			t.Object({ v: t.String() }, { $id: 'Own' })
+		)
+		const app = new Elysia().post(
+			'/',
+			{ body: t.Object({ a: owner.models.A }) },
+			() => ''
+		)
+
+		expect((app.routes[0] as any).hooks.body.properties.a.$id).toBe('Own')
+	})
+
+	it('keeps a user $id under every name', () => {
+		const source = t.Object({ v: t.String() }, { $id: 'Own' })
 		const app = new Elysia().model({ a: source, b: source })
 
-		expect((app.models as any).a).toBe((app.models as any).b)
-		expect((app.models as any).a.$id).toBe('a')
-		expect((app.models as any).b.$id).toBe('a')
+		expect((app.models as any).a.$id).toBe('Own')
+		expect((app.models as any).b.$id).toBe('Own')
+	})
+
+	// `.model()` registers the schema as it is at that call: an edit to the
+	// source afterwards must not move validation for any use of the model
+	it('validates every use of a model against the source as registered', async () => {
+		const source: any = t.Object({ n: t.Number() })
+		const app = new Elysia().model({ s: source })
+		const model = (app.models as any).s
+
+		source.properties.n = t.String()
+
+		app.post('/name', { body: 's' }, ({ body }) => body).post(
+			'/nested',
+			{ body: t.Object({ x: model }) },
+			({ body }) => body
+		)
+		const other = new Elysia().post(
+			'/other',
+			{ body: model },
+			({ body }) => body
+		)
+		const again = new Elysia()
+			.model({ again: model })
+			.post('/again', { body: 'again' }, ({ body }) => body)
+
+		const send = (
+			target: { handle(request: Request): Promise<Response> },
+			path: string,
+			body: unknown
+		) =>
+			target
+				.handle(
+					new Request('http://localhost' + path, {
+						method: 'POST',
+						headers: { 'content-type': 'application/json' },
+						body: JSON.stringify(body)
+					})
+				)
+				.then((response) => response.status)
+
+		for (const [target, path, wrap] of [
+			[app, '/name', (v: unknown) => v],
+			[app, '/nested', (v: unknown) => ({ x: v })],
+			[other, '/other', (v: unknown) => v],
+			[again, '/again', (v: unknown) => v]
+		] as const) {
+			expect([path, await send(target, path, wrap({ n: 1 }))]).toEqual([
+				path,
+				200
+			])
+			expect([path, await send(target, path, wrap({ n: 'a' }))]).toEqual([
+				path,
+				422
+			])
+		}
 	})
 
 	it('does not corrupt a schema whose property key is __proto__', () => {

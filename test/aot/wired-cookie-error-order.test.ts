@@ -10,15 +10,18 @@ afterAll(() => rmSync(dir, { recursive: true, force: true }))
 // validator -> ... -> cookie/*`. The consumer entry (`elysia` -> dist/index)
 // enters `error` first, so any `extends ElysiaError` living in a cookie module
 // is evaluated before `ElysiaError` exists and the bundle throws at startup
-describe('wired AOT bundle with the cookie jar kept', () => {
+describe('wired AOT bundle', () => {
+	// the response schema alone can't set a cookie, so the jar is stubbed;
+	// the cookie route keeps the real `cookie/*` modules this order bug needs
 	it.each([
 		[
 			'union-literal response',
 			'wired-union-literal-response-app.ts',
-			'{"status":"ok"}'
+			'{"status":"ok"}',
+			false
 		],
-		['cookie route + union body', 'wired-cookie-app.ts', 'none']
-	])('%s evaluates and serves', async (_, fixture, body) => {
+		['cookie route + union body', 'wired-cookie-app.ts', 'none', true]
+	])('%s evaluates and serves', async (_, fixture, body, jar) => {
 		const app = resolve(import.meta.dir, 'fixtures', fixture)
 		// dist plugin + `elysia` imports: the consumer graph, not src
 		const { aot } = await import('elysia/plugin/aot/bun')
@@ -31,9 +34,9 @@ describe('wired AOT bundle with the cookie jar kept', () => {
 		if (!result.success) throw new AggregateError(result.logs)
 
 		const text = await result.outputs[0]!.text()
-		// preconditions: wired bridge and real (unstubbed) cookie modules
+		// preconditions: wired bridge, real cookie modules only with a jar
 		expect(text).toContain('unionPrioritySort')
-		expect(text).toContain('invalid-cookie')
+		expect(text.includes('invalid-cookie')).toBe(jar)
 
 		// own directory: Bun caches a directory listing once it imported from it
 		const out = join(mkdtempSync(join(dir, 'case-')), 'app.mjs')
