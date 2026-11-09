@@ -88,6 +88,18 @@ const cases: [
 	['wildcard', '/j/a/b', (app) => app.get('/j/*', ({ params }) => params)]
 ]
 
+// The two routers may enumerate params in a different order, which is not a
+// difference worth failing on: compare JSON bodies parsed, other bodies as text
+const outcome = async (response: Response) => {
+	const text = await response.text()
+
+	try {
+		return { status: response.status, body: JSON.parse(text) }
+	} catch {
+		return { status: response.status, body: text }
+	}
+}
+
 describe('Bun router params parity', () => {
 	it.each(cases)('%s', async (_, path, register) => {
 		const app = register(new Elysia({ systemRouter: true })).listen(0)
@@ -98,10 +110,7 @@ describe('Bun router params parity', () => {
 				`http://localhost:${app.server!.port}${path}`
 			)
 
-			expect({
-				status: served.status,
-				body: await served.text()
-			}).toEqual({ status: handled.status, body: await handled.text() })
+			expect(await outcome(served)).toEqual(await outcome(handled))
 		} finally {
 			await app.stop()
 		}
