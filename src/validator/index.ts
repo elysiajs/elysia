@@ -326,7 +326,8 @@ export class StandardValidator extends Validator {
 	}
 
 	Check(value: unknown): boolean {
-		return 'value' in this.#sync(value)
+		const result = this.#sync(value)
+		return !('issues' in result && result.issues)
 	}
 
 	Errors(value: unknown): TLocalizedValidationError[] {
