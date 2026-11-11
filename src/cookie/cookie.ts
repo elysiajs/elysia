@@ -1,0 +1,210 @@
+import type { BaseCookie } from './types'
+import { resolvePendingCookie } from './crypto'
+import { EmptyObject } from '../utils'
+
+const FORWARDED_KEYS = [
+	'expires',
+	'maxAge',
+	'domain',
+	'path',
+	'secure',
+	'httpOnly',
+	'sameSite',
+	'priority',
+	'partitioned'
+] as const
+
+type FORWARDED_KEYS = typeof FORWARDED_KEYS
+
+type Updater<T> = T | ((value: T) => T)
+
+// signing comes only from the app or route cookie config
+type CookieMutation = Omit<BaseCookie, 'secrets'> & { secrets?: never }
+
+function clearRaw(cookie: any) {
+	if (cookie['~raw'] !== undefined) cookie['~raw'] = undefined
+}
+
+const rejectSecrets = <T>(name: string, config: T): T => {
+	if (config && typeof config === 'object' && 'secrets' in config)
+		throw new Error(
+			`[Elysia] cookie "${name}" can't take \`secrets\`: set signing on the app or route cookie config`
+		)
+
+	return config
+}
+
+export interface Cookie extends Pick<BaseCookie, FORWARDED_KEYS[number]> {}
+
+export class Cookie<T = any> implements BaseCookie {
+	#name: string
+	#setRef: { cookie?: Record<string, BaseCookie> }
+	#initial: Partial<BaseCookie>
+	#encode?: (value: unknown) => unknown
+	#encodedJar?: object
+
+	constructor(
+		name: string,
+		setRef: { cookie?: Record<string, BaseCookie> },
+		initial: Partial<BaseCookie> = Object.create(null),
+		// the field schema's codec encode, run when the cookie is sent
+		encode?: (value: unknown) => unknown
+	) {
+		this.#name = name
+		this.#setRef = setRef
+		this.#encode = encode
+		this.#initial = initial
+	}
+
+	static isCookie(v: unknown): v is Cookie {
+		return typeof v === 'object' && v !== null && #name in v
+	}
+
+	get #jar(): Record<string, BaseCookie> {
+		const jar = (this.#setRef.cookie ??= new EmptyObject())
+
+		if (this.#encode && this.#encodedJar !== jar) {
+			this.#encodedJar = jar
+
+			let encoders = (jar as any)['~encode']
+			if (!encoders)
+				Object.defineProperty(jar, '~encode', {
+					value: (encoders = new EmptyObject())
+				})
+
+			encoders[this.#name] = this.#encode
+		}
+
+		return jar
+	}
+
+	get cookie(): BaseCookie {
+		const c = this.#setRef.cookie?.[this.#name] ?? this.#initial
+		if (c && (c as any)['~unsign'] !== undefined)
+			resolvePendingCookie(c as Record<string, any>, this.#name)
+
+		return c
+	}
+
+	set cookie(jar: CookieMutation) {
+		this.#jar[this.#name] = rejectSecrets(this.#name, jar)
+	}
+
+	protected get setCookie() {
+		const j = this.#jar
+		if (!(this.#name in j)) j[this.#name] = this.#initial
+
+		const entry = j[this.#name]
+		if (entry && (entry as any)['~unsign'] !== undefined)
+			resolvePendingCookie(entry as Record<string, any>, this.#name)
+
+		return entry
+	}
+
+	get value(): T {
+		const cookie = this.cookie
+		const value = cookie.value as T
+
+		if (
+			value !== null &&
+			typeof value === 'object' &&
+			(cookie as any)['~raw'] !== undefined
+		) {
+			const j = this.#jar
+			if (!(this.#name in j)) j[this.#name] = cookie
+		}
+
+		return value
+	}
+
+	set value(value: T) {
+		if (
+			this.cookie.value === value &&
+			(!value || typeof value !== 'object')
+		)
+			return
+
+		const j = this.#jar
+		if (!(this.#name in j))
+			j[this.#name] = Object.assign(new EmptyObject(), this.#initial)
+
+		j[this.#name].value = value
+	}
+
+	update(config: Updater<CookieMutation>) {
+		// the updater gets a copy: a throw must leave the live cookie untouched
+		const next = rejectSecrets(
+			this.#name,
+			typeof config === 'function'
+				? config(Object.assign(new EmptyObject(), this.cookie))
+				: config
+		)
+		const cookie = Object.assign(this.cookie, next)
+
+		clearRaw(cookie)
+
+		this.cookie = cookie
+
+		return this
+	}
+
+	set(config: Updater<CookieMutation>) {
+		const next = rejectSecrets(
+			this.#name,
+			typeof config === 'function'
+				? config(Object.assign(new EmptyObject(), this.cookie))
+				: config
+		)
+		const cookie = Object.assign(
+			new EmptyObject(),
+			this.#initial,
+			{ value: this.value },
+			next
+		)
+
+		clearRaw(cookie)
+
+		this.cookie = cookie
+
+		return this
+	}
+
+	remove() {
+		if (this.value === undefined) return
+
+		this.set({
+			expires: new Date(0),
+			maxAge: 0,
+			value: ''
+		})
+		// its '' is no decoded value to encode
+		Object.defineProperty(this.cookie, '~remove', { value: 1 })
+
+		return this
+	}
+
+	toJSON() {
+		return this.value
+	}
+
+	toString() {
+		return typeof this.value === 'object'
+			? JSON.stringify(this.value)
+			: (this.value?.toString() ?? '')
+	}
+}
+
+Object.defineProperty(Cookie, 'name', { value: 'Cookie' })
+
+for (const key of FORWARDED_KEYS)
+	Object.defineProperty(Cookie.prototype, key, {
+		get(this: Cookie<unknown>) {
+			return this.cookie[key]
+		},
+		set(this: Cookie<unknown>, v) {
+			const cookie = this.setCookie
+			cookie[key] = v
+
+			clearRaw(cookie)
+		}
+	})

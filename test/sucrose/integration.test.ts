@@ -12,8 +12,8 @@ describe('Integration', () => {
 				]
 			})
 
-			const status = await res.exited;
-			expect(status).toEqual(0);
+			const status = await res.exited
+			expect(status).toEqual(0)
 		},
 		{
 			timeout: 500

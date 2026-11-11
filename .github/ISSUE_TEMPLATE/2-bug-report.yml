@@ -25,8 +25,8 @@ body:
 
     - type: input
       attributes:
-        label: What environment are you using
-        description: |
+          label: What environment are you using
+          description: |
               Answer with runtime and version you are using.
               - Bun version: `bun --version`
               - Node version: `node --version`
@@ -35,8 +35,8 @@ body:
 
     - type: input
       attributes:
-        label: Are you using dynamic mode?
-        description: Is your code using `new Elysia({ aot:false })`
+          label: Are you using dynamic mode?
+          description: Is your code using `new Elysia({ aot:false })`
 
     - type: textarea
       attributes:
@@ -64,5 +64,5 @@ body:
 
     - type: input
       attributes:
-        label: Have you try removing the `node_modules` and `bun.lock` and try again yet?
-        description: rm -rf node_modules && bun.lock
+          label: Have you try removing the `node_modules` and `bun.lock` and try again yet?
+          description: rm -rf node_modules && bun.lock

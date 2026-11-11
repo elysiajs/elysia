@@ -1,0 +1,92 @@
+import { Elysia, t } from '../../src'
+import { runCases } from './harness'
+
+const app = new Elysia()
+	.get('/', () => 'ok')
+	.get('/user/:id', ({ params: { id } }) => id)
+	.post(
+		'/json',
+		{
+			body: t.Object({ name: t.String(), age: t.Number() })
+		},
+		({ body }) => body
+	)
+	.post(
+		'/json-default',
+		{
+			body: t.Object({
+				name: t.String({ default: 'saltyaom' }),
+				tags: t.Array(t.String(), { default: ['elysia'] })
+			})
+		},
+		({ body }) => body
+	)
+	.get(
+		'/search',
+		{
+			query: t.Object({ page: t.Number(), limit: t.Number() })
+		},
+		({ query }) => query
+	)
+	.get(
+		'/me',
+		{
+			cookie: t.Object({ session: t.Optional(t.String()) })
+		},
+		({ cookie: { session } }) => session.value
+	)
+
+const handle = app.handle
+
+const body = JSON.stringify({ name: 'saltyaom', age: 21 })
+// A POST body is a single-use stream, so unlike the GETs we can't reuse one
+// Request — but `clone()` is ~5× cheaper than `new Request` (153ns vs 751ns) and
+// leaves the prebuilt original unconsumed, so each op gets a fresh body while the
+// measured cost is framework dispatch (route + parse + validate + handler +
+// encode), not Request construction. Before this, `new Request` was ~43% of the
+// reported POST op, inflating it vs the (reuse-based) GET numbers.
+const postBase = new Request('http://e.ly/json', {
+	method: 'POST',
+	headers: { 'content-type': 'application/json' },
+	body
+})
+const post = () => postBase.clone()
+const postDefaultBase = new Request('http://e.ly/json-default', {
+	method: 'POST',
+	headers: { 'content-type': 'application/json' },
+	body: '{}'
+})
+const postDefault = () => postDefaultBase.clone()
+
+// Reuse prebuilt no-body Requests so the measured op is framework dispatch,
+// not `new Request` construction (~155ns, which dominated the cheap GET path).
+const getRoot = new Request('http://e.ly/')
+const getUser = new Request('http://e.ly/user/42')
+const getSearch = new Request('http://e.ly/search?page=2&limit=20')
+const getMe = new Request('http://e.ly/me', {
+	headers: { cookie: 'session=abc' }
+})
+
+// Mixed traffic: rotate across all 6 routes per op so the radix lookup +
+// compiled handlers can't stay perfectly monomorphic — closer to a server
+// fielding varied paths (additive, not a replacement for the isolated ones).
+const gets = [getRoot, getUser, getSearch, getMe]
+let i = 0
+const rotate = () => {
+	const n = i++ % 6
+	return n === 4
+		? handle(post())
+		: n === 5
+			? handle(postDefault())
+			: handle(gets[n])
+}
+
+await runCases(import.meta.path, {
+	'GET / (plain)': () => handle(getRoot),
+	'GET /user/:id (dynamic)': () => handle(getUser),
+	'POST /json (body validate)': () => handle(post()),
+	'POST /json-default (body + defaults)': () => handle(postDefault()),
+	'GET /search (query coerce)': () => handle(getSearch),
+	'GET /me (cookie)': () => handle(getMe),
+	'rotate all 6 routes': rotate
+})

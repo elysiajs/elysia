@@ -19,14 +19,13 @@ new Elysia()
 				...models,
 				pepper: t.String()
 			}))
-			// Add prefix
-			.prefix('decorator', 'unstable')
 	)
-	.get(
-		'/mapped',
-		({ unstableRenamedProperty }) => unstableRenamedProperty
+	.get('/mapped', ({ renamedProperty }) => renamedProperty)
+	.post(
+		'/pepper',
+		{
+			body: 'pepper'
+			// response: t.String()
+		},
+		({ body }) => body
 	)
-	.post('/pepper', ({ body }) => body, {
-		body: 'pepper',
-		// response: t.String()
-	})

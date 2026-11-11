@@ -1,10 +1,22 @@
-import { describe, it, expect } from 'bun:test'
+import { afterAll, beforeAll, describe, it, expect } from 'bun:test'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
-import { Elysia, form, redirect } from '../../../src'
+import {
+	Elysia,
+	ElysiaFile,
+	ElysiaStatus,
+	file,
+	form,
+	redirect,
+	status,
+	t
+} from '../../../src'
+import { WebStandardAdapter } from '../../../src/adapter/web-standard'
 
 import { mapResponse } from '../../../src/adapter/web-standard/handler'
 import { Passthrough } from './utils'
-import { req } from '../../utils'
 
 const createContext = () => ({
 	cookie: {},
@@ -24,12 +36,154 @@ class Student {
 
 class CustomResponse extends Response {}
 
+describe('supported subclass response metadata', () => {
+	class OtherArray extends Array<unknown> {}
+	class OtherFile extends ElysiaFile {}
+	const content = 'file fallback probe\n'
+	let directory: string
+	let fixture: string
+
+	beforeAll(() => {
+		directory = mkdtempSync(join(tmpdir(), 'elysia-response-metadata-'))
+		fixture = join(directory, 'payload.txt')
+		writeFileSync(fixture, content)
+	})
+
+	afterAll(() => rmSync(directory, { recursive: true }))
+
+	const cases = (['array', 'file'] as const).flatMap((value) =>
+		(['ordinary', 'subclass'] as const).flatMap((kind) =>
+			[
+				'no-set',
+				'status-header',
+				'cookie',
+				'default-header',
+				'default-and-set',
+				'static-default',
+				...(value === 'file' ? ['not-modified'] : [])
+			].map((mode) => ({ value, kind, mode }))
+		)
+	)
+
+	it.each(cases)(
+		'$value $kind $mode preserves cold and warm metadata',
+		async ({ value, kind, mode }) => {
+			const makeValue = () =>
+				value === 'file'
+					? kind === 'ordinary'
+						? new ElysiaFile(fixture)
+						: new OtherFile(fixture)
+					: kind === 'ordinary'
+						? ['hello', { id: 7 }]
+						: new OtherArray('hello', { id: 7 })
+			const defaults =
+				mode === 'default-header' ||
+				mode === 'default-and-set' ||
+				mode === 'static-default'
+			const fullSet =
+				mode === 'status-header' || mode === 'default-and-set'
+			const notModified = mode === 'not-modified'
+			const app = new Elysia()
+			if (defaults) app.headers({ 'x-default': 'base' })
+			if (mode === 'static-default') app.get('/', makeValue())
+			else if (fullSet || notModified)
+				app.get('/', ({ set }) => {
+					set.status = notModified ? 304 : 202
+					set.headers['x-probe'] = 'fallback-probe'
+					return makeValue()
+				})
+			else if (mode === 'cookie')
+				app.get('/', ({ cookie }) => {
+					cookie.session.set({
+						value: 'fallback-probe',
+						path: '/',
+						httpOnly: true
+					})
+					return makeValue()
+				})
+			else app.get('/', () => makeValue())
+
+			const headers: Record<string, string> = {
+				'content-type':
+					value === 'file'
+						? 'text/plain'
+						: 'application/json;charset=utf-8'
+			}
+			if (value === 'file' && !notModified) {
+				headers['accept-ranges'] = 'bytes'
+				headers['content-range'] =
+					`bytes 0-${content.length - 1}/${content.length}`
+			}
+			if (defaults) headers['x-default'] = 'base'
+			if (fullSet || notModified) headers['x-probe'] = 'fallback-probe'
+			if (mode === 'cookie')
+				headers['set-cookie'] =
+					'session=fallback-probe; Path=/; HttpOnly'
+			const expected = {
+				status: notModified ? 304 : fullSet ? 202 : 200,
+				headers: [...new Headers(headers).entries()],
+				body: value === 'file' ? content : '["hello",{"id":7}]'
+			}
+			const responses = []
+			// Consume both dispatches before asserting so an old-source cold failure
+			// cannot hide a different warm-path result.
+			for (const phase of ['cold', 'warm']) {
+				const response = await app.handle(
+					new Request('http://localhost/')
+				)
+				responses.push({
+					phase,
+					status: response.status,
+					headers: [...response.headers.entries()],
+					body: await response.text()
+				})
+			}
+			expect(responses).toEqual(
+				['cold', 'warm'].map((phase) => ({ phase, ...expected }))
+			)
+		}
+	)
+
+	// A static value on a route that exposes it to afterHandle/mapResponse is
+	// isolated per request with structuredClone. That drops the class, so a
+	// file (or a subclass) was served as JSON `{"path": …}`, leaking the
+	// server path. A response schema keeps the value unprepared on every
+	// runtime; non-Bun runtimes never prepare a file (see the Node smoke test)
+	it.each(
+		(['ordinary', 'subclass'] as const).flatMap((kind) =>
+			(['onAfterHandle', 'mapResponse'] as const).map((hook) => ({
+				kind,
+				hook
+			}))
+		)
+	)(
+		'serves a static $kind file with $hook as the file',
+		async ({ kind, hook }) => {
+			const value =
+				kind === 'ordinary'
+					? new ElysiaFile(fixture)
+					: new OtherFile(fixture)
+			const app = new Elysia({ adapter: WebStandardAdapter })
+				[hook]('global', () => {})
+				.get('/', { response: t.Any() }, value)
+
+			for (let i = 0; i < 2; i++) {
+				const response = await app.handle(
+					new Request('http://localhost/')
+				)
+				expect(response.headers.get('content-type')).toBe('text/plain')
+				await expect(response.text()).resolves.toBe(content)
+			}
+		}
+	)
+})
+
 describe('Web Standard - Map Response', () => {
 	it('map string', async () => {
 		const response = mapResponse('Shiroko', createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toBe('Shiroko')
+		await expect(response.text()).resolves.toBe('Shiroko')
 		expect(response.status).toBe(200)
 	})
 
@@ -37,16 +191,18 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(1, createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toBe('1')
+		await expect(response.text()).resolves.toBe('1')
 		expect(response.status).toBe(200)
 	})
 
 	it('map boolean', async () => {
-		const response = mapResponse(true, createContext())
+		for (const value of [true, false]) {
+			const response = mapResponse(value, createContext())
 
-		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toBe('true')
-		expect(response.status).toBe(200)
+			expect(response).toBeInstanceOf(Response)
+			await expect(response.text()).resolves.toBe(String(value))
+			expect(response.status).toBe(200)
+		}
 	})
 
 	it('map object', async () => {
@@ -57,7 +213,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(body, createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual(body)
+		await expect(response.json()).resolves.toEqual(body)
 		expect(response.status).toBe(200)
 	})
 
@@ -65,7 +221,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(() => 1, createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toBe('1')
+		await expect(response.text()).resolves.toBe('1')
 		expect(response.status).toBe(200)
 	})
 
@@ -73,7 +229,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(undefined, createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('')
+		await expect(response.text()).resolves.toEqual('')
 		expect(response.status).toBe(200)
 	})
 
@@ -81,8 +237,21 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(null, createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('')
+		await expect(response.text()).resolves.toEqual('')
 		expect(response.status).toBe(200)
+	})
+
+	it('map undefined to an empty body for 204, 205, and 304', async () => {
+		for (const status of [204, 205, 304] as const) {
+			const response = mapResponse(undefined, {
+				...createContext(),
+				status
+			})
+
+			expect(response).toBeInstanceOf(Response)
+			expect(response.status).toBe(status)
+			await expect(response.text()).resolves.toEqual('')
+		}
 	})
 
 	it('map Blob', async () => {
@@ -91,7 +260,9 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(file, createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.arrayBuffer()).toEqual(await file.arrayBuffer())
+		await expect(response.arrayBuffer()).resolves.toEqual(
+			await file.arrayBuffer()
+		)
 		expect(response.status).toBe(200)
 	})
 
@@ -101,7 +272,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(file, createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('Hello')
+		await expect(response.text()).resolves.toEqual('Hello')
 		expect(response.status).toBe(200)
 	})
 
@@ -116,18 +287,23 @@ describe('Web Standard - Map Response', () => {
 		)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual(body)
+		await expect(response.json()).resolves.toEqual(body)
 		expect(response.status).toBe(200)
 	})
 
-	it('map Error', async () => {
+	it('maps Error to RFC 9457 problem details', async () => {
 		const response = mapResponse(new Error('Hello'), createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual({
-			name: 'Error',
-			message: 'Hello'
+		await expect(response.json()).resolves.toMatchObject({
+			type: 'internal-server-error',
+			title: 'Internal Server Error',
+			status: 500,
+			detail: 'Hello'
 		})
+		expect(response.headers.get('content-type')).toBe(
+			'application/problem+json'
+		)
 		expect(response.status).toBe(500)
 	})
 
@@ -135,7 +311,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(new Response('Shiroko'), createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('Shiroko')
+		await expect(response.text()).resolves.toEqual('Shiroko')
 		expect(response.status).toBe(200)
 	})
 
@@ -146,7 +322,7 @@ describe('Web Standard - Map Response', () => {
 		)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('Shiroko')
+		await expect(response.text()).resolves.toEqual('Shiroko')
 		expect(response.status).toBe(200)
 	})
 
@@ -159,7 +335,7 @@ describe('Web Standard - Map Response', () => {
 		})
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('Shiroko')
+		await expect(response.text()).resolves.toEqual('Shiroko')
 		expect(response.status).toBe(200)
 		expect(response.headers.get('content-type')).toBe(
 			'text/html; charset=utf8'
@@ -170,7 +346,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(new Student('Himari'), createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual({
+		await expect(response.json()).resolves.toEqual({
 			name: 'Himari'
 		})
 		expect(response.status).toBe(200)
@@ -181,7 +357,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse('Shiroko', context)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toBe('Shiroko')
+		await expect(response.text()).resolves.toBe('Shiroko')
 		expect(response.headers.toJSON()).toEqual(context.headers)
 		expect(response.status).toBe(200)
 	})
@@ -191,7 +367,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(undefined, context)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('')
+		await expect(response.text()).resolves.toEqual('')
 		expect(response.headers.toJSON()).toEqual(context.headers)
 		expect(response.status).toBe(200)
 	})
@@ -201,7 +377,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(null, context)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('')
+		await expect(response.text()).resolves.toEqual('')
 		expect(response.headers.toJSON()).toEqual(context.headers)
 		expect(response.status).toBe(200)
 	})
@@ -211,7 +387,7 @@ describe('Web Standard - Map Response', () => {
 		const response = await mapResponse(() => 1, context)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('1')
+		await expect(response.text()).resolves.toEqual('1')
 		expect(response.headers.toJSON()).toEqual({
 			...context.headers
 		})
@@ -231,10 +407,10 @@ describe('Web Standard - Map Response', () => {
 		)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual(body)
+		await expect(response.json()).resolves.toEqual(body)
 		expect(response.headers.toJSON()).toEqual({
 			...context.headers,
-			'content-type': 'application/json'
+			'content-type': 'application/json;charset=utf-8'
 		})
 		expect(response.status).toBe(200)
 	})
@@ -245,11 +421,16 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(new Error('Hello'), context)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual({
-			name: 'Error',
-			message: 'Hello'
+		await expect(response.json()).resolves.toMatchObject({
+			type: 'internal-server-error',
+			title: 'Internal Server Error',
+			status: 500,
+			detail: 'Hello'
 		})
-		expect(response.headers.toJSON()).toEqual(context.headers)
+		expect(response.headers.toJSON()).toEqual({
+			...context.headers,
+			'content-type': 'application/problem+json'
+		})
 		expect(response.status).toBe(500)
 	})
 
@@ -260,7 +441,7 @@ describe('Web Standard - Map Response', () => {
 		const headers = response.headers.toJSON()
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('Shiroko')
+		await expect(response.text()).resolves.toEqual('Shiroko')
 		expect(response.headers.toJSON()).toEqual(headers)
 	})
 
@@ -278,7 +459,7 @@ describe('Web Standard - Map Response', () => {
 		const headers = response.headers.toJSON()
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('Shiroko')
+		await expect(response.text()).resolves.toEqual('Shiroko')
 		// @ts-ignore
 		expect(response.headers.toJSON()).toEqual({
 			...headers,
@@ -294,7 +475,7 @@ describe('Web Standard - Map Response', () => {
 		})
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toBe('Shiroko')
+		await expect(response.text()).resolves.toBe('Shiroko')
 		expect(response.status).toBe(418)
 	})
 
@@ -304,17 +485,15 @@ describe('Web Standard - Map Response', () => {
 			headers: {
 				Name: 'Sorasaki Hina'
 			},
-			redirect: 'https://cunny.school',
 			cookie: {}
 		})
 
 		expect(response).toBeInstanceOf(Response)
 		expect(response.status).toBe(302)
-		// expect(await response.text()).toEqual('Shiroko')
+		// await expect(response.text()).resolves.toEqual('Shiroko')
 		expect(response.headers.toJSON()).toEqual({
 			name: 'Sorasaki Hina',
-			// Response.redirect serializes the parsed URL, so a bare authority gains a '/' path
-			location: 'https://cunny.school/'
+			location: 'https://cunny.school'
 		})
 	})
 
@@ -331,7 +510,7 @@ describe('Web Standard - Map Response', () => {
 			}
 		})
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('Hina')
+		await expect(response.text()).resolves.toEqual('Hina')
 		expect(response.headers.get('name')).toEqual('Sorasaki Hina')
 		expect(response.headers.getAll('set-cookie')).toEqual(['name=hina'])
 	})
@@ -352,7 +531,7 @@ describe('Web Standard - Map Response', () => {
 			}
 		})
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('Hina')
+		await expect(response.text()).resolves.toEqual('Hina')
 		expect(response.headers.get('name')).toEqual('Sorasaki Hina')
 		expect(response.headers.getAll('set-cookie')).toEqual([
 			'name=hina',
@@ -364,7 +543,7 @@ describe('Web Standard - Map Response', () => {
 		const response = mapResponse(new Passthrough(), createContext())
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.text()).toEqual('hi')
+		await expect(response.text()).resolves.toEqual('hi')
 		expect(response.status).toBe(200)
 	})
 
@@ -403,11 +582,12 @@ describe('Web Standard - Map Response', () => {
 			createContext()
 		)
 
-		expect(await response.formData()).toBeInstanceOf(FormData)
-		// ? Auto appended by Bun
-		// expect(response.headers.get('content-type')).toStartWith(
-		// 	'multipart/form-data'
-		// )
+		// ? Auto appended by Bun. Read before formData() consumes the
+		// body, which drops the lazily-materialised header.
+		expect(response.headers.get('content-type')).toStartWith(
+			'multipart/form-data'
+		)
+		await expect(response.formData()).resolves.toBeInstanceOf(FormData)
 		expect(response.status).toBe(200)
 	})
 
@@ -416,13 +596,17 @@ describe('Web Standard - Map Response', () => {
 			.mapResponse(() => {
 				return new Response('b')
 			})
-			.get('/', () => 'a', {
-				beforeHandle() {
-					return 'a'
-				}
-			})
+			.get(
+				'/',
+				{
+					beforeHandle() {
+						return 'a'
+					}
+				},
+				() => 'a'
+			)
 
-		const response = await app.handle(req('/')).then((x) => x.text())
+		const response = await app.handle('/').then((x) => x.text())
 
 		expect(response).toBe('b')
 	})
@@ -432,13 +616,17 @@ describe('Web Standard - Map Response', () => {
 			.mapResponse(() => {
 				return new Response('b')
 			})
-			.get('/', () => 'a', {
-				beforeHandle() {
-					return 'a'
-				}
-			})
+			.get(
+				'/',
+				{
+					beforeHandle() {
+						return 'a'
+					}
+				},
+				() => 'a'
+			)
 
-		const response = await app.handle(req('/')).then((x) => x.text())
+		const response = await app.handle('/').then((x) => x.text())
 
 		expect(response).toBe('b')
 	})
@@ -452,10 +640,222 @@ describe('Web Standard - Map Response', () => {
 			})
 			.get('/', () => 'a')
 
-		const response = await app.handle(req('/'))
+		const response = await app.handle('/')
 
 		expect(response.headers.get('content-type')).toBe(
 			'text/html; charset=utf8'
 		)
+	})
+})
+
+describe('Web Standard - Map Response with untouched set', () => {
+	const untouched = () => ({ headers: {} }) as any
+
+	it('map string on an untouched set', async () => {
+		const response = mapResponse('Shiroko', untouched())
+
+		expect(response).toBeInstanceOf(Response)
+		await expect(response.text()).resolves.toBe('Shiroko')
+		expect(response.status).toBe(200)
+	})
+
+	it('map object on an untouched set', async () => {
+		const response = mapResponse({ name: 'Shiroko' }, untouched())
+
+		expect(response).toBeInstanceOf(Response)
+		await expect(response.json()).resolves.toEqual({ name: 'Shiroko' })
+		expect(response.status).toBe(200)
+	})
+
+	it('write back set.status for ElysiaStatus on an untouched set', async () => {
+		const set = untouched()
+		const response = mapResponse(status(418, 'teapot'), set)
+
+		expect(response.status).toBe(418)
+		await expect(response.text()).resolves.toBe('teapot')
+		expect(set.status).toBe(418)
+	})
+
+	it('write back set.status for Promise<ElysiaStatus> on an untouched set', async () => {
+		const set = untouched()
+		const response = await mapResponse(
+			Promise.resolve(status(418, 'teapot')),
+			set
+		)
+
+		expect(response.status).toBe(418)
+		await expect(response.text()).resolves.toBe('teapot')
+		expect(set.status).toBe(418)
+	})
+
+	it('maps ElysiaFile without mutating set.headers', async () => {
+		const set = untouched()
+		const response = await mapResponse(file('test/kyuukurarin.mp4'), set)
+
+		expect(response.headers.get('content-type')).toBe('video/mp4')
+		expect(response.headers.get('content-range')).toStartWith('bytes 0-')
+		expect(Object.keys(set.headers)).toHaveLength(0)
+	})
+
+	it('writes stream headers back to an untouched set', async () => {
+		const set = untouched()
+		const response = await mapResponse(
+			(function* () {
+				yield 'a'
+				yield 'b'
+			})(),
+			set
+		)
+
+		expect(response.headers.get('transfer-encoding')).toBe('chunked')
+		await expect(response.text()).resolves.toBe('ab')
+		expect(set.headers['transfer-encoding']).toBe('chunked')
+	})
+
+	it('takes the slow path for a prototype-chained set.headers, own keys only', async () => {
+		// The slow path exists to strip a prototype off `set.headers`, so it
+		// must not publish what it strips. `Object.assign(set.headers, body)`
+		// in a handler reparents through the inherited `__proto__` setter, and
+		// promoting inherited keys would turn a request body into real headers
+		// — the platform itself reads own properties only
+		// (`new Response(x, { headers })`), so a chain walk is Elysia being
+		// more permissive than the runtime it wraps.
+		const set = {
+			headers: Object.assign(Object.create({ 'x-default': '1' }), {
+				'x-own': '2'
+			})
+		} as any
+		const response = mapResponse('Shiroko', set)
+
+		expect(response.headers.get('x-own')).toBe('2')
+		expect(response.headers.get('x-default')).toBeNull()
+		await expect(response.text()).resolves.toBe('Shiroko')
+	})
+
+	it('write back set.status from a sync handler returning Promise<status()>', async () => {
+		let observed: unknown
+
+		const app = new Elysia()
+			.onAfterResponse(({ set }) => {
+				observed = set.status
+			})
+			.get('/', () => Promise.resolve(status(418, 'teapot')))
+
+		const response = await app.handle('/')
+
+		expect(response.status).toBe(418)
+		await expect(response.text()).resolves.toBe('teapot')
+
+		await Bun.sleep(10)
+		expect(observed).toBe(418)
+	})
+})
+
+describe('Web Standard - ElysiaStatus headers once set.headers is a Headers', () => {
+	// Two or more set-cookie values turn set.headers into a Headers instance;
+	// a status's headers and the set's cookies must both survive that state
+	class Accepted extends ElysiaStatus<any, any> {}
+	let directory: string
+	let script: string
+
+	beforeAll(() => {
+		directory = mkdtempSync(join(tmpdir(), 'elysia-status-headers-'))
+		// .js: Elysia's mime table says application/javascript, Bun's Blob
+		// says text/javascript, so a dropped write is observable
+		script = join(directory, 'payload.js')
+		writeFileSync(script, 'export {}\n')
+	})
+
+	afterAll(() => rmSync(directory, { recursive: true }))
+
+	const app = new Elysia()
+		.get('/returned', ({ cookie: { a, b } }) => {
+			a.value = '1'
+			b.value = '2'
+
+			return new ElysiaStatus(201, 'made', { 'x-status': '1' })
+		})
+		.get(
+			'/thrown',
+			{
+				beforeHandle({ cookie: { a, b } }) {
+					a.value = '1'
+					b.value = '2'
+
+					throw new ElysiaStatus(201, 'made', { 'x-status': '1' })
+				}
+			},
+			() => 'unreachable'
+		)
+		// A subclass misses the `ElysiaStatus` tag and lands in mapFallback;
+		// raw set-cookie headers are not re-serialized from set.cookie later
+		.get('/subclass', ({ set }) => {
+			set.headers['set-cookie'] = ['a=1', 'b=2'] as any
+
+			return new Accepted(201, 'made', { 'x-status': '1' })
+		})
+		// Headers.set is case-insensitive: a mixed-case status header must still
+		// override the handler's lowercase one, not sit beside it as "set, status"
+		.get('/subclass-case', ({ set }) => {
+			set.headers['set-cookie'] = ['a=1', 'b=2'] as any
+			set.headers['x-test'] = 'set'
+
+			return new Accepted(201, 'made', { 'X-Test': 'status' })
+		})
+		// A status carrying its own Set-Cookie must add to, not replace, the
+		// cookies already on the response
+		.get('/subclass-cookie', ({ set }) => {
+			set.headers['set-cookie'] = ['a=1', 'b=2'] as any
+
+			return new Accepted(201, 'made', {
+				'Set-Cookie': 'status=3; Path=/'
+			})
+		})
+		.get('/file', ({ cookie: { a, b } }) => {
+			a.value = '1'
+			b.value = '2'
+
+			return file(script)
+		})
+
+	for (const [path, cookies] of [
+		['/returned', ['a=1; Path=/', 'b=2; Path=/']],
+		['/thrown', ['a=1; Path=/', 'b=2; Path=/']],
+		['/subclass', ['a=1', 'b=2']]
+	] as const)
+		it(`keep both cookies and status headers: ${path}`, async () => {
+			const response = await app.handle(path)
+
+			expect(response.status).toBe(201)
+			expect(response.headers.getSetCookie()).toEqual([...cookies])
+			expect(response.headers.get('x-status')).toBe('1')
+			await expect(response.text()).resolves.toBe('made')
+		})
+
+	it('let a mixed-case status header override the existing one', async () => {
+		const response = await app.handle('/subclass-case')
+
+		expect(response.headers.get('x-test')).toBe('status')
+	})
+
+	it('keep original cookies when the status carries Set-Cookie', async () => {
+		const response = await app.handle('/subclass-cookie')
+
+		expect(response.headers.getSetCookie()).toEqual(
+			expect.arrayContaining(['a=1', 'b=2', 'status=3; Path=/'])
+		)
+		expect(response.headers.getSetCookie()).toHaveLength(3)
+	})
+
+	it("keep an ElysiaFile's content-type alongside two cookies", async () => {
+		const response = await app.handle('/file')
+
+		expect(response.headers.get('content-type')).toBe(
+			'application/javascript'
+		)
+		expect(response.headers.getSetCookie()).toEqual([
+			'a=1; Path=/',
+			'b=2; Path=/'
+		])
 	})
 })

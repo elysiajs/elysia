@@ -1,0 +1,150 @@
+import { afterAll, beforeAll, describe, it, expect } from 'bun:test'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+import { Elysia, file } from '../../src'
+import { handleFile, responseToSetHeaders } from '../../src/adapter/utils'
+
+describe('file response range headers', () => {
+	it('applies accept-ranges/content-range defaults when absent', () => {
+		const body = new Blob(['12345'])
+		const res = handleFile(body, {
+			headers: new Headers({ 'x-custom': 'a' }),
+			status: 200,
+			cookie: undefined
+		} as any)
+
+		expect(res.headers.get('accept-ranges')).toBe('bytes')
+		expect(res.headers.get('content-range')).toBe('bytes 0-4/5')
+		expect(res.headers.get('x-custom')).toBe('a')
+	})
+
+	it('does not override a user-provided range header', () => {
+		const body = new Blob(['12345'])
+		const res = handleFile(body, {
+			headers: new Headers({ 'accept-ranges': 'none' }),
+			status: 200,
+			cookie: undefined
+		} as any)
+
+		expect(res.headers.get('accept-ranges')).toBe('none')
+	})
+
+	// An empty file has no byte range: send no content-range, never the literal "undefined"
+	it('omits content-range for an empty file with a plain set.headers', () => {
+		const res = handleFile(new Blob([]), {
+			status: 200,
+			headers: {}
+		} as any)
+
+		expect(res.headers.get('content-range')).toBeNull()
+		expect(res.headers.get('accept-ranges')).toBe('bytes')
+	})
+
+	it('omits content-range for an empty file with a Headers set.headers', () => {
+		const res = handleFile(new Blob([]), {
+			status: 200,
+			headers: new Headers({ 'x-custom': 'a' })
+		} as any)
+
+		expect(res.headers.get('content-range')).toBeNull()
+		expect(res.headers.get('x-custom')).toBe('a')
+	})
+
+	it('omits content-range for an empty Blob returned from a route', async () => {
+		const app = new Elysia()
+			.headers({ 'x-default': 'base' })
+			.get('/', () => new Blob([]))
+
+		const res = await app.handle('/')
+
+		expect(res.headers.get('content-range')).toBeNull()
+		expect(res.headers.get('x-default')).toBe('base')
+	})
+
+	describe('empty file on disk', () => {
+		let dir: string
+		let path: string
+
+		beforeAll(() => {
+			dir = mkdtempSync(join(tmpdir(), 'elysia-empty-file-'))
+			path = join(dir, 'empty.txt')
+			writeFileSync(path, '')
+		})
+
+		afterAll(() => {
+			rmSync(dir, { recursive: true, force: true })
+		})
+
+		const routes = () =>
+			new Elysia()
+				.get('/dynamic', () => file(path))
+				.get('/static', file(path))
+
+		it('omits content-range for file() through app.handle', async () => {
+			const app = routes()
+
+			for (const route of ['/dynamic', '/static']) {
+				const res = await app.handle(route)
+
+				expect(res.status).toBe(200)
+				expect(res.headers.get('content-range')).toBeNull()
+				expect(await res.text()).toBe('')
+			}
+		})
+
+		it('omits content-range for file() through the Bun server', async () => {
+			const app = routes().listen(0)
+
+			try {
+				for (const route of ['/dynamic', '/static']) {
+					const res = await fetch(
+						`http://localhost:${app.server!.port}${route}`
+					)
+
+					expect(res.status).toBe(200)
+					expect(res.headers.get('content-range')).toBeNull()
+					expect(await res.text()).toBe('')
+				}
+			} finally {
+				await app.stop()
+			}
+		})
+	})
+})
+
+describe('streaming response headers', () => {
+	it('removes content-encoding when set.headers is a Headers instance', () => {
+		const set = {
+			headers: new Headers({
+				'content-encoding': 'gzip',
+				'content-type': 'text/plain'
+			}),
+			status: 200
+		}
+
+		const out = responseToSetHeaders(new Response('hi'), set as any)
+
+		const read = (key: string) =>
+			out.headers instanceof Headers
+				? out.headers.get(key)
+				: (out.headers as Record<string, string>)[key]
+
+		expect(read('content-encoding') ?? null).toBeNull()
+		expect(read('content-type')).toBe('text/plain')
+	})
+
+	it('still removes content-encoding on a plain-object set.headers', () => {
+		const set = {
+			headers: { 'content-encoding': 'gzip' } as Record<string, string>,
+			status: 200
+		}
+
+		const out = responseToSetHeaders(new Response('hi'), set as any)
+
+		expect(
+			(out.headers as Record<string, string>)['content-encoding']
+		).toBeUndefined()
+	})
+})

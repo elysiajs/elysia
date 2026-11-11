@@ -1,34 +1,65 @@
-import { serializeCookie } from '../cookies'
-import { hasHeaderShorthand, isNotEmpty, StatusMap } from '../utils'
+import { EmptyObject, isByteStream, isNotEmpty, sseData } from '../utils'
+import { StatusMap } from '../constants'
+import { ElysiaStatus } from '../error'
 
+import { serializeCookie } from '../cookie/serialize'
+import { hasHeaderShorthand } from '../universal/constants'
+import type { ElysiaFile } from '../universal/file'
 import type { Context } from '../context'
-import { env } from '../universal'
-import { isBun } from '../universal/utils'
-import { MaybePromise } from '../types'
 
-export const handleFile = (
-	response: File | Blob,
+import { skipClone } from './skip-clone'
+import { isBorrowedResponse } from './response-ownership'
+import { defaultHeaders } from './default-headers'
+
+const setCookie = 'set-cookie' as const
+
+export const hget = (h: Headers | Record<string, unknown>, k: string) =>
+	h instanceof Headers ? h.get(k) : h[k]
+
+// write a header on either shape; `soft` keeps a present key on Headers
+// and a truthy value on a plain object
+export function hput(
+	h: Headers | Record<string, unknown>,
+	k: string,
+	v: unknown,
+	soft?: 1
+) {
+	if (h instanceof Headers) {
+		if (!soft || !h.has(k)) h.set(k, v as string)
+	} else if (!soft || !h[k]) h[k] = v
+}
+
+export function materializeSetHeaders(set: Context['set']) {
+	const headers = set.headers
+	if ((headers as any)[defaultHeaders] !== headers) return headers
+
+	return (set.headers = Object.assign(new EmptyObject(), headers))
+}
+
+const sseFormat = (data: string) => sseData(data) + '\n'
+const identityFormat = (data: string) => data
+
+const textEncoder = new TextEncoder()
+
+export function normalizeContentType(contentType: string) {
+	if (contentType === 'application/json') return contentType
+
+	const end = contentType.indexOf(';')
+	return (end === -1 ? contentType : contentType.slice(0, end))
+		.trim()
+		.toLowerCase()
+}
+
+export function handleFile(
+	response: File | Blob | ElysiaFile,
 	set?: Context['set'],
-	request?: Request
-): Response => {
-	if (!isBun && response instanceof Promise)
-		return response.then((res) => handleFile(res, set, request)) as any
-
-	const size = response.size
-
+	request?: Request,
+	size = (response as File | Blob).size
+): Response {
 	const rangeHeader = request?.headers.get('range')
 	if (rangeHeader) {
 		const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader)
 		if (match) {
-			if (!match[1] && !match[2])
-				return new Response(null, {
-					status: 416,
-					headers: mergeHeaders(
-						new Headers({ 'content-range': `bytes */${size}` }),
-						set?.headers ?? {}
-					)
-				})
-
 			let start: number
 			let end: number
 
@@ -43,15 +74,14 @@ export const handleFile = (
 					: size - 1
 			}
 
-			if (start >= size || start > end) {
+			if ((!match[1] && !match[2]) || start >= size || start > end)
 				return new Response(null, {
 					status: 416,
 					headers: mergeHeaders(
 						new Headers({ 'content-range': `bytes */${size}` }),
-						set?.headers ?? {}
+						set?.headers ?? new EmptyObject()
 					)
 				})
-			}
 
 			const contentLength = end - start + 1
 			const rangeHeaders = new Headers({
@@ -60,26 +90,20 @@ export const handleFile = (
 				'content-length': String(contentLength)
 			})
 
-			// Blob.slice() exists at runtime but is absent from the ESNext lib typings
-			// (no DOM lib). Cast through unknown to the minimal interface we need.
-			// Pass response.type as third arg so the sliced blob preserves MIME type.
 			return new Response(
-				(
-					response as unknown as {
-						slice(
-							start: number,
-							end: number,
-							contentType?: string
-						): Blob
-					}
-				).slice(start, end + 1, response.type),
+				(response as any).slice(start, end + 1, response.type),
 				{
 					status: 206,
-					headers: mergeHeaders(rangeHeaders, set?.headers ?? {})
+					headers: mergeHeaders(
+						rangeHeaders,
+						set?.headers ?? new EmptyObject()
+					)
 				}
 			)
 		}
 	}
+
+	const body = 'value' in response ? response.value : response
 
 	const immutable =
 		set &&
@@ -88,565 +112,976 @@ export const handleFile = (
 			set.status === 412 ||
 			set.status === 416)
 
-	const defaultHeader = immutable
-		? {}
-		: ({
-				'accept-ranges': 'bytes',
-				'content-range': size
-					? `bytes 0-${size - 1}/${size}`
-					: undefined
-			} as Record<string, string>)
+	const defaultHeader: Record<string, string> = immutable
+		? new EmptyObject()
+		: { 'accept-ranges': 'bytes' }
+	if (!immutable && size)
+		defaultHeader['content-range'] = `bytes 0-${size - 1}/${size}`
 
-	if (!set && !size) return new Response(response as Blob)
+	if (!set && !size) return new Response(body as Blob)
 
 	if (!set)
-		return new Response(response as Blob, {
+		return new Response(body as Blob, {
 			headers: defaultHeader
 		})
 
 	if (set.headers instanceof Headers) {
 		for (const key of Object.keys(defaultHeader))
-			if (key in set.headers) set.headers.append(key, defaultHeader[key])
+			if (!set.headers.has(key))
+				set.headers.append(key, defaultHeader[key])
 
 		if (immutable) {
 			set.headers.delete('content-length')
 			set.headers.delete('accept-ranges')
 		}
 
-		return new Response(response as Blob, set as any)
+		return new Response(body as Blob, set as any)
 	}
 
-	if (isNotEmpty(set.headers))
-		return new Response(response as Blob, {
-			status: set.status as number,
-			headers: Object.assign(defaultHeader, set.headers)
-		})
-
-	return new Response(response as Blob, {
+	return new Response(body as Blob, {
 		status: set.status as number,
-		headers: defaultHeader
+		headers: Object.assign(defaultHeader, set.headers)
 	})
 }
 
-export const parseSetCookies = (headers: Headers, setCookie: string[]) => {
+function normalizeHeaders(set: Context['set']) {
+	const headers = set.headers
+	if (!(headers instanceof Headers)) return
+
+	const flat: Record<string, unknown> = new EmptyObject()
+
+	for (const [key, value] of headers) if (key !== setCookie) flat[key] = value
+
+	const cookies = headers.getSetCookie()
+	if (cookies.length) flat[setCookie] = cookies
+
+	set.headers = flat as Context['set']['headers']
+}
+
+export function parseSetCookies(headers: Headers, setCookie: string[]) {
 	if (!headers) return headers
 
 	headers.delete('set-cookie')
 
-	for (let i = 0; i < setCookie.length; i++) {
-		const index = setCookie[i].indexOf('=')
-
-		headers.append(
-			'set-cookie',
-			`${setCookie[i].slice(0, index)}=${
-				setCookie[i].slice(index + 1) || ''
-			}`
-		)
-	}
+	for (let i = 0; i < setCookie.length; i++)
+		headers.append('set-cookie', setCookie[i])
 
 	return headers
 }
 
-export const responseToSetHeaders = (
-	response: Response,
-	set?: Context['set']
-) => {
+export function responseToSetHeaders(response: Response, set?: Context['set']) {
+	if (set && set.headers instanceof Headers) normalizeHeaders(set)
+	if (set) materializeSetHeaders(set)
+
 	if (set?.headers) {
 		if (response) {
 			if (hasHeaderShorthand)
 				Object.assign(set.headers, response.headers.toJSON())
 			else
 				for (const [key, value] of response.headers.entries())
-					if (key in set.headers) set.headers[key] = value
+					set.headers[key] = value
 		}
 
-		if (set.status === 200) set.status = response.status
-
-		// ? `content-encoding` prevent response streaming
-		if (set.headers['content-encoding'])
-			delete set.headers['content-encoding']
-
-		return set
-	}
-
-	if (!response)
+		if (set.status === undefined || set.status === 200)
+			set.status = response.status
+	} else if (!response) {
 		return {
-			headers: {},
+			headers: new EmptyObject(),
 			status: set?.status ?? 200
 		}
-
-	if (hasHeaderShorthand) {
+	} else if (hasHeaderShorthand) {
 		set = {
 			headers: response.headers.toJSON(),
 			status: set?.status ?? 200
 		}
+	} else {
+		set = {
+			headers: new EmptyObject(),
+			status: set?.status ?? 200
+		}
 
-		// ? `content-encoding` prevent response streaming
-		if (set.headers['content-encoding'])
-			delete set.headers['content-encoding']
-
-		return set
+		for (const [key, value] of response.headers.entries())
+			set.headers[key] = value
 	}
 
-	set = {
-		headers: {},
-		status: set?.status ?? 200
-	}
+	// ? `content-encoding` prevents response streaming
+	if (set!.headers['content-encoding'])
+		delete set!.headers['content-encoding']
 
-	for (const [key, value] of response.headers.entries()) {
-		// ? `content-encoding` prevent response streaming
-
-		if (key === 'content-encoding') continue
-
-		if (key in set.headers) set.headers[key] = value
-	}
-
-	return set
+	return set!
 }
 
 interface CreateHandlerParameter {
 	mapResponse(
 		response: unknown,
 		set: Context['set'],
-		request?: Request
+		request?: Request,
+		owned?: boolean
 	): Response
-	mapCompactResponse(response: unknown, request?: Request): Response
+	mapCompactResponse(
+		response: unknown,
+		request?: Request,
+		owned?: boolean
+	): Response
 }
 
-const enqueueBinaryChunk = (
-	controller: ReadableStreamDefaultController,
-	chunk: unknown
-): MaybePromise<boolean> => {
-	if (chunk instanceof Blob)
-		return chunk.arrayBuffer().then((buffer) => {
-			controller.enqueue(new Uint8Array(buffer))
-			return true as const
-		})
+const describesFields = (schema: any): boolean =>
+	schema?.type === 'object' ||
+	schema?.type === 'array' ||
+	!!schema?.allOf?.some(describesFields)
 
-	if (chunk instanceof Uint8Array) {
-		controller.enqueue(chunk)
-		return true
+const hasFields = (value: unknown) =>
+	Array.isArray(value) ||
+	Object.prototype.toString.call(value) === '[object Object]'
+
+const unwrapChunk = (chunk: any, value: any, typedSSE: boolean) =>
+	chunk.toSSE
+		? { ...chunk, ...value, data: value.data }
+		: typedSSE
+			? value.data
+			: value
+
+function cleanChunk(validator: any, chunk: any, typedSSE: boolean) {
+	const payload = chunk.toSSE
+		? { ...chunk }
+		: typedSSE
+			? { data: chunk }
+			: chunk
+
+	if (validator.Clean)
+		return hasFields(payload) || !describesFields(validator.schema)
+			? unwrapChunk(chunk, validator.Clean(payload), typedSSE)
+			: chunk
+
+	try {
+		const parsed: any = validator.From(payload, 'response', true)
+
+		return parsed instanceof Promise
+			? parsed.then(
+					(value) => unwrapChunk(chunk, value, typedSSE),
+					() => chunk
+				)
+			: unwrapChunk(chunk, parsed, typedSSE)
+	} catch {
+		return chunk
 	}
-
-	if (chunk instanceof ArrayBuffer) {
-		controller.enqueue(new Uint8Array(chunk))
-		return true
-	}
-
-	if (ArrayBuffer.isView(chunk)) {
-		controller.enqueue(
-			new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength)
-		)
-		return true
-	}
-
-	return false
 }
 
-export const createStreamHandler =
-	({ mapResponse, mapCompactResponse }: CreateHandlerParameter) =>
-	async (
+export function createStreamHandler({
+	mapResponse,
+	mapCompactResponse
+}: CreateHandlerParameter) {
+	return async (
 		generator: Generator | AsyncGenerator | ReadableStream,
 		set?: Context['set'],
 		request?: Request,
-		skipFormat?: boolean
+		skipFormat?: boolean,
+		owned = false
 	) => {
+		// `null` request = static pre-mapping (`mapStaticValue`), don't consume
+		if (request === null) return undefined!
+
+		if (isByteStream(generator)) {
+			if (generator.locked)
+				throw new TypeError(
+					'Cannot transfer a locked or consumed byte stream'
+				)
+
+			if (set) {
+				handleSet(set)
+				hput(
+					materializeSetHeaders(set),
+					'content-type',
+					'application/octet-stream',
+					1
+				)
+
+				return new Response(generator, set as ResponseInit)
+			}
+
+			return new Response(generator, {
+				headers: { 'content-type': 'application/octet-stream' }
+			})
+		}
+
+		// taken before the first pull: a stream the error hook answers with
+		// is not this route's response
+		const pickChunk = (set as any)?.['~chunk']
+		if (pickChunk) (set as any)['~chunk'] = undefined
+
+		const typedSSE =
+			!skipFormat && 'sse' in generator && (generator as any).sse === true
+		const sourceIterator =
+			typeof (generator as any).next === 'function'
+				? (generator as AsyncIterator<unknown>)
+				: undefined
+
 		// Since ReadableStream doesn't have next, init might be undefined
-		let init = (generator as Generator).next?.() as
-			| IteratorResult<unknown>
-			| undefined
+		let init = (
+			typedSSE ? undefined : (generator as Generator).next?.()
+		) as IteratorResult<unknown> | undefined
+
+		// a native Promise first (an own `then` may shadow its method), then
+		// any thenable a custom iterator hands back, as the later pulls do
+		if (
+			init instanceof Promise ||
+			typeof (init as any)?.then === 'function'
+		)
+			init = await init
+
+		const sign = (set as { '~sign'?: Function } | undefined)?.['~sign']
+		if (sign)
+			try {
+				await sign(set)
+			} catch (error) {
+				try {
+					await (generator as Generator).return?.(undefined)
+				} catch {}
+
+				throw error
+			}
 
 		if (set) handleSet(set)
-		if (init instanceof Promise) init = await init
 
-		// Generator or ReadableStream is returned from a generator function
-		if (init?.value instanceof ReadableStream) {
+		const yieldedStream = init?.value instanceof ReadableStream
+		if (yieldedStream)
 			// @ts-ignore
 			generator = init.value
-		} else if (init && (typeof init?.done === 'undefined' || init?.done)) {
-			if (set) return mapResponse(init.value, set, request)
-			return mapCompactResponse(init.value, request)
+		else if (init && (typeof init?.done === 'undefined' || init?.done)) {
+			let value = init.value
+			if (pickChunk) {
+				if (
+					value instanceof Promise ||
+					typeof (value as any)?.then === 'function'
+				)
+					value = await value
+
+				const wrapped = value instanceof ElysiaStatus
+				const validator = pickChunk(
+					wrapped ? value.status : (set?.status ?? 200)
+				)
+				if (validator) {
+					let body = wrapped ? value.response : value
+					if (
+						body instanceof Promise ||
+						typeof (body as any)?.then === 'function'
+					)
+						body = await body
+
+					if (typeof (body as any)?.next === 'function') {
+						if (set) (set as any)['~chunk'] = pickChunk
+					} else if (
+						!(body instanceof Error) &&
+						!(body instanceof Response) &&
+						!(body instanceof ReadableStream)
+					)
+						body = await (validator.mayReturnPromise
+							? validator.From(body, 'response', true)
+							: validator.EncodeFrom(body, 'response'))
+
+					if (wrapped) value.response = body
+					else value = body
+				}
+			}
+
+			if (set) return mapResponse(value, set, request, owned)
+			return mapCompactResponse(value, request, owned)
 		}
 
 		// Check if stream is from a pre-formatted Response body
 		const isSSE =
-			!skipFormat &&
-			// @ts-ignore First SSE result is wrapped with sse()
-			(init?.value?.sse ??
-				// @ts-ignore ReadableStream is wrapped with sse()
-				generator?.sse ??
-				// User explicitly set content-type to SSE
-				set?.headers['content-type']?.startsWith('text/event-stream'))
+			typedSSE ||
+			(!skipFormat &&
+				// First SSE result is wrapped with sse()
+				(init?.value?.sse ??
+					// @ts-ignore ReadableStream is wrapped with sse()
+					generator?.sse ??
+					(set &&
+						(
+							hget(set.headers, 'content-type') as
+								| string
+								| undefined
+						)?.startsWith('text/event-stream'))))
 
-		const format = isSSE
-			? (data: string) => `data: ${data}\n\n`
-			: (data: string) => data
+		const format = isSSE ? sseFormat : identityFormat
 
 		const contentType = isSSE
 			? 'text/event-stream'
 			: init?.value && typeof init?.value === 'object'
-				? 'application/json'
+				? ArrayBuffer.isView(init.value)
+					? 'application/octet-stream'
+					: 'application/json'
 				: 'text/plain'
 
-		if (set?.headers) {
-			if (!set.headers['transfer-encoding'])
-				set.headers['transfer-encoding'] = 'chunked'
-			if (!set.headers['content-type'])
-				set.headers['content-type'] = contentType
-			if (!set.headers['cache-control'])
-				set.headers['cache-control'] = 'no-cache'
-		} else
-			set = {
-				status: 200,
-				headers: {
-					'content-type': contentType,
-					'transfer-encoding': 'chunked',
-					'cache-control': 'no-cache',
-					connection: 'keep-alive'
-				}
-			}
+		set ??= { status: 200, headers: new EmptyObject() } as Context['set']
+		const headers = materializeSetHeaders(set)
 
-		// Get an explicit async iterator so pull() can advance one step at a time.
-		// Generators already implement the iterator protocol directly (.next()),
-		// while ReadableStream (which generator may be reassigned to above) needs
-		// [Symbol.asyncIterator]() to produce one.
-		const iterator: AsyncIterator<unknown> =
-			typeof (generator as any).next === 'function'
-				? (generator as AsyncIterator<unknown>)
-				: (generator as any)[Symbol.asyncIterator]()
+		if (!typedSSE) hput(headers, 'transfer-encoding', 'chunked', 1)
+		hput(headers, 'content-type', contentType, 1)
+		hput(headers, 'cache-control', 'no-cache', 1)
+
+		const sourceStream =
+			generator instanceof ReadableStream ? generator : undefined
+
+		let streamReader:
+			| {
+					read(): Promise<IteratorResult<unknown>>
+					cancel(): Promise<void>
+					releaseLock(): void
+			  }
+			| undefined
+
+		const iterator: AsyncIterator<unknown> = sourceStream
+			? {
+					next: () =>
+						(streamReader ??= sourceStream.getReader()).read(),
+					async return() {
+						if (!streamReader) {
+							await sourceStream.cancel()
+
+							return { done: true, value: undefined }
+						}
+
+						try {
+							await streamReader.cancel()
+						} finally {
+							streamReader.releaseLock()
+						}
+
+						return { done: true, value: undefined }
+					}
+				}
+			: (sourceIterator ?? (generator as any)[Symbol.asyncIterator]())
+
+		const outerIterator =
+			yieldedStream && !init!.done ? sourceIterator : undefined
 
 		let end = false
+		let finalizing: Promise<void> | undefined
+		let onAbort: (() => void) | undefined
+		const signal = request?.signal
+
+		const cleanupAbort = () => {
+			if (signal && onAbort) {
+				signal.removeEventListener('abort', onAbort)
+				onAbort = undefined
+			}
+		}
+
+		const safeReturn = async (target?: AsyncIterator<unknown>) => {
+			try {
+				await target?.return?.()
+			} catch {}
+		}
+
+		const finalize = (
+			mode: 'close' | 'error',
+			controller?: ReadableStreamDefaultController,
+			error?: unknown
+		) => {
+			if (end) return finalizing
+
+			end = true
+			cleanupAbort()
+			finalizing = safeReturn(iterator).then(() =>
+				safeReturn(outerIterator)
+			)
+
+			if (!controller) return finalizing
+
+			try {
+				if (mode === 'error') controller.error(error)
+				else controller.close()
+			} catch {}
+		}
+
+		// Synchronous except for a Blob, whose bytes arrive later: an async
+		// function here cost a Promise and an await per chunk
+		const enqueueValue = (
+			controller: ReadableStreamDefaultController,
+			value: unknown
+		): Promise<void> | undefined => {
+			// @ts-ignore
+			if (value.toSSE) {
+				// @ts-ignore
+				controller.enqueue(textEncoder.encode(value.toSSE()))
+				return
+			}
+
+			if (value instanceof Blob)
+				return value.arrayBuffer().then((buffer) => {
+					controller.enqueue(new Uint8Array(buffer))
+				})
+
+			if (value instanceof ArrayBuffer) {
+				controller.enqueue(new Uint8Array(value))
+				return
+			}
+
+			if (ArrayBuffer.isView(value)) {
+				controller.enqueue(
+					new Uint8Array(
+						value.buffer,
+						value.byteOffset,
+						value.byteLength
+					)
+				)
+				return
+			}
+
+			if (typeof value === 'object')
+				controller.enqueue(
+					textEncoder.encode(format(JSON.stringify(value)))
+				)
+			else
+				controller.enqueue(
+					textEncoder.encode(format((value as any).toString()))
+				)
+		}
+
+		const validator = sourceStream
+			? undefined
+			: pickChunk?.(set.status ?? 200)
+
+		const enqueueChunk =
+			validator?.Clean || validator?.mayReturnPromise
+				? (
+						controller: ReadableStreamDefaultController,
+						value: unknown
+					) => {
+						const cleaned = cleanChunk(validator, value, typedSSE)
+
+						return cleaned instanceof Promise && cleaned !== value
+							? cleaned.then((value) =>
+									enqueueValue(controller, value)
+								)
+							: enqueueValue(controller, cleaned)
+					}
+				: enqueueValue
+
+		// one controller per stream: the pull callbacks are made once, not per
+		// chunk
+		let controller!: ReadableStreamDefaultController
+
+		const fail = (error: unknown) => {
+			finalize('error', controller, error)
+		}
+
+		// `null` / `undefined` are skipped; returning without an enqueue
+		// would leave the stream waiting for a pull that never comes
+		const step = (
+			result: IteratorResult<unknown>
+		): Promise<void> | undefined => {
+			while (true) {
+				if (result.done || end) {
+					finalize('close', controller)
+					return
+				}
+
+				const chunk = result.value
+				if (chunk !== undefined && chunk !== null)
+					return enqueueChunk(controller, chunk)
+
+				const next = iterator.next() as
+					| IteratorResult<unknown>
+					| Promise<IteratorResult<unknown>>
+				if (typeof (next as Promise<unknown>).then === 'function')
+					return Promise.resolve(next).then(step)
+
+				result = next as IteratorResult<unknown>
+			}
+		}
 
 		return new Response(
-			new ReadableStream({
-				start(controller) {
-					// Register abort handler once — terminates the iterator and
-					// closes the stream so pull() won't be called again.
-					request?.signal?.addEventListener('abort', () => {
-						end = true
-						iterator.return?.()
+			new ReadableStream(
+				{
+					start(c) {
+						controller = c
 
-						try {
-							controller.close()
-						} catch {}
-					})
+						if (signal) {
+							onAbort = () => finalize('close', controller)
 
-					// Enqueue the already-extracted init value (first generator
-					// result, used above for SSE detection). Subsequent values
-					// are produced on-demand by pull().
-					if (
-						!init ||
-						init.value instanceof ReadableStream ||
-						init.value === undefined ||
-						init.value === null
-					)
-						return
-
-					// @ts-ignore
-					if (init.value.toSSE)
-						// @ts-ignore
-						controller.enqueue(init.value.toSSE())
-					else if (enqueueBinaryChunk(controller, init.value)) return
-					else if (typeof init.value === 'object')
-						try {
-							controller.enqueue(
-								format(JSON.stringify(init.value))
-							)
-						} catch {
-							controller.enqueue(format(init.value.toString()))
+							if (signal.aborted) onAbort()
+							else
+								signal.addEventListener('abort', onAbort, {
+									once: true
+								})
 						}
-					else controller.enqueue(format(init.value.toString()))
-				},
 
-				async pull(controller) {
-					// Respect abort/cancel that happened between pull() calls.
-					if (end) {
-						try {
-							controller.close()
-						} catch {}
-						return
-					}
-
-					try {
-						const { value: chunk, done } = await iterator.next()
-
-						if (done || end) {
-							try {
-								controller.close()
-							} catch {}
+						if (
+							!init ||
+							init.value instanceof ReadableStream ||
+							init.value === undefined ||
+							init.value === null
+						)
 							return
-						}
-
-						// null/undefined chunks are skipped; the runtime will
-						// call pull() again since nothing was enqueued.
-						if (chunk === undefined || chunk === null) return
-
-						// @ts-ignore
-						if (chunk.toSSE)
-							// @ts-ignore
-							controller.enqueue(chunk.toSSE())
-						else if (enqueueBinaryChunk(controller, chunk)) return
-						else if (typeof chunk === 'object')
-							try {
-								controller.enqueue(
-									format(JSON.stringify(chunk))
-								)
-							} catch {
-								controller.enqueue(format(chunk.toString()))
-							}
-						else controller.enqueue(format(chunk.toString()))
-					} catch (error) {
-						console.warn(error)
 
 						try {
-							controller.close()
-						} catch {}
+							return enqueueChunk(controller, init.value)?.catch(
+								fail
+							)
+						} catch (error) {
+							fail(error)
+						}
+					},
+
+					pull() {
+						// Respect abort/cancel that happened between pull() calls.
+						if (end) return
+
+						// A sync generator steps without a microtask per chunk
+						try {
+							const next = iterator.next() as
+								| IteratorResult<unknown>
+								| Promise<IteratorResult<unknown>>
+
+							// a custom async iterator may hand back any thenable
+							return (
+								typeof (next as Promise<unknown>).then ===
+								'function'
+									? Promise.resolve(next).then(step)
+									: step(next as IteratorResult<unknown>)
+							)?.catch(fail)
+						} catch (error) {
+							fail(error)
+						}
+					},
+
+					cancel() {
+						finalize('close')
 					}
 				},
-
-				cancel() {
-					end = true
-					iterator.return?.()
-				}
-			}),
+				typedSSE ? { highWaterMark: 0 } : undefined
+			),
 			set as any
 		)
 	}
+}
 
 export async function* streamResponse(response: Response) {
 	const body = response.body
-
-	if (!body) return
-
-	const reader = body.getReader()
-	const decoder = new TextDecoder()
-
-	try {
-		while (true) {
-			const { done, value } = await reader.read()
-			if (done) break
-
-			if (typeof value === 'string') yield value
-			else yield decoder.decode(value)
-		}
-	} finally {
-		reader.releaseLock()
-	}
+	if (body) yield* body as any
 }
 
-export const handleSet = (set: Context['set']) => {
-	if (typeof set.status === 'string') set.status = StatusMap[set.status]
+export function handleSet(set: Context['set']) {
+	if (typeof set.status === 'string')
+		set.status = StatusMap[set.status as keyof typeof StatusMap]
+
+	if (set.headers instanceof Headers) normalizeHeaders(set)
+
+	const proto = Object.getPrototypeOf(set.headers)
+	if (
+		proto !== null &&
+		proto !== Object.prototype &&
+		proto !== EmptyObject.prototype
+	) {
+		const flat: Record<string, unknown> = new EmptyObject()
+
+		for (const key of Object.keys(set.headers)) flat[key] = set.headers[key]
+		set.headers = flat as Context['set']['headers']
+	}
 
 	if (set.cookie && isNotEmpty(set.cookie)) {
+		materializeSetHeaders(set)
 		const cookie = serializeCookie(set.cookie)
 
-		if (cookie) set.headers['set-cookie'] = cookie
+		if (cookie) {
+			const existing = set.headers[setCookie] as
+				| string
+				| string[]
+				| undefined
+
+			if (existing) {
+				const kept =
+					typeof existing === 'string' ? [existing] : existing
+				const added = (
+					typeof cookie === 'string' ? [cookie] : cookie
+				).filter((value) => !kept.includes(value))
+
+				set.headers[setCookie] = (
+					added.length ? kept.concat(added) : existing
+				) as any
+			} else set.headers[setCookie] = cookie
+		}
 	}
 
-	if (set.headers['set-cookie'] && Array.isArray(set.headers['set-cookie'])) {
+	if (set.headers[setCookie] && Array.isArray(set.headers[setCookie]))
 		set.headers = parseSetCookies(
 			new Headers(set.headers as any) as Headers,
-			set.headers['set-cookie']
+			set.headers[setCookie]
 		) as any
-	}
 }
 
-// Merge header by allocating a new one
-// In Bun, response.headers can be mutable
-// while in Node and Cloudflare Worker is not
-// default to creating a new one instead
-export function mergeHeaders(
+function applySetHeaders(
+	target: Headers,
+	setHeaders: Context['set']['headers'],
+	present: Headers
+) {
+	let cookies: string[] | undefined
+	for (const [key, value] of setHeaders instanceof Headers
+		? setHeaders
+		: (Object.entries(setHeaders) as [string, string][]))
+		if (key === setCookie) {
+			cookies ??= target.getSetCookie()
+			if (!cookies.includes(value)) {
+				target.append(key, value)
+				cookies.push(value)
+			}
+		} else if (!present.has(key)) target.set(key, value)
+}
+
+function mergeHeaders(
 	responseHeaders: Headers,
 	setHeaders: Context['set']['headers']
 ) {
-	// Direct clone preserves all headers including multiple set-cookie
 	const headers = new Headers(responseHeaders)
-
-	// Merge headers: Response headers take precedence, set.headers fill in non-conflicting ones
-	if (setHeaders instanceof Headers)
-		for (const key of setHeaders.keys()) {
-			if (key === 'set-cookie') {
-				if (headers.has('set-cookie')) continue
-
-				for (const cookie of setHeaders.getSetCookie())
-					headers.append('set-cookie', cookie)
-			} else if (!responseHeaders.has(key))
-				headers.set(key, setHeaders?.get(key) ?? '')
-		}
-	else
-		for (const key in setHeaders)
-			if (key === 'set-cookie')
-				headers.append(key, setHeaders[key] as any)
-			else if (!responseHeaders.has(key))
-				headers.set(key, setHeaders[key] as any)
+	applySetHeaders(headers, setHeaders, responseHeaders)
 
 	return headers
 }
 
-export function mergeStatus(
-	responseStatus: number,
-	setStatus: Context['set']['status']
+function cancelPropagatingBody(
+	clonedBody: ReadableStream,
+	orphanedBranch: ReadableStream,
+	preserveOrphan = false
 ) {
-	if (typeof setStatus === 'string') setStatus = StatusMap[setStatus]
+	const reader = clonedBody.getReader()
 
-	if (responseStatus === 200) return setStatus
+	return new ReadableStream({
+		async pull(controller) {
+			const { done, value } = await reader.read()
 
-	return responseStatus
+			if (done) controller.close()
+			else controller.enqueue(value)
+		},
+		cancel(reason) {
+			if (preserveOrphan) {
+				// Tee waits for every branch before resolving cancellation
+				// Detach this response while leaving the owner reusable branch intact
+				reader.cancel(reason).catch(() => {})
+				return
+			}
+
+			orphanedBranch.cancel(reason)
+			return reader.cancel(reason)
+		}
+	})
 }
 
-export const createResponseHandler = (handler: CreateHandlerParameter) => {
-	const handleStream = createStreamHandler(handler)
+export function createResponseHandler() {
+	return (
+		response: Response,
+		set?: Context['set'],
+		request?: Request,
+		owned = false
+	) => {
+		// Framework-fresh Response (error/static clone-at-source): single-owner
+		if (skipClone.has(response) && !response.bodyUsed) {
+			skipClone.delete(response)
+			owned = true
+		}
 
-	return (response: Response, set: Context['set'], request?: Request) => {
-		const newResponse = new Response(response.body, {
-			headers: mergeHeaders(response.headers, set.headers),
-			status: mergeStatus(response.status, set.status)
-		})
+		const explicitlyBorrowed = isBorrowedResponse(response)
+		const borrowed = !owned || explicitlyBorrowed
+		const mustClone = owned && explicitlyBorrowed
 
-		if (
-			!(newResponse as Response).headers.has('content-length') &&
-			(newResponse as Response).headers.get('transfer-encoding') ===
-				'chunked'
+		if (!borrowed && response.bodyUsed)
+			throw new TypeError(
+				'Cannot reuse a consumed Response across requests'
+			)
+
+		let status: Context['set']['status']
+
+		if (set) {
+			status = response.status === 200 ? set.status : response.status
+			if (typeof status === 'string')
+				status = StatusMap[status as keyof typeof StatusMap]
+			const statusUnchanged =
+				status === undefined || status === response.status
+
+			if (
+				!mustClone &&
+				statusUnchanged &&
+				!set.cookie &&
+				!isNotEmpty(set.headers)
+			)
+				return response
+		} else if (!mustClone) return response
+
+		if (!borrowed && response.body?.locked)
+			throw new TypeError('Cannot patch a Response whose body is locked')
+
+		let body = response.body
+
+		if (borrowed) {
+			const cloned = response.clone()
+
+			body =
+				cloned.body && response.body
+					? cancelPropagatingBody(
+							cloned.body,
+							response.body,
+							explicitlyBorrowed
+						)
+					: cloned.body
+		}
+
+		const newResponse = new Response(
+			body,
+			set
+				? {
+						headers: mergeHeaders(response.headers, set.headers),
+						status: status as any,
+						statusText: response.statusText
+					}
+				: {
+						headers: response.headers,
+						status: response.status,
+						statusText: response.statusText
+					}
 		)
-			return handleStream(
-				streamResponse(newResponse as Response),
-				responseToSetHeaders(newResponse as Response, set),
-				request,
-				true // don't auto-format SSE for pre-formatted Response
-			) as any
 
 		return newResponse
 	}
 }
 
-export async function tee<T>(
-	source: AsyncIterable<T>,
-	branches = 2
-): Promise<AsyncIterableIterator<T>[]> {
-	const state = Array.from({ length: branches }, () => ({
-		active: true,
-		consumed: true
-	}))
-	if (!state.length) return []
+function teeChunkCost(chunk: unknown) {
+	if (typeof chunk === 'string') return chunk.length
+	if (typeof chunk !== 'object' || chunk === null) return 64
 
+	const byteLength = (chunk as { byteLength?: number }).byteLength
+	if (typeof byteLength === 'number') return byteLength
+
+	const size = (chunk as { size?: number }).size
+	if (typeof size === 'number') return size
+
+	return 64
+}
+
+const doneResult = { done: true as const, value: undefined } as const
+
+interface Pending<T> {
+	resolve: (r: IteratorResult<T>) => void
+	reject: (e: unknown) => void
+}
+
+/**
+ * Tee a returned `ReadableStream` so afterResponse, `defer()` and derive
+ * dispose wait for it, as for a tee'd generator. A `bytes()` stream is left
+ * alone (exact-stream contract), and so is a `Response`: reading its `.body`
+ * would move it off Bun's native send path
+ */
+export function observeStream(
+	source: ReadableStream
+):
+	| [ReadableStream, AsyncIterable<unknown>, AsyncIterableIterator<unknown>]
+	| undefined {
+	if (source.locked || isByteStream(source)) return
+
+	const reader = source.getReader()
+	const [value, observer] = tee({
+		[Symbol.asyncIterator]: () => ({
+			next: () => reader.read() as Promise<IteratorResult<unknown>>,
+			return: (reason?: unknown) =>
+				reader
+					.cancel(reason)
+					.then(() => ({ done: true, value: undefined }))
+		})
+	})
+
+	const body = new ReadableStream(
+		{
+			async pull(controller) {
+				try {
+					const result = await value.next()
+					if (result.done) controller.close()
+					else controller.enqueue(result.value)
+				} catch (error) {
+					controller.error(error)
+				}
+			},
+			cancel(reason) {
+				return value.return?.(reason) as Promise<void> | undefined
+			}
+		},
+		{ highWaterMark: 0 }
+	)
+
+	if ((source as any).sse === true) (body as any).sse = true
+
+	// the value branch, stopped by an exit that never sends `body`
+	return [body, observer, value]
+}
+
+/**
+ * Split async source into a value iterator and a completion iterator
+ *
+ * A producer drains the source ahead of the value consumer (response/client)
+ *
+ * To prevent long/infinite stream, the unconsumed window is capped:
+ * Producer backpressures whenever the window hits `cap` ENTRIES or
+ * `capBytes` bytes, whichever comes first
+ *
+ * The second iterator yields nothing: it settles once the source ends
+ * (rejects with its error) or the value iterator returns, which stops
+ * the source so an infinite one can't keep afterResponse waiting
+ */
+export function tee<T>(
+	source: AsyncIterable<T>,
+	// backpressure
+	cap = 64,
+	capBytes = 1 << 22 // 4MiB
+): AsyncIterableIterator<T>[] {
 	const iterator: AsyncIterator<T> | Iterator<T> =
 		(source as AsyncIterable<T>)[Symbol.asyncIterator]?.() ??
 		(source as unknown as Iterable<T>)[Symbol.iterator]()
 
-	let active = state.length
-	let current: T
-	let hasValue = false
-	let remaining = 0
+	const buffer: T[] = []
+	const sizes: number[] = []
+	let windowBytes = 0
 	let done = false
+	let stopped = false
 	let failed = false
 	let sourceError: unknown
-	let pulling: Promise<void> | undefined
-	let waiting: (() => void)[] = []
+	let drainResume: (() => void) | null = null
+	let pending: Pending<T> | null = null
 
-	const wake = () => {
-		const pending = waiting
-		waiting = []
+	let finish!: Pending<T>
+	const completed = new Promise<IteratorResult<T>>(
+		(resolve, reject) => (finish = { resolve, reject })
+	)
+	// nobody may await the completion iterator
+	completed.catch(() => {})
 
-		for (const resolve of pending) resolve()
+	const resumeProducer = () => {
+		if (drainResume) {
+			const resume = drainResume
+			drainResume = null
+			resume()
+		}
 	}
 
-	const wait = () => new Promise<void>((resolve) => waiting.push(resolve))
+	const stop = (p?: Pending<T> | null) => {
+		pending = null
+		p?.resolve(doneResult)
 
-	const pull = () => {
-		pulling ??= Promise.resolve()
-			.then(() => iterator.next())
-			.then((result) => {
-				if (result.done || !active || done) {
-					done = true
-					return
-				}
+		if (stopped) return
+		stopped = done = true
+		buffer.length = sizes.length = windowBytes = 0
+		resumeProducer()
 
-				current = result.value
-				hasValue = true
-				remaining = active
-
-				for (const branch of state)
-					if (branch.active) branch.consumed = false
-			})
-			.catch((error) => {
-				if (!active || done) return
-
-				failed = done = true
-				sourceError = error
-			})
-			.finally(() => {
-				pulling = undefined
-				wake()
-			})
-	}
-
-	const stop = () => {
-		if (done) return
-
-		done = true
-		wake()
 		try {
-			Promise.resolve(iterator.return?.()).catch(() => {})
+			const r = iterator.return?.()
+			if (r && typeof (r as Promise<unknown>).then === 'function')
+				(r as Promise<unknown>).catch(() => {})
 		} catch {}
+
+		finish.resolve(doneResult)
 	}
 
-	const close = (index: number) => {
-		const branch = state[index]
-		if (!branch.active) return false
+	;(async () => {
+		try {
+			while (!stopped) {
+				const result = await iterator.next()
+				if (result.done || stopped) break
 
-		branch.active = false
-		active--
-
-		if (hasValue && !branch.consumed && --remaining === 0) {
-			hasValue = false
-			wake()
-		}
-
-		return true
-	}
-
-	const next = async (index: number): Promise<IteratorResult<T>> => {
-		const branch = state[index]
-
-		while (branch.active) {
-			if (failed) {
-				close(index)
-				throw sourceError
-			}
-
-			if (hasValue && !branch.consumed) {
-				branch.consumed = true
-				const result = { done: false as const, value: current }
-
-				if (--remaining === 0) {
-					hasValue = false
-					wake()
+				// a waiting consumer takes the value directly
+				const p = pending as Pending<T> | null
+				if (p) {
+					pending = null
+					p.resolve({ done: false, value: result.value })
+					continue
 				}
 
-				return result
+				buffer.push(result.value)
+				sizes.push(teeChunkCost(result.value))
+				windowBytes += sizes[sizes.length - 1]
+
+				if (
+					(buffer.length >= cap || windowBytes >= capBytes) &&
+					!stopped
+				)
+					await new Promise<void>((resolve) => {
+						drainResume = resolve
+					})
 			}
+		} catch (error) {
+			// a stopped source has nobody left to fail
+			failed = !stopped
+			sourceError = error
+		} finally {
+			done = true
 
-			if (done) {
-				close(index)
-				break
+			const p = pending as Pending<T> | null
+			pending = null
+			if (failed) {
+				p?.reject(sourceError)
+				finish.reject(sourceError)
+			} else {
+				p?.resolve(doneResult)
+				finish.resolve(doneResult)
 			}
-
-			if (!hasValue) pull()
-			await wait()
 		}
+	})()
 
-		return { done: true, value: undefined }
-	}
+	const value = Object.assign(
+		Object.create(null) as AsyncIterableIterator<T>,
+		{
+			[Symbol.asyncIterator]() {
+				return this
+			},
 
-	return state.map((_, index) => ({
-		next: () => next(index),
-		async return(finalValue?: unknown) {
-			if (close(index) && (index === 0 || !active)) stop()
+			next: () => {
+				if (buffer.length) {
+					const value = buffer.shift()!
+					windowBytes -= sizes.shift()!
+					if (buffer.length < cap && windowBytes < capBytes)
+						resumeProducer()
 
-			return { done: true, value: finalValue }
-		},
-		[Symbol.asyncIterator]() {
-			return this
+					return Promise.resolve({ done: false, value })
+				}
+
+				if (failed) return Promise.reject(sourceError)
+				if (done) return Promise.resolve(doneResult)
+
+				return new Promise<IteratorResult<T>>(
+					(resolve, reject) => (pending = { resolve, reject })
+				)
+			},
+
+			// Synchronous-effect return, see the tee() doc comment
+			return: (result?: unknown) => {
+				stop(pending)
+
+				return Promise.resolve({
+					done: true as const,
+					value: result as T
+				})
+			},
+
+			throw: (error?: unknown) => {
+				stop(pending)
+
+				return Promise.reject(error)
+			}
 		}
-	}))
+	)
+
+	const observer = Object.assign(
+		Object.create(null) as AsyncIterableIterator<T>,
+		{
+			[Symbol.asyncIterator]() {
+				return this
+			},
+			next: () => completed,
+			return: (result?: unknown) =>
+				Promise.resolve({ done: true as const, value: result as T }),
+			throw: (error?: unknown) => Promise.reject(error)
+		}
+	)
+
+	// the value branch is what the stream handler frames
+	if ((source as any).sse === true) (value as any).sse = true
+
+	return [value, observer]
 }
