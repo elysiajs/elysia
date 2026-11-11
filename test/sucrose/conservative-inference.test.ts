@@ -128,6 +128,40 @@ describe('context access that cannot be statically identified', () => {
 		await expect(responseText(handler, 'asi')).resolves.toBe('asi')
 	})
 
+	it('keeps query available in a method with a computed name', async () => {
+		const handler = new Function(
+			'k',
+			'return ({ [String(k)](context) { return context.query.name } })[k]'
+		)('k')
+
+		await expect(responseText(handler, 'computed')).resolves.toBe(
+			'computed'
+		)
+	})
+
+	it('keeps query available behind a string holding a brace', async () => {
+		const handler = new Function(
+			`return ({ body = '{', query }) => query.name`
+		)()
+
+		await expect(responseText(handler, 'brace')).resolves.toBe('brace')
+	})
+
+	it('keeps query available to a method called as a tag or in parentheses', async () => {
+		const consume = function (this: any) {
+			return this.query?.name ?? 'miss'
+		}
+
+		for (const source of ['(c) => c.consume`x`', '(c) => (c.consume)()']) {
+			const response = await new Elysia()
+				.derive(() => ({ consume }))
+				.get('/', new Function(`return ${source}`)())
+				.handle(new Request('http://e.ly/?name=hit'))
+
+			expect(await response.text()).toBe('hit')
+		}
+	})
+
 	it('marks every context property as accessed', () => {
 		expect(
 			sucrose(function (context: any) {

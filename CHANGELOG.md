@@ -13,6 +13,7 @@ Feature:
 - programmatic `defer` API
 - export `isPlainObject` from `elysia/utils`
 - on Bun, signed-cookie verification uses the native constant-time `crypto.timingSafeEqual` instead of loading `node:crypto`
+- `.wrap()` passes the app that serves as a second argument, so a wrap a plugin registered knows which app it runs on
 
 Breaking Change:
 
@@ -25,6 +26,7 @@ Breaking Change:
 - `NotFoundError` renamed to `NotFound`
 - `config.encodeSchema` is always enabled. Can't support both in a type-safe manner.
 - `derive` now run in `beforeHandle`. `resolve` is removed
+- a hook, guard or macro that still carries a 1.x `resolve` function now throws at registration (a function-form macro: when its route compiles) instead of being ignored, since an auth gate written as `resolve` would otherwise stop guarding its routes. A macro of your own named `resolve` keeps working unless it takes a function as its option and is defined after its first use
 - `.onError(Error, fn)` registers a per-class handler, replacing the 1.x `.error({ CODE: Class })` dictionary; `.onError(fn)` registers the general error handler
 - pass the hook scope as a literal first argument instead of `{ as: 'global' }`; the 1.x `{ as }` object is deprecated but still accepted by the hook methods, with a one-time warning
 - rename `scoped` scope to `plugin`
@@ -91,6 +93,7 @@ Behavior Change:
 - a throwing `afterResponse` / `defer` on the JIT lane and a rejected async `trace` callback are now reported with `console.error` instead of being swallowed
 - `stop(true)` no longer waits on an async plugin that never settles
 - `app.fetch` now holds a request until pending async plugins settle, so fetch-only deployments (Workers, Vercel, `export default { fetch: app.fetch }`) no longer 404 a plugin's routes on a cold start (1.x did); a function captured before settling forwards to the settled handler. `app.handle` still dispatches to the partial app while a plugin is pending, so a plugin can call it on its own app during setup
+- `app.fetch` answers `500` to every request once an async plugin has rejected (or thrown while being applied), the same fail-closed outcome as `listen()`: the failed plugin may have been the one that guards the routes. `app.handle` still dispatches to what was registered
 - `context.route` is set only for dynamic routes; on a static route it is `undefined`, use `context.path` (1.x always set it)
 - an unknown hook or guard scope (1.x `'scoped'`, `.guard({ as })`, …) now throws at registration instead of silently registering the hook as `local`
 - `.as()` now throws on a scope other than `'plugin'` / `'global'`: a 1.x `.as('scoped')`, an `.as('local')` or a typo silently lifted every hook into the parent
@@ -162,6 +165,7 @@ Behavior Change:
 - `ValidationError#errors` and the lazy `query` an error hook sees are shared accessors that read from their receiver, so every error stays in V8's fast mode (about 2.8 KB less per 422 on Node). Reading `errors` through a `Proxy`, an `Object.create(error)` child or a detached getter now throws; read it from the error itself
 - a cookie entry clears its internal `~unsign` and `~raw` markers by setting them to `undefined` instead of deleting them, so the entry stays in V8's fast mode (about 300–450 B less per request on Node for a signed cookie read or a JSON cookie write). `Object.keys(cookie.x.cookie)` and the copy an updater receives can now list those keys with an `undefined` value
 - an async generator with a synchronous `finally`, cancelled by the client before its first chunk is read, now runs `afterResponse` before the generator's `finally` (already the order for a generator that awaits between yields or has an async `finally`)
+- a WebSocket route runs `transform` before validation, as an HTTP route does, on the upgrade (params, query, headers) and on each message (body): `transform` now sees the raw input and what it writes is validated. It used to run after validation and see decoded values
 
 Improvement:
 
@@ -285,6 +289,11 @@ Bug fix:
 - AOT strip mode: a traced app with no HTTP route (WebSocket-only, or no routes) threw `trace support was stripped`
 - a WebSocket route with `response: { 200: undefined }` threw at `listen()` once TypeBox was loaded
 - a static route's percent-encoded or trailing-slash alias could replace another static route registered at that exact spelling (`/caf%C3%A9/` next to `/café/`) after the first request
+- a thrown error, or one an error hook returns, whose `status` is a numeric string (`'403'`) is served with that status, and one whose `status` is not an HTTP status at all (`'fail'`, `'abc'`) is a masked `500`; both used to reach the client as `200 OK` with the error message as the body
+- a WebSocket upgrade answered `500` when the app had `.headers()` defaults and an upgrade hook (`beforeHandle`, `transform`, `derive`, `upgrade`) wrote to `set.headers`
+- a successful WebSocket upgrade (`101`) now carries what its hooks wrote to `set.headers` and `set.cookie` (signed like an HTTP answer) and the `.headers()` defaults, as 1.x did; the `upgrade` option's headers win on a conflict
+- a Standard Schema whose `validate` returns a Promise (zod / valibot async refinements) failed every WebSocket upgrade and message with a `500`; it validates as on HTTP
+- handler source inference never reports a read set that omits a real read: a method with a computed name, a string holding a bracket, an escaped key, and a method called as a tag or in parentheses are read correctly or as unknown
 
 Chore:
 

@@ -308,14 +308,16 @@ export function replayHandlerParams(
  * throws, a route the build froze must never fall through to a live validator
  */
 export function frozenRouteValidator(
-	...args: Parameters<typeof buildFrozenRouteValidator>
+	hook: Parameters<typeof buildFrozenRouteValidator>[0],
+	root: Parameters<typeof buildFrozenRouteValidator>[1],
+	method: Parameters<typeof buildFrozenRouteValidator>[2],
+	path: Parameters<typeof buildFrozenRouteValidator>[3]
 ): ReturnType<typeof buildFrozenRouteValidator> {
+	// forwarding `...args` retains 32 B per route under bun compile --aot for some reason
 	const build = replayImpl?.buildFrozenRouteValidator
-	if (build) return build(...args)
+	if (build) return build(hook, root, method, path)
 
-	// either holds an entry only for a captured validator, which is what
-	// makes the manifest import the builder (`hasCaptured` in `emitModule`)
-	const program = programFor(args[1]['~programId'])
+	const program = programFor(root['~programId'])
 	if (
 		program &&
 		(program.lazyGroups?.length || isNotEmpty(program.validators))

@@ -14,7 +14,7 @@ import { skipClone } from '../../adapter/skip-clone'
 import { origin } from '../../adapter/origin'
 import { ElysiaStatus } from '../../error'
 import { ElysiaFile } from '../../universal/file'
-import { adoptErrorType } from '../../handler/error'
+import { adoptErrorType, errorStatus } from '../../handler/error'
 import { ELYSIA_TYPES } from '../../type/constants'
 import { scanTokens } from '../lexer'
 import { registerDeriveDisposable } from '../../handler/utils'
@@ -556,12 +556,13 @@ export const mapError = /*#__PURE__*/ map<
 >((i, fn, [map, link, mapResponse, schedule, sign, mode, arm, declined]) => {
 	link(mapResponse, 'rm')
 	link(adoptErrorType, 'aet')
+	link(errorStatus, 'ers')
 	link(ElysiaStatus, 'es')
 	return (
 		awaitSite(`er${at(i)}(c)`, fn, mode, '_r', arm) +
 		`if(_r!==undefined){\n` +
 		// a returned error is served as one no hook answers, at its own status
-		`if(_r instanceof Error){c.set.status=_r.status||500\n${declined}return _efb(_r,c)}\n` +
+		`if(_r instanceof Error){c.set.status=ers(_r.status)\n${declined}return _efb(_r,c)}\n` +
 		`if(_r instanceof es||_r instanceof Response)c.set.status=_r.status\n` +
 		`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
 		schedule +

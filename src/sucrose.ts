@@ -103,7 +103,7 @@ function computedDestructuringChannel<K extends string>(
 		(property?.k === 's' &&
 			!property.value.includes('\\') &&
 			tokens[index + 2]?.value === ']' &&
-			channelOf(property.value)) ||
+			channelOf(property.value.slice(1))) ||
 		false
 	)
 }
@@ -143,10 +143,24 @@ export function inferParameterReads<K extends string>(
 
 	if (!tokens?.length) return null
 
+	// a string keeps its quote, so `"]"` never reads as the delimiter `]`
+	for (const token of tokens)
+		if (token.k === 's') token.value = `"${token.value}`
+
 	const keys = new Set<K>()
-	const isCall = (at: number) =>
-		tokens[at]?.value === '(' ||
-		(tokens[at]?.value === '?.' && tokens[at + 1]?.value === '(')
+	const isCall = (at: number, grouped: boolean) => {
+		while (grouped && tokens[at]?.value === ')') at++
+
+		return (
+			tokens[at]?.value === '(' ||
+			(tokens[at]?.value === '?.' && tokens[at + 1]?.value === '(') ||
+			/^[^\s}`]*\s*`/.test(
+				source
+					.slice(tokens[at - 1].at + 1, tokens[at]?.at)
+					.replace(/\\u\{\w*\}|\/\*[\s\S]*?\*\/|\/\/.*/g, '')
+			)
+		)
+	}
 
 	// a quoted key, or a number, which the scan drops: `{ 0: a }` is `{ : a }`
 	const isOpaqueKey = (at: number) =>
@@ -202,8 +216,13 @@ export function inferParameterReads<K extends string>(
 			parameterEnd = arrow
 		}
 	} else {
-		for (let i = 0; i < tokens.length; i++)
-			if (tokens[i].value === '(') {
+		// a computed method name `[f(a)](c)` holds a `(` before the parameters
+		let brackets = 0
+		for (let i = 0; i < tokens.length; i++) {
+			const value = tokens[i].value
+			if (value === '[') brackets++
+			else if (value === ']') brackets--
+			else if (value === '(' && brackets === 0) {
 				parameterStart = i + 1
 				let depth = 1
 				for (let j = i + 1; j < tokens.length; j++) {
@@ -216,6 +235,7 @@ export function inferParameterReads<K extends string>(
 				}
 				break
 			}
+		}
 	}
 
 	if (parameterStart < 0 || parameterEnd < parameterStart || bodyStart < 0)
@@ -378,7 +398,7 @@ export function inferParameterReads<K extends string>(
 
 		if (tokens[next]?.k === 'i' && next > i + 1) {
 			const member = tokens[next].value
-			const call = isCall(next + 1)
+			const call = isCall(next + 1, tokens[i - 1]?.value === '(')
 			const key = channelOf(member, call)
 
 			if (key) keys.add(key)
@@ -390,7 +410,11 @@ export function inferParameterReads<K extends string>(
 			const property = tokens[next + 1]
 			const key =
 				property?.k === 's' &&
-				channelOf(property.value, isCall(next + 3))
+				!property.value.includes('\\') &&
+				channelOf(
+					property.value.slice(1),
+					isCall(next + 3, tokens[i - 1]?.value === '(')
+				)
 			if (!key || tokens[next + 2]?.value !== ']') return null
 
 			keys.add(key)

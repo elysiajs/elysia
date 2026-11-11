@@ -75,6 +75,7 @@ import {
 
 import { isBun } from '../universal/constants'
 import { mapResponse } from '../adapter/web-standard/handler'
+import { handleSet, hput, materializeSetHeaders } from '../adapter/utils'
 
 import type { AnyElysia } from '../base'
 import type { Context } from '../context'
@@ -755,12 +756,22 @@ export function buildWSRoute(
 		}
 	}
 
-	function dispatchParsedSync(ws: ElysiaWS<any>, message: unknown) {
+	function dispatchParsedSync(
+		ws: ElysiaWS<any>,
+		message: unknown,
+		transformed?: 1
+	): void | Promise<void> {
+		if (transforms.length && !transformed)
+			return transformMessage(ws, message).then(
+				(m) => dispatchParsedSync(ws, m, 1),
+				(error) => handleError(ws, error)
+			)
+
 		if (bodyValidator) {
 			let decoded: unknown
 
 			try {
-				decoded = bodyValidator.From(message, 'body')
+				decoded = bodyValidator.From(message, 'body', true)
 			} catch (error) {
 				return onMessageValidationError(ws, error)
 			}
@@ -791,14 +802,22 @@ export function buildWSRoute(
 		}
 	}
 
+	// `transform` gets the parsed message before validation, as on HTTP
+	async function transformMessage(ws: ElysiaWS<any>, message: unknown) {
+		ws.body = message as any
+
+		for (let i = 0; i < transforms.length; i++) {
+			const r = transforms[i](ws as any)
+			if (typeof (r as any)?.then === 'function') await r
+		}
+
+		return ws.body as unknown
+	}
+
 	async function runMessageFull(ws: ElysiaWS<any>, message: unknown) {
 		try {
 			ws.body = message as any
 
-			for (let i = 0; i < transforms.length; i++) {
-				const r = transforms[i](ws as any)
-				if (typeof (r as any)?.then === 'function') await r
-			}
 			// a beforeHandle answer skips the handler only: afterHandle still
 			// runs, as on HTTP
 			let response: unknown
@@ -859,8 +878,11 @@ export function buildWSRoute(
 			let message = parseMessage(ws as any, rawMessage)
 			if (message instanceof Promise) message = await message
 
+			if (transforms.length)
+				message = await transformMessage(ws, message)
+
 			if (bodyValidator) {
-				const decoded = bodyValidator.From(message, 'body')
+				const decoded = bodyValidator.From(message, 'body', true)
 				message = decoded instanceof Promise ? await decoded : decoded
 			}
 
@@ -918,41 +940,26 @@ export function buildWSRoute(
 		let upgraded = false
 
 		try {
-			if (validators.params) {
-				let r = (validators.params as any).From(
-					context.params ?? nullObject(),
-					'params'
-				)
-				if (r instanceof Promise) r = await r
-				context.params = r as any
-			}
+			// own header object, as on HTTP: the `.headers()` defaults are
+			// shared and not extensible
+			materializeSetHeaders((context as any).set)
+
+			// raw input first, as on HTTP: `transform` reads and may rewrite
+			// it, validation then checks what it left
 			if (validators.query || inference.query) {
 				const url = request.url
-				let r: unknown = parseQueryFromURL(
+				;(context as any).query = parseQueryFromURL(
 					url,
 					(context as any).qi ?? url.indexOf('?'),
 					queryArray,
 					queryObject
 				)
-
-				if (validators.query) {
-					r = validators.query.From(r, 'query')
-					if (r instanceof Promise) r = await r
-				}
-				;(context as any).query = r
 			}
 
-			if (validators.headers || inference.headers) {
-				let r: unknown = isBun
+			if (validators.headers || inference.headers)
+				(context as any).headers = isBun
 					? request.headers.toJSON()
 					: Object.fromEntries(request.headers)
-
-				if (validators.headers) {
-					r = validators.headers.From(r, 'headers')
-					if (r instanceof Promise) r = await r
-				}
-				;(context as any).headers = r
-			}
 
 			if (cookieConfig && needsCookie) {
 				const cookieHeader = request.headers.get('cookie')
@@ -962,7 +969,7 @@ export function buildWSRoute(
 
 					let r: unknown = raw
 					if (!cookieIsOptional || Object.keys(raw).length) {
-						r = (validators.cookie as any).From(raw, 'cookie')
+						r = (validators.cookie as any).From(raw, 'cookie', true)
 						if (r instanceof Promise) r = await r
 					}
 
@@ -1002,6 +1009,36 @@ export function buildWSRoute(
 			for (let i = 0; i < transforms.length; i++) {
 				const r = transforms[i](context as any)
 				if (typeof (r as any)?.then === 'function') await r
+			}
+
+			if (validators.params) {
+				let r = (validators.params as any).From(
+					context.params ?? nullObject(),
+					'params',
+					true
+				)
+				if (r instanceof Promise) r = await r
+				context.params = r as any
+			}
+
+			if (validators.query) {
+				let r = validators.query.From(
+					(context as any).query,
+					'query',
+					true
+				)
+				if (r instanceof Promise) r = await r
+				;(context as any).query = r
+			}
+
+			if (validators.headers) {
+				let r = validators.headers.From(
+					(context as any).headers,
+					'headers',
+					true
+				)
+				if (r instanceof Promise) r = await r
+				;(context as any).headers = r
 			}
 
 			for (let i = 0; i < allBeforeHandles.length; i++) {
@@ -1068,8 +1105,26 @@ export function buildWSRoute(
 					context
 				)
 
+			// the 101 carries what the hooks wrote, as an HTTP answer would:
+			// signed cookies and `set.headers`, the `upgrade` headers on top.
+			// A failed sign throws into the error lane before any upgrade
+			const set = (context as any).set as Context['set']
+			if (signCookies) await signCookies(set)
+			handleSet(set)
+
+			let headers = set.headers as Headers | Record<string, unknown>
+			if (upgradeHeaders) {
+				// a copy: a refused upgrade answers from `set` without these
+				headers =
+					headers instanceof Headers
+						? new Headers(headers)
+						: { ...headers }
+				for (const key in upgradeHeaders)
+					hput(headers, key, upgradeHeaders[key])
+			}
+
 			upgraded = server.upgrade(request, {
-				headers: upgradeHeaders,
+				headers: headers as any,
 				data: {
 					id: undefined,
 					context: context as any,

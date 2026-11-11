@@ -136,6 +136,17 @@ export const resolveStatus = (status: unknown) =>
 		? (StatusMap[status as keyof StatusMap] ?? +status)
 		: status
 
+export function errorStatus(status: unknown) {
+	const resolved = resolveStatus(status)
+
+	return typeof resolved === 'number' &&
+		resolved % 1 === 0 &&
+		resolved >= 200 &&
+		resolved <= 599
+		? resolved
+		: 500
+}
+
 /**
  * Body served by an error that carries a status but no usable body:
  * its declared `response`, otherwise its message, or `mask` in its place
@@ -257,7 +268,9 @@ export function fallbackErrorResponse(
 		readonly value?: unknown
 		readonly detail?: unknown
 	}
-	const status = resolveStatus(self.status)
+	const status = self.status
+		? errorStatus(self.status)
+		: resolveStatus(self.status)
 	const owned = error instanceof HTTPError
 	// Read once: what the claim is checked on is what gets served
 	const type: unknown = self.type
@@ -420,7 +433,7 @@ export function fallbackErrorResponse(
 }
 
 function applyErrorStatus(context: Context, error: any) {
-	if (error?.status) context.set.status = error.status
+	if (error?.status) context.set.status = errorStatus(error.status)
 	else if (context.set.status === undefined || context.set.status === 200)
 		context.set.status = 500
 }
@@ -466,7 +479,7 @@ export function createErrorHandler(
 	) => {
 		// a returned error is served as one no hook answers, at its own status
 		if (result instanceof Error) {
-			context.set.status = (result as any).status || 500
+			context.set.status = errorStatus((result as any).status)
 
 			return serveUnhandled(context, result, sign)
 		}

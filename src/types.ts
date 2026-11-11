@@ -4099,7 +4099,8 @@ export type WrapFn<
 		...rest: any[]
 	) => MaybePromise<Response>
 > = (
-	fetch: (request: Request, ...rest: any[]) => MaybePromise<Response>
+	fetch: (request: Request, ...rest: any[]) => MaybePromise<Response>,
+	app: AnyElysia
 ) => Callback
 
 type RouteHookCapture = {

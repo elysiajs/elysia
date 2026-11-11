@@ -794,7 +794,7 @@ export function applyHoc(
 	if (!hoc?.length) return fetch
 
 	let handler = fetch
-	for (let i = hoc.length - 1; i >= 0; i--) handler = hoc[i](handler)
+	for (let i = hoc.length - 1; i >= 0; i--) handler = hoc[i](handler, app)
 
 	return handler
 }

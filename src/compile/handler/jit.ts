@@ -23,7 +23,7 @@ import {
 	isProduction
 } from '../../error'
 import { isDynamicRegex, StatusMap, traceEventIndex } from '../../constants'
-import { fallbackResponse } from '../../handler/error'
+import { errorStatus, fallbackResponse } from '../../handler/error'
 import {
 	drainDisposables,
 	emptyResponse,
@@ -1371,6 +1371,7 @@ export function compileHandlerJit(
 		if (hasErrorHook) {
 			link(hook!.error!, 'er')
 			link(fallbackResponse, 'fbr')
+			link(errorStatus, 'ers')
 
 			const allowUnsafeDetail =
 				!!root['~config']?.allowUnsafeValidationDetails
@@ -1406,7 +1407,7 @@ export function compileHandlerJit(
 					(allowUnsafeDetail
 						? `if(e instanceof verr)e.allowUnsafeValidationDetails=true\n`
 						: ``) +
-					`if(e?.status)c.set.status=e.status\n` +
+					`if(e?.status)c.set.status=ers(e.status)\n` +
 					`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
 					errorJar
 			)

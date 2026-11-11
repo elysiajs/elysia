@@ -16,7 +16,7 @@ const buildFixture = () => {
 		.get('/guarded', () => 'g')
 
 	const app = new Elysia()
-		.macro({ auth: { resolve: () => ({ user: 'x' }) } })
+		.macro({ auth: { derive: () => ({ user: 'x' }) } })
 		.get('/', () => 'root')
 		.get('/dyn/:id', ({ params }) => params.id)
 		.use(child)

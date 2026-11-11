@@ -225,3 +225,97 @@ describe('1.x { as } hook options', () => {
 		expect(JSON.parse(stdout)).toEqual({ positional: 0, object: 1 })
 	})
 })
+
+// 1.x `resolve` is never installed in 2.0, so an auth gate written as
+// `resolve` would silently stop guarding. It must throw instead
+describe('removed resolve hook key', () => {
+	const removed = '"resolve" was removed in 2.0'
+	const noop = () => {}
+
+	it('rejects it in an object macro', () => {
+		expect(() =>
+			new Elysia().macro({ auth: { resolve: noop } as any })
+		).toThrow(removed)
+	})
+
+	it('rejects it in a route hook', () => {
+		expect(() =>
+			new Elysia().get('/s', { resolve: noop } as any, () => 'x')
+		).toThrow(removed)
+	})
+
+	it('rejects it in guard(hook)', () => {
+		expect(() => new Elysia().guard({ resolve: noop } as any)).toThrow(
+			removed
+		)
+	})
+
+	it('rejects it in guard(hook, cb)', () => {
+		expect(() =>
+			new Elysia().guard({ resolve: noop } as any, (app) => app)
+		).toThrow(removed)
+	})
+
+	it('rejects it in group(prefix, hook, cb)', () => {
+		expect(() =>
+			(new Elysia() as any).group('/g', { resolve: noop }, (app: any) => app)
+		).toThrow(removed)
+	})
+
+	it('fails closed for a function macro', async () => {
+		const app = new Elysia()
+			.macro({ auth: () => ({ resolve: noop }) } as any)
+			.get('/s', { auth: true } as any, () => 'secret')
+
+		const result = await app
+			.handle(new Request('http://localhost/s'))
+			.then(
+				(r) => r.status,
+				() => 500
+			)
+
+		expect(result).toBe(500)
+	})
+
+	it('keeps a user macro named resolve working', async () => {
+		const app = new Elysia()
+			.macro({ resolve: { beforeHandle: () => 'gated' } } as any)
+			.get('/s', { resolve: true } as any, () => 'x')
+
+		const res = await app.handle(new Request('http://localhost/s'))
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('gated')
+	})
+
+	it('accepts resolve: undefined', () => {
+		expect(() =>
+			new Elysia().get('/s', { resolve: undefined } as any, () => 'x')
+		).not.toThrow()
+	})
+
+	it('keeps a resolve macro defined after the route working', async () => {
+		const app = (new Elysia() as any)
+			.get('/s', { resolve: true }, () => 'x')
+			.macro({ resolve: { beforeHandle: () => 'gated' } })
+
+		const res = await app.handle(new Request('http://localhost/s'))
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('gated')
+	})
+
+	it('keeps a parent resolve macro used by a plugin route working', async () => {
+		const app = (new Elysia() as any)
+			.macro({ resolve: { beforeHandle: () => 'gated' } })
+			.use((new Elysia() as any).get('/s', { resolve: true }, () => 'x'))
+
+		const res = await app.handle(new Request('http://localhost/s'))
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('gated')
+	})
+
+	it('rejects an array value like a function', () => {
+		expect(() =>
+			new Elysia().get('/s', { resolve: [noop] } as any, () => 'x')
+		).toThrow(removed)
+	})
+})

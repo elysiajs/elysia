@@ -241,8 +241,8 @@ describe('WebSocket upgrade schema decoding', () => {
 		app.stop()
 	})
 
-	it('rejects a Promise returned by a non-async Standard Schema validator', async () => {
-		// Promise-returning validators must declare async so the route awaits them.
+	it('awaits a Promise returned by a non-async Standard Schema validator', async () => {
+		// zod/valibot async validators are plain functions returning a Promise; WS awaits them like HTTP does.
 		const syncReturningPromise = {
 			'~standard': {
 				version: 1,
@@ -275,10 +275,7 @@ describe('WebSocket upgrade schema decoding', () => {
 			}
 		)
 
-		expect(res.status).toBe(500)
-		await expect(res.text()).resolves.toContain(
-			'asynchronous Standard Schema'
-		)
+		expect(res.status).toBe(101)
 		app.stop()
 	})
 

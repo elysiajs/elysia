@@ -163,4 +163,22 @@ describe('HOC', () => {
 
 		expect(calls).toEqual(['shared', 'other'])
 	})
+
+	it('passes the app that serves, not the plugin that registered it, to an inherited wrap', async () => {
+		const seen: unknown[] = []
+
+		const plugin = new Elysia()
+			.wrap((fn, app) => {
+				seen.push(app)
+
+				return fn
+			})
+			.get('/plugin', () => 'plugin')
+		const app = new Elysia().use(plugin).get('/', () => 'ok')
+
+		await app.handle('/plugin')
+
+		expect(seen).toHaveLength(1)
+		expect(seen[0]).toBe(app)
+	})
 })

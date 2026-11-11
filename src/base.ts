@@ -175,6 +175,7 @@ import type {
 	GuardHookSingleton
 } from './types'
 import type { ElysiaStatus } from './error'
+import { internalServerErrorResponse } from './error'
 import {
 	clearContextCache,
 	type Context,
@@ -395,6 +396,26 @@ const hasHookKeys = (value: object) => {
 			return true
 
 	return false
+}
+
+// 1.x `resolve` is gone: left in a hook it is never installed, so an auth
+// gate written as `resolve` silently stops guarding. Only its 1.x shape (a
+// function or a list of them) is refused: a macro the app named `resolve`
+// may be defined after its first use, and takes its option as a value
+const assertNoResolve = (
+	hook: Record<string, unknown>,
+	where: string,
+	macro?: object
+) => {
+	const resolve = hook.resolve
+
+	if (
+		(typeof resolve === 'function' || Array.isArray(resolve)) &&
+		!(macro && 'resolve' in macro)
+	)
+		throw new Error(
+			`[Elysia] ${where}: "resolve" was removed in 2.0, use "derive" instead`
+		)
 }
 
 function assertSchemaShape(hook: Record<string, unknown>, where: string) {
@@ -4085,7 +4106,14 @@ export class Elysia<
 		assertScope(scope)
 
 		// Invalid guard schemas would disable every nested route.
-		if (hook) assertSchemaShape(hook as Record<string, unknown>, '.guard()')
+		if (hook) {
+			assertSchemaShape(hook as Record<string, unknown>, '.guard()')
+			assertNoResolve(
+				hook as Record<string, unknown>,
+				'.guard()',
+				this['~ext']?.macro
+			)
+		}
 
 		hook = snapshotHookSchemas(hook, this.models)
 		hookToGuard(hook as any)
@@ -4614,11 +4642,17 @@ export class Elysia<
 		for (const key in macro) {
 			if (typeof macro[key] === 'object') {
 				// Function macros produce schemas later, so check only objects here.
-				if (macro[key])
+				if (macro[key]) {
 					assertSchemaShape(
 						macro[key] as Record<string, unknown>,
 						`.macro(${key})`
 					)
+					assertNoResolve(
+						macro[key] as Record<string, unknown>,
+						`.macro(${key})`,
+						'resolve' in macro ? macro : m
+					)
+				}
 
 				macro[key] = hookToGuard(macro[key] as any) as any
 			}
@@ -4727,7 +4761,14 @@ export class Elysia<
 				continue
 			}
 
-			if (isFunction) hookToGuard(hook)
+			if (isFunction) {
+				assertNoResolve(
+					hook as Record<string, unknown>,
+					`.macro(${key})`,
+					macro
+				)
+				hookToGuard(hook)
+			}
 			const own: unknown[] = []
 			seen.set(seed, own)
 			const nested: [unknown[], number][] = [
@@ -5878,11 +5919,17 @@ export class Elysia<
 				)
 		}
 
-		if (hasHook && hookOrFn)
+		if (hasHook && hookOrFn) {
 			assertSchemaShape(
 				hookOrFn as Record<string, unknown>,
 				`${method} ${path}`
 			)
+			assertNoResolve(
+				hookOrFn as Record<string, unknown>,
+				`${method} ${path}`,
+				this['~ext']?.macro
+			)
+		}
 
 		const handler = hasHook ? fn : hookOrFn
 		const hook = hasHook
@@ -8621,6 +8668,14 @@ export class Elysia<
 
 	private fetchFn?: (request: Request) => MaybePromise<Response>
 	get fetch(): (request: Request) => MaybePromise<Response> {
+		// a rejected async plugin may have been the auth gate: fail closed
+		// like listen(), before the cache a later handle() may have filled
+		if (this._error !== undefined && !this.ready) {
+			const { error } = this._error
+
+			return () => internalServerErrorResponse(error)
+		}
+
 		if (this.fetchFn) return this.fetchFn
 
 		if (this.ready)

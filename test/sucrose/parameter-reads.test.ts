@@ -121,7 +121,53 @@ describe('a member call on the context returns null', () => {
 		[`(ctx) => ctx['me']?.()`, null],
 		['({ ws }) => ws.me()', null],
 		// a name an allowlist would pass reads `this` all the same
-		['(ctx) => ctx.params()', null]
+		['(ctx) => ctx.params()', null],
+		// a tag and a parenthesized callee keep the context as `this`
+		['(ctx) => ctx.me`x`', null],
+		['(ctx) => ctx.me /* } */ `x`', null],
+		[`(ctx) => ctx['me']\`x\``, null],
+		['(ctx) => (ctx.me)()', null],
+		['(ctx) => ((ctx?.me))()', null],
+		[`(ctx) => (ctx['me'])\`x\``, null]
+	])
+
+	// these drop `this` or call nothing, so they stay readable
+	table([
+		['(ctx) => (0, ctx.me)()', ['me']],
+		['(ctx) => `${ctx.me}`', ['me']],
+		['(ctx) => `a${ctx.me}b${ctx.iris}`', ['iris', 'me']]
+	])
+})
+
+describe('the parameter list after a computed method name', () => {
+	// The `(` inside `[f(a)]` read as the parameter list, so the reader
+	// answered "reads nothing" for a handler reading `c.db`
+	table([
+		['[f(a)](c) { return c.db }', ['db']],
+		['async *[f(a)](c) { yield c.db }', ['db']],
+		[`[(() => 'k')()](c) { return c.user }`, ['user']],
+		[`['('](c) { return c.db }`, ['db']]
+	])
+})
+
+describe('a string is never a punctuator', () => {
+	// A string holding a bracket ended or opened a pattern, losing `user`
+	table([
+		[`function ({ db = ')', user }) { return user }`, ['db', 'user']],
+		[`(c = '(') => c.db`, ['db']],
+		[`({ db = '{', user }) => user`, ['db', 'user']],
+		[`(c) => { const { a = '{', user } = c; return user }`, ['a', 'user']],
+		[`(c) => { const { a = '}', user } = c; return user }`, ['a', 'user']],
+		[`m(c = '}') { const u = c.user; return (x) => u }`, ['user']],
+		[`(c) => { let x; x\n'='\nc + ''; return c.db }`, null]
+	])
+})
+
+describe('an escaped key the scan cannot name returns null', () => {
+	// `c['d\x62']` reads `db`, not a member spelled with a backslash
+	table([
+		[`(c) => c['d\\x62']`, null],
+		[`(c) => c['\\u0075ser']`, null]
 	])
 })
 

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Elysia, t } from '../../src'
+import { Elysia, t, status } from '../../src'
 import { clearContextCache, createContext } from '../../src/context'
 
 import { describe, expect, it } from 'bun:test'
@@ -562,9 +562,9 @@ describe('fetch while async plugins are pending', () => {
 		expect(await response.text()).toBe('deep')
 	})
 
-	// the plugin already reported its rejection, synchronous routes stay
-	// served, the same contract app.handle keeps
-	it('serves registered routes once a pending plugin rejects', async () => {
+	// the failed plugin may have been the auth gate, so the exported fetch
+	// fails closed like listen()
+	it('answers 500 once a pending plugin rejects', async () => {
 		const errors: unknown[] = []
 		const orig = console.error
 		console.error = (error: unknown) => errors.push(error)
@@ -575,11 +575,85 @@ describe('fetch while async plugins are pending', () => {
 				.use(sleep(1).then(() => Promise.reject(new Error('boom'))))
 
 			const response = await app.fetch(new Request('http://e.ly/sync'))
-			expect(await response.text()).toBe('sync')
+			expect(response.status).toBe(500)
+			expect(await response.text()).not.toContain('sync')
 			expect(errors.length).toBeGreaterThan(0)
 		} finally {
 			console.error = orig
 		}
+	})
+
+	it('keeps answering 500 on later requests and on a fetch captured early', async () => {
+		const orig = console.error
+		console.error = () => {}
+
+		try {
+			const app = new Elysia()
+				.get('/sync', () => 'sync')
+				.use(sleep(1).then(() => Promise.reject(new Error('boom'))))
+
+			const captured = app.fetch
+			const first = await captured(new Request('http://e.ly/sync'))
+			const second = await captured(new Request('http://e.ly/sync'))
+			const third = await app.fetch(new Request('http://e.ly/sync'))
+
+			expect(first.status).toBe(500)
+			expect(second.status).toBe(500)
+			expect(third.status).toBe(500)
+		} finally {
+			console.error = orig
+		}
+	})
+
+	it('does not serve a protected route when the gate plugin fails', async () => {
+		const orig = console.error
+		console.error = () => {}
+
+		try {
+			const auth = async (app: Elysia) => {
+				await sleep(5)
+				throw new Error('jwks fetch failed')
+				// never reached
+				return app.onBeforeHandle('global', () => status(401))
+			}
+			const app = new Elysia().use(auth).get('/secret', () => 'SECRET')
+
+			const response = await app.fetch(new Request('http://e.ly/secret'))
+			expect(response.status).toBe(500)
+			expect(await response.text()).not.toContain('SECRET')
+		} finally {
+			console.error = orig
+		}
+	})
+
+	it('handle still dispatches after a plugin rejects', async () => {
+		const orig = console.error
+		console.error = () => {}
+
+		try {
+			const app = new Elysia()
+				.get('/sync', () => 'sync')
+				.use(sleep(1).then(() => Promise.reject(new Error('boom'))))
+
+			await app.modules.catch(() => {})
+
+			expect(await (await app.handle('/sync')).text()).toBe('sync')
+
+			// handle filled the fetch cache, the getter must still fail closed
+			const response = await app.fetch(new Request('http://e.ly/sync'))
+			expect(response.status).toBe(500)
+		} finally {
+			console.error = orig
+		}
+	})
+
+	it('serves normally when every async plugin lands', async () => {
+		const app = new Elysia()
+			.get('/sync', () => 'sync')
+			.use(sleep(1).then(() => new Elysia().get('/lazy', () => 'lazy')))
+
+		const response = await app.fetch(new Request('http://e.ly/lazy'))
+		expect(await response.text()).toBe('lazy')
 	})
 
 	// handle() builds a partial handler while pending; it must not become the
