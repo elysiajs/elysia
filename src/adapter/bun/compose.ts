@@ -13,11 +13,13 @@ const allocateIf = (value: string, condition: unknown) =>
 	condition ? value : ''
 
 const preserveEncodedSlashes = (params: Record<string, string>) => {
+	const cloned: Record<string, string> = {}
 	for (const key of Object.keys(params))
-		if (params[key].includes('/'))
-			params[key] = params[key].replaceAll('/', '%2F')
+		cloned[key] = params[key].includes('/')
+			? params[key].replaceAll('/', '%2F')
+			: params[key]
 
-	return params
+	return cloned
 }
 
 const createContext = (
@@ -68,7 +70,10 @@ const createContext = (
 		`{request,` +
 		`store,` +
 		allocateIf(`qi,`, needsQuery) +
-		allocateIf(`params:preserveEncodedSlashes(request.params),`, isDynamic) +
+		allocateIf(
+			`params:preserveEncodedSlashes(request.params),`,
+			isDynamic
+		) +
 		getPath +
 		allocateIf(
 			`url:request.url,`,
