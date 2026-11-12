@@ -38,7 +38,11 @@ export const mapResponse = (
 				return Response.json(response, set as any)
 
 			case 'ElysiaFile':
-				return handleFile((response as ElysiaFile).value as File, set, request)
+				return handleFile(
+					(response as ElysiaFile).value as File,
+					set,
+					request
+				)
 
 			case 'File':
 				return handleFile(response as File, set, request)
@@ -175,7 +179,11 @@ export const mapEarlyResponse = (
 				return Response.json(response, set as any)
 
 			case 'ElysiaFile':
-				return handleFile((response as ElysiaFile).value as File, set, request)
+				return handleFile(
+					(response as ElysiaFile).value as File,
+					set,
+					request
+				)
 
 			case 'File':
 				return handleFile(response as File, set, request)
@@ -219,6 +227,13 @@ export const mapEarlyResponse = (
 				)
 
 			case 'FormData':
+				if (
+					isNotEmpty(set.headers) ||
+					set.status !== 200 ||
+					isNotEmpty(set.cookie)
+				)
+					return new Response(response as FormData, set as any)
+
 				return new Response(response as FormData)
 
 			case 'Cookie':
@@ -268,7 +283,7 @@ export const mapEarlyResponse = (
 				// custom class with an array-like value
 				// eg. Bun.sql`` result
 				if (Array.isArray(response))
-					return Response.json(response) as any
+					return Response.json(response, set as any) as any
 
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)
@@ -289,7 +304,11 @@ export const mapEarlyResponse = (
 				return Response.json(response, set as any)
 
 			case 'ElysiaFile':
-				return handleFile((response as ElysiaFile).value as File, set, request)
+				return handleFile(
+					(response as ElysiaFile).value as File,
+					set,
+					request
+				)
 
 			case 'File':
 				return handleFile(response as File, set, request)
@@ -405,7 +424,11 @@ export const mapCompactResponse = (
 			return Response.json(response)
 
 		case 'ElysiaFile':
-			return handleFile((response as ElysiaFile).value as File, undefined, request)
+			return handleFile(
+				(response as ElysiaFile).value as File,
+				undefined,
+				request
+			)
 
 		case 'File':
 			return handleFile(response as File, undefined, request)

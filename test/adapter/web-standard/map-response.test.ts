@@ -286,6 +286,35 @@ describe('Web Standard - Map Response', () => {
 		})
 	})
 
+	it('respects Headers instance in set headers', async () => {
+		const response = mapResponse('Shiroko', {
+			...createContext(),
+			headers: new Headers({
+				'x-powered-by': 'elysia'
+			})
+		})
+
+		expect(response.headers.get('x-powered-by')).toBe('elysia')
+		expect(await response.text()).toBe('Shiroko')
+	})
+
+	it('adds file headers with Headers instance in set headers', async () => {
+		const file = new Blob(['Shiroko'])
+		const response = mapResponse(file, {
+			...createContext(),
+			status: 201,
+			headers: new Headers({
+				'x-powered-by': 'elysia'
+			})
+		})
+
+		expect(response.status).toBe(201)
+		expect(response.headers.get('x-powered-by')).toBe('elysia')
+		expect(response.headers.get('accept-ranges')).toBe('bytes')
+		expect(response.headers.get('content-range')).toBe('bytes 0-6/7')
+		expect(await response.text()).toBe('Shiroko')
+	})
+
 	it('map named status', async () => {
 		const response = mapResponse('Shiroko', {
 			status: "I'm a teapot",
