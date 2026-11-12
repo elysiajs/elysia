@@ -2368,9 +2368,6 @@ export type ExcludeElysiaResponse<T> = PartialIf<
 	undefined extends Awaited<T> ? true : false
 >
 
-/**
- * @deprecated
- */
 export type InferContext<
 	T extends AnyElysia,
 	Path extends string = T['~Prefix'],
@@ -2384,9 +2381,6 @@ export type InferContext<
 	Path
 >
 
-/**
- * @deprecated
- */
 export type InferHandler<
 	T extends AnyElysia,
 	Path extends string = T['~Prefix'],
