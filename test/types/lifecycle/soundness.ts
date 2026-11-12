@@ -709,6 +709,30 @@ import { Prettify } from '../../../src/types'
 	}>()
 }
 
+// Macro error plain return uses the default error status
+{
+	const app = new Elysia()
+		.macro({
+			a: {
+				error() {
+					return {
+						failure: 'macro' as string
+					}
+				}
+			}
+		})
+		.get('/', () => 'ok' as const, {
+			a: true
+		})
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'ok'
+		500: {
+			failure: string
+		}
+	}>()
+}
+
 // Macro should extract possible status 4
 {
 	const app = new Elysia()
@@ -1007,10 +1031,10 @@ import { Prettify } from '../../../src/types'
 		])
 
 	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
-		200: 'fouco' | 'sartre' | 'lilith'
 		401: 'fouco'
 		404: 'lilith'
 		418: 'sartre'
+		500: 'fouco' | 'sartre' | 'lilith'
 	}>()
 }
 
@@ -1028,10 +1052,10 @@ import { Prettify } from '../../../src/types'
 		])
 
 	expectTypeOf<(typeof app)['~Ephemeral']['response']>().toEqualTypeOf<{
-		200: 'fouco' | 'sartre' | 'lilith'
 		401: 'fouco'
 		404: 'lilith'
 		418: 'sartre'
+		500: 'fouco' | 'sartre' | 'lilith'
 	}>()
 }
 
@@ -1049,10 +1073,38 @@ import { Prettify } from '../../../src/types'
 		])
 
 	expectTypeOf<(typeof app)['~Metadata']['response']>().toEqualTypeOf<{
-		200: 'fouco' | 'sartre' | 'lilith'
 		401: 'fouco'
 		404: 'lilith'
 		418: 'sartre'
+		500: 'fouco' | 'sartre' | 'lilith'
+	}>()
+}
+
+// onError explicit and plain default error statuses are unioned
+{
+	const app = new Elysia().onError(({ status }) =>
+		Math.random() > 0.5 ? status(500, 'explicit') : 'plain'
+	)
+
+	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+		500: 'explicit' | 'plain'
+	}>()
+}
+
+// onError plain return uses the default error status
+{
+	const app = new Elysia()
+		.onError({ as: 'global' }, () => ({
+			failure: 'maintenance' as string
+		}))
+		.get('/', () => {
+			throw new Error('maintenance')
+		})
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		500: {
+			failure: string
+		}
 	}>()
 }
 
