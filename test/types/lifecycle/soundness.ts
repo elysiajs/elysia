@@ -1007,10 +1007,10 @@ import { Prettify } from '../../../src/types'
 		])
 
 	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
-		200: 'fouco' | 'sartre' | 'lilith'
 		401: 'fouco'
 		404: 'lilith'
 		418: 'sartre'
+		500: 'fouco' | 'sartre' | 'lilith'
 	}>()
 }
 
@@ -1028,10 +1028,10 @@ import { Prettify } from '../../../src/types'
 		])
 
 	expectTypeOf<(typeof app)['~Ephemeral']['response']>().toEqualTypeOf<{
-		200: 'fouco' | 'sartre' | 'lilith'
 		401: 'fouco'
 		404: 'lilith'
 		418: 'sartre'
+		500: 'fouco' | 'sartre' | 'lilith'
 	}>()
 }
 
@@ -1049,10 +1049,27 @@ import { Prettify } from '../../../src/types'
 		])
 
 	expectTypeOf<(typeof app)['~Metadata']['response']>().toEqualTypeOf<{
-		200: 'fouco' | 'sartre' | 'lilith'
 		401: 'fouco'
 		404: 'lilith'
 		418: 'sartre'
+		500: 'fouco' | 'sartre' | 'lilith'
+	}>()
+}
+
+// onError plain responses should be typed as error responses
+{
+	const app = new Elysia()
+		.onError(() => ({
+			failure: 'Server is during maintenance'
+		}))
+		.get('/', () => {
+			throw new Error('Server is during maintenance')
+		})
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		500: {
+			failure: string
+		}
 	}>()
 }
 
