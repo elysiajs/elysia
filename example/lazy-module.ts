@@ -12,7 +12,9 @@ const app = new Elysia()
 	.listen(3000)
 
 await app.modules
+const protocol = app.server?.tls ? "https" : "http"
+
 
 console.log(
-	`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
+   `🔥 Elysia is running at ${protocol}://${app.server?.hostname}:${app.server?.port}`
 )
