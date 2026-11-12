@@ -1007,10 +1007,10 @@ import { Prettify } from '../../../src/types'
 		])
 
 	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
-		200: 'fouco' | 'sartre' | 'lilith'
 		401: 'fouco'
 		404: 'lilith'
 		418: 'sartre'
+		500: 'fouco' | 'sartre' | 'lilith'
 	}>()
 }
 
@@ -1028,10 +1028,10 @@ import { Prettify } from '../../../src/types'
 		])
 
 	expectTypeOf<(typeof app)['~Ephemeral']['response']>().toEqualTypeOf<{
-		200: 'fouco' | 'sartre' | 'lilith'
 		401: 'fouco'
 		404: 'lilith'
 		418: 'sartre'
+		500: 'fouco' | 'sartre' | 'lilith'
 	}>()
 }
 
@@ -1049,10 +1049,56 @@ import { Prettify } from '../../../src/types'
 		])
 
 	expectTypeOf<(typeof app)['~Metadata']['response']>().toEqualTypeOf<{
-		200: 'fouco' | 'sartre' | 'lilith'
 		401: 'fouco'
 		404: 'lilith'
 		418: 'sartre'
+		500: 'fouco' | 'sartre' | 'lilith'
+	}>()
+}
+
+// onError plain return infers default error status
+{
+	const app = new Elysia()
+		.onError(() => ({ failure: 'boom' as string }))
+		.get('/throws', () => {
+			throw new Error('boom')
+		})
+
+	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+		500: {
+			failure: string
+		}
+	}>()
+
+	expectTypeOf<
+		(typeof app)['~Routes']['throws']['get']['response']
+	>().toEqualTypeOf<{
+		500: {
+			failure: string
+		}
+	}>()
+}
+
+// onError explicit 500 response merges with plain default response
+{
+	const app = new Elysia()
+		.onError(({ status }) =>
+			Math.random() > 0.5
+				? status(500, { code: 'custom' as const })
+				: { failure: 'plain' as const }
+		)
+		.get('/throws', () => {
+			throw new Error('boom')
+		})
+
+	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+		500: { readonly code: 'custom' } | { failure: 'plain' }
+	}>()
+
+	expectTypeOf<
+		(typeof app)['~Routes']['throws']['get']['response']
+	>().toEqualTypeOf<{
+		500: { readonly code: 'custom' } | { failure: 'plain' }
 	}>()
 }
 
