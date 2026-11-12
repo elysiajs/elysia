@@ -1,5 +1,6 @@
 import { Serve as BunServe, type Server as BunServer } from 'bun'
 import type { Equal, MaybePromise } from '../types'
+import type { WebSocketConfig } from '../ws/bun'
 
 export interface ErrorLike extends Error {
 	code?: string
@@ -120,6 +121,13 @@ export interface ServeOptions extends GenericServeOptions {
 		string,
 		Function | Response | Record<string, Function | Response>
 	>
+
+	/**
+	 * WebSocket configuration options
+	 *
+	 * @see https://bun.sh/docs/api/websockets
+	 */
+	websocket?: WebSocketConfig
 }
 
 export type Serve =
