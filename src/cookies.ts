@@ -326,13 +326,20 @@ export class Cookie<T> implements ElysiaCookie {
 		return this
 	}
 
-	remove() {
+	remove(
+		options?:
+			| string
+			| Partial<Omit<ElysiaCookie, 'value' | 'maxAge' | 'expires'>>
+	) {
 		if (this.value === undefined) return
+
+		if (typeof options === 'string') options = { path: options }
 
 		this.set({
 			expires: new Date(0),
 			maxAge: 0,
-			value: ''
+			value: '',
+			...options
 		})
 
 		return this
