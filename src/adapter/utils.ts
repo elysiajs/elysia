@@ -638,15 +638,37 @@ export async function tee<T>(
 		return { done: true, value: undefined }
 	}
 
-	return state.map((_, index) => ({
-		next: () => next(index),
-		async return(finalValue?: unknown) {
-			if (close(index) && (index === 0 || !active)) stop()
+	return state.map(
+		(_, index) =>
+			new TeeBranch<T>(
+				() => next(index),
+				async (finalValue?: unknown) => {
+					if (close(index) && (index === 0 || !active)) stop()
 
-			return { done: true, value: finalValue }
-		},
-		[Symbol.asyncIterator]() {
-			return this
-		}
-	}))
+					return { done: true, value: finalValue }
+				}
+			)
+	)
+}
+
+/**
+ * A branch of `tee`. It is a class instance, not an object literal, because
+ * `mapResponse` picks how to send a value by its `constructor.name`, and an
+ * `Object` is sent as JSON.
+ */
+class TeeBranch<T> implements AsyncIterableIterator<T> {
+	constructor(
+		readonly next: () => Promise<IteratorResult<T>>,
+		private readonly close: (
+			finalValue?: unknown
+		) => Promise<IteratorResult<T>>
+	) {}
+
+	return(finalValue?: unknown) {
+		return this.close(finalValue)
+	}
+
+	[Symbol.asyncIterator]() {
+		return this
+	}
 }

@@ -506,4 +506,40 @@ describe('trace', () => {
 		await response.text()
 		expect(order).toEqual(['HANDLE', 'AFTER'])
 	})
+
+	// https://github.com/elysiajs/elysia/issues/2044
+	it.each([
+		[
+			'a response header',
+			({ set }: { set: { headers: Record<string, string> } }) => {
+				set.headers['x-a'] = '1'
+			}
+		],
+		[
+			'a non-200 status',
+			({ set }: { set: { status?: number | string } }) => {
+				set.status = 201
+			}
+		]
+	])(
+		'stream a generator response when a trace is registered and %s is set',
+		async (_, setResponse) => {
+			const app = new Elysia()
+				.trace({ as: 'global' }, ({ onHandle }) => {
+					onHandle(() => {})
+				})
+				.onAfterHandle({ as: 'global' }, setResponse as any)
+				.get('/', async function* () {
+					yield 'first\n'
+					yield 'second\n'
+				})
+
+			const response = await app.handle(req('/'))
+
+			expect(response.headers.get('content-type')).not.toContain(
+				'application/json'
+			)
+			expect(await response.text()).toBe('first\nsecond\n')
+		}
+	)
 })
