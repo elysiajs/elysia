@@ -40,7 +40,8 @@ import {
 	redirect,
 	emptySchema,
 	insertStandaloneValidator,
-	mergeCookie
+	mergeCookie,
+	randomId
 } from './utils'
 
 import {
@@ -49,6 +50,7 @@ import {
 	getCookieValidator,
 	ElysiaTypeCheck,
 	hasType,
+	hasRef,
 	resolveSchema
 } from './schema'
 import {
@@ -989,7 +991,7 @@ export default class Elysia<
 							standaloneValidators
 						}
 					: undefined,
-				localHook.webSocket
+				localHook.websocket
 					? { websocket: localHook.websocket as any }
 					: undefined
 			)
@@ -1004,7 +1006,7 @@ export default class Elysia<
 						handler: handle,
 						hooks
 					},
-					localHook.webSocket
+					localHook.websocket
 						? { websocket: localHook.websocket as any }
 						: undefined
 				)
@@ -5047,6 +5049,109 @@ export default class Elysia<
 		return this
 	}
 
+	private addPluginRoute(
+		plugin: AnyElysia,
+		{
+			method,
+			path,
+			handler,
+			hooks
+		}: AnyElysia['router']['history'][number],
+		/** plugin error hooks that will be merged into this app's event */
+		inheritedError?: HookContainer[]
+	) {
+		const routeHooks = plugin['~cookieConfig']
+			? {
+					...hooks,
+					config: {
+						...hooks.config,
+						cookie: mergeCookie(
+							plugin['~cookieConfig'],
+							hooks.config?.cookie ?? {}
+						)
+					}
+				}
+			: hooks
+
+		// WS handler is bound to the adapter it was created with,
+		// re-register when the plugin has a different adapter instance
+		if (
+			method === 'WS' &&
+			hooks?.websocket &&
+			this['~adapter']?.ws &&
+			plugin['~adapter'] !== this['~adapter']
+		) {
+			const { parse, body, response } = hooks.websocket as any
+			const wsError: Function[] = [
+				(hooks.websocket as any).error ?? []
+			].flat()
+			const models = plugin.definitions.typebox
+
+			// bind to plugin models so refs don't resolve against this app's
+			const resolveModel = (schema: any) => {
+				if (typeof schema === 'string')
+					return schema in models['$defs']
+						? models.Import(schema as never)
+						: (plugin.definitions.type[schema] ?? schema)
+
+				if (
+					schema?.[Kind] &&
+					schema[Kind] !== 'Import' &&
+					hasRef(schema)
+				) {
+					const id = randomId()
+
+					return t
+						.Module({ ...models['$defs'], [id]: schema })
+						.Import(id)
+				}
+
+				return schema
+			}
+
+			const before = new Set(this.router.history)
+
+			this['~adapter'].ws(this, path, {
+				...hooks.websocket,
+				...routeHooks,
+				parse,
+				body: resolveModel(body),
+				response: resolveModel(response),
+				// ws callbacks first, adapter already runs this app's error hooks
+				error: [
+					...new Set([
+						...wsError,
+						...[
+							...(routeHooks.error ?? []),
+							// shared adapter also runs hooks added after .ws()
+							...(plugin.event.error ?? [])
+						]
+							.map((x: HookContainer) => x.fn)
+							.filter(
+								(fn: Function) =>
+									![
+										...(this.event.error ?? []),
+										...(inheritedError ?? [])
+									].some((e) => e.fn === fn)
+							)
+					])
+				]
+			} as any)
+
+			// keep inherited hooks in history for a parent that re-registers
+			const route = this.router.history.find((x) => !before.has(x))
+			if (route?.method === 'WS' && inheritedError?.length)
+				route.hooks.error = [
+					...(route.hooks.error ?? []),
+					...inheritedError
+				]
+
+			return
+		}
+
+		this.add(method, path, handler, routeHooks)
+	}
+
 	private _use(
 		plugin: AnyElysia | ((app: AnyElysia) => MaybePromise<AnyElysia>)
 	) {
@@ -5070,31 +5175,14 @@ export default class Elysia<
 								plugin.model(this.definitions.type as any)
 								plugin.error(this.definitions.error as any)
 
+								if (isNotEmpty(plugin.definitions.type))
+									this.model(plugin.definitions.type)
+
 								// Recompile async plugin routes
-								for (const {
-									method,
-									path,
-									handler,
-									hooks
-								} of Object.values(plugin.router.history))
-									this.add(
-										method,
-										path,
-										handler,
-										plugin['~cookieConfig']
-											? {
-													...hooks,
-													config: {
-														...hooks.config,
-														cookie: mergeCookie(
-															plugin['~cookieConfig'],
-															hooks.config?.cookie ?? {}
-														)
-													}
-												}
-											: hooks,
-										undefined
-									)
+								for (const route of Object.values(
+									plugin.router.history
+								))
+									this.addPluginRoute(plugin, route)
 
 								if (plugin === this) return
 
@@ -5253,25 +5341,13 @@ export default class Elysia<
 				...plugin.extender.macro
 			}
 
-		for (const { method, path, handler, hooks } of Object.values(
-			plugin.router.history
-		))
-			this.add(
-				method,
-				path,
-				handler,
-				plugin['~cookieConfig']
-					? {
-							...hooks,
-							config: {
-								...hooks.config,
-								cookie: mergeCookie(
-									plugin['~cookieConfig'],
-									hooks.config?.cookie ?? {}
-								)
-							}
-						}
-					: hooks
+		const inherited = filterGlobalHook(plugin.event)
+
+		for (const route of Object.values(plugin.router.history))
+			this.addPluginRoute(
+				plugin,
+				route,
+				inherited.error as HookContainer[]
 			)
 
 		if (name) {
@@ -5321,17 +5397,10 @@ export default class Elysia<
 			)
 
 			if (isNotEmpty(plugin.event))
-				this.event = mergeLifeCycle(
-					this.event,
-					filterGlobalHook(plugin.event),
-					current
-				)
+				this.event = mergeLifeCycle(this.event, inherited, current)
 		} else {
 			if (isNotEmpty(plugin.event))
-				this.event = mergeLifeCycle(
-					this.event,
-					filterGlobalHook(plugin.event)
-				)
+				this.event = mergeLifeCycle(this.event, inherited)
 		}
 
 		if (plugin.validator.global)
