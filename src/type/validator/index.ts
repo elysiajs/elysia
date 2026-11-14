@@ -570,6 +570,7 @@ export class TypeBoxValidator<
 	#isForm = false
 	#hasOptional = false
 	#cleanRedundant = false
+	#cleanFirst = false
 
 	// Lazy-JIT deferral state
 	#deferred = false
@@ -939,6 +940,19 @@ export class TypeBoxValidator<
 			options?.normalize !== 'typebox' &&
 			isFullyClosedObject(this.schema)
 
+		this.#cleanFirst =
+			!!this.Clean &&
+			!options?.sanitize &&
+			(options?.normalize === true ||
+				options?.normalize === 'exactMirror' ||
+				options?.normalize === 'typebox') &&
+			schemaSome(
+				this.schema,
+				(node) =>
+					(node['~kind'] === 'Object' || node.type === 'object') &&
+					node.additionalProperties === false
+			)
+
 		if (
 			this.hasCodec &&
 			!this.#isForm &&
@@ -1181,6 +1195,9 @@ export class TypeBoxValidator<
 		this.#tick()
 
 		if (this.#isForm || !this.hasCodec) {
+			if (this.#cleanFirst && this.Clean && !this.#isForm)
+				value = this.Clean(value) as Static<T>
+
 			const errors = this.#noValidate
 				? undefined
 				: this.#validate(value, false)
@@ -1341,6 +1358,9 @@ export class TypeBoxValidator<
 		const markedValue = value
 		const marked = this.#isForm ? this.#markForm(value) : undefined
 		try {
+			if (this.#cleanFirst && this.Clean && !this.#isForm)
+				value = this.Clean(value) as Static<T>
+
 			if (!this.#noValidate) {
 				// take() MUST run even if Check throws (type-elysia-2)
 				collectFileTypeChecks()
@@ -1402,6 +1422,9 @@ export class TypeBoxValidator<
 		const markedValue = value
 		const marked = this.#isForm ? this.#markForm(value) : undefined
 		try {
+			if (this.#cleanFirst && this.Clean && !this.#isForm)
+				value = this.Clean(value) as Static<T>
+
 			const errors = this.#noValidate ? undefined : this.#validate(value)
 			if (errors)
 				throw this.#error(
