@@ -5,7 +5,7 @@ import { afterEach, describe, it, expect } from 'bun:test'
 import { Type, type TSchema } from 'typebox'
 
 import { Elysia, t } from '../../src'
-import { post, json } from '../utils'
+import { req, post, json } from '../utils'
 import { TypeBoxValidatorCache } from '../../src/type/validator'
 import {
 	fnKey,
@@ -802,4 +802,132 @@ describe('TypeBoxValidatorCache refine under any keyword', () => {
 				expect(await status(`/a${other}`, other)).toBe(200)
 				expect(await status(`/a${other}`, first)).toBe(422)
 			})
+})
+
+// The structural key is built from enumerable keys, and an instance keeps what
+// it does in internal slots or on its prototype: a RegExp `pattern` keys as `{}`
+// whatever it matches. Two routes whose schemas differed only in that RegExp
+// got the same key and SHARED one compiled validator, so whichever route was
+// requested first decided what the other accepted. A schema holding an object
+// the key cannot describe must be identity-only.
+describe('TypeBoxValidatorCache non-plain objects', () => {
+	afterEach(() => Validator.clear())
+
+	const meta = (schema: unknown) =>
+		computeSchemaMeta(schema as TSchema, false)
+
+	// matches on state that neither its source, flags nor keys show
+	class Allow extends RegExp {
+		#allowed: string
+
+		constructor(allowed: string) {
+			super('^.+$')
+			this.#allowed = allowed
+		}
+
+		test(value: string) {
+			return value === this.#allowed
+		}
+	}
+
+	it('treats a schema holding an instance as opaque', () => {
+		const cases: [string, unknown][] = [
+			['RegExp pattern', t.String({ pattern: /^a$/ })],
+			[
+				'nested RegExp pattern',
+				t.Object({ a: t.Array(t.String({ pattern: /^a$/ })) })
+			],
+			['RegExp subclass', t.String({ pattern: new Allow('a') })],
+			[
+				'RegExp with own keys',
+				t.String({ pattern: Object.assign(/^a$/, { allow: 'a' }) })
+			],
+			[
+				// a JSON form says how an instance prints, not what it matches
+				'RegExp with a toJSON',
+				t.String({
+					pattern: Object.assign(/^a$/, { toJSON: () => '^a$' })
+				})
+			],
+			['Map', { type: 'object', default: new Map([['a', 1]]) }],
+			['Set', { type: 'array', default: new Set([1]) }],
+			[
+				'inherited keyword',
+				Object.assign(Object.create({ maximum: 1 }), { type: 'number' })
+			]
+		]
+
+		// a structural key here would let a same-shaped schema holding another
+		// instance be served this one's validator
+		const keyed = cases
+			.filter(([, schema]) => meta(schema).special !== true)
+			.map(([label]) => label)
+
+		expect(keyed).toEqual([])
+	})
+
+	it('still keys plain data structurally', () => {
+		// a null-prototype object and an array describe themselves in full, so
+		// they keep sharing one validator across schema objects
+		const schema = Object.assign(Object.create(null), {
+			type: 'string',
+			enum: ['a', 'b']
+		})
+
+		expect(meta(schema).special).toBe(false)
+		expect(meta(schema).key).toBe('{"type":"string","enum":["a","b"]}')
+	})
+
+	it('serves a RegExp schema to itself only', () => {
+		const cache = new TypeBoxValidatorCache(60_000)
+		const make = (pattern: RegExp) =>
+			t.Object({ id: t.String({ pattern }) })
+		const lenient = make(/^.+$/)
+
+		cache.set(lenient, undefined, { tag: 1 } as any)
+
+		expect(cache.get(make(/^[a-z0-9]+$/))).toBeUndefined()
+		// identity still hits: a schema is compiled once however often it is used
+		expect((cache.get(lenient) as any).tag).toBe(1)
+
+		cache.clear()
+	})
+
+	it('keeps same-source RegExps that match differently apart', () => {
+		const create = (allowed: string) =>
+			Validator.create(
+				t.Object({ id: t.String({ pattern: new Allow(allowed) }) })
+			)
+		const a = create('a')
+		const b = create('b')
+
+		expect(a.Check({ id: 'a' })).toBe(true)
+		expect(a.Check({ id: 'b' })).toBe(false)
+		expect(b.Check({ id: 'b' })).toBe(true)
+		expect(b.Check({ id: 'a' })).toBe(false)
+	})
+
+	for (const first of ['public', 'files'])
+		it(`enforces each route's own RegExp when /${first} is requested first`, async () => {
+			const params = (pattern: RegExp) =>
+				t.Object({ id: t.String({ pattern }) })
+			const app = new Elysia()
+				.get('/public/:id', { params: params(/^.+$/) }, () => 'ok')
+				.get(
+					'/files/:id',
+					{ params: params(/^[a-z0-9]+$/) },
+					() => 'ok'
+				)
+			const other = first === 'public' ? 'files' : 'public'
+			const status = (path: string) =>
+				app.handle(req(path)).then((r) => r.status)
+
+			// the first request builds and caches its route's validator; the
+			// second route must build its own, not be served the first's
+			expect(await status(`/${first}/abc`)).toBe(200)
+			expect(await status(`/${other}/abc`)).toBe(200)
+
+			expect(await status('/public/A_B')).toBe(200)
+			expect(await status('/files/A_B')).toBe(422)
+		})
 })

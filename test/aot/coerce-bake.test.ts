@@ -9,6 +9,7 @@ import {
 	endValidatorCapture
 } from '../../src/compile/aot-capture'
 import { materialise, materialiseHandlers, registerManifest } from './_manifest'
+import { compileToSource } from '../../src/plugin/aot/source'
 
 /** Baked coercion must match live validation or fall back completely. */
 
@@ -302,4 +303,136 @@ describe('shared leaf is not corrupted across optional/required reuse', () => {
 		expect(ok.status).toBe(200)
 		await expect(ok.json()).resolves.toEqual({ a: 5, b: 2 })
 	})
+})
+
+describe('cookie signing secrets stay out of the plan', () => {
+	const secret = 'coerce-bake-cookie-signing-secret'
+
+	const build = (field: () => any) => () =>
+		new Elysia()
+			.get(
+				'/set',
+				{ cookie: t.Cookie({ uid: t.Optional(field()) }) },
+				({ cookie }: any) => {
+					cookie.uid.value = 7
+
+					return 'ok'
+				}
+			)
+			.get(
+				'/c',
+				{ cookie: t.Cookie({ uid: field() }) },
+				({ cookie }: any) =>
+					typeof cookie.uid.value + ':' + cookie.uid.value
+			)
+
+	// the plan as captured, and the manifest module a bundler ships
+	const emit = async (routes: () => any) => {
+		const { validators } = capture(routes)
+		const plan = slot(validators, 'GET', '/c', 'cookie')?.coercePlan
+
+		Compiled.clear()
+		Validator.clear()
+		clearCoerceLeafCache()
+		const source = await compileToSource(routes())
+
+		// the cookie slot is in the manifest inspected by the caller
+		expect(source).toContain('"cookie":')
+
+		return { plan, source }
+	}
+
+	const get = (app: any, path: string, cookie?: string) =>
+		app.handle(
+			new Request('http://localhost' + path, {
+				headers: cookie ? { cookie } : {}
+			})
+		)
+
+	const signedBy = async (app: any) =>
+		(await get(app, '/set')).headers.getSetCookie()[0]!.split(';')[0]!
+
+	// coerced in the cookie slot: the plan records each of these leaves
+	for (const [name, field] of [
+		['number', () => t.Cookie(t.Number(), { secrets: secret })],
+		[
+			'constrained number',
+			() => t.Cookie(t.Number({ minimum: 1 }), { secrets: secret })
+		],
+		['integer', () => t.Cookie(t.Integer(), { secrets: [secret] })],
+		['boolean', () => t.Cookie(t.Boolean(), { secrets: secret })],
+		['literal', () => t.Cookie(t.Literal(7), { secrets: secret })],
+		[
+			'optional',
+			() => t.Optional(t.Cookie(t.Number(), { secrets: secret }))
+		],
+		[
+			'nullable',
+			() => t.Nullable(t.Cookie(t.Number(), { secrets: secret }))
+		]
+	] as const)
+		it(`bakes without the secret: ${name} field`, async () => {
+			const { plan, source } = await emit(build(field))
+
+			// still baked, and the manifest carries the plan checked here
+			expect(plan).toBeDefined()
+			expect(source).toContain('cp: ' + JSON.stringify(plan))
+
+			// whoever reads the build output could forge the cookie with it
+			expect(JSON.stringify(plan)).not.toContain('config')
+			expect(source).not.toContain(secret)
+		})
+
+	it('keeps the constraints of a signed field in the plan', async () => {
+		const { plan } = await emit(
+			build(() => t.Cookie(t.Number({ minimum: 1 }), { secrets: secret }))
+		)
+
+		expect(plan).toEqual({ p: { uid: { e: 1, c: { minimum: 1 } } } })
+	})
+
+	it('signs and verifies with the live secret once frozen', async () => {
+		const routes = build(() =>
+			t.Cookie(t.Number({ minimum: 1 }), { secrets: secret })
+		)
+
+		// live control arm first: `freeze` claims the process manifest
+		const live = routes()
+		const signed = await signedBy(live)
+		expect(signed).toStartWith('uid=7.')
+		expect(await (await get(live, '/c', signed)).text()).toBe('number:7')
+
+		// the secret comes from the schema the app declares, not the manifest
+		const { app, validators } = freeze(routes)
+		expect(
+			slot(validators, 'GET', '/c', 'cookie')?.coercePlan
+		).toBeDefined()
+		expect(await signedBy(app)).toBe(signed)
+
+		const ok = await get(app, '/c', signed)
+		expect(ok.status).toBe(200)
+		expect(await ok.text()).toBe('number:7')
+
+		// unsigned, then a value the secret did not sign
+		expect((await get(app, '/c', 'uid=7')).status).toBe(400)
+		expect(
+			(await get(app, '/c', signed.replace('uid=7', 'uid=8'))).status
+		).toBe(400)
+	})
+
+	// a config that JSON can't carry never baked a plan: leaving `config` out
+	// of the plan must not start baking one
+	for (const [name, options] of [
+		['an undefined secret', { secrets: [secret, undefined] }],
+		['an infinite maxAge', { secrets: secret, maxAge: Infinity }]
+	] as const)
+		it(`does not bake a field with ${name}`, async () => {
+			const { plan, source } = await emit(
+				build(() => t.Cookie(t.Number(), options as any))
+			)
+
+			expect(plan).toBeUndefined()
+			expect(source).not.toContain('cp: ')
+			expect(source).not.toContain(secret)
+		})
 })

@@ -198,7 +198,11 @@ export function routeShape(
 
 			if (map) named(value)
 			else if (k === 'config' && isCookieAt(at))
-				shape([value?.sign, !!value?.secrets])
+				// `~unset` makes a field sign: never the shape of no `secrets`
+				shape([
+					value?.sign,
+					value?.['~unset'] ? null : !!value?.secrets
+				])
 			// secret never enters shape
 			else if (
 				k === 'secrets' &&

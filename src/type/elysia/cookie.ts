@@ -47,6 +47,9 @@ export function Cookie(
 	if (options)
 		for (const key in options) {
 			const value = options[key]
+			if (key === 'secrets' && value == null)
+				(config ??= {})['~unset'] = true
+
 			if (value === undefined) continue
 
 			if ((COOKIE_OPTION_KEYS as readonly string[]).includes(key))
@@ -56,6 +59,25 @@ export function Cookie(
 
 	if (isSchema(first)) {
 		if (!config) return first
+
+		// a wrapped t.Cookie keeps what this call leaves unset, `sign` adds up
+		const inner = (first as TCookieField).config as
+			| Record<string, unknown>
+			| undefined
+
+		if (inner)
+			for (const key of COOKIE_OPTION_KEYS) {
+				const value = inner[key]
+				const own = config[key]
+
+				if (value === undefined) continue
+				if (own === undefined) config[key] = value
+				else if (key === 'sign')
+					config.sign =
+						own === true ||
+						value === true ||
+						([] as unknown[]).concat(value, own)
+			}
 
 		const target = Object.create(
 			Object.getPrototypeOf(first),

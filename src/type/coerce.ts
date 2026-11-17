@@ -424,6 +424,15 @@ export function captureCoercePlan(
 
 			if (o) {
 				const { type, ...rest } = o
+
+				// cookie `config` holds the signing secrets and the plan is
+				// emitted: left out, the rebuild reads it from the live node
+				if ('config' in rest) {
+					// as when it was in the plan: no plan for a non-JSON config
+					if (!jsonSafe(rest.config)) bakeable = false
+					delete rest.config
+				}
+
 				if (Object.keys(rest).length) leaf.c = rest
 
 				if ('~optional' in o) leaf.o = o['~optional']

@@ -394,6 +394,59 @@ if (!hasSyncHmac) {
 			expect(setCookie).not.toContain(val + '.')
 		})
 
+		it('never signs a forged value when only an attribute is written', async () => {
+			// An attribute write is the one mutation that doesn't read the
+			// value first. If the entry reaches `set.cookie` before its HMAC
+			// is checked, the response signs whatever the client sent and
+			// hands back a valid signature for it: a signing oracle for any
+			// value on any signed name.
+			const attributes = {
+				expires: new Date(0),
+				maxAge: 86400,
+				domain: 'example.com',
+				path: '/',
+				secure: true,
+				httpOnly: true,
+				sameSite: 'strict',
+				priority: 'high',
+				partitioned: true
+			}
+
+			const app = new Elysia({
+				cookie: { secrets: SECRET, sign: ['sid'] }
+			})
+				.get('/thrown/:key', ({ cookie: { sid }, params: { key } }) => {
+					;(sid as any)[key] = (attributes as any)[key]
+					return 'ok'
+				})
+				// a caught rejection leaves nothing for the success exit either
+				.get('/caught/:key', ({ cookie: { sid }, params: { key } }) => {
+					try {
+						;(sid as any)[key] = (attributes as any)[key]
+					} catch {}
+					return 'ok'
+				})
+
+			for (const forged of [
+				'sid=1',
+				'sid=garbage.nothmac',
+				'sid={"admin":true}'
+			])
+				for (const key of Object.keys(attributes)) {
+					const thrown = await app.handle(
+						req(`/thrown/${key}`, forged)
+					)
+					await expectInvalidCookieError(thrown, 'sid')
+					expect(thrown.headers.getAll('set-cookie')).toEqual([])
+
+					const caught = await app.handle(
+						req(`/caught/${key}`, forged)
+					)
+					expect(caught.status).toBe(200)
+					expect(caught.headers.getAll('set-cookie')).toEqual([])
+				}
+		})
+
 		it('rejects a dotless value when no null secret is configured', async () => {
 			const app = new Elysia({
 				cookie: { secrets: SECRET, sign: ['sid'] }

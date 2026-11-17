@@ -52,10 +52,18 @@ interface WalkState {
 function walk(value: any, key: string | number, state: WalkState) {
 	if (value !== null && typeof value === 'object') {
 		const elyTyp = value['~elyTyp']
+		const proto = Object.getPrototypeOf(value)
 
 		if (
 			!state.isOpaque &&
-			(value['~refine'] || elyTyp === ELYSIA_TYPES.NoValidate)
+			(value['~refine'] ||
+				elyTyp === ELYSIA_TYPES.NoValidate ||
+				// enumerable keys can not describe an instance: a RegExp
+				// `pattern` keys as `{}` whatever it matches, and a `toJSON`
+				// only says how it prints
+				(proto !== Object.prototype &&
+					proto !== null &&
+					proto !== Array.prototype))
 		) {
 			state.isOpaque = true
 			// the structural key is dead the moment the schema is opaque

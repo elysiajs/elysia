@@ -311,7 +311,7 @@ describe('static stream preparation', () => {
 			return Reflect.apply(factory, this, [handler, ...bindings])
 		}
 		try {
-			expect(AOT_MANIFEST_FORMAT).toBe(10)
+			expect(AOT_MANIFEST_FORMAT).toBe(11)
 			registerManifest({ handlers: manifest })
 			const replayed = app(input.value)
 			replayed.compile()

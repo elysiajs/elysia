@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'bun:test'
 
-import { Elysia } from '../../src'
+import { Elysia, t } from '../../src'
 import { Cookie } from '../../src/cookie/cookie'
 import { compileCookieConfig } from '../../src/cookie/config'
-import { parseCookieRaw, signCookieValues } from '../../src/cookie/utils'
+import { signCookie } from '../../src/cookie/crypto'
+import {
+	buildCookieJar,
+	parseCookieRaw,
+	parseCookieRawLazy,
+	signCookieValues
+} from '../../src/cookie/utils'
 
 describe('cookie signing configuration', () => {
 	it('rejects global signing without a usable secret', () => {
@@ -129,6 +135,87 @@ describe('cookie signing configuration', () => {
 		const cookies = { token: { value: 'secret-data' } }
 
 		expect(() => signCookieValues(cookies as any, config as any)).toThrow()
+	})
+
+	// `sign: true` declares every cookie signed. With no usable top-level
+	// secret (an unset env var, or a rotation of only `null`, which accepts
+	// unsigned values) a name without its own secret can't be verified, so a
+	// read must reject it: handing over the client's value is an unsigned read
+	// of a cookie the config calls signed
+	const ownSecret = 'Fischl von Luftschloss Narfidort'
+	const unverifiable = (secrets?: (string | null)[]) =>
+		t.Cookie(
+			{
+				sid: t.Cookie(t.Optional(t.String()), { secrets: ownSecret }),
+				role: t.Optional(t.String())
+			},
+			{ sign: true, secrets }
+		)
+
+	it('rejects reading a cookie declared signed that has no usable secret', async () => {
+		for (const secrets of [undefined, [null], [null, '']]) {
+			const cookie = unverifiable(secrets)
+			const app = new Elysia().get(
+				'/',
+				{ cookie },
+				({ cookie: { role } }) => role.value ?? 'none'
+			)
+
+			const response = await app.handle(
+				new Request('http://localhost/', {
+					headers: { cookie: 'role=admin' }
+				})
+			)
+			expect(response.status).toBe(400)
+
+			// verified on access: the read rejects, not the request
+			const config = compileCookieConfig(cookie, undefined)
+			const jar = buildCookieJar(
+				{ headers: {} } as any,
+				parseCookieRawLazy('role=admin', config),
+				config,
+				1
+			)
+			expect(() => jar.role.value).toThrow('invalid cookie signature')
+		}
+	})
+
+	// only the unverifiable name is turned away: the config stays valid, and
+	// writing that name keeps naming the missing secret, not a signature
+	it('keeps the rest of a config without a top-level secret working', async () => {
+		const cookie = unverifiable()
+		const app = new Elysia()
+			.get('/', { cookie }, ({ cookie: { sid } }) => sid.value ?? 'none')
+			.get('/write', { cookie }, ({ cookie: { sid } }) => {
+				sid.value = 'abc'
+				return 'ok'
+			})
+
+		const signed = await signCookie('abc', ownSecret, 'sid')
+		const get = (path: string, cookie?: string) =>
+			app.handle(
+				new Request('http://localhost' + path, {
+					headers: cookie ? { cookie } : {}
+				})
+			)
+
+		await expect((await get('/')).text()).resolves.toBe('none')
+		await expect((await get('/', `sid=${signed}`)).text()).resolves.toBe(
+			'abc'
+		)
+
+		const write = await get('/write')
+		expect(write.status).toBe(200)
+		expect(decodeURIComponent(write.headers.get('set-cookie')!)).toInclude(
+			`sid=${signed}`
+		)
+
+		expect(() =>
+			signCookieValues(
+				{ role: { value: 'admin' } } as any,
+				compileCookieConfig(cookie, undefined)
+			)
+		).toThrow('`cookie.secrets` is missing or empty')
 	})
 
 	// signing is decided by the app/route config alone: a per-cookie

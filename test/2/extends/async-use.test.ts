@@ -192,7 +192,9 @@ describe('.use() with asynchronous plugins', () => {
 		}
 	)
 
-	it('accepts a new plugin after a previous rejection is observed', async () => {
+	// the rejected plugin may have been the auth gate: a later plugin is still
+	// applied, but the app stays failed
+	it('keeps a previous rejection after a new plugin is added', async () => {
 		const errors: unknown[] = []
 		const orig = console.error
 		console.error = (...a: unknown[]) => {
@@ -208,7 +210,7 @@ describe('.use() with asynchronous plugins', () => {
 
 			app.use(Promise.resolve(new Elysia().get('/p', () => 'p')))
 
-			await expect(app.modules).resolves.toBeUndefined()
+			await expect(app.modules).rejects.toThrow('first')
 
 			const res = await app.handle('/p').then((r) => r.text())
 			expect(res).toBe('p')

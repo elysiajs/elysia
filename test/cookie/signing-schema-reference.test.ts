@@ -365,6 +365,143 @@ describe('cookie signing config reached through a schema reference', () => {
 		)
 	})
 
+	// an outer t.Cookie adds to the config of the t.Cookie it wraps: replacing
+	// it drops `secrets` / `sign`, and a forged `session=admin` passes
+	const wraps: [
+		kind: string,
+		wrap: (
+			inner: Record<string, unknown>,
+			outer: Record<string, unknown>
+		) => any
+	][] = [
+		[
+			'object-level',
+			(inner, outer) =>
+				t.Cookie(
+					t.Cookie(
+						{ session: t.Optional(t.String()) },
+						{ sign: ['session'], ...inner }
+					),
+					outer
+				)
+		],
+		[
+			'per-field',
+			(inner, outer) =>
+				t.Object({
+					session: t.Cookie(
+						t.Cookie(t.Optional(t.String()), inner),
+						outer
+					)
+				})
+		]
+	]
+
+	for (const [kind, wrap] of wraps) {
+		it(`keeps the ${kind} config of a t.Cookie wrapped by another`, async () => {
+			const app = new Elysia().get(
+				'/',
+				{
+					cookie: wrap(
+						{ secrets: SECRET, httpOnly: true },
+						{ maxAge: 300 }
+					)
+				},
+				handler
+			)
+
+			await expectSigning(app)
+
+			// the wrapped attribute and the added one both apply
+			const issued = (await app.handle('/')).headers.get('set-cookie')
+			expect(issued).toInclude('HttpOnly')
+			expect(issued).toInclude('Max-Age=300')
+		})
+
+		// what the outer call sets wins instead of failing the compile
+		it(`signs a wrapped ${kind} t.Cookie with the outer secret`, async () => {
+			const wrapped = 'Prinzessin der Verurteilung'
+			const app = new Elysia().get(
+				'/',
+				{ cookie: wrap({ secrets: wrapped }, { secrets: SECRET }) },
+				handler
+			)
+
+			await expectSigning(app)
+
+			const stale = await app.handle(
+				'/',
+				withCookie(
+					`session=${encodeURIComponent(await signCookie('admin', wrapped, 'session'))}`
+				)
+			)
+			expect(stale.status).toBe(400)
+		})
+
+		it(`reads the outer legacySignature of a wrapped ${kind} t.Cookie`, async () => {
+			const legacy = withCookie(
+				`session=${encodeURIComponent(await signCookie('admin', SECRET))}`
+			)
+			const reading = (inner: boolean, outer: boolean) =>
+				new Elysia()
+					.get(
+						'/',
+						{
+							cookie: wrap(
+								{ secrets: SECRET, legacySignature: inner },
+								{ legacySignature: outer }
+							)
+						},
+						handler
+					)
+					.handle('/', legacy)
+
+			expect((await reading(false, true)).status).toBe(200)
+			expect((await reading(true, false)).status).toBe(400)
+		})
+	}
+
+	it('adds the outer `sign` names to the wrapped ones', async () => {
+		const app = new Elysia().get(
+			'/',
+			{
+				cookie: t.Cookie(
+					t.Cookie(
+						{
+							session: t.Optional(t.String()),
+							theme: t.Optional(t.String())
+						},
+						{ secrets: SECRET, sign: ['session'] }
+					),
+					{ sign: ['theme'] }
+				)
+			},
+			({ cookie }) => {
+				cookie.theme.value = 'dark'
+				return handler({ cookie })
+			}
+		)
+
+		await expectSigning(app)
+		expect((await app.handle('/')).headers.getSetCookie()).toContain(
+			`theme=${encodeURIComponent(await signCookie('dark', SECRET, 'theme'))}; Path=/`
+		)
+	})
+
+	// TypeBox rebuilds a module member from its enumerable keys: the wrapped
+	// signing has to sit in `config` itself
+	it('keeps a wrapped t.Cookie config through t.Module', async () => {
+		const module: any = t.Module({
+			Session: t.Cookie(kinds[0]![1](), { maxAge: 300 })
+		})
+		const app = new Elysia().get('/', { cookie: module.Session }, handler)
+
+		await expectSigning(app)
+		expect((await app.handle('/')).headers.get('set-cookie')).toInclude(
+			'Max-Age=300'
+		)
+	})
+
 	it('reads the config a t.Cyclic cookie holds in its $defs', () =>
 		expectSigning(
 			new Elysia().get(
@@ -668,8 +805,8 @@ describe('cookie signing config reached through a schema reference', () => {
 				)
 		))
 
-	// `null` leaves a field unsigned, `[null]` signs without a usable key:
-	// candidates naming one each disagree
+	// `null` and `[null]` both ask a field to sign without a usable key, yet
+	// are not one `secrets`: candidates naming one each disagree
 	for (const [first, second] of [
 		[null, [null]],
 		[[null], null]
@@ -694,6 +831,62 @@ describe('cookie signing config reached through a schema reference', () => {
 
 			expect(() => app.compile()).toThrow(ambiguous)
 		})
+
+	// on the cookie object an unset `secrets` asks for nothing: it must not
+	// set a candidate apart from one without options, the app secret signs
+	it('signs through same-named schemas when one has an unset object secret', () =>
+		expectSigning(
+			new Elysia({ cookie: { secrets: SECRET, sign: ['session'] } })
+				.model({
+					Session: t.Cookie(
+						t.Object({ session: t.Optional(t.String()) }),
+						{ secrets: undefined }
+					)
+				})
+				.get(
+					'/',
+					{
+						cookie: t.Cyclic(
+							{
+								Session: t.Object({
+									session: t.Optional(t.String())
+								})
+							},
+							'Session'
+						) as any
+					},
+					handler
+				)
+		))
+
+	// on a field it asks to sign, which like `sign` adds up across
+	// candidates: the one without options can't leave the field unsigned
+	it('throws on compile for same-named schemas when one has an unset field secret', () => {
+		const app = new Elysia()
+			.model({
+				Session: t.Object({
+					session: t.Cookie(t.Optional(t.String()), {
+						secrets: undefined
+					})
+				})
+			})
+			.get(
+				'/',
+				{
+					cookie: t.Cyclic(
+						{
+							Session: t.Object({
+								session: t.Optional(t.String())
+							})
+						},
+						'Session'
+					) as any
+				},
+				handler
+			)
+
+		expect(() => app.compile()).toThrow(/`cookie.secrets`/)
+	})
 
 	// a model name is matched whole, only an `$id` by its last segment
 	it('signs through t.Ref to a model named with a path', () =>
@@ -1084,6 +1277,36 @@ describe('cookie signing config reached through a schema reference', () => {
 
 		expect(() => app.compile()).toThrow(/`cookie.secrets`/)
 	})
+
+	// `secrets: process.env.COOKIE_SECRET` with the variable unset is still a
+	// field asking to sign: it must fail at boot, not accept a forged cookie
+	for (const secrets of [undefined, null]) {
+		const field = () =>
+			t.Object({
+				session: t.Cookie(t.Optional(t.String()), { secrets } as any)
+			})
+
+		it(`throws on compile for a field secret left ${secrets}`, async () => {
+			const app = () =>
+				new Elysia().get('/', { cookie: field() }, handler)
+
+			expect(() => app().compile()).toThrow(/`cookie.secrets`/)
+
+			// nor is the route served unsigned when nothing compiled it ahead
+			const forged = await app().handle('/', withCookie('session=admin'))
+			expect(forged.status).toBe(500)
+		})
+
+		// the app secret is the fallback of a signed field without its own
+		it(`signs a field secret left ${secrets} with the app secret`, () =>
+			expectSigning(
+				new Elysia({ cookie: { secrets: SECRET } }).get(
+					'/',
+					{ cookie: field() },
+					handler
+				)
+			))
+	}
 })
 
 // the async verifier, selected without a synchronous HMAC, in its own process
@@ -1344,4 +1567,28 @@ describe('AOT replay of a cookie signing config reached through a schema referen
 			expect(replayed.frozen).toBe(0)
 			await expectSigning(replayed.app)
 		})
+
+	// a field secret left unset makes the field sign with the app secret:
+	// the unsigned lane of a build without the option must not serve it
+	it('never replays an unsigned build when a field secret is left unset', async () => {
+		const app = (options: Record<string, unknown>) => () =>
+			new Elysia({ cookie: { secrets: SECRET } }).get(
+				'/',
+				{
+					cookie: t.Object({
+						session: t.Cookie(t.Optional(t.String()), options)
+					})
+				},
+				handler
+			)
+
+		const replayed = await replay(
+			app({ maxAge: 60 }),
+			app({ maxAge: 60, secrets: undefined })
+		)
+
+		expect(replayed.drifted).toBe(true)
+		expect(replayed.frozen).toBe(0)
+		await expectSigning(replayed.app)
+	})
 })

@@ -92,11 +92,13 @@ export class Cookie<T = any> implements BaseCookie {
 
 	protected get setCookie() {
 		const j = this.#jar
-		if (!(this.#name in j)) j[this.#name] = this.#initial
+		const fresh = !(this.#name in j)
 
-		const entry = j[this.#name]
+		const entry = fresh ? this.#initial : j[this.#name]
 		if (entry && (entry as any)['~unsign'] !== undefined)
 			resolvePendingCookie(entry as Record<string, any>, this.#name)
+
+		if (fresh) j[this.#name] = entry
 
 		return entry
 	}

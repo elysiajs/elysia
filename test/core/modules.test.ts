@@ -647,6 +647,38 @@ describe('fetch while async plugins are pending', () => {
 		}
 	})
 
+	// a plugin added once the first batch settled starts a new chain: it must
+	// not forget the rejection, the gate is still missing
+	it('stays closed when an async plugin is added after the gate rejected', async () => {
+		const orig = console.error
+		console.error = () => {}
+
+		try {
+			const app = new Elysia()
+				.use(sleep(1).then(() => Promise.reject(new Error('gate'))))
+				.get('/secret', () => 'SECRET')
+
+			await app.modules.catch(() => {})
+
+			app.use(
+				sleep(1).then(() => new Elysia().get('/late', () => 'late'))
+			)
+
+			// held on the new chain, then answered by the failure
+			const pending = await app.fetch(new Request('http://e.ly/secret'))
+			expect(pending.status).toBe(500)
+			expect(await pending.text()).not.toContain('SECRET')
+
+			await expect(app.modules).rejects.toThrow('gate')
+
+			const settled = await app.fetch(new Request('http://e.ly/secret'))
+			expect(settled.status).toBe(500)
+			expect(await settled.text()).not.toContain('SECRET')
+		} finally {
+			console.error = orig
+		}
+	})
+
 	it('serves normally when every async plugin lands', async () => {
 		const app = new Elysia()
 			.get('/sync', () => 'sync')

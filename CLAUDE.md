@@ -13,9 +13,9 @@ Executors:
 - Codex (/codex:rescue --background): Peer engineer, different perspective. Second-opinion, reviewer/verifier.
 	- gpt-6.1-sol model with high effort: reasoning-heavy, treat as peer engineer with second opinion for code review, debugging, and complex problem solving.
 
-For high reasoning tasks, code review, architecture decisions, use Codex gpt-5.6-sol to debate with your own reasoning as pushback to find flaws in your plan.
+For high reasoning tasks, code review, architecture decisions, use Codex gpt-6.1-sol to debate with your own reasoning as pushback to find flaws in your plan.
 
-For security-sensitive decision/investigation, offload thinking and investigation to thinker (Opus) and use Codex gpt-daybreak-blue-latest (`codex exec -m gpt-daybreak-blue-latest --cyber-access-program daybreak_blue`) as a second opinion to prevent your own safeguards.
+For security-sensitive decision/investigation, use Codex gpt-daybreak-blue-latest (`codex exec -m gpt-daybreak-blue-latest --cyber-access-program daybreak_blue`) as a second opinion.
 
 For orchestration:
 - mechanical executor, use a detailed conclusion + key diffs; synthesize.

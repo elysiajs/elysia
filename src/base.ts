@@ -5816,8 +5816,8 @@ export class Elysia<
 	}
 
 	#useAsync(promise: Promise<any>): this {
-		if (!this.ready) this._error = undefined
-
+		// `_error` is never cleared here: a plugin that failed earlier may have
+		// been the auth gate, a later one must not reopen the app
 		this.#pending++
 
 		const base = this.ready ?? Promise.resolve()

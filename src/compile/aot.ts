@@ -7,7 +7,7 @@ import type { resolveHandlerParams } from './handler/params'
 import type { buildFrozenRouteValidator } from './handler/frozen-validator'
 import type { ValidatorOptions } from '../validator'
 
-export const AOT_MANIFEST_FORMAT = 10
+export const AOT_MANIFEST_FORMAT = 11
 const AOT_ABI = `${packageJson.version}:${AOT_MANIFEST_FORMAT}`
 
 export interface AotFingerprint {

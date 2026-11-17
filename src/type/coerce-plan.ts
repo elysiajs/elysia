@@ -146,7 +146,8 @@ export const COERCE_LEAF_CTOR = {
 export interface CoerceLeaf {
 	// `~elyTyp` of the primitive coercion
 	e: number
-	// constraints bag passed to the leaf constructor (own-enumerable, minus `type`)
+	// constraints bag passed to the leaf constructor (own-enumerable, minus
+	// `type` and cookie `config`: the signing secrets never enter the plan)
 	c?: Record<string, unknown>
 	// `~optional` marker to re-attach (coercion preserves it; the shared leaf can't)
 	o?: unknown
@@ -270,10 +271,18 @@ function rebuildCoerceNode<T>(
 	if (isCoerceLeaf(node)) {
 		const key = node.e + (node.c ? JSON.stringify(node.c) : '')
 
+		// cookie `config` is never in the plan: read from the live node, and
+		// built per use as the key can't tell one config from another
+		const bag =
+			original &&
+			Object.prototype.propertyIsEnumerable.call(original, 'config')
+				? { ...node.c, config: (original as any).config }
+				: node.c
+
 		let leaf: any
-		if (seen.has(key)) {
+		if (bag !== node.c || seen.has(key)) {
 			// @ts-expect-error
-			leaf = COERCE_LEAF_CTOR[node.e]!(node.c)
+			leaf = COERCE_LEAF_CTOR[node.e]!(bag)
 		} else {
 			seen.add(key)
 			leaf = coerceLeafCache.get(key)

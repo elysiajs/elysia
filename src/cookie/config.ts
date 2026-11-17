@@ -74,12 +74,13 @@ const emptyGathered = (): Gathered => ({
 	fields: nullObject()
 })
 
-// without `sign`, sorted keys, `secrets` as a list
+// without `sign` and `~unset` (a field's other way to ask for signing),
+// sorted keys, `secrets` as a list
 function comparableConfig(config: Record<string, any>) {
 	const out: Record<string, unknown> = nullObject()
 
 	for (const key of Object.keys(config).sort())
-		if (key !== 'sign')
+		if (key !== 'sign' && key !== '~unset')
 			out[key] = key === 'secrets' ? listKey(config[key]) : config[key]
 
 	return out
@@ -266,8 +267,13 @@ export function compileCookieConfig(
 	for (const name in fieldConfigs) {
 		const config = fieldConfigs[name]
 
-		// an empty secret fails below instead of unsigning
-		const sign = config.secrets != null || config.sign === true
+		// an empty secret fails below instead of unsigning, and so does a
+		// `secrets` t.Cookie was passed without a value (`~unset`)
+		const sign =
+			config.secrets != null ||
+			config.sign === true ||
+			(config as any)['~unset'] === true
+
 		if (sign) hasSign = true
 
 		fields[name] = {
@@ -344,7 +350,10 @@ export function resolveSignSecrets(
 	if (field?.sign) return field.secrets ?? config.globalSecrets
 
 	if (config.globalSign === true || config.globalSignSet?.has(name) === true)
-		return config.globalSecrets
+		// declared signed with no usable secret: an empty one verifies nothing,
+		// so a read rejects where an unset secret (reads as unsigned) or a
+		// `null`-only rotation (accepts unsigned) would pass the client's value
+		return hasUsableSecret(config.globalSecrets) ? config.globalSecrets : ''
 }
 
 export function isCookieSigned(
@@ -354,7 +363,13 @@ export function isCookieSigned(
 	| { signed: true; secrets: string | null | (string | null)[] }
 	| { signed: false } {
 	const secrets = resolveSignSecrets(name, config)
-	if (secrets !== undefined) return { signed: true, secrets }
+	if (
+		secrets !== undefined &&
+		// no secret set at all resolves to an empty one for reads: a write
+		// still throws below
+		(config.fields[name]?.sign || config.globalSecrets !== undefined)
+	)
+		return { signed: true, secrets }
 
 	if (
 		config.fields[name]?.sign ||

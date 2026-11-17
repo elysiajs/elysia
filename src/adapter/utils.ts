@@ -234,19 +234,22 @@ const hasFields = (value: unknown) =>
 	Array.isArray(value) ||
 	Object.prototype.toString.call(value) === '[object Object]'
 
+// an sse() payload carries a `toSSE` function; a data chunk with a key of
+// that name is not one
 const unwrapChunk = (chunk: any, value: any, typedSSE: boolean) =>
-	chunk.toSSE
+	typeof chunk.toSSE === 'function'
 		? { ...chunk, ...value, data: value.data }
 		: typedSSE
 			? value.data
 			: value
 
 function cleanChunk(validator: any, chunk: any, typedSSE: boolean) {
-	const payload = chunk.toSSE
-		? { ...chunk }
-		: typedSSE
-			? { data: chunk }
-			: chunk
+	const payload =
+		typeof chunk.toSSE === 'function'
+			? { ...chunk }
+			: typedSSE
+				? { data: chunk }
+				: chunk
 
 	if (validator.Clean)
 		return hasFields(payload) || !describesFields(validator.schema)
@@ -392,8 +395,11 @@ export function createStreamHandler({
 		const isSSE =
 			typedSSE ||
 			(!skipFormat &&
-				// First SSE result is wrapped with sse()
-				(init?.value?.sse ??
+				// First SSE result is wrapped with sse(), an `sse` key of a
+				// data chunk says nothing
+				((typeof init?.value?.toSSE === 'function'
+					? init.value.sse
+					: undefined) ??
 					// @ts-ignore ReadableStream is wrapped with sse()
 					generator?.sse ??
 					(set &&
@@ -502,7 +508,7 @@ export function createStreamHandler({
 			value: unknown
 		): Promise<void> | undefined => {
 			// @ts-ignore
-			if (value.toSSE) {
+			if (typeof value.toSSE === 'function') {
 				// @ts-ignore
 				controller.enqueue(textEncoder.encode(value.toSSE()))
 				return
