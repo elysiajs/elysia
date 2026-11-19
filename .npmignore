@@ -10,6 +10,13 @@
 .husky
 .eslintrc.json
 
+/AGENTS.md
+/CLAUDE.md
+/AI_POLICY.md
+/.audit
+/.unsound
+/ARCHITECTURE.md
+
 bun.lock
 bun.lockb
 node_modules

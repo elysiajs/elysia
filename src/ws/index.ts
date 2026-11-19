@@ -15,6 +15,99 @@ import type { FlattenResponse, WSParseHandler } from './types'
 import type { MaybeArray, Prettify, RouteSchema } from '../types'
 import { ValidationError } from '../error'
 
+const asyncResponseValidationIssues = [
+	{
+		message:
+			'Asynchronous Standard Schema validation is not supported by synchronous WebSocket responses'
+	}
+]
+
+const isBufferSource = (value: unknown): value is BufferSource =>
+	ArrayBuffer.isView(value) ||
+	value instanceof ArrayBuffer ||
+	(typeof SharedArrayBuffer !== 'undefined' &&
+		value instanceof SharedArrayBuffer)
+
+function validateResponse(
+	validator: TypeCheck<any> | ElysiaTypeCheck<any> | undefined,
+	data: unknown
+) {
+	if (!validator) return
+
+	// @ts-ignore
+	if (validator.provider === 'standard') {
+		// @ts-ignore
+		const result = validator.schema['~standard'].validate(data)
+
+		if (
+			result &&
+			typeof result === 'object' &&
+			'then' in result &&
+			typeof result.then === 'function'
+		) {
+			void Promise.resolve(result).catch(() => {})
+
+			return {
+				error: new ValidationError(
+					'message',
+					validator,
+					data,
+					false,
+					asyncResponseValidationIssues as any
+				).message
+			}
+		}
+
+		if (result.issues)
+			return {
+				error: new ValidationError(
+					'message',
+					validator,
+					data,
+					false,
+					result.issues as any
+				).message
+			}
+
+		return { value: result.value }
+	}
+
+	if (validator.Check(data) === false)
+		return {
+			error: new ValidationError('message', validator, data).message
+		}
+
+	return { value: data }
+}
+
+async function validateResponseAsync(
+	validator: TypeCheck<any> | ElysiaTypeCheck<any> | undefined,
+	data: unknown
+) {
+	if (!validator) return
+
+	// @ts-ignore
+	if (validator.provider === 'standard') {
+		// @ts-ignore
+		const result = await validator.schema['~standard'].validate(data)
+
+		if (result.issues)
+			return {
+				error: new ValidationError(
+					'message',
+					validator,
+					data,
+					false,
+					result.issues as any
+				).message
+			}
+
+		return { value: result.value }
+	}
+
+	return validateResponse(validator, data)
+}
+
 export const websocket: WebSocketHandler<any> = {
 	open(ws) {
 		ws.data.open?.(ws)
@@ -94,10 +187,14 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 		if (Buffer.isBuffer(data))
 			return this.raw.send(data as unknown as BufferSource, compress)
 
-		if (this.validator?.Check(data) === false)
-			return this.raw.send(
-				new ValidationError('message', this.validator, data).message
-			)
+		const validation = validateResponse(this.validator, data)
+		if (validation?.error) return this.raw.send(validation.error)
+		if (validation) {
+			data = validation.value as any
+
+			if (data === undefined) return 0
+			if (isBufferSource(data)) return this.raw.send(data, compress)
+		}
 
 		if (typeof data === 'object') data = JSON.stringify(data) as any
 
@@ -115,10 +212,14 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 		if (Buffer.isBuffer(data))
 			return this.raw.ping(data as unknown as BufferSource)
 
-		if (this.validator?.Check(data) === false)
-			return this.raw.send(
-				new ValidationError('message', this.validator, data).message
-			)
+		const validation = validateResponse(this.validator, data)
+		if (validation?.error) return this.raw.send(validation.error)
+		if (validation) {
+			data = validation.value as any
+
+			if (data === undefined) return this.raw.ping()
+			if (isBufferSource(data)) return this.raw.ping(data)
+		}
 
 		if (typeof data === 'object') data = JSON.stringify(data) as any
 
@@ -136,10 +237,14 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 		if (Buffer.isBuffer(data))
 			return this.raw.pong(data as unknown as BufferSource)
 
-		if (this.validator?.Check(data) === false)
-			return this.raw.send(
-				new ValidationError('message', this.validator, data).message
-			)
+		const validation = validateResponse(this.validator, data)
+		if (validation?.error) return this.raw.send(validation.error)
+		if (validation) {
+			data = validation.value as any
+
+			if (data === undefined) return this.raw.pong()
+			if (isBufferSource(data)) return this.raw.pong(data)
+		}
 
 		if (typeof data === 'object') data = JSON.stringify(data) as any
 
@@ -169,10 +274,15 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 				compress
 			)
 
-		if (this.validator?.Check(data) === false)
-			return this.raw.send(
-				new ValidationError('message', this.validator, data).message
-			)
+		const validation = validateResponse(this.validator, data)
+		if (validation?.error) return this.raw.send(validation.error)
+		if (validation) {
+			data = validation.value as any
+
+			if (data === undefined) return 0
+			if (isBufferSource(data))
+				return this.raw.publish(topic, data, compress)
+		}
 
 		if (typeof data === 'object') data = JSON.stringify(data) as any
 
@@ -244,66 +354,45 @@ export const createWSMessageParser = (
 export const createHandleWSResponse = (
 	responseValidator: TypeCheck<any> | ElysiaTypeCheck<any> | undefined
 ) => {
-	const handleWSResponse = (
+	const handleWSResponse = async (
 		ws: ServerWebSocket<any>,
 		data: unknown
-	): unknown => {
-		if (data instanceof Promise)
-			return data.then((data) => handleWSResponse(ws, data))
+	): Promise<unknown> => {
+		data = await data
 
 		if (Buffer.isBuffer(data)) return ws.send(data.toString())
 
 		if (data === undefined) return
 
-		const validateResponse = responseValidator
-			? // @ts-ignore
-				responseValidator.provider === 'standard'
-				? (data: unknown) =>
-						// @ts-ignore
-						responseValidator.schema['~standard'].validate(data)
-							.issues
-				: (data: unknown) => responseValidator.Check(data) === false
-			: undefined
+		const send = async (datum: unknown) => {
+			// ? A generator that yields nothing produce no message to
+			// ? validate, same as returning undefined above
+			if (datum === undefined) return
 
-		const send = (datum: unknown) => {
-			if (validateResponse && validateResponse(datum) === false)
-				return ws.send(
-					new ValidationError('message', responseValidator!, datum)
-						.message
-				)
+			const validation = await validateResponseAsync(
+				responseValidator,
+				datum
+			)
+			if (validation?.error) return ws.send(validation.error)
+			if (validation) {
+				datum = validation.value
+
+				if (datum === undefined) return
+				if (isBufferSource(datum)) return ws.send(datum)
+			}
 
 			if (typeof datum === 'object') return ws.send(JSON.stringify(datum))
 
 			ws.send(datum as any)
 		}
 
-		if (typeof (data as Generator)?.next !== 'function')
-			return void send(data)
+		if (typeof (data as Generator)?.next !== 'function') return send(data)
 
-		const init = (data as Generator | AsyncGenerator).next()
+		const init = await (data as Generator | AsyncGenerator).next()
+		await send(init.value)
 
-		if (init instanceof Promise)
-			return (async () => {
-				const first = await init
-
-				if (validateResponse && validateResponse(first))
-					return ws.send(
-						new ValidationError(
-							'message',
-							responseValidator!,
-							first
-						).message
-					)
-
-				send(first.value as any)
-
-				if (!first.done)
-					for await (const datum of data as Generator) send(datum)
-			})()
-
-		send(init.value)
-
-		if (!init.done) for (const datum of data as Generator) send(datum)
+		if (!init.done)
+			for await (const datum of data as Generator) await send(datum)
 	}
 
 	return handleWSResponse

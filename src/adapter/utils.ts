@@ -523,32 +523,130 @@ export async function tee<T>(
 	source: AsyncIterable<T>,
 	branches = 2
 ): Promise<AsyncIterableIterator<T>[]> {
-	const buffer: T[] = []
+	const state = Array.from({ length: branches }, () => ({
+		active: true,
+		consumed: true
+	}))
+	if (!state.length) return []
+
+	const iterator: AsyncIterator<T> | Iterator<T> =
+		(source as AsyncIterable<T>)[Symbol.asyncIterator]?.() ??
+		(source as unknown as Iterable<T>)[Symbol.iterator]()
+
+	let active = state.length
+	let current: T
+	let hasValue = false
+	let remaining = 0
 	let done = false
-	let waiting: { resolve: () => void }[] = []
+	let failed = false
+	let sourceError: unknown
+	let pulling: Promise<void> | undefined
+	let waiting: (() => void)[] = []
 
-	;(async () => {
-		for await (const value of source) {
-			buffer.push(value)
-			waiting.forEach((w) => w.resolve())
-			waiting = []
-		}
-		done = true
-		waiting.forEach((w) => w.resolve())
-	})()
+	const wake = () => {
+		const pending = waiting
+		waiting = []
 
-	async function* makeIterator(): AsyncIterableIterator<T> {
-		let i = 0
-		while (true) {
-			if (i < buffer.length) {
-				yield buffer[i++]
-			} else if (done) {
-				return
-			} else {
-				await new Promise<void>((resolve) => waiting.push({ resolve }))
-			}
-		}
+		for (const resolve of pending) resolve()
 	}
 
-	return Array.from({ length: branches }, makeIterator)
+	const wait = () => new Promise<void>((resolve) => waiting.push(resolve))
+
+	const pull = () => {
+		pulling ??= Promise.resolve()
+			.then(() => iterator.next())
+			.then((result) => {
+				if (result.done || !active || done) {
+					done = true
+					return
+				}
+
+				current = result.value
+				hasValue = true
+				remaining = active
+
+				for (const branch of state)
+					if (branch.active) branch.consumed = false
+			})
+			.catch((error) => {
+				if (!active || done) return
+
+				failed = done = true
+				sourceError = error
+			})
+			.finally(() => {
+				pulling = undefined
+				wake()
+			})
+	}
+
+	const stop = () => {
+		if (done) return
+
+		done = true
+		wake()
+		try {
+			Promise.resolve(iterator.return?.()).catch(() => {})
+		} catch {}
+	}
+
+	const close = (index: number) => {
+		const branch = state[index]
+		if (!branch.active) return false
+
+		branch.active = false
+		active--
+
+		if (hasValue && !branch.consumed && --remaining === 0) {
+			hasValue = false
+			wake()
+		}
+
+		return true
+	}
+
+	const next = async (index: number): Promise<IteratorResult<T>> => {
+		const branch = state[index]
+
+		while (branch.active) {
+			if (failed) {
+				close(index)
+				throw sourceError
+			}
+
+			if (hasValue && !branch.consumed) {
+				branch.consumed = true
+				const result = { done: false as const, value: current }
+
+				if (--remaining === 0) {
+					hasValue = false
+					wake()
+				}
+
+				return result
+			}
+
+			if (done) {
+				close(index)
+				break
+			}
+
+			if (!hasValue) pull()
+			await wait()
+		}
+
+		return { done: true, value: undefined }
+	}
+
+	return state.map((_, index) => ({
+		next: () => next(index),
+		async return(finalValue?: unknown) {
+			if (close(index) && (index === 0 || !active)) stop()
+
+			return { done: true, value: finalValue }
+		},
+		[Symbol.asyncIterator]() {
+			return this
+		}
+	}))
 }

@@ -3,6 +3,24 @@ import { Elysia, ELYSIA_REQUEST_ID, t } from '../../src'
 import { req } from '../utils'
 
 describe('Bun router', () => {
+	it('treat native static route paths as data', async () => {
+		const path = "/pages/o'brien"
+		const app = new Elysia({ systemRouter: true })
+			.get(path, ({ path }) => path)
+			.listen(0)
+
+		try {
+			const response = await fetch(
+				`http://localhost:${app.server!.port}${path}`
+			)
+
+			expect(response.status).toBe(200)
+			expect(await response.text()).toBe(path)
+		} finally {
+			await app.stop()
+		}
+	})
+
 	it('works', async () => {
 		let trace = false
 		let wrapped = false
@@ -78,6 +96,41 @@ describe('Bun router', () => {
 				id: '1'
 			}
 		})
+	})
+
+	it('preserves encoded slashes in native named params', async () => {
+		const app = new Elysia({ systemRouter: true })
+			.get('/file/:name/end', ({ params }) => params.name)
+			.get('/wild/*', ({ params }) => params['*'])
+			.listen(0)
+
+		try {
+			const values = await Promise.all(
+				[
+					'/file/a%20b%2Fc/end',
+					'/file/a%2fb/end',
+					'/file/%2e%2e%2fsecret/end',
+					'/file/a%252Fb/end',
+					'/file/a%20b/end',
+					'/wild/a%2Fb'
+				].map((path) =>
+					fetch(`http://localhost:${app.server!.port}${path}`).then(
+						(response) => response.text()
+					)
+				)
+			)
+
+			expect(values).toEqual([
+				'a b%2Fc',
+				'a%2Fb',
+				'..%2Fsecret',
+				'a%2Fb',
+				'a b',
+				'a%2Fb'
+			])
+		} finally {
+			await app.stop()
+		}
 	})
 
 	it('handle optional params', async () => {

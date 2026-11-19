@@ -489,6 +489,18 @@ describe('Body Validator', () => {
 		expect(value).toBe('hifumi_daisuki')
 	})
 
+	it('escapes single quote in default string body', async () => {
+		const payload = "hifumi';globalThis.__bodyDefaultValueInjection=1;//"
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.String({ default: payload })
+		})
+
+		const value = await app.handle(post('/')).then((x) => x.text())
+
+		expect((globalThis as any).__bodyDefaultValueInjection).toBeUndefined()
+		expect(value).toBe(payload)
+	})
+
 	it('create default boolean body', async () => {
 		const app = new Elysia().post('/', ({ body }) => typeof body, {
 			body: t.Boolean({ default: true })

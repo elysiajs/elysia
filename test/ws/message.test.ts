@@ -246,6 +246,95 @@ describe('WebSocket message', () => {
 		app.stop()
 	})
 
+	it('should await async standard schema validation', async () => {
+		let handlerCalls = 0
+		const app = new Elysia()
+			.ws('/ws', {
+				body: z.string().refine(async (value) => value === 'allowed'),
+				message(ws, message) {
+					handlerCalls++
+					ws.send(message)
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		const response = wsMessage(ws)
+		ws.send('denied')
+
+		const { data } = await response
+		expect(data).toInclude('validation')
+		expect(handlerCalls).toBe(0)
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('should handle a rejecting async standard schema', async () => {
+		let errorCalls = 0
+		let handlerCalls = 0
+		const schema = {
+			'~standard': {
+				version: 1 as const,
+				vendor: 'test',
+				async validate() {
+					throw new Error('schema rejected')
+				}
+			}
+		}
+		const app = new Elysia()
+			.ws('/ws', {
+				body: schema,
+				error() {
+					errorCalls++
+					return 'caught'
+				},
+				message() {
+					handlerCalls++
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		const response = wsMessage(ws)
+		ws.send('message')
+
+		const { data } = await response
+		expect(data).toBe('caught')
+		expect(errorCalls).toBe(1)
+		expect(handlerCalls).toBe(0)
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('should use the transformed standard schema value', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				body: z.string().transform((value) => value.toUpperCase()),
+				message(ws, message) {
+					ws.send(message)
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+
+		const response = wsMessage(ws)
+		ws.send('hello')
+
+		const { data } = await response
+		expect(data).toBe('HELLO')
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
 	it('should parse objects', async () => {
 		const app = new Elysia()
 			.ws('/ws', {

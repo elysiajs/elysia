@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { parseCookie, Cookie } from '../../src/cookies'
-import { signCookie } from '../../src/utils'
+import { signCookie, unsignCookie } from '../../src/utils'
 
 describe('Parse Cookie', () => {
 	it('handle empty cookie', async () => {
@@ -44,6 +44,25 @@ describe('Parse Cookie', () => {
 		})
 
 		expect(result.fischl.value).toEqual('fischl')
+	})
+
+	it('rejects malformed and modified signatures', async () => {
+		const secret = 'Fischl von Luftschloss Narfidort'
+		const signed = await signCookie('fischl', secret)
+		const dot = signed.lastIndexOf('.')
+		const value = signed.slice(0, dot)
+		const signature = signed.slice(dot + 1)
+		const modified =
+			signature.slice(0, -1) +
+			(signature.charCodeAt(signature.length - 1) === 65 ? 'B' : 'A')
+
+		expect(await unsignCookie(signed, secret)).toBe('fischl')
+		expect(await unsignCookie(`${value}.${modified}`, secret)).toBe(false)
+		expect(await unsignCookie(`${value}.not-base64!`, secret)).toBe(false)
+		expect(
+			await unsignCookie(`${value}.${signature.slice(0, -1)}`, secret)
+		).toBe(false)
+		expect(await unsignCookie(`${value}.${signature}A`, secret)).toBe(false)
 	})
 
 	it('unsign multiple signature', async () => {

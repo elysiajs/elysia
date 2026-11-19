@@ -383,6 +383,39 @@ describe('Stream', () => {
 			})
 	})
 
+	it('serializes each SSE data line without creating control fields', () => {
+		const payload = sse({
+			data: 'first\r\nevent: forged\rthird\n'
+		}) as { toSSE(): string }
+
+		expect(payload.toSSE()).toBe(
+			'data: first\ndata: event: forged\ndata: third\ndata: \n\n'
+		)
+	})
+
+	it('rejects newlines in SSE control fields', () => {
+		for (const payload of [
+			sse({ id: 'safe\nevent: forged', data: 'message' }),
+			sse({ event: 'safe\rid: forged', data: 'message' })
+		] as { toSSE(): string }[])
+			expect(() => payload.toSSE()).toThrow(TypeError)
+	})
+
+	it('rejects invalid SSE retry values', () => {
+		for (const retry of [-1, 1.5, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+			const payload = sse({ retry, data: 'message' }) as {
+				toSSE(): string
+			}
+
+			expect(() => payload.toSSE()).toThrow(TypeError)
+		}
+
+		const payload = sse({ retry: 0, data: { message: 'ok' } }) as {
+			toSSE(): string
+		}
+		expect(payload.toSSE()).toBe('retry: 0\ndata: {"message":"ok"}\n\n')
+	})
+
 	it('handle sse without id', () => {
 		const app = new Elysia().get('/sse', async function* () {
 			for (let i = 0; i < 3; i++) {

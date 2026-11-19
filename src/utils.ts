@@ -50,6 +50,29 @@ export const isClass = (v: Object) =>
 const isObject = (item: any): item is Object =>
 	item && typeof item === 'object' && !Array.isArray(item)
 
+const dangerousKeys = new Set(['__proto__', 'constructor', 'prototype'])
+
+export const isSafeObjectKey = (key: string) => !dangerousKeys.has(key)
+
+export const safeAssign = <Target extends object>(
+	target: Target,
+	source: unknown
+) => {
+	if (source == null) return target
+
+	const input = Object(source) as Record<PropertyKey, any>
+	const output = target as Record<PropertyKey, any>
+
+	for (const key of Object.keys(input))
+		if (isSafeObjectKey(key)) output[key] = input[key]
+
+	for (const key of Object.getOwnPropertySymbols(input))
+		if (Object.prototype.propertyIsEnumerable.call(input, key))
+			output[key] = input[key]
+
+	return target
+}
+
 export const mergeDeep = <
 	A extends Record<string, any>,
 	B extends Record<string, any>
@@ -687,18 +710,6 @@ export const signCookie = async (val: string, secret: string | null) => {
 	)
 }
 
-const constantTimeEqual =
-	typeof crypto?.timingSafeEqual === 'function'
-		? (a: string, b: string) => {
-				// Compare as UTF-8 bytes; timingSafeEqual requires equal length
-				const ab = Buffer.from(a, 'utf8')
-				const bb = Buffer.from(b, 'utf8')
-
-				if (ab.length !== bb.length) return false
-				return crypto.timingSafeEqual(ab, bb)
-			}
-		: (a: string, b: string) => a === b
-
 export const unsignCookie = async (input: string, secret: string | null) => {
 	if (typeof input !== 'string')
 		throw new TypeError('Signed cookie string must be provided.')
@@ -711,9 +722,30 @@ export const unsignCookie = async (input: string, secret: string | null) => {
 	}
 
 	const tentativeValue = input.slice(0, dot)
-	const expectedInput = await signCookie(tentativeValue, secret)
+	const encodedSignature = input.slice(dot + 1)
+	if (!/^[A-Za-z0-9+/]{43}$/.test(encodedSignature)) return false
 
-	return constantTimeEqual(expectedInput, input) ? tentativeValue : false
+	const signature = Buffer.from(encodedSignature, 'base64')
+	if (removeTrailingEquals(signature.toString('base64')) !== encodedSignature)
+		return false
+	if (secret === null) throw new TypeError('Secret key must be provided')
+
+	const secretKey = await crypto.subtle.importKey(
+		'raw',
+		encoder.encode(secret),
+		{ name: 'HMAC', hash: 'SHA-256' },
+		false,
+		['verify']
+	)
+
+	return (await crypto.subtle.verify(
+		'HMAC',
+		secretKey,
+		signature,
+		encoder.encode(tentativeValue)
+	))
+		? tentativeValue
+		: false
 }
 
 export const insertStandaloneValidator = <const Name extends keyof InputSchema>(
@@ -1198,17 +1230,35 @@ export const sse = <
 	payload.toSSE = () => {
 		let payloadString = ''
 
-		if (payload.id !== undefined && payload.id !== null)
-			payloadString += `id: ${payload.id}\n`
-		if (payload.event) payloadString += `event: ${payload.event}\n`
-		if (payload.retry !== undefined)
-			payloadString += `retry: ${payload.retry}\n`
+		if (payload.id !== undefined && payload.id !== null) {
+			const id = String(payload.id)
+			if (/[\r\n]/.test(id))
+				throw new TypeError('SSE id must not contain newlines')
 
-		if (payload.data === null) payloadString += 'data: null\n'
-		else if (typeof payload.data === 'string')
-			payloadString += `data: ${payload.data}\n`
-		else if (typeof payload.data === 'object')
-			payloadString += `data: ${JSON.stringify(payload.data)}\n`
+			payloadString += `id: ${id}\n`
+		}
+		if (payload.event) {
+			if (/[\r\n]/.test(payload.event))
+				throw new TypeError('SSE event must not contain newlines')
+
+			payloadString += `event: ${payload.event}\n`
+		}
+		if (payload.retry !== undefined) {
+			if (!Number.isSafeInteger(payload.retry) || payload.retry < 0)
+				throw new TypeError(
+					'SSE retry must be a non-negative safe integer'
+				)
+
+			payloadString += `retry: ${payload.retry}\n`
+		}
+
+		const data =
+			typeof payload.data === 'string'
+				? payload.data
+				: JSON.stringify(payload.data)
+		if (data !== undefined)
+			for (const line of data.replace(/\r\n?/g, '\n').split('\n'))
+				payloadString += `data: ${line}\n`
 
 		if (payloadString) payloadString += '\n'
 

@@ -36,6 +36,79 @@ describe('Before Handle', () => {
 		expect(await res.text()).toBe('Cat')
 	})
 
+	it('respect bound authorization hooks in both AOT modes', async () => {
+		const authorize = ({ request }: { request: Request }) => {
+			if (!request.headers.has('authorization'))
+				return new Response('unauthorized', { status: 401 })
+		}
+
+		for (const aot of [true, false]) {
+			let handlerCalls = 0
+			const app = new Elysia({ aot }).get(
+				'/',
+				() => {
+					handlerCalls++
+					return 'authorized'
+				},
+				{ beforeHandle: authorize.bind(null) }
+			)
+
+			const unauthorized = await app.handle(req('/'))
+			const authorized = await app.handle(
+				new Request('http://localhost/', {
+					headers: { authorization: 'Bearer token' }
+				})
+			)
+
+			expect(unauthorized.status).toBe(401)
+			expect(await unauthorized.text()).toBe('unauthorized')
+			expect(authorized.status).toBe(200)
+			expect(await authorized.text()).toBe('authorized')
+			expect(handlerCalls).toBe(1)
+		}
+	})
+
+	for (const aot of [true, false])
+		it(`awaits Promise-returning bound authorization with aot: ${aot}`, async () => {
+			function authorize({ request }: { request: Request }) {
+				return Promise.resolve(
+					request.headers.has('authorization')
+						? undefined
+						: new Response('unauthorized', { status: 401 })
+				)
+			}
+
+			let handlerCalls = 0
+			const app = new Elysia({ aot }).get(
+				'/',
+				() => {
+					handlerCalls++
+					return 'authorized'
+				},
+				{ beforeHandle: authorize.bind(null) }
+			)
+
+			const unauthorized = await app.handle(req('/'))
+			expect(unauthorized.status).toBe(401)
+			expect(await unauthorized.text()).toBe('unauthorized')
+			expect(handlerCalls).toBe(0)
+
+			const authorized = await app.handle(
+				req('/', { headers: { authorization: 'Bearer token' } })
+			)
+			expect(authorized.status).toBe(200)
+			expect(await authorized.text()).toBe('authorized')
+			expect(handlerCalls).toBe(1)
+		})
+
+	it('keeps detectable synchronous beforeHandle hooks synchronous', () => {
+		const app = new Elysia().get('/', () => 'ok', {
+			beforeHandle() {}
+		})
+
+		expect(app.fetch(req('/'))).toBeInstanceOf(Response)
+	})
+
 	it('group before handler', async () => {
 		const app = new Elysia()
 			.group('/type', (app) =>

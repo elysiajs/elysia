@@ -321,6 +321,37 @@ describe('Query Validator', () => {
 		})
 	})
 
+	it('escapes single quote in default string value', async () => {
+		const payload = "tea';globalThis.__queryDefaultValueInjection=1;//"
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				name: t.String(),
+				faction: t.String({ default: payload })
+			})
+		})
+
+		const value = await app
+			.handle(req('/?name=nagisa'))
+			.then((x) => x.json())
+
+		expect((globalThis as any).__queryDefaultValueInjection).toBeUndefined()
+		expect(value.faction).toBe(payload)
+	})
+
+	it('escapes single quote in default property key', async () => {
+		const key = "faction'];globalThis.__queryDefaultKeyInjection=1;//"
+		const app = new Elysia().get('/', () => 'ok', {
+			query: t.Object({
+				[key]: t.String({ default: 'tea_party' })
+			})
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect((globalThis as any).__queryDefaultKeyInjection).toBeUndefined()
+		expect(res.status).toBe(200)
+	})
+
 	it('create default number query', async () => {
 		const app = new Elysia().get('/', ({ query }) => query, {
 			query: t.Object({

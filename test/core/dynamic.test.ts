@@ -313,6 +313,27 @@ describe('Dynamic Mode', () => {
 		})
 	})
 
+	it('verify route-local cookie signatures on the first request', async () => {
+		const app = new Elysia({ aot: false }).get(
+			'/',
+			({ cookie }) => cookie.session.value,
+			{
+				cookie: t.Cookie(
+					{ session: t.String() },
+					{ secrets: 'secret', sign: ['session'] }
+				)
+			}
+		)
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				headers: { cookie: 'session=forged.signature' }
+			})
+		)
+
+		expect(response.status).toBe(400)
+	})
+
 	it('handle global cookie signing', async () => {
 		const app = new Elysia({
 			aot: false,

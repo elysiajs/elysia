@@ -313,7 +313,8 @@ describe('Web Standard - Map Response', () => {
 		// expect(await response.text()).toEqual('Shiroko')
 		expect(response.headers.toJSON()).toEqual({
 			name: 'Sorasaki Hina',
-			location: 'https://cunny.school'
+			// Response.redirect serializes the parsed URL, so a bare authority gains a '/' path
+			location: 'https://cunny.school/'
 		})
 	})
 
