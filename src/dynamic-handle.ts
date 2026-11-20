@@ -1,3 +1,4 @@
+import { Kind, type TSchema } from '@sinclair/typebox'
 import { TransformDecodeError } from '@sinclair/typebox/value'
 import type { Context } from './context'
 import { parseCookie } from './cookies'
@@ -11,11 +12,17 @@ import {
 import type { AnyElysia, CookieOptions } from './index'
 import { parseQuery } from './parse-query'
 import { parseFormData } from './form-data'
+import { coercePrimitiveRoot } from './replace-schema'
 import {
 	applySchemaDefaults,
 	getSchemaProperties,
+	getSchemaValidator,
+	hasType,
+	isUnion,
+	unwrapImportSchema,
 	type ElysiaTypeCheck
 } from './schema'
+import { fileType } from './type-system/utils'
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
 import {
 	hasSetImmediate,
@@ -54,11 +61,73 @@ async function validateStandardSchema(
 	return result.value
 }
 
+const isTypedFile = (property: TSchema) =>
+	!!property.extension &&
+	(property[Kind] === 'File' || property[Kind] === 'Files')
+
+const validateFileTypes = async (
+	body: any,
+	properties: Record<string, TSchema> | undefined
+) => {
+	if (properties)
+		for (const key in properties)
+			if (isTypedFile(properties[key]))
+				await fileType(
+					body?.[key],
+					properties[key].extension,
+					`body.${key}`
+				)
+}
+
 export const createDynamicHandler = (app: AnyElysia) => {
 	const { mapResponse, mapEarlyResponse } = app['~adapter'].handler
 
 	// @ts-expect-error
 	const defaultHeader = app.setHeaders
+
+	const fileUnions = new WeakMap<
+		ElysiaTypeCheck<any>,
+		[ElysiaTypeCheck<any>, Record<string, TSchema>][]
+	>()
+
+	const findFileUnionProperties = (
+		bodyValidator: ElysiaTypeCheck<any>,
+		body: unknown
+	) => {
+		let candidates = fileUnions.get(bodyValidator)
+
+		if (!candidates) {
+			candidates = []
+
+			for (const type of bodyValidator.schema.anyOf as TSchema[]) {
+				if (!hasType('File', type) && !hasType('Files', type)) continue
+
+				const candidate = getSchemaValidator(type, {
+					// @ts-expect-error
+					modules: app.definitions.typebox,
+					dynamic: !app.config.aot,
+					// @ts-expect-error
+					models: app.definitions.type,
+					normalize: app.config.normalize,
+					additionalCoerce: coercePrimitiveRoot(),
+					sanitize: () => app.config.sanitize
+				})
+				if (!candidate) continue
+
+				const properties =
+					getSchemaProperties(candidate.schema) ??
+					getSchemaProperties(type)
+
+				if (properties && Object.values(properties).some(isTypedFile))
+					candidates.push([candidate, properties])
+			}
+
+			fileUnions.set(bodyValidator, candidates)
+		}
+
+		for (const [candidate, properties] of candidates)
+			if (candidate.Check(body)) return properties
+	}
 
 	return async (request: Request): Promise<Response> => {
 		const url = request.url,
@@ -510,6 +579,20 @@ export const createDynamicHandler = (app: AnyElysia) => {
 						// Zod returns { value: ... } wrapper
 						context.body = decoded?.value ?? decoded
 				}
+
+				if (validator.body)
+					await validateFileTypes(
+						context.body,
+						isUnion(validator.body.schema) &&
+							validator.body.schema.anyOf?.length
+							? findFileUnionProperties(
+									validator.body,
+									context.body
+								)
+							: getSchemaProperties(
+									unwrapImportSchema(validator.body.schema)
+								)
+					)
 			}
 
 			if (hooks.beforeHandle)
