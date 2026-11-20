@@ -97,9 +97,8 @@ describe('NotFound miss sentinel', () => {
 	})
 
 	it('rethrowing error hook never leaks the sentinel', async () => {
-		// baseline (pre-sentinel) behavior: a hook that throws inside the
-		// error pipeline falls into the internal-server-error funnel with
-		// the materialized NotFound as detail — pinned byte-identical here
+		// a hook that throws inside the error pipeline ends in the masked
+		// 500, which reads nothing from either error, in dev too
 		const app = new Elysia()
 			.get('/', () => 'hi')
 			.onError(({ error }) => {
@@ -115,9 +114,7 @@ describe('NotFound miss sentinel', () => {
 				type: 'internal-server-error',
 				code: 'internal-server-error',
 				title: 'Internal Server Error',
-				status: 500,
-				detail: 'Not Found',
-				name: 'NotFound'
+				status: 500
 			})
 		)
 		expectNoSentinelLeak(body)

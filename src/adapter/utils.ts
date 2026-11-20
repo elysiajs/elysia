@@ -688,6 +688,14 @@ export function handleSet(set: Context['set']) {
 	}
 
 	if (set.cookie && isNotEmpty(set.cookie)) {
+		const pending = (set as { '~sign'?: Function })['~sign']?.(set)
+		if (pending) {
+			pending.catch(() => {})
+			throw new Error(
+				'[Elysia] a signed cookie was written while the response was mapped'
+			)
+		}
+
 		materializeSetHeaders(set)
 		const cookie = serializeCookie(set.cookie)
 

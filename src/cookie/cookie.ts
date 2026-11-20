@@ -81,7 +81,11 @@ export class Cookie<T = any> implements BaseCookie {
 	get cookie(): BaseCookie {
 		const c = this.#setRef.cookie?.[this.#name] ?? this.#initial
 		if (c && (c as any)['~unsign'] !== undefined)
-			resolvePendingCookie(c as Record<string, any>, this.#name)
+			resolvePendingCookie(
+				c as Record<string, any>,
+				this.#name,
+				this.#setRef
+			)
 
 		return c
 	}
@@ -96,7 +100,11 @@ export class Cookie<T = any> implements BaseCookie {
 
 		const entry = fresh ? this.#initial : j[this.#name]
 		if (entry && (entry as any)['~unsign'] !== undefined)
-			resolvePendingCookie(entry as Record<string, any>, this.#name)
+			resolvePendingCookie(
+				entry as Record<string, any>,
+				this.#name,
+				this.#setRef
+			)
 
 		if (fresh) j[this.#name] = entry
 

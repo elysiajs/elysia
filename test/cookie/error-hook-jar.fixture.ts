@@ -139,7 +139,8 @@ const readSid = ({ cookie }: any) => ({ sid: cookie.sid.value ?? null })
 }
 
 // signed: the hook reads a verified value, writes are signed, a forged
-// cookie never reaches it, and the validation error still wins
+// cookie reads as absent, so the validation error stays the client's and
+// is never a masked 500 a client can trigger at will
 {
 	const config = { cookie: { secrets: 's', sign: ['sid', 'flash'] } }
 	let seen: unknown[] = []
@@ -180,7 +181,11 @@ const readSid = ({ cookie }: any) => ({ sid: cookie.sid.value ?? null })
 	res = await app.handle(request('/?n=x', 'sid=admin'))
 	check(seen.includes('admin'), false, 'forged: never read')
 	check(seen[0], 'query', 'forged: query error first')
-	check(res.status, 400, 'forged: rejected')
+	check(
+		`${res.status} ${await res.text()}`,
+		'422 {"sid":null}',
+		'forged: read as absent, validation status kept'
+	)
 }
 
 // a lane that awaits the jar must not run an error hook for a request aborted

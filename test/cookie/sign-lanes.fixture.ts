@@ -5,6 +5,10 @@
 // routes after it
 import assert from 'node:assert/strict'
 
+// every failed sign ends in the masked 500, which logs once
+const log = console.error
+console.error = () => {}
+
 const lane = process.argv[2] as 'jit' | 'subtle' | 'aot'
 if (lane === 'subtle') {
 	;(Bun as any).CryptoHasher = undefined
@@ -505,10 +509,11 @@ const early =
 }
 
 // Signing fails closed: when the signer throws or rejects (an HSM or WebCrypto
-// outage), a cookie meant to be signed is dropped instead of leaving unsigned,
-// the error response still goes out and an unsigned cookie is kept. Runs last,
-// the failure is process-wide
+// outage), a cookie meant to be signed is dropped instead of leaving unsigned
+// and the request ends in the masked 500, which sends no cookie at all and
+// logs once. Runs last, the failure is process-wide
 {
+
 	const write = (cookie: any) => {
 		cookie.session.value = 'raw-secret'
 		cookie.theme.value = 'dark'
@@ -615,13 +620,12 @@ const early =
 			)
 			check(
 				/(^|, )theme=dark/.test(setCookie),
-				true,
-				`${name}: unsigned cookie kept`
+				false,
+				`${name}: no cookie on the masked 500`
 			)
 			// On the success lane the signer's failure is the error (a 500), and
-			// an error hook's answer fails closed to the 500 fallback, never sent
-			// with its cookie silently missing. Without a hook, the response the
-			// error lane chose goes out unchanged
+			// an error hook's answer fails closed to the masked 500, never sent
+			// with its cookie silently missing
 			const body = await res.text()
 			check(res.status, 500, `${name}: status`)
 			if (name === 'validation error')
@@ -655,7 +659,7 @@ const early =
 }
 
 if (failures.length) {
-	console.error(failures.join('\n'))
+	log(failures.join('\n'))
 	process.exit(1)
 }
 

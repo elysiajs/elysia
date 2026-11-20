@@ -12,19 +12,13 @@ import {
 
 import { createContext, type Context } from '../context'
 import { origin } from '../adapter/origin'
-import { createErrorHandler } from './error'
+import { createErrorHandler, maskedResponse, signFailed } from './error'
 import { compileCookieConfig } from '../cookie/config'
 import { signCookieValues } from '../cookie/utils'
 import { frozenRootOf } from '../generation'
 import { flattenChain, nullObject, isNotEmpty, authorityEnd } from '../utils'
 import { handleSet, hput, materializeSetHeaders } from '../adapter/utils'
-import {
-	InternalServerError,
-	NotFound,
-	PROBLEM_JSON,
-	internalServerErrorResponse,
-	isProduction
-} from '../error'
+import { InternalServerError, NotFound, PROBLEM_JSON } from '../error'
 
 import type { AppHook, CompiledHandler, MaybePromise } from '../types'
 import type { Server } from '../universal/server'
@@ -65,48 +59,58 @@ function decodeParams(params: Record<string, string>) {
 	return params
 }
 
-function finalizeError(
+type ErrorHandler = ReturnType<typeof createErrorHandler>
+
+// afterResponse reads the status sent
+function sent(
 	context: Context,
-	handleError: (
-		context: Context,
-		error: Error,
-		sign?: (set: Context['set']) => unknown
-	) => unknown,
 	afterResponse: ((context: Context, status?: number) => void) | undefined,
-	error: Error,
-	sign?: (set: Context['set']) => unknown
+	response: Response
 ) {
-	let resp: Response | Promise<Response>
 	try {
-		resp = handleError(context, error, sign) as Response | Promise<Response>
-	} catch (errorPipelineThrow) {
-		if (!isProduction()) console.error(errorPipelineThrow)
-		resp = internalServerErrorResponse(error)
-	}
-
-	if (resp instanceof Promise)
-		return resp.then(
-			(r) => {
-				afterResponse?.(context)
-				return r
-			},
-			(errorPipelineThrow) => {
-				if (!isProduction()) console.error(errorPipelineThrow)
-				const r = internalServerErrorResponse(error)
-				afterResponse?.(context)
-				return r
-			}
-		)
-
+		if (response instanceof Response) context.set.status = response.status
+	} catch {}
 	afterResponse?.(context)
 
-	return resp
+	return response
+}
+
+// what the error handler throws or rejects with is masked, once
+function finalizeError(
+	context: Context,
+	handleError: ErrorHandler,
+	afterResponse: ((context: Context, status?: number) => void) | undefined,
+	error: Error,
+	sign?: (set: Context['set']) => unknown,
+	result?: unknown,
+	step?: 1 | 2
+) {
+	let response: Response | Promise<Response>
+	try {
+		response = handleError(context, error, sign, result, step) as
+			| Response
+			| Promise<Response>
+	} catch (thrown) {
+		response = maskedResponse(context, thrown)
+	}
+
+	return response instanceof Promise
+		? response.then(
+				(response) => sent(context, afterResponse, response),
+				(thrown) =>
+					sent(
+						context,
+						afterResponse,
+						maskedResponse(context, thrown)
+					)
+			)
+		: sent(context, afterResponse, response)
 }
 
 const catchError =
 	(
 		context: Context,
-		handleError: (context: Context, error: Error) => unknown,
+		handleError: ErrorHandler,
 		afterResponse: ((context: Context, status?: number) => void) | undefined
 	) =>
 	(error: Error) =>
@@ -115,7 +119,7 @@ const catchError =
 function dispatchResult(
 	result: unknown,
 	context: Context,
-	handleError: (context: Context, error: Error) => unknown,
+	handleError: ErrorHandler,
 	afterResponse: ((context: Context, status?: number) => void) | undefined
 ): MaybePromise<Response> {
 	if (result instanceof Promise)
@@ -139,7 +143,7 @@ function findRoute(
 	// a 404 isn't a route: the app's whole current chain answers it
 	onNotFound: (context: Context) => MaybePromise<Response>,
 	// a matched route's own lane, see `failRoute`
-	handleError: (context: Context, error: Error) => unknown,
+	handleError: ErrorHandler,
 	afterResponse: ((context: Context, status?: number) => void) | undefined,
 	strictPath: boolean,
 	hasWS: boolean | undefined,
@@ -310,6 +314,9 @@ export function createFetchHandler(
 	) {
 		if (!sign) return baseMapResponse(response, set, request, true)
 
+		// a body can write while it is mapped, signed again in `handleSet`
+		;(set as { '~sign'?: Function })['~sign'] = sign
+
 		let pending: any
 		try {
 			pending = sign(set)
@@ -332,6 +339,8 @@ export function createFetchHandler(
 
 	function mapWithHooks(
 		mapResponseHooks: ((context: Context) => unknown)[],
+		// a matched route's chain stops once its request aborted, as compiled
+		abort: boolean,
 		response: unknown,
 		set: Context['set'],
 		context: Context,
@@ -340,84 +349,52 @@ export function createFetchHandler(
 		;(context as { responseValue?: unknown }).responseValue = response
 
 		const request = context.request
+		const aborted = () => abort && armedAbort(context)
+		const done = (value: unknown) =>
+			aborted()
+				? (emptyResponse.clone() as Response)
+				: finalMap(value, set, request, sign)
 
 		const run = (i: number): unknown => {
 			for (; i < mapResponseHooks.length; i++) {
+				if (aborted()) return emptyResponse.clone()
+
 				const result = mapResponseHooks[i](context)
 
-				if (typeof (result as any)?.then === 'function')
+				if (typeof (result as any)?.then === 'function') {
+					if (abort) (context as any)['~sig'] ??= request.signal
+
 					// eslint-disable-next-line sonarjs/function-inside-loop -- promise continuation for the hook at index i
-					return Promise.resolve(result).then((resolved) => {
-						if (resolved !== undefined)
-							return finalMap(resolved, set, request, sign)
+					return Promise.resolve(result).then((resolved) =>
+						resolved === undefined ? run(i + 1) : done(resolved)
+					)
+				}
 
-						return run(i + 1)
-					})
-
-				if (result !== undefined)
-					return finalMap(result, set, request, sign)
+				if (result !== undefined) return done(result)
 			}
 
-			return finalMap(response, set, request, sign)
+			return done(response)
 		}
 
 		return run(0)
 	}
 
 	const mapResponse = mapResponseHooks?.length
-		? mapWithHooks.bind(null, mapResponseHooks)
+		? mapWithHooks.bind(null, mapResponseHooks, false)
 		: plainMap
 
 	const allowUnsafe = app['~config']?.allowUnsafeValidationDetails
 	const handleError = createErrorHandler(
 		errorHooks,
 		mapResponse as any,
-		allowUnsafe
+		allowUnsafe,
+		!mapResponseHooks?.length
 	)
 
 	const handleRouteError =
 		errorHooks || mapResponseHooks?.length
 			? createErrorHandler(undefined, plainMap as any, allowUnsafe)
 			: handleError
-
-	// from failed cookie signing
-	const signFailed = (set: Context['set']) =>
-		(set as { '~signFailed'?: true })['~signFailed'] === true ||
-		(!Object.isExtensible(set) &&
-			(set.cookie as { '~signFailed'?: true } | undefined)?.[
-				'~signFailed'
-			] === true)
-
-	const failClosed =
-		(
-			withHooks: typeof handleRouteError,
-			root?: boolean
-		): typeof handleRouteError =>
-		(context, error, sign) => {
-			const set = context.set
-			const end = () =>
-				handleRouteError(
-					context,
-					signFailed(set) ? new InternalServerError() : error,
-					sign
-				)
-
-			if (signFailed(set)) return end()
-
-			const signed = (r: unknown) => (signFailed(set) ? end() : r)
-
-			try {
-				const response = withHooks(context, error, sign)
-
-				return response instanceof Promise
-					? response.then(signed, root ? undefined : end)
-					: signed(response)
-			} catch (e) {
-				if (root) throw e
-
-				return end()
-			}
-		}
 
 	const rootCookie = frozenRootOf(app)['~config']?.cookie
 	let rootCookieConfig: ReturnType<typeof compileCookieConfig> | undefined
@@ -439,10 +416,6 @@ export function createFetchHandler(
 				set.cookie &&
 				signCookieValues(set.cookie, rootCookieConfig!, set)
 		: undefined
-
-	const handleRootError = rootSign
-		? failClosed(handleError, true)
-		: handleError
 
 	const hasTrace = !!traceHandlers?.length
 
@@ -542,7 +515,7 @@ export function createFetchHandler(
 		context: Context,
 		error: Error,
 		sign: ((set: Context['set']) => unknown) | undefined = rootSign
-	) => finalizeError(context, handleRootError, afterResponse, error, sign)
+	) => finalizeError(context, handleError, afterResponse, error, sign)
 
 	const routeAfterResponse = (context: Context, status?: number) =>
 		afterResponse(context, status, null)
@@ -557,40 +530,63 @@ export function createFetchHandler(
 			sign
 		)
 
-	const routeHandlers = new WeakMap<object, typeof handleRouteError>()
+	const routeHandlers = new WeakMap<object, ErrorHandler>()
 
-	app['~finalizeError'] = (context, error, sign, wholeChain, route) => {
+	app['~finalizeError'] = (
+		context,
+		error,
+		sign,
+		wholeChain,
+		route,
+		result,
+		step
+	) => {
 		if (wholeChain) return fail(context, error, sign)
 		if (!route) return failRoute(context, error, sign)
 
 		let handle = routeHandlers.get(route)
 		if (!handle) {
-			handle = failClosed(
-				createErrorHandler(
-					route.error?.length ? (route.error as any) : undefined,
-					(route.mapResponse?.length
-						? mapWithHooks.bind(null, route.mapResponse as any)
-						: plainMap) as any,
-					allowUnsafe
-				)
+			handle = createErrorHandler(
+				route.error?.length ? (route.error as any) : undefined,
+				(route.mapResponse?.length
+					? mapWithHooks.bind(
+							null,
+							route.mapResponse as any,
+							abortSignal
+						)
+					: plainMap) as any,
+				allowUnsafe
 			)
 
 			routeHandlers.set(route, handle)
 		}
 
-		return finalizeError(context, handle, routeAfterResponse, error, sign)
+		return finalizeError(
+			context,
+			handle,
+			route.runAfterResponse
+				? (context) =>
+						afterResponse(
+							context,
+							undefined,
+							route.runAfterResponse as AppHook['afterResponse']
+						)
+				: routeAfterResponse,
+			error,
+			sign,
+			result,
+			step
+		)
 	}
-
-	// the plain 404, signed as the error lane signs, see `rootSign`
-	const signedNotFound = rootSign && failClosed(handleRouteError)
 
 	const onNotFound = (context: Context) => {
 		if (hasError) return fail(context, new NotFound())
 
-		if (signedNotFound && context.set.cookie)
+		// the plain 404, signed as the error lane signs, see `rootSign`
+		if (rootSign && context.set.cookie)
 			return finalizeError(
 				context,
-				signedNotFound,
+				handleRouteError,
 				afterResponse,
 				new NotFound(),
 				rootSign
@@ -613,16 +609,9 @@ export function createFetchHandler(
 				: checked(mapped)
 		})
 
-	// without mapResponse hooks nothing sets a cookie while mapping, so an
-	// answer without one skips the signer
-	const mapEarly: typeof mapResponse = !signedEarly
-		? mapResponse
-		: mapResponseHooks?.length
-			? signedEarly
-			: (response, set, context) =>
-					set.cookie
-						? signedEarly(response, set, context)
-						: mapResponse(response, set, context)
+	// an answer with no cookie yet still takes the signer: its body can
+	// write one while it is mapped
+	const mapEarly: typeof mapResponse = signedEarly ?? mapResponse
 
 	if (traceRequestPhase)
 		return traceProvider!.requestLane({

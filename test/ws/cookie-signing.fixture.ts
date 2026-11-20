@@ -1,7 +1,11 @@
 // WebSocket upgrade exits on the async (WebCrypto) signer: the signature must
-// land before `set` serializes, and a failed sign must still drop the cookie
+// land before `set` serializes, and a failed sign ends in the masked 500,
+// which sends no cookie and logs once
 // own process: WebCrypto must be selected before the HMAC singleton loads
 import assert from 'node:assert/strict'
+
+const log = console.error
+console.error = () => {}
 ;(Bun as any).CryptoHasher = undefined
 ;(process as any).getBuiltinModule = undefined
 
@@ -82,19 +86,20 @@ const exits = (secrets: any) => {
 	}
 }
 
+// a throwing error hook ends in the masked 500, without the cookie
 const expected = {
-	'hook response': [200, 'user-42'],
-	'error hook': [200, 'from-error'],
-	'throwing error hook': [500, 'user-42']
+	'hook response': [200, 'user-42', 1],
+	'error hook': [200, 'from-error', 1],
+	'throwing error hook': [500, false, 0]
 } as const
 
 for (const [name, app] of Object.entries(exits('secret'))) {
 	const res = await upgrade(app)
-	const [status, value] = expected[name as keyof typeof expected]
+	const [status, value, count] = expected[name as keyof typeof expected]
 	const pairs = pairsOf(res, 'session')
 	const pair = pairs[0] ?? 'session='
 	check(res.status, status, `${name}: status`)
-	check(pairs.length, 1, `${name}: one session cookie`)
+	check(pairs.length, count, `${name}: session cookies`)
 	check(
 		await unsignCookie(
 			decodeURIComponent(pair.slice('session='.length)),
@@ -112,10 +117,9 @@ crypto.subtle.sign = () => Promise.reject(new Error('signer down'))
 for (const [name, app] of Object.entries(failing)) {
 	const res = await upgrade(app)
 	check(pairsOf(res, 'session').length, 0, `${name}: no unsigned session`)
-	check(pairsOf(res, 'theme').join(), 'theme=dark', `${name}: unsigned kept`)
+	check(pairsOf(res, 'theme').join(), '', `${name}: no cookie`)
 
-	// a failed sign is a 500 (the error on the hook response and route error
-	// hook), only the app-level fallback keeps its response
+	// a failed sign is the masked 500
 	const body = await res.text()
 	check(res.status, 500, `${name}: status`)
 	if (name === 'error hook')
@@ -129,7 +133,7 @@ for (const [name, app] of Object.entries(failing)) {
 }
 
 if (failures.length) {
-	console.error(failures.join('\n'))
+	log(failures.join('\n'))
 	process.exit(1)
 }
 

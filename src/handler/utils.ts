@@ -1,4 +1,3 @@
-import { isAsyncFunction, mayReturnPromise } from '../compile/utils'
 import { isDisposable, isSingleton } from '../utils'
 import { isCloudflareWorker, isFastly } from '../universal/constants'
 import { HTTPError, problemTypeOf } from '../error'
@@ -98,12 +97,22 @@ export function finalizeRouteError(
 	context: Partial<Context>,
 	error: unknown,
 	sign?: (set: Context['set']) => unknown,
-	route?: RouteErrorHooks
+	route?: RouteErrorHooks,
+	result?: unknown,
+	step?: 1 | 2
 ) {
 	const finalize = app['~finalizeError']
 	if (!finalize) throw error
 
-	return finalize(context as Context, error as Error, sign, false, route)
+	return finalize(
+		context as Context,
+		error as Error,
+		sign,
+		false,
+		route,
+		result,
+		step
+	)
 }
 
 /**
@@ -113,15 +122,33 @@ export function finalizeRouteError(
 export interface RouteErrorHooks {
 	error?: Function[]
 	mapResponse?: Function[]
+	// an exit without a compiled afterResponse scheduler (WS upgrade)
+	runAfterResponse?: Function[]
 }
 
-// a route's `fre`, carrying its own error and `mapResponse` hooks
-export const finalizeRouteErrorOf = (
-	route: RouteErrorHooks | undefined
-): typeof finalizeRouteError =>
-	route?.error?.length || route?.mapResponse?.length
-		? (app, context, error, sign) =>
-				finalizeRouteError(app, context, error, sign, route)
+// a route's `fre`, carrying its own error and `mapResponse` hooks. A route
+// without them only ever passes the error
+export const finalizeRouteErrorOf = (route: RouteErrorHooks | undefined) =>
+	route?.error?.length ||
+	route?.mapResponse?.length ||
+	route?.runAfterResponse?.length
+		? (
+				app: AnyElysia,
+				context: Partial<Context>,
+				error: unknown,
+				sign?: (set: Context['set']) => unknown,
+				result?: unknown,
+				step?: 1 | 2
+			) =>
+				finalizeRouteError(
+					app,
+					context,
+					error,
+					sign,
+					route,
+					result,
+					step
+				)
 		: finalizeRouteError
 
 export function registerDeriveDisposable(
@@ -172,6 +199,3 @@ export async function drainDisposables(context: any) {
 		console.error(error)
 	}
 }
-
-export const hasAsync = (fns: Function[]) =>
-	fns.some((fn) => isAsyncFunction(fn) || mayReturnPromise(fn))

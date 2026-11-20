@@ -1067,9 +1067,9 @@ describe('WebSocket error hook registered after the route', () => {
 		}
 	})
 
-	// What an upgrade's error hook throws ends with the route's own hooks,
-	// as on HTTP: an earlier handler for the new error still answers
-	it('answers what an error hook throws with the earlier hooks, as on HTTP', async () => {
+	// What an upgrade's error hook throws ends the dispatch, as on HTTP: no
+	// later hook answers it, the request ends in the masked 500
+	it('masks what an error hook throws instead of letting a later hook answer, as on HTTP', async () => {
 		for (const precompile of [false, true]) {
 			const app = new Elysia({ precompile })
 				.use(websocket())
@@ -1092,13 +1092,19 @@ describe('WebSocket error hook registered after the route', () => {
 				return `${response.status} ${await response.text()}`
 			}
 
-			expect({
-				http: await served('/http'),
-				ws: await served('/ws', { upgrade: 'websocket' })
-			}).toEqual({
-				http: '418 caught secondary',
-				ws: '418 caught secondary'
-			})
+			const masked =
+				'500 {"type":"internal-server-error","code":"internal-server-error","title":"Internal Server Error","status":500}'
+
+			const log = console.error
+			console.error = () => {}
+			try {
+				expect({
+					http: await served('/http'),
+					ws: await served('/ws', { upgrade: 'websocket' })
+				}).toEqual({ http: masked, ws: masked })
+			} finally {
+				console.error = log
+			}
 		}
 	})
 })

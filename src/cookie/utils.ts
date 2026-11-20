@@ -270,7 +270,7 @@ class CookieJarHandler {
 
 		const entry = this.materialize(store, key)
 		if ((entry as any)['~unsign'] !== undefined)
-			resolvePendingCookie(entry as Record<string, any>, key)
+			resolvePendingCookie(entry as Record<string, any>, key, this.setRef)
 	}
 
 	get(store: Record<string, BaseCookie>, key: string) {

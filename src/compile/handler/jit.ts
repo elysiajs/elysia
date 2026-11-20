@@ -23,7 +23,7 @@ import {
 	isProduction
 } from '../../error'
 import { isDynamicRegex, StatusMap, traceEventIndex } from '../../constants'
-import { errorStatus, fallbackResponse } from '../../handler/error'
+import { applyErrorStatus } from '../../handler/error'
 import {
 	drainDisposables,
 	emptyResponse,
@@ -591,8 +591,6 @@ export function compileHandlerJit(
 
 	const abortChainGuard = () => (abortOn ? abortPeek : undefined)
 
-	const abortCatch = abortOn ? `if((${arm}).aborted)return emp.clone()\n` : ''
-
 	const phaseOn = (phase: TraceEvent) =>
 		hasTrace && (tracePhases === null || tracePhases.has(phase))
 
@@ -1038,11 +1036,9 @@ export function compileHandlerJit(
 
 	if (syncCookieSign || asyncCookieSign) link(signCookieValues, 'scv')
 
-	// A streamed body runs on the first pull, after the sign above: the
-	// stream handler signs again before it builds the headers
-	const streamSign = hasCookieSign
-		? `if(typeof _r?.next==='function')c.set['~sign']=_sgn\n`
-		: ''
+	// A body can write while it is mapped, after the sign above: `handleSet`
+	// signs again where it serialises the cookies
+	const streamSign = hasCookieSign ? `c.set['~sign']=_sgn\n` : ''
 
 	let factoryHelpers =
 		thenSign || settleSign
@@ -1370,23 +1366,12 @@ export function compileHandlerJit(
 
 		if (hasErrorHook) {
 			link(hook!.error!, 'er')
-			link(fallbackResponse, 'fbr')
-			link(errorStatus, 'ers')
+			link(applyErrorStatus, 'aes')
 
 			const allowUnsafeDetail =
 				!!root['~config']?.allowUnsafeValidationDetails
 
 			if (allowUnsafeDetail) link(ValidationError, 'verr')
-
-			// `_efb`: hooks already ran, so call `fallbackResponse` directly, not via `fre`
-			factoryHelpers +=
-				`function _em(c,_r){return typeof _r?.then==='function'?Promise.resolve(_r).catch((_e)=>fre(rt,c,_e)):_r}\n` +
-				`function _fbm(_r,_s,_c){return ${map}(_r,_s,_c.request,true)}\n` +
-				`${asyncCookieSign ? 'async ' : ''}function _efb(e,c){\n` +
-				(asyncCookieSign ? `let _sg${arm ? ',_as' : ''}\n` : ``) +
-				(asyncCookieSign ? awaitSign : signPrefix) +
-				`return _em(c,fbr(c,e,_fbm))\n` +
-				`}\n`
 
 			let errorJar = ''
 			if (cookieConfig && needsCookie) {
@@ -1399,7 +1384,10 @@ export function compileHandlerJit(
 				link(parseRaw, key)
 
 				const raw = `${key}(c.request.headers.get('cookie'),cc${asyncCookieSign ? ',1' : ''})`
-				errorJar = `c.cookie??=bcj(c.set,${asyncCookieSign ? awaitValue(raw, arm) : raw},cc${jarArgs})\n`
+				errorJar =
+					// a forged signed cookie reads as absent: the error stays the client's
+					(hasCookieSign ? `c.set['~forgedAbsent']=1\n` : '') +
+					`c.cookie??=bcj(c.set,${asyncCookieSign ? awaitValue(raw, arm) : raw},cc${jarArgs})\n`
 			}
 
 			const errorHead = plain(
@@ -1407,8 +1395,7 @@ export function compileHandlerJit(
 					(allowUnsafeDetail
 						? `if(e instanceof verr)e.allowUnsafeValidationDetails=true\n`
 						: ``) +
-					`if(e?.status)c.set.status=ers(e.status)\n` +
-					`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
+					`aes(c,e)\n` +
 					errorJar
 			)
 			if (typeof asyncMode === 'object') {
@@ -1418,50 +1405,35 @@ export function compileHandlerJit(
 				asyncMode.e = true
 			}
 
-			// what an error no hook answers runs before `_efb`
-			const declined =
+			// the hooks ran here: `fre` settles what they decided, see
+			// `createErrorHandler`. An aborted request ends before it
+			const beforeSettle =
 				endTrace('error') +
-				(hasDeriveDispose
-					? schedule + abortCatch
-					: abortCatch + schedule)
+				(abortOn
+					? `if((${arm}).aborted){${hasDeriveDispose ? schedule : ''}return emp.clone()}\n`
+					: '')
+			const settle = (result: string) =>
+				beforeSettle + freThenSchedule(`e,undefined,${result},1`)
 
 			body +=
 				errorHead +
 				(abortOn && asyncCookieSign
-					? `if(${abortPeek}){${declined}return _efb(e,c)}\n`
+					? `if(${abortPeek}){${beforeSettle}}\n`
 					: '') +
-				`let _r${hasMapResponse ? ',tmp' : ''}\n` +
+				`let _r\n` +
 				mapError(
 					hook!.error!,
-					[
-						map,
-						link,
-						responseMap,
-						(hasMapResponse
-							? `c.responseValue=_r\n` +
-								mapChainHook(
-									hook!.mapResponse!,
-									'mr',
-									asyncMode,
-									undefined,
-									abortChainGuard(),
-									arm
-								)
-							: '') + declined,
-						(response) =>
-							`${signPrefix}return _em(c,${signMap(response)})\n`,
-						asyncMode,
-						arm,
-						declined
-					],
+					[asyncMode, arm, settle('_r')],
 					abortChainGuard(),
 					asyncTail(asyncMode)
 				) +
-				declined +
-				`return _efb(e,c)\n`
+				settle('undefined')
 		} else body += endTrace('error') + freThenSchedule('e')
 
-		const hookThrew = `catch(_ee){${freThenSchedule('_ee').trimEnd()}}}\n`
+		// a hook that throws, or the head before them: MASKED, no hook runs again
+		const hookThrew = `catch(_ee){${endTrace('error')}${freThenSchedule(
+			hasErrorHook ? '_ee,undefined,undefined,2' : '_ee'
+		).trimEnd()}}}\n`
 		// a sync-first route hoists its error hooks too: JSC compiles a catch
 		// clause in time quadratic in its size
 		const syncFirst = typeof asyncMode === 'object' && !asyncMode.async
@@ -1516,7 +1488,7 @@ export function compileHandlerJit(
 		code = code.replaceAll('fre(rt,c,', '_sfre(rt,c,')
 		factoryHelpers =
 			factoryHelpers.replaceAll('fre(rt,c,', '_sfre(rt,c,') +
-			`function _sgn(s){return scv(s.cookie,cc,s)}\nfunction _sfre(rt,c,e){return fre(rt,c,e,_sgn)}\n`
+			`function _sgn(s){return scv(s.cookie,cc,s)}\nfunction _sfre(rt,c,e,_s,r,p){return fre(rt,c,e,_sgn,r,p)}\n`
 	}
 
 	if (factoryHelpers)

@@ -679,7 +679,10 @@ export class Elysia<
 		// every app-level hook, as for a 404: a route that failed to compile
 		// has no hooks of its own to answer
 		wholeChain?: boolean,
-		route?: RouteErrorHooks
+		route?: RouteErrorHooks,
+		// the route ran its hooks inline, see `createErrorHandler`
+		result?: unknown,
+		step?: 1 | 2
 	) => MaybePromise<Response>
 	get ['~programId'](): ProgramId {
 		return this

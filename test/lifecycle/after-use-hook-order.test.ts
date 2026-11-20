@@ -120,11 +120,13 @@ const okTypes = [
 	'mapResponse',
 	'afterResponse'
 ]
+// every error hook declines: a declined error is mapped like an answer
 const errorTypes = [
 	'transform',
 	'derive',
 	'beforeHandle',
 	'error',
+	'mapResponse',
 	'afterResponse'
 ]
 

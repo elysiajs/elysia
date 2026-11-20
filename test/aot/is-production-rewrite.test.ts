@@ -184,8 +184,10 @@ describe('Bun production builds', () => {
 		expect(result.success).toBe(true)
 		const out = await result.outputs[0].text()
 
-		// This catch variable appears only in development error logging.
-		expect(out).not.toContain('errorPipelineThrow')
+		// This warning appears only in development builds.
+		expect(out).not.toContain(
+			'was called after the fetch handler was built'
+		)
 	})
 
 	it('retains development-only branches when production is disabled', async () => {
@@ -205,14 +207,14 @@ describe('Bun production builds', () => {
 		expect(result.success).toBe(true)
 		const out = await result.outputs[0].text()
 
-		// This catch variable appears only in development error logging.
-		expect(out).toContain('errorPipelineThrow')
+		// This warning appears only in development builds.
+		expect(out).toContain('was called after the fetch handler was built')
 	})
 })
 
-const ELYSIA_DIST_FETCH = resolve(
+const ELYSIA_DIST_ERROR = resolve(
 	import.meta.dir,
-	'../../dist/handler/fetch.mjs'
+	'../../dist/handler/error.mjs'
 )
 
 describe('Vite production transforms', () => {
@@ -224,8 +226,8 @@ describe('Vite production transforms', () => {
 		})
 		await plugin.buildStart()
 
-		const fetchSrc = await Bun.file(ELYSIA_DIST_FETCH).text()
-		const result = plugin.transform(fetchSrc, ELYSIA_DIST_FETCH)
+		const fetchSrc = await Bun.file(ELYSIA_DIST_ERROR).text()
+		const result = plugin.transform(fetchSrc, ELYSIA_DIST_ERROR)
 
 		expect(result).toBeDefined()
 		expect(result as string).not.toContain('isProduction()')
@@ -241,8 +243,8 @@ describe('Vite production transforms', () => {
 		})
 		await plugin.buildStart()
 
-		const fetchSrc = await Bun.file(ELYSIA_DIST_FETCH).text()
-		const result = plugin.transform(fetchSrc, ELYSIA_DIST_FETCH)
+		const fetchSrc = await Bun.file(ELYSIA_DIST_ERROR).text()
+		const result = plugin.transform(fetchSrc, ELYSIA_DIST_ERROR)
 
 		const out = (result ?? fetchSrc) as string
 		expect(out).toContain('isProduction()')

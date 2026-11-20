@@ -11,11 +11,7 @@ import {
 } from '../../cookie/utils'
 import { requestId } from '../../utils'
 import { StatusMap } from '../../constants'
-import {
-	adoptErrorType,
-	errorStatus,
-	fallbackResponse
-} from '../../handler/error'
+import { applyErrorStatus } from '../../handler/error'
 import {
 	drainDisposables,
 	emptyResponse,
@@ -119,12 +115,8 @@ export const ie: Resolver = (c) => {
 export const ec: Resolver = (c) => returnedErrorClasses(c.hook as any)
 // route-level error boundary
 export const fre: Resolver = (c) => finalizeRouteErrorOf(c.hook as any)
-// shared error fallback, reached once every error hook has declined
-export const fbr: Resolver = () => fallbackResponse
-// adopts the error's `type` into an unspecified problem a hook returned
-export const aet: Resolver = () => adoptErrorType
-// an error's status as the response may carry it, a 500 unless valid
-export const ers: Resolver = () => errorStatus
+// the status an error sets before its hooks run
+export const aes: Resolver = () => applyErrorStatus
 export const rt: Resolver = (c) => c.root
 // route hook
 export const ho: Resolver = (c) => c.hook

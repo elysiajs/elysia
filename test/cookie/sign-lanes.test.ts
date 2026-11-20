@@ -262,9 +262,8 @@ describe('signed cookies on every compiled lane', () => {
 	})
 
 	// `[null, secret]` verifies but has no key to sign with. An error hook's
-	// answer then fails closed to the 500 fallback, never sent with its
-	// cookie silently missing, and the cookie never leaves unsigned, as on
-	// WebSocket
+	// answer then fails closed to the masked 500, never sent with its cookie
+	// silently missing: a masked 500 sends no cookie at all, as on WebSocket
 	it('fails closed when the cookie an error hook answers with fails to sign', async () => {
 		for (const precompile of [false, true])
 			for (const writer of [
@@ -322,7 +321,7 @@ describe('signed cookies on every compiled lane', () => {
 					status: 500,
 					body: expect.not.stringContaining('handled') as any,
 					session: [],
-					theme: ['theme=dark']
+					theme: []
 				})
 			}
 	})
@@ -332,9 +331,9 @@ describe('signed cookies on every compiled lane', () => {
 			.split(/, (?=[^ ;]+=)/)
 			.filter((cookie) => cookie.startsWith('session='))
 
-	// A sign failure always ends on a dedicated 500, never on what an earlier
-	// try of the hook answered, whatever its status
-	it('ends a failed sign on a dedicated 500 after a retried hook', async () => {
+	// A hook that throws a status ends in the masked 500, whatever the status:
+	// the hook runs once, so its later answer and cookie are never sent
+	it('ends a hook that throws a status on the masked 500, no answer or cookie sent', async () => {
 		for (const precompile of [false, true])
 			for (const code of [200, 401]) {
 				let calls = 0
@@ -407,8 +406,7 @@ describe('signed cookies on every compiled lane', () => {
 							if (throwing && calls === 1)
 								throw new TypeError('hook failed')
 
-							// only the first answer writes: a retry has nothing
-							// left to fail on
+							// a throwing hook runs once and never writes
 							if (calls === (throwing ? 2 : 1))
 								cookie.session.value = 'user-42'
 
@@ -534,7 +532,8 @@ describe('signed cookies on every compiled lane', () => {
 	})
 
 	// The failure is recorded off the cookies: one named like the record is
-	// an ordinary cookie, and a healthy sign keeps the hook's answer
+	// an ordinary cookie, and a healthy sign keeps the hook's answer. A hook
+	// that throws is never an answer: it ends in the masked 500
 	it('keeps the hook answer for a cookie named ~signFailed', async () => {
 		for (const name of ['~signFailed', 'regular'])
 			for (const answer of ['returns', 'throws']) {
@@ -559,13 +558,25 @@ describe('signed cookies on every compiled lane', () => {
 					status: res.status,
 					body: await res.text(),
 					session: sessions(res).length
-				}).toEqual({
-					name,
-					answer,
-					status: 418,
-					body: 'teapot',
-					session: 1
-				})
+				}).toEqual(
+					answer === 'throws'
+						? {
+								name,
+								answer,
+								status: 500,
+								body: expect.stringContaining(
+									'internal-server-error'
+								) as any,
+								session: 0
+							}
+						: {
+								name,
+								answer,
+								status: 418,
+								body: 'teapot',
+								session: 1
+							}
+				)
 			}
 	})
 })
@@ -718,7 +729,7 @@ describe('signed cookies on exits no route answers', () => {
 	})
 
 	// `[null, secret]` verifies but has no key to sign with: the exit fails
-	// closed to the dedicated 500, the signed cookie dropped, never unsigned
+	// closed to the masked 500, which sends no cookie at all
 	it('fails closed when the cookie fails to sign', async () => {
 		const results = []
 		for (const [name, path, wire] of exits) {
@@ -739,10 +750,7 @@ describe('signed cookies on exits no route answers', () => {
 			)
 		}
 
-		// `theme` is not signed, it is sent as written
-		expect(results).toEqual(
-			exits.map(([name]) => `${name}: 500 theme=dark`)
-		)
+		expect(results).toEqual(exits.map(([name]) => `${name}: 500 `))
 	})
 
 	// `sign` without any secret has nothing to sign with: a cookie route fails
@@ -757,16 +765,14 @@ describe('signed cookies on exits no route answers', () => {
 			results.push(`${name}: ${res.status} ${pairs(res).join(' ')}`)
 		}
 
-		expect(results).toEqual(
-			exits.map(([name]) => `${name}: 500 theme=dark`)
-		)
+		expect(results).toEqual(exits.map(([name]) => `${name}: 500 `))
 	})
 
 	// The failure cleanup must not rely on objects user code can lock: a `set`
 	// made non-extensible cannot take the `~signFailed` mark, a cookie bag
 	// whose delete trap throws keeps the cookie. Either way a failed sign ends
-	// on the dedicated 500 (onError does not answer it) with the signed cookie
-	// dropped, on a matched route as on the exits no route answers
+	// on the masked 500 (onError does not answer it) with no cookie, on a
+	// matched route as on the exits no route answers
 	it('fails closed when set or the cookie bag refuses the cleanup', async () => {
 		const bag = () =>
 			new Proxy(
@@ -843,15 +849,12 @@ describe('signed cookies on exits no route answers', () => {
 			}
 
 		expect(results).toEqual([
-			// known gap: the route's inline error lane re-signs without reading
-			// the mark off the copy, so its hook answers the 500. The signed
-			// cookie is still dropped, never sent unsigned
-			'set non-extensible, matched: 500 answered theme=dark',
-			'set non-extensible, 404: 500 theme=dark',
-			'set non-extensible, onRequest answer: 500 theme=dark',
-			'bag delete throws, matched: 500 theme=dark',
-			'bag delete throws, 404: 500 theme=dark',
-			'bag delete throws, onRequest answer: 500 theme=dark'
+			'set non-extensible, matched: 500 ',
+			'set non-extensible, 404: 500 ',
+			'set non-extensible, onRequest answer: 500 ',
+			'bag delete throws, matched: 500 ',
+			'bag delete throws, 404: 500 ',
+			'bag delete throws, onRequest answer: 500 '
 		])
 	})
 
@@ -917,7 +920,7 @@ describe('signed cookies on exits no route answers', () => {
 
 			// positive control: the spy sees the signer the exits call
 			await app.handle(new Request('http://localhost/write'))
-			expect(sign).toHaveBeenCalledTimes(1)
+			expect(sign).toHaveBeenCalled()
 		} finally {
 			sign.mockRestore()
 		}
@@ -1203,7 +1206,7 @@ describe('signed cookies written through set.cookie on a matched route', () => {
 	})
 
 	// `[null, secret]` verifies but has no key to sign with: the route fails
-	// closed to the dedicated 500, the signed cookie dropped, never unsigned
+	// closed to the masked 500, which sends no cookie at all
 	it('fails closed when the cookie fails to sign', async () => {
 		const results: string[] = []
 		for (const [name, path, wire] of writers) {
@@ -1220,9 +1223,7 @@ describe('signed cookies written through set.cookie on a matched route', () => {
 			results.push(`${name}: ${res.status} ${pairs(res).join(' ')}`)
 		}
 
-		expect(results).toEqual(
-			writers.map(([name]) => `${name}: 500 theme=dark`)
-		)
+		expect(results).toEqual(writers.map(([name]) => `${name}: 500 `))
 	})
 
 	// `sign` without any secret has nothing to sign with: the route fails to

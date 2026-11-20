@@ -61,7 +61,6 @@ import {
 import {
 	adoptErrorType,
 	fallbackErrorResponse,
-	createErrorHandler,
 	resolveStatus
 } from '../handler/error'
 import {
@@ -538,11 +537,6 @@ export function buildWSRoute(
 		flatAppHook.error as any
 	)
 
-	const finalizeOwnError = finalizeRouteErrorOf({
-		error: errorHandlers as any,
-		mapResponse: mapResponses as any
-	})
-
 	const errorClasses = returnedErrorClasses({ error: errorHandlers })
 	// a returned error answers as a thrown one, as on HTTP: checked before
 	// a thenable is assimilated, and on what it resolves to
@@ -612,16 +606,21 @@ export function buildWSRoute(
 		}
 
 		// a failed sign drops signed cookies and throws: a 500
-		if (signCookies) await signCookies(set)
+		if (signCookies) {
+			// the body can write while it is mapped, signed in `handleSet`
+			;(set as { '~sign'?: Function })['~sign'] = signCookies
+			await signCookies(set)
+		}
 
 		return mapResponse(response, set, context.request)
 	}
 
-	const handleUpgradeError = createErrorHandler(
-		errorHandlers.length ? (errorHandlers as any) : undefined,
-		finalizeUpgradeResponse as any,
-		frozenRootOf(app)['~config']?.allowUnsafeValidationDetails
-	)
+	// an upgrade's error settles as a matched route's does
+	const finalizeOwnError = finalizeRouteErrorOf({
+		error: errorHandlers as any,
+		mapResponse: mapResponses as any,
+		runAfterResponse: afterResponses as any
+	})
 
 	async function handleError(ws: ElysiaWS<any>, error: unknown) {
 		const errCtx: any = Object.create(ws as any)
@@ -1148,18 +1147,18 @@ export function buildWSRoute(
 					context
 				)
 		} catch (error) {
-			try {
-				return (await handleUpgradeError(
-					context,
-					error as Error
-				)) as Response
-			} catch (thrown) {
-				return finalizeOwnError(app, context, thrown, signCookies) as
-					| Response
-					| Promise<Response>
-			}
+			// a forged signed cookie reads as absent, as on a route's error lane
+			if (signCookies)
+				Reflect.set((context as any).set, '~forgedAbsent', 1)
+
+			return await finalizeOwnError(app, context, error, signCookies)
 		} finally {
-			if (!upgraded && (context as any)['~dispose'])
+			// once afterResponse is scheduled, it releases them after its own
+			if (
+				!upgraded &&
+				(context as any)['~dispose'] &&
+				!(context as any)._arf
+			)
 				void drainDisposables(context)
 		}
 	}

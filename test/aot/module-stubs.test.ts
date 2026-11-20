@@ -354,7 +354,7 @@ describe('AOT module stubs', () => {
 				used.add(/^v[rs]\d+$/.test(name) ? 'va' : name)
 
 		// cookie jar, body validation and the route error hook all link
-		for (const name of ['bcj', 'cc', 'va', 'pj', 'er', 'fbr'])
+		for (const name of ['bcj', 'cc', 'va', 'pj', 'er', 'aes'])
 			expect(used).toContain(name)
 
 		const table = hooks.transform(

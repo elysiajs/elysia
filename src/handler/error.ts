@@ -1,4 +1,4 @@
-import { hasAsync, getNotFound } from './utils'
+import { getNotFound } from './utils'
 import { parseQueryFromURL } from '../parse-query'
 import {
 	NotFound,
@@ -7,6 +7,7 @@ import {
 	HTTPError,
 	isProduction,
 	internalServerErrorResponse,
+	internalServerErrorBodyString,
 	problemBody,
 	titleOf,
 	PROBLEM_JSON
@@ -50,11 +51,44 @@ function parseQuery(context: Context) {
 	Object.defineProperty(context, 'query', lazyQuery)
 }
 
-const isPristineNotFound = (context: Context, error: any) =>
-	error instanceof NotFound &&
-	error.response === 'Not Found' &&
-	!context.set.cookie &&
-	!isNotEmpty(context.set.headers)
+// from failed cookie signing
+export const signFailed = (set: Context['set']) =>
+	(set as { '~signFailed'?: true })['~signFailed'] === true ||
+	(!Object.isExtensible(set) &&
+		(set.cookie as { '~signFailed'?: true } | undefined)?.[
+			'~signFailed'
+		] === true)
+
+/**
+ * The 500 an error ends in once it cannot be settled: reads nothing from
+ * either error, sends no cookie and only the CORS headers, never throws
+ */
+export function maskedResponse(context: Context, thrown: unknown) {
+	try {
+		console.error(thrown)
+	} catch {}
+
+	const headers: Record<string, string> = { 'content-type': PROBLEM_JSON }
+	try {
+		context.set.status = 500
+
+		const source = context.set.headers as any
+		for (const [name, value] of source instanceof Headers
+			? source
+			: Object.entries(source)) {
+			const key = name.toLowerCase()
+			if (key === 'vary' || key.startsWith('access-control-'))
+				headers[key] = value as string
+		}
+
+		return new Response(internalServerErrorBodyString(undefined), {
+			status: 500,
+			headers
+		})
+	} catch {
+		return internalServerErrorResponse(undefined)
+	}
+}
 
 /**
  * Whether an error claims a problem type, judged on `type` as the caller
@@ -92,13 +126,8 @@ export function adoptErrorType(result: any, error: any) {
 	)
 }
 
-/**
- * Response served once every error hook has declined the error.
- *
- * Exported for the JIT: a route with error hooks emits its own catch block,
- * which must land on *this* function rather than re-implementing it
- */
-export function fallbackResponse(
+// Response served once every error hook has declined the error
+function fallbackResponse(
 	context: Context,
 	error: any,
 	mapResponse: (
@@ -107,26 +136,23 @@ export function fallbackResponse(
 		context?: Context
 	) => unknown
 ): unknown {
+	let r: unknown
+	// only `toResponse` itself falls back: a throwing map is not retried
 	if (typeof error?.toResponse === 'function')
 		try {
-			const r = error.toResponse()
-
-			if (r instanceof Promise)
-				return r.then(
-					(resolved) =>
-						resolved instanceof Response
-							? mapResponse(resolved, context.set, context)
-							: fallbackErrorResponse(
-									context,
-									error,
-									mapResponse
-								),
-					() => fallbackErrorResponse(context, error, mapResponse)
-				)
-
-			if (r instanceof Response)
-				return mapResponse(r, context.set, context)
+			r = error.toResponse()
 		} catch {}
+
+	if (r instanceof Promise)
+		return r.then(
+			(resolved) =>
+				resolved instanceof Response
+					? mapResponse(resolved, context.set, context)
+					: fallbackErrorResponse(context, error, mapResponse),
+			() => fallbackErrorResponse(context, error, mapResponse)
+		)
+
+	if (r instanceof Response) return mapResponse(r, context.set, context)
 
 	return fallbackErrorResponse(context, error, mapResponse)
 }
@@ -280,15 +306,7 @@ export function fallbackErrorResponse(
 	) as number
 
 	// An error inside the error path has nowhere left to fall
-	const failed = (cause: unknown) => {
-		context.set.status = 500
-
-		return mapResponse(
-			internalServerErrorResponse(cause),
-			context.set,
-			context
-		)
-	}
+	const failed = (cause: unknown) => maskedResponse(context, cause)
 
 	// Only this copy's HTTPError: another Error's `headers` may be an HTTP
 	// client's copy of an upstream response (openai v4's APIError), so it is
@@ -432,12 +450,28 @@ export function fallbackErrorResponse(
 	return legacy()
 }
 
-function applyErrorStatus(context: Context, error: any) {
+export function applyErrorStatus(context: Context, error: any) {
 	if (error?.status) context.set.status = errorStatus(error.status)
 	else if (context.set.status === undefined || context.set.status === 200)
 		context.set.status = 500
 }
 
+type Sign = ((set: Context['set']) => unknown) | undefined
+
+const isPristineNotFound = (context: Context, error: any) =>
+	error instanceof NotFound &&
+	error.response === 'Not Found' &&
+	!context.set.cookie &&
+	!isNotEmpty(context.set.headers)
+
+/**
+ * Dispatches an error to its hooks once, then settles it: an answer or a
+ * declined error. A hook that throws, or a failure while settling, throws
+ * out to the caller, which masks it (see `finalizeError`).
+ *
+ * A route that ran its hooks inline passes `step`: 1 settles `result`, 2
+ * masks `error`
+ */
 export function createErrorHandler(
 	onErrors: AppHook['error'] | undefined,
 	mapResponse: (
@@ -445,43 +479,36 @@ export function createErrorHandler(
 		set: Context['set'],
 		...any: unknown[]
 	) => unknown,
-	allowUnsafe = false
+	allowUnsafe = false,
+	// no mapResponse hook: a declined plain 404 is the cached one
+	cachedNotFound = false
 ) {
-	const enter = (context: Context, error: Error) => {
-		// @ts-expect-error
-		context.error = error
-		if (allowUnsafe && (error as any)?.['~verr'] === true)
-			(error as ValidationError).allowUnsafeValidationDetails = true
-		applyErrorStatus(context, error)
+	const total = onErrors?.length ?? 0
 
-		parseQuery(context)
-	}
-
-	// A signed route's cookie signer rides along to the final map
-	type Sign = ((set: Context['set']) => unknown) | undefined
-	const mapWith = (sign: Sign): typeof mapResponse =>
+	const map = (sign: Sign): typeof mapResponse =>
 		sign
 			? (response, set, context) =>
 					mapResponse(response, set, context, sign)
 			: mapResponse
 
-	if (!onErrors)
-		return (context: Context, error: Error, sign?: Sign) => {
-			enter(context, error)
-			return fallbackResponse(context, error, mapWith(sign))
-		}
-
-	const respond = (
+	const serve = (
 		context: Context,
-		error: Error,
+		error: any,
 		result: unknown,
 		sign: Sign
 	) => {
+		if (result === undefined)
+			return cachedNotFound && !sign && isPristineNotFound(context, error)
+				? getNotFound()
+				: fallbackResponse(context, error, map(sign))
+
 		// a returned error is served as one no hook answers, at its own status
 		if (result instanceof Error) {
+			// @ts-expect-error
+			context.error = result
 			context.set.status = errorStatus((result as any).status)
 
-			return serveUnhandled(context, result, sign)
+			return fallbackResponse(context, result, map(sign))
 		}
 
 		if (result instanceof ElysiaStatus || result instanceof Response)
@@ -489,45 +516,71 @@ export function createErrorHandler(
 		else if (context.set.status === undefined || context.set.status === 200)
 			context.set.status = 500
 
-		return mapWith(sign)(
-			adoptErrorType(result, error),
-			context.set,
-			context
-		)
+		return map(sign)(adoptErrorType(result, error), context.set, context)
 	}
 
-	const serveUnhandled = (context: Context, error: Error, sign: Sign) =>
-		isPristineNotFound(context, error)
-			? getNotFound()
-			: fallbackResponse(context, error, mapWith(sign))
+	const signed = (context: Context, response: unknown) =>
+		signFailed(context.set)
+			? maskedResponse(context, new Error('Failed to sign cookies'))
+			: response
 
-	if (hasAsync(onErrors))
-		return async (context: Context, error: Error, sign?: Sign) => {
-			materializeSetHeaders(context.set)
-			enter(context, error)
+	const settle = (
+		context: Context,
+		error: any,
+		result: unknown,
+		sign: Sign
+	) => {
+		const response = serve(context, error, result, sign) as any
 
-			for (let i = 0; i < onErrors.length; i++) {
-				let result = onErrors[i](context as any)
-				if (typeof (result as any)?.then === 'function')
-					result = await result
+		return typeof response?.then === 'function'
+			? Promise.resolve(response).then((response) =>
+					signed(context, response)
+				)
+			: signed(context, response)
+	}
 
-				if (result !== undefined)
-					return respond(context, error, result, sign)
-			}
+	const run = (
+		context: Context,
+		error: any,
+		sign: Sign,
+		i: number
+	): unknown => {
+		for (; i < total; i++) {
+			const result = onErrors![i](context as any)
 
-			return serveUnhandled(context, error, sign)
-		}
+			if (typeof (result as any)?.then === 'function')
+				// eslint-disable-next-line sonarjs/function-inside-loop -- continuation for the hook at index i
+				return Promise.resolve(result).then((result) =>
+					result === undefined
+						? run(context, error, sign, i + 1)
+						: settle(context, error, result, sign)
+				)
 
-	return (context: Context, error: Error, sign?: Sign) => {
-		materializeSetHeaders(context.set)
-		enter(context, error)
-
-		for (let i = 0; i < onErrors.length; i++) {
-			const result = onErrors[i](context as any)
 			if (result !== undefined)
-				return respond(context, error, result, sign)
+				return settle(context, error, result, sign)
 		}
 
-		return serveUnhandled(context, error, sign)
+		return settle(context, error, undefined, sign)
+	}
+
+	return (
+		context: Context,
+		error: Error,
+		sign?: Sign,
+		result?: unknown,
+		step?: 1 | 2
+	) => {
+		if (step === 2) return maskedResponse(context, error)
+		if (step) return settle(context, error, result, sign)
+
+		if (total) materializeSetHeaders(context.set)
+		// @ts-expect-error
+		context.error = error
+		if (allowUnsafe && (error as any)?.['~verr'] === true)
+			(error as ValidationError).allowUnsafeValidationDetails = true
+		applyErrorStatus(context, error)
+		parseQuery(context)
+
+		return run(context, error, sign, 0)
 	}
 }

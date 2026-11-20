@@ -315,22 +315,36 @@ export function maybeJsonDecode(value: unknown) {
 	return value
 }
 
-export function resolvePendingCookie(entry: Record<string, any>, name: string) {
+export function resolvePendingCookie(
+	entry: Record<string, any>,
+	name: string,
+	// the request's `set`: an error hook reads a forged cookie as absent
+	set?: Record<string, any>
+) {
 	const value = entry.value
 
-	if (typeof value !== 'string') throw InvalidCookie.signature(name)
-	if (!hasSyncHmac)
-		throw new Error(
-			`resolvePendingCookie called without sync HMAC. Unreachable under correct lane gating (cookie: "${name}")`
-		)
+	let decoded: unknown
+	try {
+		if (typeof value !== 'string') throw InvalidCookie.signature(name)
+		if (!hasSyncHmac)
+			throw new Error(
+				`sync HMAC not missing on "${name}"`
+			)
 
-	const decoded = unsignWithSecretsSync(
-		name,
-		value,
-		entry['~unsign'] as string | (string | null)[],
-		// the jar marks the entry when the app opted out of the legacy fallback
-		!entry['~strict']
-	)
+		decoded = unsignWithSecretsSync(
+			name,
+			value,
+			entry['~unsign'] as string | (string | null)[],
+			// the jar marks the entry when the app opted out of the legacy fallback
+			!entry['~strict']
+		)
+	} catch (error) {
+		if (!set?.['~forgedAbsent'] || !(error instanceof InvalidCookie))
+			throw error
+
+		entry.value = entry['~unsign'] = undefined
+		return
+	}
 
 	// Success: update entry in-place, then remove the pending marker.
 	const resolvedValue = maybeJsonDecode(decoded)

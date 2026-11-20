@@ -128,7 +128,8 @@ const byType = (log: Log) => {
 	return rows
 }
 
-// Types that run for a successful POST, and for a returned error
+// Types that run for a successful POST, and for a returned error every error
+// hook declines: a declined error is mapped like an answer
 const okTypes = [
 	'request',
 	'parse',
@@ -145,6 +146,7 @@ const errorTypes = [
 	'derive',
 	'beforeHandle',
 	'error',
+	'mapResponse',
 	'afterResponse'
 ]
 

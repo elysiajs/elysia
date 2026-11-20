@@ -175,10 +175,10 @@ const exits: Exit[] = [
 			})
 	],
 	[
-		// falls through to the app-level fallback
+		// the masked 500: no cookie at all
 		'an error hook throws',
 		500,
-		'user-42',
+		null,
 		(app, cookie) =>
 			app.ws('/p', {
 				cookie,
@@ -254,6 +254,8 @@ describe('WebSocket upgrade responses sign cookies', () => {
 					expect(res.status).toBe(status)
 
 					const pairs = pairsOf(res, 'session')
+					if (value === null) return void expect(pairs).toEqual([])
+
 					expect(pairs).toHaveLength(1)
 					// exactly the written value (unsigned is `false`, a double signature is not the value)
 					expect(await verified(pairs[0]!)).toBe(value)
@@ -327,8 +329,8 @@ describe('WebSocket upgrade rejects a per-cookie secrets write', () => {
 	})
 })
 
-// `[null, secret]` verifies but has no current key to sign with: every signed
-// cookie is dropped, never sent unsigned, the rest of the response survives
+// `[null, secret]` verifies but has no current key to sign with: the upgrade
+// ends in the masked 500, which sends no cookie at all
 describe('WebSocket upgrade responses fail closed when signing fails', () => {
 	const unsignable = () =>
 		new Elysia({
@@ -342,7 +344,7 @@ describe('WebSocket upgrade responses fail closed when signing fails', () => {
 
 	const expectDropped = (res: Response) => {
 		expect(pairsOf(res, 'session')).toEqual([])
-		expect(pairsOf(res, 'theme')).toEqual(['theme=dark'])
+		expect(pairsOf(res, 'theme')).toEqual([])
 	}
 
 	it('turns a failed sign on a hook response into the error', async () => {
@@ -366,8 +368,8 @@ describe('WebSocket upgrade responses fail closed when signing fails', () => {
 		}
 	})
 
-	// a cookie that failed to sign falls to the app-level fallback (500 like
-	// HTTP), never the route error hook's 200 with the cookie silently missing
+	// a cookie that failed to sign ends in the masked 500 like HTTP, never the
+	// route error hook's 200 with the cookie silently missing
 	it('replaces a route error hook response with the fallback', async () => {
 		const app = unsignable()
 			.ws('/p', {

@@ -14,12 +14,10 @@ import { skipClone } from '../../adapter/skip-clone'
 import { origin } from '../../adapter/origin'
 import { ElysiaStatus } from '../../error'
 import { ElysiaFile } from '../../universal/file'
-import { adoptErrorType, errorStatus } from '../../handler/error'
 import { ELYSIA_TYPES } from '../../type/constants'
 import { scanTokens } from '../lexer'
 import { registerDeriveDisposable } from '../../handler/utils'
 
-import type { ElysiaAdapter } from '../../adapter'
 import type { AppEvent, AppHook, MaybeArray } from '../../types'
 
 export type Link = (v: unknown, key: string) => void
@@ -542,34 +540,12 @@ export const mapAfterResponse = /*#__PURE__*/ map<
 
 export const mapError = /*#__PURE__*/ map<
 	'error',
-	[
-		map: string,
-		link: Link,
-		mapResponse: ElysiaAdapter['response']['map'],
-		schedule: string,
-		// signs, then returns the response: a sync route chains an async signer
-		sign: (response: string) => string,
-		mode: AsyncMode,
-		arm: string | undefined,
-		declined: string
-	]
->((i, fn, [map, link, mapResponse, schedule, sign, mode, arm, declined]) => {
-	link(mapResponse, 'rm')
-	link(adoptErrorType, 'aet')
-	link(errorStatus, 'ers')
-	link(ElysiaStatus, 'es')
-	return (
+	[mode: AsyncMode, arm: string | undefined, answered: string]
+>(
+	(i, fn, [mode, arm, answered]) =>
 		awaitSite(`er${at(i)}(c)`, fn, mode, '_r', arm) +
-		`if(_r!==undefined){\n` +
-		// a returned error is served as one no hook answers, at its own status
-		`if(_r instanceof Error){c.set.status=ers(_r.status)\n${declined}return _efb(_r,c)}\n` +
-		`if(_r instanceof es||_r instanceof Response)c.set.status=_r.status\n` +
-		`else if(c.set.status===undefined||c.set.status===200)c.set.status=500\n` +
-		schedule +
-		sign(`${map}(aet(_r,e),c.set,c.request,true)`) +
-		`}\n`
-	)
-})
+		`if(_r!==undefined){\n${answered}}\n`
+)
 
 // NOTE: must stay a `function` declaration so `mapTransform`,
 // `mapAfterResponse`, and `mapError` above can use it.
