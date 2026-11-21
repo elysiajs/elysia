@@ -45,6 +45,7 @@ import {
 	ElysiaTypeCheck,
 	applySchemaDefaults,
 	cloneSchemaInput,
+	hasMissingSchemaDefaults,
 	getCookieValidator,
 	getSchemaProperties,
 	getSchemaValidator,
@@ -1310,12 +1311,15 @@ export const composeHandler = ({
 				type: 'query',
 				normalize
 			})
-			if (cleanQuery && validator.query.hasDefault)
-				fnLiteral += `c.query=cloneSchemaInput(c.query)\n`
+			if (validator.query.hasDefault) {
+				fnLiteral += `const hqd=hasMissingSchemaDefaults(validator.query,c.query)\n`
+				if (cleanQuery)
+					fnLiteral += `if(hqd)c.query=cloneSchemaInput(c.query)\n`
+			}
 			fnLiteral += cleanQuery
 
 			if (Kind in validator.query?.schema && validator.query.hasDefault)
-				fnLiteral += `c.query=applySchemaDefaults(validator.query,c.query)\n`
+				fnLiteral += `if(hqd)c.query=applySchemaDefaults(validator.query,c.query)\n`
 
 			if (validator.query.isOptional)
 				fnLiteral += `if(isNotEmpty(c.query)){`
@@ -1360,6 +1364,7 @@ export const composeHandler = ({
 			let hasNonUnionFileWithDefault = false
 
 			if (validator.body.hasDefault) {
+				fnLiteral += `const hbd=hasMissingSchemaDefaults(validator.body,c.body)\n`
 				const schema = unwrapImportSchema(validator.body.schema)
 
 				if (
@@ -1375,10 +1380,10 @@ export const composeHandler = ({
 					normalize
 				})
 				if (cleanBody)
-					fnLiteral += `c.body=cloneSchemaInput(c.body)\n`
+					fnLiteral += `if(hbd)c.body=cloneSchemaInput(c.body)\n`
 				fnLiteral += cleanBody
 
-				fnLiteral += `c.body=applySchemaDefaults(validator.body,c.body)\n`
+				fnLiteral += `if(hbd)c.body=applySchemaDefaults(validator.body,c.body)\n`
 
 				if (validator.body.hasTransform || validator.body.isOptional)
 					fnLiteral += `isNotEmptyObject=c.body&&(typeof c.body==="object"&&(isNotEmpty(c.body)||c.body instanceof ArrayBuffer))\n`
@@ -2077,6 +2082,7 @@ export const composeHandler = ({
 		`safeAssign,` +
 		`applySchemaDefaults,` +
 		`cloneSchemaInput,` +
+		`hasMissingSchemaDefaults,` +
 		`utils:{` +
 		allocateIf(`parseQuery,`, hasBody) +
 		allocateIf(`parseQueryFromURL,`, hasQuery) +
@@ -2131,6 +2137,7 @@ export const composeHandler = ({
 			safeAssign,
 			applySchemaDefaults,
 			cloneSchemaInput,
+			hasMissingSchemaDefaults,
 			utils: {
 				parseQuery: hasBody ? parseQuery : undefined,
 				parseFormData: hasBody ? parseFormData : undefined,

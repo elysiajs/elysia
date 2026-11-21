@@ -1315,6 +1315,199 @@ const matchesExistingProperties = (
 	return true
 }
 
+const schemaHasAnyDefault = (
+	inputSchema: TAnySchema,
+	references: TAnySchema[],
+	seen = new Set<TAnySchema>()
+): boolean => {
+	const schema = resolveDefaultSchema(inputSchema, references)
+	if (seen.has(schema)) return false
+	seen.add(schema)
+
+	if (schema.default !== undefined) return true
+
+	for (const child of [
+		...Object.values(schema.properties ?? {}),
+		...Object.values(schema.patternProperties ?? {}),
+		...(schema.allOf ?? []),
+		...(schema.anyOf ?? []),
+		...(schema.oneOf ?? []),
+		...(Array.isArray(schema.items)
+			? schema.items
+			: schema.items
+				? [schema.items]
+				: []),
+		...(schema.additionalProperties &&
+		typeof schema.additionalProperties === 'object'
+			? [schema.additionalProperties]
+			: [])
+	] as TAnySchema[])
+		if (schemaHasAnyDefault(child, references, seen)) return true
+
+	return false
+}
+
+const hasMissingDefaultsInValue = (
+	inputSchema: TAnySchema,
+	value: any,
+	references: TAnySchema[],
+	nullish: boolean,
+	seen = new WeakMap<TAnySchema, Set<unknown>>()
+): boolean => {
+	const schema = resolveDefaultSchema(inputSchema, references)
+	let seenValues = seen.get(schema)
+	if (!seenValues) seen.set(schema, (seenValues = new Set()))
+	if (seenValues.has(value)) return false
+	seenValues.add(value)
+
+	const missing = value === undefined || (nullish && value === null)
+	if (missing && schema.default !== undefined) return true
+
+	const properties = getSchemaProperties(schema)
+	if (properties) {
+		if (value !== null && typeof value === 'object') {
+			for (const [key, propertySchema] of Object.entries(properties)) {
+				const propertyValue = hasOwn(value, key)
+					? value[key]
+					: undefined
+				if (
+					(propertyValue === undefined ||
+						(nullish && propertyValue === null)) &&
+					schemaHasAnyDefault(propertySchema, references)
+				)
+					return true
+
+				if (
+					hasMissingDefaultsInValue(
+						propertySchema,
+						propertyValue,
+						references,
+						nullish,
+						seen
+					)
+				)
+					return true
+			}
+		} else if (
+			missing &&
+			(schema[Kind] === 'Object' || schema.type === 'object') &&
+			Object.values(properties).some((property) =>
+				schemaHasAnyDefault(property, references)
+			)
+		)
+			return true
+	}
+
+	if (Array.isArray(value) && schema.items) {
+		if (Array.isArray(schema.items)) {
+			for (let i = 0; i < schema.items.length; i++)
+				if (
+					hasMissingDefaultsInValue(
+						schema.items[i],
+						value[i],
+						references,
+						nullish,
+						seen
+					)
+				)
+					return true
+		} else
+			for (let i = 0; i < value.length; i++)
+				if (
+					hasMissingDefaultsInValue(
+						schema.items,
+						value[i],
+						references,
+						nullish,
+						seen
+					)
+				)
+					return true
+	}
+
+	for (const member of schema.allOf ?? [])
+		if (hasMissingDefaultsInValue(member, value, references, nullish, seen))
+			return true
+
+	for (const members of [schema.anyOf, schema.oneOf] as (
+		| TAnySchema[]
+		| undefined
+	)[])
+		if (members) {
+			if (
+				missing &&
+				members.some((member) =>
+					schemaHasAnyDefault(member, references)
+				)
+			)
+				return true
+
+			for (const member of members) {
+				const memberSchema = resolveDefaultSchema(member, references)
+				const memberProperties = getSchemaProperties(memberSchema)
+				const couldMatch =
+					Array.isArray(value) && memberSchema.items
+						? true
+						: value !== null &&
+							typeof value === 'object' &&
+							!Array.isArray(value) &&
+							memberProperties &&
+							matchesExistingProperties(
+								member,
+								value,
+								references
+							)
+				if (
+					couldMatch &&
+					hasMissingDefaultsInValue(
+						member,
+						value,
+						references,
+						nullish,
+						seen
+					)
+				)
+					return true
+			}
+		}
+
+	if (schema.patternProperties && value !== null && typeof value === 'object')
+		for (const [pattern, propertySchema] of Object.entries(
+			schema.patternProperties
+		) as [string, TAnySchema][])
+			for (const key of Object.keys(value))
+				if (
+					new RegExp(pattern).test(key) &&
+					hasMissingDefaultsInValue(
+						propertySchema,
+						value[key],
+						references,
+						nullish,
+						seen
+					)
+				)
+					return true
+
+	return false
+}
+
+export const hasMissingSchemaDefaults = (
+	checker: TypeCheck<any> | ElysiaTypeCheck<any>,
+	value: unknown,
+	nullish = false
+) => {
+	// @ts-expect-error private property
+	const schema = checker?.schema as TAnySchema | undefined
+	if (!schema) return true
+
+	const references =
+		typeof checker.References === 'function'
+			? (checker.References() as TAnySchema[])
+			: (Object.values(schema.$defs ?? {}) as TAnySchema[])
+
+	return hasMissingDefaultsInValue(schema, value, references, nullish)
+}
+
 const prepareDefaultInput = (
 	inputSchema: TAnySchema,
 	input: any,

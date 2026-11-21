@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'bun:test'
 
 import { t } from '../../src'
-import { hasProperty, getSchemaProperties } from '../../src/schema'
+import {
+	getSchemaProperties,
+	hasMissingSchemaDefaults,
+	hasProperty,
+	getSchemaValidator
+} from '../../src/schema'
 
 describe('getSchemaProperties', () => {
 	it('returns properties for Object schema', () => {
@@ -169,5 +174,39 @@ describe('hasProperty', () => {
 		])
 
 		expect(hasProperty('default', schema)).toBe(true)
+	})
+})
+
+describe('hasMissingSchemaDefaults', () => {
+	it('skips coercion branch defaults when the corresponding values exist', () => {
+		const schema = t.Object({
+			count: t.Numeric(),
+			enabled: t.BooleanString()
+		})
+		const validator = getSchemaValidator(schema, { dynamic: true })!
+
+		expect(
+			hasMissingSchemaDefaults(validator, {
+				count: '12',
+				enabled: 'true'
+			})
+		).toBe(false)
+	})
+
+	it('keeps default processing when a defaulted property is absent', () => {
+		const schema = t.Object({
+			count: t.Numeric(),
+			name: t.String({ default: 'anonymous' })
+		})
+		const validator = getSchemaValidator(schema, { dynamic: true })!
+
+		expect(hasMissingSchemaDefaults(validator, {})).toBe(true)
+		expect(
+			hasMissingSchemaDefaults(
+				validator,
+				{ count: '12', name: null },
+				true
+			)
+		).toBe(true)
 	})
 })
