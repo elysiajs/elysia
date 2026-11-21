@@ -944,8 +944,9 @@ export default class Elysia<
 				inference: this.inference
 			})
 
+			_compiled = compiled
 			if (this.router.history[index])
-				_compiled = this.router.history[index].composed = compiled
+				this.router.history[index].composed = compiled
 
 			return compiled
 		}

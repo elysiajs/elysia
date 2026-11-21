@@ -2123,7 +2123,7 @@ export const composeHandler = ({
 			hooks: lifeCycleToFn(hooks),
 			validator: hasValidation ? validator : undefined,
 			// @ts-expect-error
-			handleError: app.handleError,
+			handleError: (c: any, e: any, s: any) => app.handleError(c, e, s),
 			mapResponse: adapterHandler.mapResponse,
 			mapCompactResponse: adapterHandler.mapCompactResponse,
 			mapEarlyResponse: adapterHandler.mapEarlyResponse,
