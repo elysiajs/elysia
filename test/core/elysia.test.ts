@@ -487,4 +487,33 @@ describe('Edge Case', () => {
 			})
 		).then((x) => x.json())
 	})
+
+	it('await multiline Promise-returning handler with response schema', async () => {
+		const payload = () => Promise.resolve({ ok: true })
+
+		// Bun's transpiler normalizes function source, so build the handlers
+		// from raw source to keep the line break as Node and Deno would see it
+		const wrapped = new Function('payload', 'return () =>\n\tpayload()')(
+			payload
+		)
+		const parenthesized = new Function(
+			'payload',
+			'return () => (\n\tpayload()\n)'
+		)(payload)
+
+		const app = new Elysia()
+			.get('/wrapped', wrapped, {
+				response: t.Object({ ok: t.Boolean() })
+			})
+			.get('/parenthesized', parenthesized, {
+				response: t.Object({ ok: t.Boolean() })
+			})
+
+		for (const path of ['/wrapped', '/parenthesized']) {
+			const res = await app.handle(req(path))
+
+			expect(res.status).toBe(200)
+			expect(await res.json()).toEqual({ ok: true })
+		}
+	})
 })
