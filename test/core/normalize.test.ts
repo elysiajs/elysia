@@ -951,4 +951,166 @@ describe('Normalize', () => {
 			currentPage: 1
 		})
 	})
+
+	it('normalize body with additionalProperties: false', async () => {
+		const app = new Elysia({ normalize: true }).post(
+			'/',
+			{
+				body: t.Object(
+					{
+						name: t.String()
+					},
+					{ additionalProperties: false }
+				)
+			},
+			({ body }) => body
+		)
+
+		const response = await app.handle(
+			new Request('http://localhost/', json({ name: 'x', extra: 1 }))
+		)
+
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual({
+			name: 'x'
+		})
+	})
+
+	it("normalize body with additionalProperties: false using normalize: 'typebox'", async () => {
+		const app = new Elysia({ normalize: 'typebox' }).post(
+			'/',
+			{
+				body: t.Object(
+					{
+						name: t.String()
+					},
+					{ additionalProperties: false }
+				)
+			},
+			({ body }) => body
+		)
+
+		const response = await app.handle(
+			new Request('http://localhost/', json({ name: 'x', extra: 1 }))
+		)
+
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual({
+			name: 'x'
+		})
+	})
+
+	it('normalize nested body with additionalProperties: false', async () => {
+		const app = new Elysia({ normalize: true }).post(
+			'/',
+			{
+				body: t.Object({
+					inner: t.Object(
+						{
+							name: t.String()
+						},
+						{ additionalProperties: false }
+					)
+				})
+			},
+			({ body }) => body
+		)
+
+		const response = await app.handle(
+			new Request(
+				'http://localhost/',
+				json({ inner: { name: 'x', extra: 1 } })
+			)
+		)
+
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual({
+			inner: {
+				name: 'x'
+			}
+		})
+	})
+
+	it('normalize response with additionalProperties: false', async () => {
+		const app = new Elysia({ normalize: true }).get(
+			'/',
+			{
+				response: t.Object(
+					{
+						name: t.String()
+					},
+					{ additionalProperties: false }
+				)
+			},
+			() => ({ name: 'x', extra: 1 }) as any
+		)
+
+		const response = await app.handle(new Request('http://localhost/'))
+
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual({
+			name: 'x'
+		})
+	})
+
+	it('strictly validate body with additionalProperties: false if not normalize', async () => {
+		const app = new Elysia({ normalize: false }).post(
+			'/',
+			{
+				body: t.Object(
+					{
+						name: t.String()
+					},
+					{ additionalProperties: false }
+				)
+			},
+			({ body }) => body
+		)
+
+		const response = await app.handle(
+			new Request('http://localhost/', json({ name: 'x', extra: 1 }))
+		)
+
+		expect(response.status).toBe(422)
+	})
+
+	it('strictly validate response with additionalProperties: false if not normalize', async () => {
+		const app = new Elysia({ normalize: false }).get(
+			'/',
+			{
+				response: t.Object(
+					{
+						name: t.String()
+					},
+					{ additionalProperties: false }
+				)
+			},
+			() => ({ name: 'x', extra: 1 }) as any
+		)
+
+		const response = await app.handle(new Request('http://localhost/'))
+
+		expect(response.status).toBe(500)
+	})
+
+	it('still validate body type with additionalProperties: false when normalized', async () => {
+		const app = new Elysia({ normalize: true }).post(
+			'/',
+			{
+				body: t.Object(
+					{
+						name: t.String()
+					},
+					{ additionalProperties: false }
+				)
+			},
+			({ body }) => body
+		)
+
+		const response = await app.handle(
+			new Request('http://localhost/', json({ name: 42, extra: 1 }))
+		)
+
+		expect(response.status).toBe(422)
+	})
 })
