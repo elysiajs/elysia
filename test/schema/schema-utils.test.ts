@@ -230,4 +230,22 @@ describe('hasMissingSchemaDefaults', () => {
 			})
 		).toBe(false)
 	})
+
+	it('detects a default attached to a reference', () => {
+		const name = t.String({ $id: 'Name' })
+		const nameRef = {
+			...t.Ref(name),
+			default: 'anonymous'
+		} as any
+		const schema = t.Object(
+			{ name: nameRef },
+			{ $defs: { Name: name } }
+		)
+		const validator = getSchemaValidator(schema, { dynamic: true })!
+
+		expect(hasMissingSchemaDefaults(validator, {})).toBe(true)
+		expect(hasMissingSchemaDefaults(validator, { name: 'provided' })).toBe(
+			false
+		)
+	})
 })

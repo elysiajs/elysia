@@ -1320,6 +1320,8 @@ const schemaHasAnyDefault = (
 	references: TAnySchema[],
 	seen = new Set<TAnySchema>()
 ): boolean => {
+	if (inputSchema.default !== undefined) return true
+
 	const schema = resolveDefaultSchema(inputSchema, references)
 	if (seen.has(schema)) return false
 	seen.add(schema)
@@ -1393,13 +1395,21 @@ const hasMissingDefaultsInValue = (
 	nullish: boolean,
 	seen = new WeakMap<TAnySchema, Set<unknown>>()
 ): boolean => {
+	const missing = value === undefined || (nullish && value === null)
+	if (missing && inputSchema.default !== undefined) return true
+	if (
+		!missing &&
+		inputSchema.default !== undefined &&
+		hasMissingObjectDefaultProperties(inputSchema.default, value)
+	)
+		return true
+
 	const schema = resolveDefaultSchema(inputSchema, references)
 	let seenValues = seen.get(schema)
 	if (!seenValues) seen.set(schema, (seenValues = new Set()))
 	if (seenValues.has(value)) return false
 	seenValues.add(value)
 
-	const missing = value === undefined || (nullish && value === null)
 	if (missing && schema.default !== undefined) return true
 	if (
 		!missing &&
