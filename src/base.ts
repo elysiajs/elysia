@@ -270,8 +270,16 @@ const keyCounters = new WeakMap<object, { p: string; n: number }>()
 const requestOrigins = new WeakMap<object, Set<number>>()
 
 // a `hoc` entry's plugin: its registrant's hash, or an unnamed registration
-// whose plugin is set once, by the first named plugin it passes through
-type HocOrigin = number | { origin?: number } | undefined
+// whose plugin is set once, by the first named plugin it passes through.
+// A registration made with a context listener carries it here, with its wrap
+type HocOrigin =
+	| number
+	| {
+			origin?: number
+			wrap?: WrapFn<any>
+			context?: (context: Context) => unknown
+	  }
+	| undefined
 const hocOriginOf = (o: HocOrigin) => (typeof o === 'object' ? o.origin : o)
 const emptyHistory = Object.freeze([]) as readonly HistoryEntry[]
 
@@ -8760,13 +8768,16 @@ export class Elysia<
 	 *	)
 	 *	.get('/', () => ctx.getStore())
 	 * ```
+	 *
+	 * @param context called with the context created when a request arrives,
+	 * once it is constructed and before any hook runs; a throw is logged
 	 */
 	wrap<
 		T extends (...params: any) => MaybePromise<Response> = (
 			request: Request,
 			...rest: any[]
 		) => MaybePromise<Response>
-	>(callback: WrapFn<T>): this {
+	>(callback: WrapFn<T>, context?: (context: Context) => unknown): this {
 		this.#assertMutable('wrap')
 		if (!isProduction() && this.fetchFn && !this.#pending)
 			console.warn(
@@ -8775,7 +8786,11 @@ export class Elysia<
 
 		const ext = this.#ext
 		;(ext.hoc ??= []).push(callback)
-		;(ext.hocOrigin ??= []).push(this.hash ?? {})
+		;(ext.hocOrigin ??= []).push(
+			context
+				? { origin: this.hash, wrap: callback, context }
+				: (this.hash ?? {})
+		)
 
 		return this
 	}

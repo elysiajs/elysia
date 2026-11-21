@@ -59,6 +59,40 @@ function decodeParams(params: Record<string, string>) {
 	return params
 }
 
+function createListenedContext(app: AnyElysia) {
+	const Context = createContext(app)
+	const hoc = app['~ext']?.hoc
+	const origins = app['~ext']?.hocOrigin
+
+	if (!hoc || !origins) return Context
+
+	const listeners: ((context: Context) => unknown)[] = []
+	for (let i = 0; i < hoc.length; i++) {
+		const origin = origins[i]
+		const listener =
+			typeof origin === 'object' && origin.wrap === hoc[i]
+				? origin.context
+				: undefined
+
+		if (listener && !listeners.includes(listener)) listeners.push(listener)
+	}
+
+	if (!listeners.length) return Context
+
+	return function (request: Request) {
+		const context = new Context(request)
+
+		for (let i = 0; i < listeners.length; i++)
+			try {
+				listeners[i](context)
+			} catch (error) {
+				console.error(error)
+			}
+
+		return context
+	} as unknown as typeof Context
+}
+
 type ErrorHandler = ReturnType<typeof createErrorHandler>
 
 // afterResponse reads the status sent
@@ -253,7 +287,7 @@ function findRoute(
 export function createFetchHandler(
 	app: AnyElysia
 ): (request: Request) => MaybePromise<Response> {
-	const Context = createContext(app)
+	const Context = createListenedContext(app)
 	const map = app['~map']! ?? nullObject()
 	const router = app['~router']!
 	const hasWS = !!app['~hasWS']
@@ -312,9 +346,10 @@ export function createFetchHandler(
 		request: Request | undefined,
 		sign: ((set: Context['set']) => unknown) | undefined
 	) {
-		if (!sign) return baseMapResponse(response, set, request, true)
+		if (!sign)
+			return baseMapResponse(response, set, request, true)
 
-		// a body can write while it is mapped, signed again in `handleSet`
+			// a body can write while it is mapped, signed again in `handleSet`
 		;(set as { '~sign'?: Function })['~sign'] = sign
 
 		let pending: any
