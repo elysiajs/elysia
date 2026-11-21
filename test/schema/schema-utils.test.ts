@@ -209,4 +209,25 @@ describe('hasMissingSchemaDefaults', () => {
 			)
 		).toBe(true)
 	})
+
+	it('detects missing fields supplied by an object-valued default', () => {
+		const schema = t.Object({
+			config: t.Object(
+				{ a: t.String(), b: t.String() },
+				{ default: { a: 'A', b: 'B' } }
+			)
+		})
+		const validator = getSchemaValidator(schema, { dynamic: true })!
+
+		expect(
+			hasMissingSchemaDefaults(validator, {
+				config: { a: 'provided' }
+			})
+		).toBe(true)
+		expect(
+			hasMissingSchemaDefaults(validator, {
+				config: { a: 'provided', b: 'provided' }
+			})
+		).toBe(false)
+	})
 })

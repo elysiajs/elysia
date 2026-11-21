@@ -16,6 +16,22 @@ describe('Query Validator', () => {
 		expect(res.status).toBe(200)
 	})
 
+	it('normalizes frozen query input when defaults are already present', async () => {
+		const app = new Elysia({ normalize: 'typebox' })
+			.onTransform(({ query }) => {
+				Object.freeze(query)
+			})
+			.get('/', ({ query }) => query, {
+				query: t.Object({
+					name: t.String({ default: 'anonymous' })
+				})
+			})
+		const res = await app.handle(req('/?name=provided&extra=1'))
+
+		expect(res.status).toBe(200)
+		expect(await res.json()).toEqual({ name: 'provided' })
+	})
+
 	it('validate with hyphen in key', async () => {
 		const app = new Elysia().get(
 			'/',

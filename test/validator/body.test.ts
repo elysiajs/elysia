@@ -479,6 +479,99 @@ describe('Body Validator', () => {
 		})
 	})
 
+	it('keeps defaults from object-valued property defaults', async () => {
+		const app = new Elysia({ normalize: false }).post(
+			'/',
+			({ body }) => body,
+			{
+				body: t.Object({
+					config: t.Object(
+						{ a: t.String(), b: t.String() },
+						{ default: { a: 'A', b: 'B' } }
+					)
+				})
+			}
+		)
+
+		const response = await app
+			.handle(post('/', { config: { a: 'provided' } }))
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			config: { a: 'provided', b: 'B' }
+		})
+	})
+
+	it('applies defaults inside record branches of a union', async () => {
+		const recordEntry = t.Object(
+			{ n: t.String({ default: 'x' }) },
+			{ default: {} }
+		)
+		const app = new Elysia({ normalize: false }).post(
+			'/',
+			({ body }) => body,
+			{
+				body: t.Object({
+					tag: t.String({ default: 'ok' }),
+					data: t.Union([
+						t.Record(t.String(), recordEntry),
+						t.String()
+					])
+				})
+			}
+		)
+
+		const response = await app
+			.handle(post('/', { tag: 'ok', data: { a: {} } }))
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			tag: 'ok',
+			data: { a: { n: 'x' } }
+		})
+	})
+
+	it('applies defaults inside schema-valued additional properties', async () => {
+		const app = new Elysia({ normalize: false }).post(
+			'/',
+			({ body }) => body,
+			{
+				body: t.Object(
+					{ tag: t.String({ default: 'ok' }) },
+					{
+						additionalProperties: t.Object(
+							{ n: t.String({ default: 'x' }) },
+							{ default: {} }
+						)
+					}
+				)
+			}
+		)
+
+		const response = await app
+			.handle(post('/', { tag: 'ok', extra: {} }))
+			.then((x) => x.json())
+
+		expect(response).toEqual({ tag: 'ok', extra: { n: 'x' } })
+	})
+
+	it('normalizes frozen input when defaults are already present', async () => {
+		const app = new Elysia({ normalize: 'typebox' })
+			.onTransform(({ body }) => {
+				if (body && typeof body === 'object') Object.freeze(body)
+			})
+			.post('/', ({ body }) => body, {
+				body: t.Object({
+					name: t.String({ default: 'anonymous' })
+				})
+			})
+
+		const response = await app
+			.handle(post('/', { name: 'provided', extra: 1 }))
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual({ name: 'provided' })
+	})
+
 	it('create default string body', async () => {
 		const app = new Elysia().post('/', ({ body }) => body, {
 			body: t.String({ default: 'hifumi_daisuki' })

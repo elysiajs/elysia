@@ -1314,7 +1314,7 @@ export const composeHandler = ({
 			if (validator.query.hasDefault) {
 				fnLiteral += `const hqd=hasMissingSchemaDefaults(validator.query,c.query)\n`
 				if (cleanQuery)
-					fnLiteral += `if(hqd)c.query=cloneSchemaInput(c.query)\n`
+					fnLiteral += `c.query=cloneSchemaInput(c.query)\n`
 			}
 			fnLiteral += cleanQuery
 
@@ -1380,7 +1380,7 @@ export const composeHandler = ({
 					normalize
 				})
 				if (cleanBody)
-					fnLiteral += `if(hbd)c.body=cloneSchemaInput(c.body)\n`
+					fnLiteral += `c.body=cloneSchemaInput(c.body)\n`
 				fnLiteral += cleanBody
 
 				fnLiteral += `if(hbd)c.body=applySchemaDefaults(validator.body,c.body)\n`

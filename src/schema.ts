@@ -1347,6 +1347,45 @@ const schemaHasAnyDefault = (
 	return false
 }
 
+const hasMissingObjectDefaultProperties = (
+	defaultValue: unknown,
+	value: unknown
+): boolean => {
+	if (Array.isArray(defaultValue) && Array.isArray(value)) {
+		for (let i = 0; i < defaultValue.length; i++) {
+			if (!(i in value) || value[i] === undefined) return true
+			if (hasMissingObjectDefaultProperties(defaultValue[i], value[i]))
+				return true
+		}
+		return false
+	}
+
+	if (
+		defaultValue === null ||
+		typeof defaultValue !== 'object' ||
+		value === null ||
+		typeof value !== 'object' ||
+		(Array.isArray(value) && !Array.isArray(defaultValue)) ||
+		(Object.getPrototypeOf(defaultValue) !== Object.prototype &&
+			Object.getPrototypeOf(defaultValue) !== null)
+	)
+		return false
+
+	for (const key of Reflect.ownKeys(defaultValue)) {
+		if (!hasOwn(value, key) || value[key as keyof typeof value] === undefined)
+			return true
+		if (
+			hasMissingObjectDefaultProperties(
+				defaultValue[key as keyof typeof defaultValue],
+				value[key as keyof typeof value]
+			)
+		)
+			return true
+	}
+
+	return false
+}
+
 const hasMissingDefaultsInValue = (
 	inputSchema: TAnySchema,
 	value: any,
@@ -1362,6 +1401,12 @@ const hasMissingDefaultsInValue = (
 
 	const missing = value === undefined || (nullish && value === null)
 	if (missing && schema.default !== undefined) return true
+	if (
+		!missing &&
+		schema.default !== undefined &&
+		hasMissingObjectDefaultProperties(schema.default, value)
+	)
+		return true
 
 	const properties = getSchemaProperties(schema)
 	if (properties) {
@@ -1451,12 +1496,13 @@ const hasMissingDefaultsInValue = (
 						: value !== null &&
 							typeof value === 'object' &&
 							!Array.isArray(value) &&
-							memberProperties &&
-							matchesExistingProperties(
-								member,
-								value,
-								references
-							)
+							(memberSchema.patternProperties ||
+								(memberProperties &&
+									matchesExistingProperties(
+										member,
+										value,
+										references
+									)))
 				if (
 					couldMatch &&
 					hasMissingDefaultsInValue(
@@ -1487,6 +1533,27 @@ const hasMissingDefaultsInValue = (
 					)
 				)
 					return true
+
+	if (
+		schema.additionalProperties &&
+		typeof schema.additionalProperties === 'object' &&
+		value !== null &&
+		typeof value === 'object'
+	) {
+		for (const key of Object.keys(value)) {
+			if (properties && hasOwn(properties, key)) continue
+			if (
+				hasMissingDefaultsInValue(
+					schema.additionalProperties,
+					value[key],
+					references,
+					nullish,
+					seen
+				)
+			)
+				return true
+		}
+	}
 
 	return false
 }
