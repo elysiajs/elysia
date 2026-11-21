@@ -61,6 +61,7 @@ export interface ServerWebSocket<T = undefined> {
 	readonly readyState: WebSocketReadyState
 	binaryType?: 'nodebuffer' | 'arraybuffer' | 'uint8array'
 	data: T
+	getBufferedAmount(): number
 }
 
 export type WebSocketCompressor =
