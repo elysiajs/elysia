@@ -175,6 +175,64 @@ describe('frozen validation without TypeBox', () => {
 	})
 })
 
+// normalize strips what a closed object rejects (elysiajs/elysia#2051), and
+// this lane has no TypeBox to fall back on
+describe('closed objects without TypeBox', () => {
+	const closed = { additionalProperties: false } as const
+	const schema = t.Object({
+		user: t.Object({ name: t.String() }, closed),
+		tags: t.Optional(t.Array(t.Object({ id: t.Number() }, closed)))
+	})
+
+	it('strips what a nested closed object rejects', () => {
+		freeze(schema)
+		const validator = bridgeFree(schema)
+
+		expect(validator).toBeDefined()
+		expect(
+			run(validator, {
+				user: { name: 'a', extra: 1 },
+				tags: [{ id: 1, extra: 1 }]
+			})
+		).toEqual({
+			ok: true,
+			value: { user: { name: 'a' }, tags: [{ id: 1 }] }
+		})
+	})
+
+	it('strips before decoding a codec member', () => {
+		const dated = t.Object({
+			when: t.Date(),
+			user: t.Object({ name: t.String() }, closed)
+		})
+
+		freeze(dated)
+		const validator = bridgeFree(dated)
+
+		expect(validator).toBeDefined()
+
+		const outcome = run(validator, {
+			when: '2024-01-02T03:04:05.000Z',
+			user: { name: 'a', extra: 1 }
+		}) as any
+
+		expect(outcome.ok).toBe(true)
+		expect(outcome.value.when).toBeInstanceOf(Date)
+		expect(outcome.value.user).toEqual({ name: 'a' })
+	})
+
+	it('matches wired validation for values it cannot strip', () => {
+		assertParity(schema, [
+			{ user: { name: 'a' } },
+			{ user: { name: 'a', extra: 1 }, extra: 1 },
+			{ user: { name: 1, extra: 1 } },
+			{ user: 'abc' },
+			{ user: { name: 'a', extra: 1 }, tags: 'abc' },
+			{ user: { name: 'a', extra: 1 }, tags: { length: 100_000_000 } }
+		])
+	})
+})
+
 describe('schemas that require TypeBox', () => {
 	it('seals codec containers and keeps their optional fields', () => {
 		const schema = t.Object({

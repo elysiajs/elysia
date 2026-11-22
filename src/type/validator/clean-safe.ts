@@ -1,5 +1,6 @@
 // ! This module must be typebox free
 import { dangerousKeys } from '../../constants'
+import { isPlainObject } from '../../utils'
 
 export function schemaSome(
 	schema: any,
@@ -153,4 +154,59 @@ export function isFullyClosedObject(schema: any) {
 	if (kind !== 'Object' && schema.type !== 'object') return false
 
 	return isCleanSafeNode(schema, new WeakSet(), new WeakSet())
+}
+
+export const hasClosedObject = (schema: unknown) =>
+	schemaSome(schema, (node) => node.additionalProperties === false)
+
+const notStripped = new TypeError()
+
+function keptKeys(cleaned: any, value: any): unknown {
+	if (cleaned === value || cleaned === null || typeof cleaned !== 'object')
+		return value
+
+	const isArray = Array.isArray(cleaned)
+
+	// a leaf such as a Date, which a cleaner working on a copy hands back new
+	if (!isArray && !isPlainObject(cleaned)) return value
+
+	if (
+		value === null ||
+		typeof value !== 'object' ||
+		isArray !== Array.isArray(value)
+	)
+		throw notStripped
+
+	if (isArray) {
+		if (cleaned.length !== value.length) throw notStripped
+
+		return cleaned.map((item, i) => keptKeys(item, value[i]))
+	}
+
+	const kept: Record<string, unknown> = {}
+	for (const key in cleaned) {
+		if (key === '__proto__') throw notStripped
+
+		const property = keptKeys(cleaned[key], value[key])
+		if (property !== undefined) kept[key] = property
+	}
+
+	return kept
+}
+
+/**
+ * Under normalize a closed object strips what its Check rejects
+ *
+ * Returns the value without the keys `clean` drops, for the caller to check
+ * again, or undefined when there is nothing to retry
+ */
+export function stripRejected(
+	clean: (value: unknown) => unknown,
+	value: unknown
+) {
+	try {
+		const cleaned = clean(value)
+
+		if (cleaned !== value) return keptKeys(cleaned, value)
+	} catch {}
 }

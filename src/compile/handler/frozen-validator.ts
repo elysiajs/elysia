@@ -1,5 +1,9 @@
 // ! This module must be typebox free
-import { isFullyClosedObject } from '../../type/validator/clean-safe'
+import {
+	hasClosedObject,
+	isFullyClosedObject,
+	stripRejected
+} from '../../type/validator/clean-safe'
 import { StandardValidator, type ValidatorOptions } from '../../validator'
 import { frozenRootOf } from '../../generation'
 import { ValidationError } from '../../error'
@@ -260,6 +264,7 @@ class FrozenSlotValidator {
 
 	#hasOptional: boolean
 	#noValidate: boolean
+	#rejected: boolean
 
 	constructor(
 		frozen: FrozenValidator,
@@ -299,6 +304,7 @@ class FrozenSlotValidator {
 			(schema as any)['~elyTyp'] !== ELYSIA_TYPES.MaybeEmpty
 		this.#noValidate =
 			(schema as any)?.['~elyTyp'] === ELYSIA_TYPES.NoValidate
+		this.#rejected = !!this.Clean && hasClosedObject(schema)
 
 		if (frozen.ps === 1)
 			this.#defaultFastPath = {
@@ -401,8 +407,7 @@ class FrozenSlotValidator {
 				return new EmptyObject()
 		}
 
-		if (!this.#noValidate && !this.#check(value))
-			throw this.#error(value, type)
+		value = this.#checked(value, type)
 
 		if (this.#decode) return this.#decode(value)
 
@@ -410,9 +415,25 @@ class FrozenSlotValidator {
 	}
 
 	EncodeFrom(value: unknown, type?: string): unknown {
-		if (!this.#noValidate && !this.#check(value))
-			throw this.#error(value, type)
+		value = this.#checked(value, type)
+
 		return this.Clean ? this.Clean(value) : value
+	}
+
+	#checked(value: unknown, type?: string) {
+		if (this.#noValidate || this.#check(value)) return value
+
+		if (this.#rejected) {
+			const stripped = stripRejected(this.Clean!, value)
+
+			if (stripped !== undefined) {
+				if (this.#check(stripped)) return stripped
+
+				value = stripped
+			}
+		}
+
+		throw this.#error(value, type)
 	}
 }
 

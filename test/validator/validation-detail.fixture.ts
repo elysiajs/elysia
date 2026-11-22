@@ -160,7 +160,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 				},
 				() =>
 					({
-						name: 'a',
+						name: 1,
 						passwordHash: '$2b$10$SECRET',
 						internalFlag: true
 					}) as any
@@ -196,7 +196,7 @@ const scenarios: Record<string, () => Promise<Response>> = {
 						{ additionalProperties: false }
 					)
 				},
-				() => ({ name: 'a', secret: 'SHOWN' }) as any
+				() => ({ name: 1, secret: 'SHOWN' }) as any
 			)
 			.handle(new Request('http://localhost/')),
 

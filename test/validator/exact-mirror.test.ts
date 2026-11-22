@@ -400,3 +400,18 @@ describe('lazy exact-mirror resolution', () => {
 		).toEqual({ mirror: 'undefined', loaded: false, required: true })
 	})
 })
+
+// A closed object is cleaned before it passed Check (elysiajs/elysia#2051),
+// so the installed exact-mirror must not size a copy from a forged length
+describe('exact-mirror on a value nothing checked', () => {
+	it('keeps no item of a non-array', () => {
+		const validator = new TypeBoxValidator(
+			t.Object({
+				list: t.Array(t.Object({ x: t.Optional(t.Number()) }))
+			})
+		)
+
+		expect(validator.Clean!({ list: { length: 3 } })).toEqual({ list: [] })
+		expect(validator.Clean!({ list: 'abc' })).toEqual({ list: [] })
+	})
+})

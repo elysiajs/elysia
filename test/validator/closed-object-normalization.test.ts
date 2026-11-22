@@ -23,9 +23,27 @@ describe('closed object normalization', () => {
 		expect(out).toEqual({ a: 1, b: 'x' } as any)
 	})
 
-	it('rejects an excess property instead of stripping it', () => {
+	// normalize strips what a closed object rejects (elysiajs/elysia#2051)
+	it('strips an excess property', () => {
 		const v = new TypeBoxValidator(closed)
+		const input = { a: 1, b: 'x', c: 9 }
+		const out = v.FromSync(input as any)
+
+		expect(out).toEqual({ a: 1, b: 'x' } as any)
+		expect(input).toEqual({ a: 1, b: 'x', c: 9 })
+	})
+
+	it('rejects an excess property when normalize is off', () => {
+		const v = new TypeBoxValidator(closed, { normalize: false })
 		expect(() => v.FromSync({ a: 1, b: 'x', c: 9 } as any)).toThrow()
+	})
+
+	it('leaves a rejected response untouched', () => {
+		const v = new TypeBoxValidator(closed)
+		const output = { a: 1, b: 'x', secret: 9 }
+
+		expect(v.EncodeFrom(output as any)).toEqual({ a: 1, b: 'x' } as any)
+		expect(output).toEqual({ a: 1, b: 'x', secret: 9 })
 	})
 
 	it('returns a nested closed object by reference', () => {

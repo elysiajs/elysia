@@ -320,3 +320,47 @@ describe('file-type queue refinements', () => {
 		expect(error.property).toMatch(/^\/files\/\d$/)
 	})
 })
+
+// A closed object is checked again once stripped (elysiajs/elysia#2051): the
+// file checks that second pass queues are the ones that must be enforced
+describe('closed object with a typed file', () => {
+	// the tests above leave their own detector installed
+	beforeAll(() => {
+		setFileTypeDetector(fileTypeFromBlob)
+	})
+
+	const app = () =>
+		new Elysia().post(
+			'/',
+			{
+				body: t.Object(
+					{ file: t.File({ type: 'image/jpeg' }) },
+					{ additionalProperties: false }
+				)
+			},
+			({ body }) => Object.keys(body)
+		)
+
+	const send = (path: string) => {
+		const body = new FormData()
+		body.append('file', Bun.file(path))
+		body.append('extra', '1')
+
+		return app().handle(
+			new Request('http://localhost/', { method: 'POST', body })
+		)
+	}
+
+	it('strips an unknown field beside a real image', async () => {
+		const response = await send('./test/images/millenium.jpg')
+
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual(['file'])
+	})
+
+	it('rejects a file whose content is not the declared type', async () => {
+		const response = await send('./test/images/fake.jpg')
+
+		expect(response.status).toBe(422)
+	})
+})

@@ -70,9 +70,11 @@ import { exactMirrorRequired, getExactMirror } from './exact-mirror'
 import { ownSchema, snapshotSchema } from '../../schema-snapshot'
 export { TypeBoxValidatorCache, mayHaveFileType } from './validator-cache'
 import {
+	hasClosedObject,
 	isFullyClosedObject,
 	schemaHasDangerousProperties,
-	schemaSome
+	schemaSome,
+	stripRejected
 } from './clean-safe'
 
 import type { MaybePromise } from '../../types'
@@ -570,6 +572,7 @@ export class TypeBoxValidator<
 	#isForm = false
 	#hasOptional = false
 	#cleanRedundant = false
+	#stripClean?: (value: unknown) => unknown
 
 	// Lazy-JIT deferral state
 	#deferred = false
@@ -939,6 +942,13 @@ export class TypeBoxValidator<
 			options?.normalize !== 'typebox' &&
 			isFullyClosedObject(this.schema)
 
+		// TypeBox Clean works in place: a rejected value must stay as it is
+		if (!this.#isForm && hasClosedObject(this.schema))
+			this.#stripClean =
+				this.Clean === typeboxClean
+					? (value) => typeboxClean(structuredClone(value))
+					: this.Clean
+
 		if (
 			this.hasCodec &&
 			!this.#isForm &&
@@ -1175,6 +1185,26 @@ export class TypeBoxValidator<
 		return this.hasCodec ? Encode(this.schema, value) : (value as any)
 	}
 
+	#strip(
+		value: Static<T>,
+		type: string | undefined,
+		errors: TLocalizedValidationError[]
+	) {
+		if (this.#stripClean) {
+			const stripped = stripRejected(this.#stripClean, value) as Static<T>
+
+			if (stripped !== undefined) {
+				const remaining = this.#validate(stripped, false)
+				if (!remaining) return stripped
+
+				value = stripped
+				errors = remaining
+			}
+		}
+
+		throw this.#error(value, type, errors.length ? errors : undefined)
+	}
+
 	EncodeFrom(value: Static<T>, type?: string): StaticEncode<T> {
 		// EncodeFrom owns its hit; internal validation intentionally avoids a
 		// second public Check dispatch and tick
@@ -1184,16 +1214,13 @@ export class TypeBoxValidator<
 			const errors = this.#noValidate
 				? undefined
 				: this.#validate(value, false)
-			if (errors)
-				throw this.#error(
-					value,
-					type,
-					errors.length ? errors : undefined
-				)
+
+			if (errors) value = this.#strip(value, type, errors)
 
 			// Form values are returned as-is (never cleaned)
 			if (this.Clean && !this.#isForm)
 				value = this.Clean(value) as Static<T>
+
 			return value as any
 		}
 
@@ -1353,12 +1380,14 @@ export class TypeBoxValidator<
 					pendingFile = takeFileTypeChecks()
 				}
 
-				if (errors)
-					throw this.#error(
-						value,
-						type,
-						errors.length ? errors : undefined
-					)
+				if (errors) {
+					collectFileTypeChecks()
+					try {
+						value = this.#strip(value, type, errors)
+					} finally {
+						pendingFile = takeFileTypeChecks()
+					}
+				}
 				if (pendingFile)
 					await enforceFileTypeChecks(
 						pendingFile,
@@ -1403,12 +1432,7 @@ export class TypeBoxValidator<
 		const marked = this.#isForm ? this.#markForm(value) : undefined
 		try {
 			const errors = this.#noValidate ? undefined : this.#validate(value)
-			if (errors)
-				throw this.#error(
-					value,
-					type,
-					errors.length ? errors : undefined
-				)
+			if (errors) value = this.#strip(value, type, errors)
 
 			if (this.hasCodec)
 				if (this.#decodeMirror)

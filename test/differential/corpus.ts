@@ -1111,6 +1111,56 @@ corpus.push({
 })
 
 corpus.push({
+	id: 'normalize-strip-closed',
+	tags: ['safe-for-socket', 'schema', 'body', 'response'],
+	define: (app) =>
+		app
+			.post(
+				'/n',
+				{
+					body: t.Object(
+						{
+							a: t.String(),
+							list: t.Optional(
+								t.Array(
+									t.Object(
+										{ x: t.Number() },
+										{ additionalProperties: false }
+									)
+								)
+							)
+						},
+						{ additionalProperties: false }
+					)
+				},
+				({ body }: any) => body
+			)
+			.get(
+				'/r',
+				{
+					response: t.Object(
+						{ a: t.String() },
+						{ additionalProperties: false }
+					)
+				},
+				() => ({ a: 'x', secret: 'y' }) as any
+			),
+	requests: [
+		{ id: 'extra-key', make: json('/n', { a: 'x', extra: 'y' }) },
+		{
+			id: 'extra-key-in-array',
+			make: json('/n', { a: 'x', list: [{ x: 1, extra: 'y' }] })
+		},
+		{ id: 'still-invalid', make: json('/n', { a: 1, extra: 'y' }) },
+		{
+			id: 'forged-length',
+			make: json('/n', { a: 'x', list: { length: 100_000_000 } })
+		},
+		{ id: 'response-extra-key', make: get('/r') }
+	]
+})
+
+corpus.push({
 	id: 'response-schema-mismatch',
 	tags: ['safe-for-socket', 'schema', 'response'],
 	define: (app) =>

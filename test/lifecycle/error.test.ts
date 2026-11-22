@@ -1013,7 +1013,8 @@ describe('Validation error payload echo limits', () => {
 	// large to echo still came back through the issue, routing around the
 	// bound `found` respects instead of defeating it
 	it('bounds the value-derived params of an issue', async () => {
-		const app = new Elysia().post(
+		// normalize would strip the excess keys instead of reporting them
+		const app = new Elysia({ normalize: false }).post(
 			'/',
 			{
 				body: t.Object(

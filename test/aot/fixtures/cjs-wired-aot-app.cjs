@@ -40,7 +40,7 @@ if (process.env.ELYSIA_AOT_CJS_NODE_TEST === '1')
 			(await app.handle(new Request('http://localhost/?name=a&n=1')))
 				.status,
 			(await post({ a: 'x', xq: 'y' })).status,
-			(await post({ a: 'x', zz: 'y' })).status
+			(await post({ a: 1, xq: 'y' })).status
 		]
 
 		console.log('ELYSIA_AOT_CJS_WIRED_RESULTS=' + JSON.stringify(results))

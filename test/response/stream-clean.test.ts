@@ -684,9 +684,7 @@ describe('a chunk with fields is stripped even if the schema does not fit', () =
 	})
 
 	it('strips a chunk in the wrong container', async () => {
-		expect(await body(stream(t.Array(object), { secret: 'x' }))).toBe(
-			'[null]'
-		)
+		expect(await body(stream(t.Array(object), { secret: 'x' }))).toBe('[]')
 		expect(await body(stream(object, [{ a: 1, secret: 'x' }]))).toBe('{}')
 	})
 

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test'
+import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { websocket } from '../../src/plugin/websocket'
 import { newWebsocket, wsOpen, wsMessage, wsClosed } from './utils'
@@ -1119,5 +1119,126 @@ describe('WebSocket sync dispatch path', () => {
 
 		await wsClosed(ws)
 		app.stop()
+	})
+})
+
+// normalize strips what a closed object rejects (elysiajs/elysia#2051) on
+// every way a message leaves or enters a socket
+describe('closed object under normalize', () => {
+	const closed = { additionalProperties: false } as const
+
+	// a `constructor` property leaves TypeBox Clean, which works in place,
+	// as the cleaner
+	const inPlace = t.Object(
+		{
+			n: t.Numeric(),
+			constructor: t.String(),
+			pair: t.Tuple([t.Number(), t.String()])
+		},
+		closed
+	)
+	const extra = { n: 5, constructor: 'own', pair: [1, 'a'], secret: 'leak' }
+	const overlong = { n: 5, constructor: 'own', pair: [1, 'a', 'b'] }
+
+	const app = new Elysia()
+		.use(websocket())
+		.ws('/send', {
+			response: t.Object({ a: t.String() }, closed),
+			message(ws) {
+				ws.send({ a: '1', secret: 'leak' } as any)
+			}
+		})
+		.ws('/return', {
+			response: t.Object({ a: t.String() }, closed),
+			message: () => ({ a: '1', secret: 'leak' }) as any
+		})
+		// a codec validator takes its own outbound branch
+		.ws('/codec', {
+			response: t.Object({ n: t.Numeric(), a: t.String() }, closed),
+			message(ws) {
+				ws.send({ n: 5, a: '1', secret: 'leak' } as any)
+			}
+		})
+		.ws('/codec/invalid', {
+			response: t.Object({ n: t.Numeric(), a: t.String() }, closed),
+			message(ws) {
+				ws.send({ n: 5, a: 1, secret: 'leak' } as any)
+			}
+		})
+		.ws('/body', {
+			body: t.Object({ a: t.String() }, closed),
+			message(ws, body) {
+				ws.send(JSON.stringify(body))
+			}
+		})
+		.ws('/in-place', {
+			response: inPlace,
+			message(ws) {
+				ws.send(extra as any)
+			}
+		})
+		.ws('/in-place/tuple', {
+			response: inPlace,
+			message(ws) {
+				ws.send(overlong as any)
+			}
+		})
+
+	const reply = async (path: string, message = 'go') => {
+		const ws = newWebsocket(app.server!, path)
+		await wsOpen(ws)
+		ws.send(message)
+
+		const { data } = await wsMessage(ws)
+		await wsClosed(ws)
+
+		return String(data)
+	}
+
+	beforeAll(() => {
+		app.listen(0)
+	})
+
+	afterAll(() => app.stop(true))
+
+	it('strips a sent and a returned message', async () => {
+		expect(JSON.parse(await reply('/send'))).toEqual({ a: '1' })
+		expect(JSON.parse(await reply('/return'))).toEqual({ a: '1' })
+	})
+
+	it('strips a message with a codec member', async () => {
+		expect(JSON.parse(await reply('/codec'))).toEqual({ n: 5, a: '1' })
+	})
+
+	it('refuses a message that is still invalid, without its fields', async () => {
+		const refused = await reply('/codec/invalid')
+
+		// the error names what is still wrong, not the stripped field
+		expect(refused).toContain('string')
+		expect(refused).not.toContain('leak')
+	})
+
+	it('strips an incoming message', async () => {
+		expect(
+			JSON.parse(await reply('/body', JSON.stringify({ a: '1', e: 2 })))
+		).toEqual({ a: '1' })
+	})
+
+	it('leaves the sent object as it was', async () => {
+		expect(JSON.parse(await reply('/in-place'))).toEqual({
+			n: 5,
+			constructor: 'own',
+			pair: [1, 'a']
+		})
+		expect(extra).toHaveProperty('secret', 'leak')
+	})
+
+	// stripping drops unknown keys only: cutting the tuple to fit would send
+	// a value the handler never made
+	it('refuses an overlong tuple instead of shortening it', async () => {
+		const refused = await reply('/in-place/tuple')
+
+		expect(refused).not.toContain('pair')
+		expect(overlong.pair).toEqual([1, 'a', 'b'])
 	})
 })

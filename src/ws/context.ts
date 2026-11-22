@@ -11,6 +11,7 @@ import type {
 import { ValidationError, ElysiaStatus } from '../error'
 import type { RouteSchema } from '../types'
 import { assignOwn, requestId } from '../utils'
+import { hasClosedObject, stripRejected } from '../type/validator/clean-safe'
 
 export const isBufferSource = (value: unknown): value is BufferSource =>
 	ArrayBuffer.isView(value) ||
@@ -283,9 +284,29 @@ export class ElysiaWS<Route extends RouteSchema = {}> {
 					if (error instanceof ValidationError) return error
 					throw error
 				}
-			else if (!v.Check(value))
-				return new ValidationError('message', value, v.Errors(value))
-			else if (v.Clean) value = v.Clean(value)
+			else {
+				let valid = v.Check(value)
+
+				// Under normalize a closed object strips what its Check
+				// rejects. Clean may work in place, on a copy here
+				if (!valid && v.Clean && hasClosedObject((v as any).schema)) {
+					value =
+						stripRejected(
+							(value) => v.Clean!(structuredClone(value)),
+							value
+						) ?? value
+					valid = v.Check(value)
+				}
+
+				if (!valid)
+					return new ValidationError(
+						'message',
+						value,
+						v.Errors(value)
+					)
+
+				if (v.Clean) value = v.Clean(value)
+			}
 		}
 
 		return serialize(value, status)

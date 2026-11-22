@@ -31,6 +31,7 @@ import {
 import { assignOwn } from '../utils'
 import { isAsyncFunction, isSingleSchema } from '../compile/utils'
 import { hasProperty } from '../type/utils'
+import { hasClosedObject, stripRejected } from '../type/validator/clean-safe'
 
 export interface ValidatorOptions {
 	app?: { ['~programId']?: ProgramId }
@@ -45,8 +46,10 @@ export interface ValidatorOptions {
 	eager?: boolean
 }
 
-export interface ResponseValidatorOptions
-	extends Omit<ValidatorOptions, 'schemas'> {
+export interface ResponseValidatorOptions extends Omit<
+	ValidatorOptions,
+	'schemas'
+> {
 	schemas?: Record<number, AnySchema>[]
 }
 
@@ -366,6 +369,7 @@ export class MultiValidator extends Validator {
 	#schemas: (CompiledTypeBoxValidator | StandardSchemaV1Like)[]
 	#codecs: boolean[]
 	#hasDefaults: boolean[]
+	#stripsRejected: boolean[]
 	#asyncMembers: (TypeBoxValidator | null)[]
 
 	constructor(
@@ -383,6 +387,7 @@ export class MultiValidator extends Validator {
 
 		const codecs: boolean[] = []
 		const hasDefaults: boolean[] = []
+		const stripsRejected: boolean[] = []
 		const asyncMembers: (TypeBoxValidator | null)[] = []
 
 		const shouldClose = options?.normalize === false
@@ -400,6 +405,7 @@ export class MultiValidator extends Validator {
 
 			codecs.push(HasCodec(coercedSchema))
 			hasDefaults.push(hd)
+			stripsRejected.push(!shouldClose && hasClosedObject(coercedSchema))
 
 			if (
 				(TypeBoxValidator as any).isAsyncMember(coercedSchema, compiled)
@@ -444,6 +450,7 @@ export class MultiValidator extends Validator {
 				if (isAsyncStandardSchema(schema)) this.isAsync = true
 				codecs.push(false)
 				hasDefaults.push(false)
+				stripsRejected.push(false)
 				asyncMembers.push(null)
 			}
 		}
@@ -462,6 +469,7 @@ export class MultiValidator extends Validator {
 		)[]
 		this.#codecs = codecs
 		this.#hasDefaults = hasDefaults
+		this.#stripsRejected = stripsRejected
 		this.#asyncMembers = asyncMembers
 	}
 
@@ -632,9 +640,27 @@ export class MultiValidator extends Validator {
 						compiled.Errors(value)
 					)
 				}
-			else if (!compiled.Check(v))
-				throw new ValidationError(type, value, () => compiled.Errors(v))
-			else memberValue = compiled.Clean(v)
+			else {
+				if (!compiled.Check(v)) {
+					// Under normalize a closed object strips what its Check
+					// rejects. TypeBox Clean works in place, on a copy here
+					const stripped = this.#stripsRejected[i]
+						? stripRejected(
+								(v) => compiled.Clean(structuredClone(v)),
+								v
+							)
+						: undefined
+
+					if (stripped === undefined || !compiled.Check(stripped))
+						throw new ValidationError(type, value, () =>
+							compiled.Errors(v)
+						)
+
+					v = stripped
+				}
+
+				memberValue = compiled.Clean(v)
+			}
 
 			snapshot = MultiValidator.#merge(snapshot, memberValue)
 		}
