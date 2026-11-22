@@ -263,7 +263,7 @@ function wsErrorFrameFallback(error: any): string | Promise<string> {
 
 	try {
 		const status = resolveStatus(error?.status)
-		if (typeof status === 'number' && !(status >= 100)) return masked()
+		if (typeof status === 'number' && status < 100) return masked()
 
 		const served = fallbackErrorResponse(
 			{
@@ -877,8 +877,7 @@ export function buildWSRoute(
 			let message = parseMessage(ws as any, rawMessage)
 			if (message instanceof Promise) message = await message
 
-			if (transforms.length)
-				message = await transformMessage(ws, message)
+			if (transforms.length) message = await transformMessage(ws, message)
 
 			if (bodyValidator) {
 				const decoded = bodyValidator.From(message, 'body', true)
