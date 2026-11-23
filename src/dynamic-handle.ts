@@ -582,13 +582,10 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 				if (validator.body)
 					await validateFileTypes(
-						context.body,
+						body,
 						isUnion(validator.body.schema) &&
 							validator.body.schema.anyOf?.length
-							? findFileUnionProperties(
-									validator.body,
-									context.body
-								)
+							? findFileUnionProperties(validator.body, body)
 							: getSchemaProperties(
 									unwrapImportSchema(validator.body.schema)
 								)

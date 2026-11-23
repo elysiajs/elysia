@@ -919,6 +919,90 @@ describe('Body Validator', () => {
 		}
 	})
 
+	for (const aot of [true, false])
+		it(`validate the uploaded file when a file field has a transform with aot: ${aot}`, async () => {
+			const app = new Elysia({ aot }).post(
+				'/upload',
+				({ body: { file } }) => file,
+				{
+					body: t.Object({
+						file: t
+							.Transform(
+								t.File({
+									type: 'image'
+								})
+							)
+							.Decode((file) => file.size)
+							.Encode(() => new File([], 'file'))
+					})
+				}
+			)
+
+			{
+				const { request, size } = upload('/upload', {
+					file: 'millenium.jpg'
+				})
+
+				const response = await app.handle(request).then((r) => r.text())
+				expect(+response).toBe(size)
+			}
+
+			{
+				const { request } = upload('/upload', {
+					file: 'fake.jpg'
+				})
+
+				const status = await app.handle(request).then((r) => r.status)
+				expect(status).toBe(422)
+			}
+		})
+
+	for (const aot of [true, false])
+		it(`validate actual file against a union branch with a transformed field with aot: ${aot}`, async () => {
+			const app = new Elysia({ aot }).post(
+				'/upload',
+				({ body: { file } }) => file.size,
+				{
+					body: t.Union([
+						t.Object({
+							file: t.File({
+								type: 'image'
+							}),
+							count: t
+								.Transform(t.String())
+								.Decode((value) => +value)
+								.Encode((value) => `${value}`)
+						}),
+						t.Object({
+							file: t.File({
+								type: 'audio'
+							})
+						})
+					])
+				}
+			)
+
+			{
+				const { request, size } = upload('/upload', {
+					file: 'millenium.jpg',
+					count: '1'
+				})
+
+				const response = await app.handle(request).then((r) => r.text())
+				expect(+response).toBe(size)
+			}
+
+			{
+				const { request } = upload('/upload', {
+					file: 'fake.jpg',
+					count: '1'
+				})
+
+				const status = await app.handle(request).then((r) => r.status)
+				expect(status).toBe(422)
+			}
+		})
+
 	it('validate actual file with multiple type', async () => {
 		const app = new Elysia().post(
 			'/upload',
