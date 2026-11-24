@@ -571,14 +571,6 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					)
 				else if (bodyValidator?.Check(body) === false)
 					throw new ValidationError('body', validator.body!, body)
-				else if (validator.body?.Decode) {
-						let decoded = validator.body.Decode(body) as any
-						if (decoded instanceof Promise)
-							decoded = await decoded
-
-						// Zod returns { value: ... } wrapper
-						context.body = decoded?.value ?? decoded
-				}
 
 				if (validator.body)
 					await validateFileTypes(
@@ -590,6 +582,18 @@ export const createDynamicHandler = (app: AnyElysia) => {
 									unwrapImportSchema(validator.body.schema)
 								)
 					)
+
+				if (
+					bodyValidator?.provider !== 'standard' &&
+					validator.body?.Decode
+				) {
+						let decoded = validator.body.Decode(body) as any
+						if (decoded instanceof Promise)
+							decoded = await decoded
+
+						// Zod returns { value: ... } wrapper
+						context.body = decoded?.value ?? decoded
+				}
 			}
 
 			if (hooks.beforeHandle)

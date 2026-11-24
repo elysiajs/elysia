@@ -958,6 +958,47 @@ describe('Body Validator', () => {
 		})
 
 	for (const aot of [true, false])
+		it(`does not run the body decoder for a rejected file with aot: ${aot}`, async () => {
+			let decoded = 0
+
+			const app = new Elysia({ aot }).post('/upload', () => 'ok', {
+				body: t.Object({
+					file: t
+						.Transform(
+							t.File({
+								type: 'image'
+							})
+						)
+						.Decode((file) => {
+							decoded++
+							return file
+						})
+						.Encode((file) => file)
+				})
+			})
+
+			{
+				const { request } = upload('/upload', {
+					file: 'millenium.jpg'
+				})
+
+				const status = await app.handle(request).then((r) => r.status)
+				expect(status).toBe(200)
+			}
+
+			{
+				const { request } = upload('/upload', {
+					file: 'fake.jpg'
+				})
+
+				const status = await app.handle(request).then((r) => r.status)
+				expect(status).toBe(422)
+			}
+
+			expect(decoded).toBe(1)
+		})
+
+	for (const aot of [true, false])
 		it(`validate actual file against a union branch with a transformed field with aot: ${aot}`, async () => {
 			const app = new Elysia({ aot }).post(
 				'/upload',
