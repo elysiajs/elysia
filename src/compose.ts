@@ -1434,13 +1434,6 @@ export const composeHandler = ({
 				}
 			}
 
-			if (validator.body.hasTransform)
-				fnLiteral += coerceTransformDecodeError(
-					`if(isNotEmptyObject)c.body=validator.body.Decode(c.body)\n`,
-					'body',
-					allowUnsafeValidationDetails
-				)
-
 			if (hasUnion && validator.body.schema.anyOf?.length) {
 				const iterator = Object.values(
 					validator.body.schema.anyOf
@@ -1552,6 +1545,13 @@ export const composeHandler = ({
 				else if (i > 1)
 					fnLiteral += `await Promise.all([${validateFile}])\n`
 			}
+
+			if (validator.body.hasTransform)
+				fnLiteral += coerceTransformDecodeError(
+					`if(isNotEmptyObject)c.body=validator.body.Decode(c.body)\n`,
+					'body',
+					allowUnsafeValidationDetails
+				)
 		}
 
 		if (validator.cookie) {

@@ -1,4 +1,5 @@
-import { TransformDecodeError } from '@sinclair/typebox/value'
+import { Kind, type TSchema } from '@sinclair/typebox'
+import { TransformDecodeError, Value } from '@sinclair/typebox/value'
 import type { Context } from './context'
 import { parseCookie } from './cookies'
 import {
@@ -11,11 +12,17 @@ import {
 import type { AnyElysia, CookieOptions } from './index'
 import { parseQuery } from './parse-query'
 import { parseFormData } from './form-data'
+import { coercePrimitiveRoot } from './replace-schema'
 import {
 	applySchemaDefaults,
 	getSchemaProperties,
+	getSchemaValidator,
+	hasType,
+	isUnion,
+	unwrapImportSchema,
 	type ElysiaTypeCheck
 } from './schema'
+import { fileType } from './type-system/utils'
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
 import {
 	hasSetImmediate,
@@ -54,11 +61,119 @@ async function validateStandardSchema(
 	return result.value
 }
 
+const isTypedFile = (property: TSchema) =>
+	!!property.extension &&
+	(property[Kind] === 'File' || property[Kind] === 'Files')
+
+const hasTypedFile = (schema: TSchema): boolean => {
+	if (schema.properties)
+		return Object.values(schema.properties as Record<string, TSchema>).some(
+			isTypedFile
+		)
+
+	const members = (schema.allOf ?? schema.anyOf ?? schema.oneOf) as
+		| TSchema[]
+		| undefined
+
+	return !!members?.some(hasTypedFile)
+}
+
+const matchesSchema = (schema: TSchema, value: unknown) => {
+	try {
+		return Value.Check(schema, value)
+	} catch {
+		return false
+	}
+}
+
+const findFileProperties = (
+	schema: TSchema,
+	body: unknown
+): Record<string, TSchema> | undefined => {
+	if (schema.properties) return schema.properties
+
+	if (schema.allOf) {
+		let properties: Record<string, TSchema> | undefined
+
+		for (const member of schema.allOf as TSchema[]) {
+			const found = findFileProperties(member, body)
+			if (found) properties = { ...properties, ...found }
+		}
+
+		return properties
+	}
+
+	const branches = (schema.anyOf ?? schema.oneOf) as TSchema[] | undefined
+
+	if (branches)
+		for (const branch of branches)
+			if (hasTypedFile(branch) && matchesSchema(branch, body))
+				return findFileProperties(branch, body)
+}
+
+const validateFileTypes = async (
+	body: any,
+	properties: Record<string, TSchema> | undefined
+) => {
+	if (properties)
+		for (const key in properties)
+			if (isTypedFile(properties[key]))
+				await fileType(
+					body?.[key],
+					properties[key].extension,
+					`body.${key}`
+				)
+}
+
 export const createDynamicHandler = (app: AnyElysia) => {
 	const { mapResponse, mapEarlyResponse } = app['~adapter'].handler
 
 	// @ts-expect-error
 	const defaultHeader = app.setHeaders
+
+	const fileUnions = new WeakMap<
+		ElysiaTypeCheck<any>,
+		[ElysiaTypeCheck<any>, Record<string, TSchema>][]
+	>()
+
+	const findFileUnionProperties = (
+		bodyValidator: ElysiaTypeCheck<any>,
+		body: unknown
+	) => {
+		let candidates = fileUnions.get(bodyValidator)
+
+		if (!candidates) {
+			candidates = []
+
+			for (const type of bodyValidator.schema.anyOf as TSchema[]) {
+				if (!hasType('File', type) && !hasType('Files', type)) continue
+
+				const candidate = getSchemaValidator(type, {
+					// @ts-expect-error
+					modules: app.definitions.typebox,
+					dynamic: !app.config.aot,
+					// @ts-expect-error
+					models: app.definitions.type,
+					normalize: app.config.normalize,
+					additionalCoerce: coercePrimitiveRoot(),
+					sanitize: () => app.config.sanitize
+				})
+				if (!candidate) continue
+
+				const properties =
+					getSchemaProperties(candidate.schema) ??
+					getSchemaProperties(type)
+
+				if (properties && Object.values(properties).some(isTypedFile))
+					candidates.push([candidate, properties])
+			}
+
+			fileUnions.set(bodyValidator, candidates)
+		}
+
+		for (const [candidate, properties] of candidates)
+			if (candidate.Check(body)) return properties
+	}
 
 	return async (request: Request): Promise<Response> => {
 		const url = request.url,
@@ -502,7 +617,23 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					)
 				else if (bodyValidator?.Check(body) === false)
 					throw new ValidationError('body', validator.body!, body)
-				else if (validator.body?.Decode) {
+
+				if (validator.body)
+					await validateFileTypes(
+						body,
+						isUnion(validator.body.schema) &&
+							validator.body.schema.anyOf?.length
+							? findFileUnionProperties(validator.body, body)
+							: findFileProperties(
+									unwrapImportSchema(validator.body.schema),
+									body
+								)
+					)
+
+				if (
+					bodyValidator?.provider !== 'standard' &&
+					validator.body?.Decode
+				) {
 						let decoded = validator.body.Decode(body) as any
 						if (decoded instanceof Promise)
 							decoded = await decoded

@@ -848,6 +848,270 @@ describe('Body Validator', () => {
 		}
 	})
 
+	it('validate actual file in dynamic mode', async () => {
+		const app = new Elysia({ aot: false }).post(
+			'/upload',
+			({ body: { file } }) => file.size,
+			{
+				body: t.Object({
+					file: t.File({
+						type: 'image'
+					})
+				})
+			}
+		)
+
+		{
+			const { request, size } = upload('/upload', {
+				file: 'millenium.jpg'
+			})
+
+			const response = await app.handle(request).then((r) => r.text())
+			expect(+response).toBe(size)
+		}
+
+		{
+			const { request } = upload('/upload', {
+				file: 'fake.jpg'
+			})
+
+			const status = await app.handle(request).then((r) => r.status)
+			expect(status).toBe(422)
+		}
+	})
+
+	it('validate actual file against the matching union branch in dynamic mode', async () => {
+		const app = new Elysia({ aot: false }).post(
+			'/upload',
+			({ body: { file } }) => file.size,
+			{
+				body: t.Union([
+					t.Object({
+						file: t.File({
+							type: 'image'
+						})
+					}),
+					t.Object({
+						file: t.File({
+							type: 'audio'
+						})
+					})
+				])
+			}
+		)
+
+		{
+			const { request, size } = upload('/upload', {
+				file: 'millenium.jpg'
+			})
+
+			const response = await app.handle(request).then((r) => r.text())
+			expect(+response).toBe(size)
+		}
+
+		{
+			const { request } = upload('/upload', {
+				file: 'fake.jpg'
+			})
+
+			const status = await app.handle(request).then((r) => r.status)
+			expect(status).toBe(422)
+		}
+	})
+
+	it('validate actual file against a union branch inside an intersection in dynamic mode', async () => {
+		const app = new Elysia({ aot: false }).post(
+			'/upload',
+			({ body: { file } }) => file.size,
+			{
+				body: t.Intersect([
+					t.Union([
+						t.Object({
+							file: t.File({
+								type: 'image'
+							})
+						}),
+						t.Object({
+							file: t.File({
+								type: 'audio'
+							})
+						})
+					]),
+					t.Object({
+						tag: t.String()
+					})
+				])
+			}
+		)
+
+		{
+			const { request, size } = upload('/upload', {
+				file: 'millenium.jpg',
+				tag: 'cover'
+			})
+
+			const response = await app.handle(request).then((r) => r.text())
+			expect(+response).toBe(size)
+		}
+
+		{
+			const { request } = upload('/upload', {
+				file: 'fake.jpg',
+				tag: 'cover'
+			})
+
+			const status = await app.handle(request).then((r) => r.status)
+			expect(status).toBe(422)
+		}
+
+		{
+			const image = await Bun.file(
+				'./test/images/millenium.jpg'
+			).arrayBuffer()
+			const body = new FormData()
+			body.append(
+				'file',
+				new File([image], 'cover.mp3', { type: 'audio/mpeg' })
+			)
+			body.append('tag', 'cover')
+
+			const status = await app
+				.handle(
+					new Request('http://localhost/upload', {
+						method: 'POST',
+						body
+					})
+				)
+				.then((r) => r.status)
+			expect(status).toBe(422)
+		}
+	})
+
+	for (const aot of [true, false])
+		it(`validate the uploaded file when a file field has a transform with aot: ${aot}`, async () => {
+			const app = new Elysia({ aot }).post(
+				'/upload',
+				({ body: { file } }) => file,
+				{
+					body: t.Object({
+						file: t
+							.Transform(
+								t.File({
+									type: 'image'
+								})
+							)
+							.Decode((file) => file.size)
+							.Encode(() => new File([], 'file'))
+					})
+				}
+			)
+
+			{
+				const { request, size } = upload('/upload', {
+					file: 'millenium.jpg'
+				})
+
+				const response = await app.handle(request).then((r) => r.text())
+				expect(+response).toBe(size)
+			}
+
+			{
+				const { request } = upload('/upload', {
+					file: 'fake.jpg'
+				})
+
+				const status = await app.handle(request).then((r) => r.status)
+				expect(status).toBe(422)
+			}
+		})
+
+	for (const aot of [true, false])
+		it(`does not run the body decoder for a rejected file with aot: ${aot}`, async () => {
+			let decoded = 0
+
+			const app = new Elysia({ aot }).post('/upload', () => 'ok', {
+				body: t.Object({
+					file: t
+						.Transform(
+							t.File({
+								type: 'image'
+							})
+						)
+						.Decode((file) => {
+							decoded++
+							return file
+						})
+						.Encode((file) => file)
+				})
+			})
+
+			{
+				const { request } = upload('/upload', {
+					file: 'millenium.jpg'
+				})
+
+				const status = await app.handle(request).then((r) => r.status)
+				expect(status).toBe(200)
+			}
+
+			{
+				const { request } = upload('/upload', {
+					file: 'fake.jpg'
+				})
+
+				const status = await app.handle(request).then((r) => r.status)
+				expect(status).toBe(422)
+			}
+
+			expect(decoded).toBe(1)
+		})
+
+	for (const aot of [true, false])
+		it(`validate actual file against a union branch with a transformed field with aot: ${aot}`, async () => {
+			const app = new Elysia({ aot }).post(
+				'/upload',
+				({ body: { file } }) => file.size,
+				{
+					body: t.Union([
+						t.Object({
+							file: t.File({
+								type: 'image'
+							}),
+							count: t
+								.Transform(t.String())
+								.Decode((value) => +value)
+								.Encode((value) => `${value}`)
+						}),
+						t.Object({
+							file: t.File({
+								type: 'audio'
+							})
+						})
+					])
+				}
+			)
+
+			{
+				const { request, size } = upload('/upload', {
+					file: 'millenium.jpg',
+					count: '1'
+				})
+
+				const response = await app.handle(request).then((r) => r.text())
+				expect(+response).toBe(size)
+			}
+
+			{
+				const { request } = upload('/upload', {
+					file: 'fake.jpg',
+					count: '1'
+				})
+
+				const status = await app.handle(request).then((r) => r.status)
+				expect(status).toBe(422)
+			}
+		})
+
 	it('validate actual file with multiple type', async () => {
 		const app = new Elysia().post(
 			'/upload',
