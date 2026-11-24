@@ -1,5 +1,5 @@
 import { Kind, type TSchema } from '@sinclair/typebox'
-import { TransformDecodeError } from '@sinclair/typebox/value'
+import { TransformDecodeError, Value } from '@sinclair/typebox/value'
 import type { Context } from './context'
 import { parseCookie } from './cookies'
 import {
@@ -64,6 +64,52 @@ async function validateStandardSchema(
 const isTypedFile = (property: TSchema) =>
 	!!property.extension &&
 	(property[Kind] === 'File' || property[Kind] === 'Files')
+
+const hasTypedFile = (schema: TSchema): boolean => {
+	if (schema.properties)
+		return Object.values(schema.properties as Record<string, TSchema>).some(
+			isTypedFile
+		)
+
+	const members = (schema.allOf ?? schema.anyOf ?? schema.oneOf) as
+		| TSchema[]
+		| undefined
+
+	return !!members?.some(hasTypedFile)
+}
+
+const matchesSchema = (schema: TSchema, value: unknown) => {
+	try {
+		return Value.Check(schema, value)
+	} catch {
+		return false
+	}
+}
+
+const findFileProperties = (
+	schema: TSchema,
+	body: unknown
+): Record<string, TSchema> | undefined => {
+	if (schema.properties) return schema.properties
+
+	if (schema.allOf) {
+		let properties: Record<string, TSchema> | undefined
+
+		for (const member of schema.allOf as TSchema[]) {
+			const found = findFileProperties(member, body)
+			if (found) properties = { ...properties, ...found }
+		}
+
+		return properties
+	}
+
+	const branches = (schema.anyOf ?? schema.oneOf) as TSchema[] | undefined
+
+	if (branches)
+		for (const branch of branches)
+			if (hasTypedFile(branch) && matchesSchema(branch, body))
+				return findFileProperties(branch, body)
+}
 
 const validateFileTypes = async (
 	body: any,
@@ -578,8 +624,9 @@ export const createDynamicHandler = (app: AnyElysia) => {
 						isUnion(validator.body.schema) &&
 							validator.body.schema.anyOf?.length
 							? findFileUnionProperties(validator.body, body)
-							: getSchemaProperties(
-									unwrapImportSchema(validator.body.schema)
+							: findFileProperties(
+									unwrapImportSchema(validator.body.schema),
+									body
 								)
 					)
 

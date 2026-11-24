@@ -919,6 +919,74 @@ describe('Body Validator', () => {
 		}
 	})
 
+	it('validate actual file against a union branch inside an intersection in dynamic mode', async () => {
+		const app = new Elysia({ aot: false }).post(
+			'/upload',
+			({ body: { file } }) => file.size,
+			{
+				body: t.Intersect([
+					t.Union([
+						t.Object({
+							file: t.File({
+								type: 'image'
+							})
+						}),
+						t.Object({
+							file: t.File({
+								type: 'audio'
+							})
+						})
+					]),
+					t.Object({
+						tag: t.String()
+					})
+				])
+			}
+		)
+
+		{
+			const { request, size } = upload('/upload', {
+				file: 'millenium.jpg',
+				tag: 'cover'
+			})
+
+			const response = await app.handle(request).then((r) => r.text())
+			expect(+response).toBe(size)
+		}
+
+		{
+			const { request } = upload('/upload', {
+				file: 'fake.jpg',
+				tag: 'cover'
+			})
+
+			const status = await app.handle(request).then((r) => r.status)
+			expect(status).toBe(422)
+		}
+
+		{
+			const image = await Bun.file(
+				'./test/images/millenium.jpg'
+			).arrayBuffer()
+			const body = new FormData()
+			body.append(
+				'file',
+				new File([image], 'cover.mp3', { type: 'audio/mpeg' })
+			)
+			body.append('tag', 'cover')
+
+			const status = await app
+				.handle(
+					new Request('http://localhost/upload', {
+						method: 'POST',
+						body
+					})
+				)
+				.then((r) => r.status)
+			expect(status).toBe(422)
+		}
+	})
+
 	for (const aot of [true, false])
 		it(`validate the uploaded file when a file field has a transform with aot: ${aot}`, async () => {
 			const app = new Elysia({ aot }).post(
