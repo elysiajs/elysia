@@ -68,6 +68,7 @@ const prefixKeywords = new Set([
 	'delete',
 	'do',
 	'else',
+	'extends',
 	'in',
 	'instanceof',
 	'new',
@@ -252,11 +253,20 @@ export function scanTokens(source: string): ScanToken[] | undefined {
 				}
 
 				// after a block `}` a `/` starts a regex, after an object
-				// literal it divides: unprovable
+				// literal it divides: unprovable. So after a line break, which
+				// may end `let x` or `break`
 				const previous = tokens.length
 					? tokens[tokens.length - 1]
 					: undefined
-				if (previous?.k === 'p' && previous.value === '}') return false
+
+				if (
+					(previous?.k === 'p' && previous.value === '}') ||
+					(previous?.k === 'i' &&
+						/[\n\r\u2028\u2029]/.test(
+							source.slice(previous.at, index)
+						))
+				)
+					return false
 
 				tokens.push({ k: 'p', value: '/', at: index })
 				index++

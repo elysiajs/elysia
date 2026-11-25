@@ -126,6 +126,9 @@ import type {
 	MergeSchema,
 	MergeElysiaInstances,
 	GuardLocalHook,
+	GuardDerive,
+	GuardDeriveResponse,
+	ResolveHandler,
 	JoinPath,
 	UnwrapRoute,
 	UnwrapSchema,
@@ -3037,6 +3040,12 @@ export class Elysia<
 				Schema,
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
+		>,
+		const Derive extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>
 	>(
 		hook: GuardLocalHook<
@@ -3047,7 +3056,8 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle,
-			'merge'
+			'merge',
+			Derive
 		> & { schema: 'merge' } & MacroOptionContext<
 				Metadata['macroFn'],
 				Schema,
@@ -3069,14 +3079,18 @@ export class Elysia<
 		{
 			derive: Volatile['derive'] &
 				// @ts-ignore
-				MacroContext['derive']
+				MacroContext['derive'] &
+				GuardDerive<Derive>
 			schema: Volatile['schema']
 			schemas: Volatile['schemas'] &
 				UnwrapRoute<Input, Definitions['typebox']> &
 				MacroContext
 			response: UnionResponseStatus<
 				UnionResponseStatus<
-					Volatile['response'],
+					UnionResponseStatus<
+						Volatile['response'],
+						GuardDeriveResponse<Derive>
+					>,
 					ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
 				>,
 				UnionResponseStatus<
@@ -3135,6 +3149,12 @@ export class Elysia<
 				Schema,
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
+		>,
+		const Derive extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>
 	>(
 		hook: GuardLocalHook<
@@ -3145,7 +3165,8 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle,
-			'override'
+			'override',
+			Derive
 		> &
 			MacroOptionContext<
 				Metadata['macroFn'],
@@ -3168,7 +3189,8 @@ export class Elysia<
 		{
 			derive: Volatile['derive'] &
 				// @ts-ignore
-				MacroContext['derive']
+				MacroContext['derive'] &
+				GuardDerive<Derive>
 			schema: {} extends Pick<Input, Extract<keyof Input, InputSchemaKey>>
 				? Volatile['schema']
 				: MergeSchema<
@@ -3178,7 +3200,10 @@ export class Elysia<
 			schemas: Volatile['schemas'] & MacroContext
 			response: UnionResponseStatus<
 				UnionResponseStatus<
-					Volatile['response'],
+					UnionResponseStatus<
+						Volatile['response'],
+						GuardDeriveResponse<Derive>
+					>,
 					ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
 				>,
 				UnionResponseStatus<
@@ -3240,7 +3265,13 @@ export class Elysia<
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
 		>,
-		const NewElysia extends AnyElysia
+		const NewElysia extends AnyElysia,
+		const Derive extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
+		>
 	>(
 		hook: GuardLocalHook<
 			Input,
@@ -3250,7 +3281,8 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle,
-			'merge'
+			'merge',
+			Derive
 		> & { schema: 'merge' } & MacroOptionContext<
 				Metadata['macroFn'],
 				Schema,
@@ -3270,7 +3302,8 @@ export class Elysia<
 					store: Singleton['store']
 					derive: Singleton['derive'] &
 						// @ts-ignore
-						MacroContext['derive']
+						MacroContext['derive'] &
+						GuardDerive<Derive>
 				},
 				WithErrorEntries<
 					Definitions,
@@ -3291,7 +3324,10 @@ export class Elysia<
 					parser: Metadata['parser']
 					response: UnionResponseStatus<
 						UnionResponseStatus<
-							Metadata['response'],
+							UnionResponseStatus<
+								Metadata['response'],
+								GuardDeriveResponse<Derive>
+							>,
 							ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
 						>,
 						UnionResponseStatus<
@@ -3360,7 +3396,13 @@ export class Elysia<
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
 		>,
-		const NewElysia extends AnyElysia
+		const NewElysia extends AnyElysia,
+		const Derive extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
+		>
 	>(
 		hook: GuardLocalHook<
 			Input,
@@ -3370,7 +3412,8 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle,
-			'override'
+			'override',
+			Derive
 		> &
 			MacroOptionContext<
 				Metadata['macroFn'],
@@ -3391,7 +3434,8 @@ export class Elysia<
 					store: Singleton['store']
 					derive: Singleton['derive'] &
 						// @ts-ignore
-						MacroContext['derive']
+						MacroContext['derive'] &
+						GuardDerive<Derive>
 				},
 				WithErrorEntries<
 					Definitions,
@@ -3416,7 +3460,10 @@ export class Elysia<
 					parser: Metadata['parser']
 					response: UnionResponseStatus<
 						UnionResponseStatus<
-							Metadata['response'],
+							UnionResponseStatus<
+								Metadata['response'],
+								GuardDeriveResponse<Derive>
+							>,
 							ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
 						>,
 						UnionResponseStatus<
@@ -3496,6 +3543,12 @@ export class Elysia<
 				Schema,
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
+		>,
+		const Derive extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>
 	>(
 		scope: 'local',
@@ -3507,7 +3560,8 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle,
-			'merge'
+			'merge',
+			Derive
 		> & { schema: 'merge' } & MacroOptionContext<
 				Metadata['macroFn'],
 				Schema,
@@ -3529,14 +3583,18 @@ export class Elysia<
 		{
 			derive: Volatile['derive'] &
 				// @ts-ignore
-				MacroContext['derive']
+				MacroContext['derive'] &
+				GuardDerive<Derive>
 			schema: Volatile['schema']
 			schemas: Volatile['schemas'] &
 				UnwrapRoute<Input, Definitions['typebox']> &
 				MacroContext
 			response: UnionResponseStatus<
 				UnionResponseStatus<
-					Volatile['response'],
+					UnionResponseStatus<
+						Volatile['response'],
+						GuardDeriveResponse<Derive>
+					>,
 					ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
 				>,
 				UnionResponseStatus<
@@ -3595,6 +3653,12 @@ export class Elysia<
 				Schema,
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
+		>,
+		const Derive extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>
 	>(
 		scope: 'local',
@@ -3606,7 +3670,8 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle,
-			'override'
+			'override',
+			Derive
 		> &
 			MacroOptionContext<
 				Metadata['macroFn'],
@@ -3629,7 +3694,8 @@ export class Elysia<
 		{
 			derive: Volatile['derive'] &
 				// @ts-ignore
-				MacroContext['derive']
+				MacroContext['derive'] &
+				GuardDerive<Derive>
 			schema: {} extends Pick<Input, Extract<keyof Input, InputSchemaKey>>
 				? Volatile['schema']
 				: MergeSchema<
@@ -3639,7 +3705,10 @@ export class Elysia<
 			schemas: Volatile['schemas'] & MacroContext
 			response: UnionResponseStatus<
 				UnionResponseStatus<
-					Volatile['response'],
+					UnionResponseStatus<
+						Volatile['response'],
+						GuardDeriveResponse<Derive>
+					>,
 					ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
 				>,
 				UnionResponseStatus<
@@ -3698,6 +3767,12 @@ export class Elysia<
 				Schema,
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
+		>,
+		const Derive extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>
 	>(
 		scope: 'plugin',
@@ -3709,7 +3784,8 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle,
-			'merge'
+			'merge',
+			Derive
 		> & { schema: 'merge' } & MacroOptionContext<
 				Metadata['macroFn'],
 				Schema,
@@ -3730,14 +3806,18 @@ export class Elysia<
 		{
 			derive: Ephemeral['derive'] &
 				// @ts-ignore
-				MacroContext['derive']
+				MacroContext['derive'] &
+				GuardDerive<Derive>
 			schema: Ephemeral['schema']
 			schemas: Ephemeral['schemas'] &
 				UnwrapRoute<Input, Definitions['typebox']> &
 				MacroContext
 			response: UnionResponseStatus<
 				UnionResponseStatus<
-					Ephemeral['response'],
+					UnionResponseStatus<
+						Ephemeral['response'],
+						GuardDeriveResponse<Derive>
+					>,
 					ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
 				>,
 				UnionResponseStatus<
@@ -3797,6 +3877,12 @@ export class Elysia<
 				Schema,
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
+		>,
+		const Derive extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>
 	>(
 		scope: 'plugin',
@@ -3808,7 +3894,8 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle,
-			'override'
+			'override',
+			Derive
 		> &
 			MacroOptionContext<
 				Metadata['macroFn'],
@@ -3830,7 +3917,8 @@ export class Elysia<
 		{
 			derive: Ephemeral['derive'] &
 				// @ts-ignore
-				MacroContext['derive']
+				MacroContext['derive'] &
+				GuardDerive<Derive>
 			schema: {} extends Pick<Input, Extract<keyof Input, InputSchemaKey>>
 				? Ephemeral['schema']
 				: MergeSchema<
@@ -3840,7 +3928,10 @@ export class Elysia<
 			schemas: Ephemeral['schemas'] & MacroContext
 			response: UnionResponseStatus<
 				UnionResponseStatus<
-					Ephemeral['response'],
+					UnionResponseStatus<
+						Ephemeral['response'],
+						GuardDeriveResponse<Derive>
+					>,
 					ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
 				>,
 				UnionResponseStatus<
@@ -3897,6 +3988,12 @@ export class Elysia<
 		const ErrorHandle extends MaybeArray<
 			ErrorHandler<
 				Definitions['error'],
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
+		>,
+		const Derive extends MaybeArray<
+			ResolveHandler<
 				Schema,
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
@@ -3911,7 +4008,8 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle,
-			'merge'
+			'merge',
+			Derive
 		> & { schema: 'merge' } & MacroOptionContext<
 				Metadata['macroFn'],
 				Schema,
@@ -3930,7 +4028,8 @@ export class Elysia<
 			store: Singleton['store']
 			derive: Singleton['derive'] &
 				// @ts-ignore
-				MacroContext['derive']
+				MacroContext['derive'] &
+				GuardDerive<Derive>
 		},
 		WithErrorEntries<
 			Definitions,
@@ -3949,7 +4048,10 @@ export class Elysia<
 			parser: Metadata['parser']
 			response: UnionResponseStatus<
 				UnionResponseStatus<
-					Metadata['response'],
+					UnionResponseStatus<
+						Metadata['response'],
+						GuardDeriveResponse<Derive>
+					>,
 					ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
 				>,
 				UnionResponseStatus<
@@ -4006,6 +4108,12 @@ export class Elysia<
 				Schema,
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
+		>,
+		const Derive extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
 		>
 	>(
 		scope: 'global',
@@ -4017,7 +4125,8 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle,
-			'override'
+			'override',
+			Derive
 		> &
 			MacroOptionContext<
 				Metadata['macroFn'],
@@ -4037,7 +4146,8 @@ export class Elysia<
 			store: Singleton['store']
 			derive: Singleton['derive'] &
 				// @ts-ignore
-				MacroContext['derive']
+				MacroContext['derive'] &
+				GuardDerive<Derive>
 		},
 		WithErrorEntries<
 			Definitions,
@@ -4059,7 +4169,10 @@ export class Elysia<
 			parser: Metadata['parser']
 			response: UnionResponseStatus<
 				UnionResponseStatus<
-					Metadata['response'],
+					UnionResponseStatus<
+						Metadata['response'],
+						GuardDeriveResponse<Derive>
+					>,
 					ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
 				>,
 				UnionResponseStatus<
@@ -4214,7 +4327,13 @@ export class Elysia<
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
 		>,
-		const NewElysia extends AnyElysia
+		const NewElysia extends AnyElysia,
+		const Derive extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
+		>
 	>(
 		prefix: Prefix,
 		schema: GuardLocalHook<
@@ -4225,7 +4344,8 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle,
-			'merge'
+			'merge',
+			Derive
 		> & { schema: 'merge' } & MacroOptionContext<
 				Metadata['macroFn'],
 				Schema,
@@ -4245,7 +4365,8 @@ export class Elysia<
 					store: Singleton['store']
 					derive: Singleton['derive'] &
 						// @ts-ignore
-						MacroContext['derive']
+						MacroContext['derive'] &
+						GuardDerive<Derive>
 				},
 				WithErrorEntries<
 					Definitions,
@@ -4266,7 +4387,10 @@ export class Elysia<
 					parser: Metadata['parser']
 					response: UnionResponseStatus<
 						UnionResponseStatus<
-							Metadata['response'],
+							UnionResponseStatus<
+								Metadata['response'],
+								GuardDeriveResponse<Derive>
+							>,
 							ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
 						>,
 						UnionResponseStatus<
@@ -4340,7 +4464,13 @@ export class Elysia<
 				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
 			>
 		>,
-		const NewElysia extends AnyElysia
+		const NewElysia extends AnyElysia,
+		const Derive extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				GuardHookSingleton<Singleton, Ephemeral, Volatile, MacroContext>
+			>
+		>
 	>(
 		prefix: Prefix,
 		schema: GuardLocalHook<
@@ -4351,7 +4481,8 @@ export class Elysia<
 			BeforeHandle,
 			AfterHandle,
 			ErrorHandle,
-			'override'
+			'override',
+			Derive
 		> &
 			MacroOptionContext<
 				Metadata['macroFn'],
@@ -4372,7 +4503,8 @@ export class Elysia<
 					store: Singleton['store']
 					derive: Singleton['derive'] &
 						// @ts-ignore
-						MacroContext['derive']
+						MacroContext['derive'] &
+						GuardDerive<Derive>
 				},
 				WithErrorEntries<
 					Definitions,
@@ -4397,7 +4529,10 @@ export class Elysia<
 					parser: Metadata['parser']
 					response: UnionResponseStatus<
 						UnionResponseStatus<
-							Metadata['response'],
+							UnionResponseStatus<
+								Metadata['response'],
+								GuardDeriveResponse<Derive>
+							>,
 							ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle>
 						>,
 						UnionResponseStatus<

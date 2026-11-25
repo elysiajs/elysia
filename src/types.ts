@@ -466,7 +466,10 @@ export type GuardLocalHook<
 	BeforeHandle extends MaybeArray<OptionalHandler<any, any>>,
 	AfterHandle extends MaybeArray<AfterHandler<any, any>>,
 	ErrorHandle extends MaybeArray<ErrorHandler<any, any, any>>,
-	GuardType extends GuardSchemaType = 'override'
+	GuardType extends GuardSchemaType = 'override',
+	Derive extends MaybeArray<ResolveHandler<any, any>> = MaybeArray<
+		ResolveHandler<Schema, Singleton>
+	>
 > = (Input extends any ? Input : Prettify<Input>) & {
 	/**
 	 * @default 'override'
@@ -503,6 +506,10 @@ export type GuardLocalHook<
 	transform?: MaybeArray<
 		PreValidationTransform<BeforeValidation<Schema>, Singleton>
 	>
+	/**
+	 * Add to the context of the guard's hooks and routes, before `beforeHandle`
+	 */
+	derive?: Derive
 	/**
 	 * Execute before main handler
 	 */
@@ -1874,6 +1881,31 @@ type MacroDerive<Def> = (
 			? Partial<Exclude<D, undefined>>
 			: D
 	: {}
+
+// What a guard's `derive` adds to the context, and the statuses it may answer.
+// Left out, `Derive` is its constraint, which adds nothing
+type GivenDerive<Derive> = ResolveHandler<any, any>[] extends Derive
+	? never
+	: Derive
+
+// Every handler of an array runs, so their keys intersect
+export type GuardDerive<Derive> = UnionToIntersect<
+	MacroDerive<{
+		derive: GivenDerive<Derive> extends readonly (infer Each)[]
+			? Each
+			: GivenDerive<Derive>
+	}>
+>
+
+type GuardDeriveReturn<Derive> = Derive extends readonly (infer Each)[]
+	? GuardDeriveReturn<Each>
+	: Derive extends (...a: any) => infer R
+		? Awaited<R>
+		: never
+
+export type GuardDeriveResponse<Derive> = DeriveResponse<
+	GuardDeriveReturn<GivenDerive<Derive>>
+>
 
 type MacroDeriveHandler<Fn> = Fn extends (...a: any) => infer R
 	? Awaited<R> extends infer V

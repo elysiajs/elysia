@@ -108,6 +108,28 @@ describe('context access that cannot be statically identified', () => {
 		await expect(responseText(handler, 'dot5')).resolves.toBe('2')
 	})
 
+	// A regex opens a statement after a line that ended one, or follows
+	// `extends`: read as a division, its `//` became a comment that
+	// swallowed `context.query`
+	for (const [name, body] of [
+		['let', 'let x\n/[//]/.test(""); return context.query.name'],
+		['var', 'var x\n/[//]/.test(""); return context.query.name'],
+		['debugger', 'debugger\n/[//]/.test(""); return context.query.name'],
+		[
+			'break',
+			'a: { if (Math.random() > 2) break a\n/[//]/.test(""); return context.query.name }'
+		],
+		[
+			'extends',
+			'new (class extends /[//]/.constructor {})(""); return context.query.name'
+		]
+	])
+		it(`keeps query available after a regex following ${name}`, async () => {
+			const handler = new Function(`return (context) => {\n${body}\n}`)()
+
+			await expect(responseText(handler, name)).resolves.toBe(name)
+		})
+
 	// Bun AOT, Node and Deno keep the source as written (Bun reprints it with
 	// `;`): the identifier opening the next statement read as part of the
 	// right-hand side, so the destructure or alias was dropped and query was

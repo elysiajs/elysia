@@ -1,9 +1,13 @@
 import { Elysia, inAotBuild, Manifest, t } from '../src'
 
 const app = new Elysia()
+	.guard({
+		derive: () => ({ b: 'b' })
+	})
 	.get(
 		'/',
 		{
+			derive: () => ({ c: 'c' }),
 			cookie: t.Optional(
 				t.Object({
 					a: t
@@ -13,6 +17,6 @@ const app = new Elysia()
 				})
 			)
 		},
-		({ cookie: { a } }) => a.value = 'yes'
+		({ cookie: { a } }) => (a.value = 'yes')
 	)
 	.listen(3000)
