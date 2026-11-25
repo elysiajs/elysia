@@ -12,6 +12,8 @@ import type { ElysiaAotOptions } from './core'
  * Run Elysia JIT compilation in build time instead of runtime
  *
  * Relative entry is resolved by the nearest `package.json`
+ * `Bun.build` defines are also applied during capture in an isolated process.
+ * With defines, entry side effects run in that process instead of the caller.
  *
  * ```ts
  * import { aot } from 'elysia/plugin/aot/bun'
@@ -44,7 +46,10 @@ export const aot = (entry?: string, options?: ElysiaAotOptions): BunPlugin => {
 				build,
 				entry === undefined
 					? createTypeboxWiringHooks()
-					: createAotPluginHooks(entry, options),
+					: createAotPluginHooks(entry, options, undefined, {
+							define: build.config.define,
+							tsconfig: build.config.tsconfig
+						}),
 				(path) => Bun.file(path).text()
 			)
 		}
